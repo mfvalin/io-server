@@ -12,5 +12,5 @@ There will be 2 types of nodes, running 3 different types of processes:
     - 1 relay process (between the node and the IO server)
     - Many compute processes
     
-![plan](plan.svg  "Plan")
+![plan](doc/plan.svg  "Plan")
 
