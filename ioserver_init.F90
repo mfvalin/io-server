@@ -66,7 +66,7 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
   integer, intent(OUT) :: allio
   integer, intent(OUT) :: nodeio
   integer, intent(OUT) :: serverio
-  integer, intent(IN) :: nio_node
+  integer, intent(IN) :: nio_node      ! number of io processes per compute node
   character(len=*), intent(IN) :: app_class
   type(C_FUNPTR), intent(IN) :: nodeio_fn
   integer :: status
@@ -91,49 +91,63 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
   call mpi_comm_split(global_comm, color, global_rank, temp_comm, ierr)   ! split global communicator into : server / not server
 
   if(color == 1) then                     ! IO server
-    serverio_comm = temp_comm
+    serverio_comm = temp_comm             ! communicator for the "io server"
   else                                    ! model compute or IO on model node
-    modelio_comm = temp_comm
+    modelio_comm = temp_comm              ! communicator for "model compute and io" nodes
     call MPI_Comm_split_type(modelio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, temp_comm ,ierr)
-    node_comm = temp_comm                             ! PEs on same SMP node
+    node_comm = temp_comm                             ! PEs on same SMP node (compute and IO processes)
+
     call MPI_Comm_rank(node_comm, local_rank, ierr)   ! rank on SMP node
     call MPI_Comm_size(node_comm, local_size, ierr)   ! rank on SMP node
+
+    ! spread io processes across sockets (lowest and highest local ranks)
     if(local_rank >= (nio_node/2) .or. local_rank < (local_size - ((nio_node+1)/2))) then
-      color = 1  ! model compute node
+      color = 1    ! model compute process
+      status = 0 
     else
-      color = 0  ! io on model node
+      color = 0  ! IO process, status can be 1 or 2
     endif
     call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)
     if(color == 0) then
-      nodeio_comm = temp_comm  ! io on model node
+      nodeio_comm = temp_comm  ! io processes on model nodes
     else
-      model_comm = temp_comm   ! model compute node
+      model_comm = temp_comm   ! compute processes on model nodes
     endif
   endif
 
-  color = 0
-  if(model_comm == MPI_COMM_NULL) color = 1     ! IO server or IO on model node
+  color = 0                                     ! model compute process
+  if(model_comm == MPI_COMM_NULL) color = 1     ! IO server or IO process on model node
+
   call MPI_Comm_split(global_comm, color, global_rank, temp_comm, ierr)
   if(color == 1) then
-    allio_comm = temp_comm
-    if(serverio_comm .ne. MPI_COMM_NULL) then  ! IO server
-      winsize = 1024 * 1024 * 1024
-    else                                       ! io on model node
-      winsize = 1024 * 1024
+    allio_comm = temp_comm                     ! all IO processes
+    if(serverio_comm .ne. MPI_COMM_NULL) then  ! IO server processe
+      winsize = 1024 * 1024 * 1024    ! PLACEHOLDER CODE TO BE ADJUSTED
+      status = 2
+    else                                       ! IO process on model node
+      winsize = 1024 * 1024           ! PLACEHOLDER CODE TO BE ADJUSTED
+      status = 1 
     endif
-    disp_unit = 4                ! word units
+    disp_unit = 4                ! 32 bit word units
     call MPI_Win_allocate(winsize, disp_unit, MPI_INFO_NULL, allio_comm, win_base, serverio_win, ierr)
-    io_base = transfer(win_base, C_NULL_PTR)    ! base address of local window
+    io_base = transfer(win_base, C_NULL_PTR)    ! base address of local window (address in integer -> C pointer)
   endif
 
-  p => NULL()
-  if(C_ASSOCIATED(nodeio_fn)) then
-    print *,'nodeio_fn associated'
-    call C_F_PROCPOINTER(nodeio_fn,p)
-    call p(220)
-  else
-    print *,'nodeio_fn is not associated'
+  if(nodeio_comm .ne. MPI_COMM_NULL) then       ! IO process on model node
+    p => NULL()
+    if(C_ASSOCIATED(nodeio_fn)) then
+      print *,'nodeio_fn associated'
+      call C_F_PROCPOINTER(nodeio_fn,p)
+      ! the IO process on model node code may not return
+      call p(220)    ! PLACEHOLDER CODE TO BE ADJUSTED
+      call MPI_Finalize(ierr)
+      stop
+    else
+      print *,'nodeio_fn is not associated'
+      return
+    endif
   endif
+
   return
 !!F_StArT
 end function ioserver_init
