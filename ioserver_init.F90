@@ -20,10 +20,13 @@ module ioserver_mod
   save
   integer :: global_comm   = MPI_COMM_WORLD
   integer :: model_comm    = MPI_COMM_NULL
+  integer :: node_comm     = MPI_COMM_NULL
+  integer :: modelio_comm  = MPI_COMM_NULL
   integer :: allio_comm    = MPI_COMM_NULL
   integer :: nodeio_comm   = MPI_COMM_NULL
   integer :: serverio_comm = MPI_COMM_NULL
   integer :: serverio_win  = MPI_WIN_NULL
+  type(C_PTR) :: io_base   = C_NULL_PTR
 end module ioserver_mod
 
 !!F_StArT
@@ -54,7 +57,7 @@ subroutine set_ioserver_global_comm(comm)
 end subroutine set_ioserver_global_comm
 !!F_EnD
 !!F_StArT
-function ioserver_init(model, allio, nodeio, serverio, app_class, nodeio_fn) result(status)
+function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, nodeio_fn) result(status)
 !!F_EnD
   use ioserver_mod
 !!F_StArT
@@ -63,11 +66,14 @@ function ioserver_init(model, allio, nodeio, serverio, app_class, nodeio_fn) res
   integer, intent(OUT) :: allio
   integer, intent(OUT) :: nodeio
   integer, intent(OUT) :: serverio
+  integer, intent(IN) :: nio_node
   character(len=*), intent(IN) :: app_class
   type(C_FUNPTR), intent(IN) :: nodeio_fn
   integer :: status
 !!F_EnD
-  integer :: color, temp_comm
+  integer :: color, temp_comm, ierr, global_rank, local_rank, local_size, disp_unit
+  integer(KIND=MPI_ADDRESS_KIND) :: winsize, win_base
+  logical :: initialized
   procedure(), pointer :: p
 
   model    = MPI_COMM_NULL
@@ -75,8 +81,51 @@ function ioserver_init(model, allio, nodeio, serverio, app_class, nodeio_fn) res
   nodeio   = MPI_COMM_NULL
   serverio = MPI_COMM_NULL
   status = -1
+
+  call MPI_Initialized(initialized, ierr)
+  if(.not. initialized) call MPI_Init(ierr)    ! initialize MPI if not already done
+
   color = 0
   if(app_class(1:1) == 'S') color = 1    ! IO server app
+  call MPI_Comm_rank(global_comm, global_rank, ierr)
+  call mpi_comm_split(global_comm, color, global_rank, temp_comm, ierr)   ! split global communicator into : server / not server
+
+  if(color == 1) then                     ! IO server
+    serverio_comm = temp_comm
+  else                                    ! model compute or IO on model node
+    modelio_comm = temp_comm
+    call MPI_Comm_split_type(modelio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, temp_comm ,ierr)
+    node_comm = temp_comm                             ! PEs on same SMP node
+    call MPI_Comm_rank(node_comm, local_rank, ierr)   ! rank on SMP node
+    call MPI_Comm_size(node_comm, local_size, ierr)   ! rank on SMP node
+    if(local_rank >= (nio_node/2) .or. local_rank < (local_size - ((nio_node+1)/2))) then
+      color = 1  ! model compute node
+    else
+      color = 0  ! io on model node
+    endif
+    call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)
+    if(color == 0) then
+      nodeio_comm = temp_comm  ! io on model node
+    else
+      model_comm = temp_comm   ! model compute node
+    endif
+  endif
+
+  color = 0
+  if(model_comm == MPI_COMM_NULL) color = 1     ! IO server or IO on model node
+  call MPI_Comm_split(global_comm, color, global_rank, temp_comm, ierr)
+  if(color == 1) then
+    allio_comm = temp_comm
+    if(serverio_comm .ne. MPI_COMM_NULL) then  ! IO server
+      winsize = 1024 * 1024 * 1024
+    else                                       ! io on model node
+      winsize = 1024 * 1024
+    endif
+    disp_unit = 4                ! word units
+    call MPI_Win_allocate(winsize, disp_unit, MPI_INFO_NULL, allio_comm, win_base, serverio_win, ierr)
+    io_base = transfer(win_base, C_NULL_PTR)    ! base address of local window
+  endif
+
   p => NULL()
   if(C_ASSOCIATED(nodeio_fn)) then
     print *,'nodeio_fn associated'
@@ -100,9 +149,10 @@ program test
   procedure(), pointer :: p
   external :: demo_fn
   interface
-    function ioserver_init(model, allio, nodeio, serverio, app_class, nodeio_fn) result(status)
+    function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, nodeio_fn) result(status)
       import :: C_FUNPTR
       integer, intent(OUT) :: model, allio, nodeio, serverio
+      integer, intent(IN) :: nio_node
       character(len=*), intent(IN) :: app_class
       type(C_FUNPTR), intent(IN) :: nodeio_fn
       integer :: status
@@ -111,8 +161,8 @@ program test
 
   p => demo_fn
   call p(110)
-  status = ioserver_init(model, allio, nodeio, serverio, "S", C_FUNLOC(demo_fn))
-  status = ioserver_init(model, allio, nodeio, serverio, "S", C_NULL_FUNPTR)
+  status = ioserver_init(model, allio, nodeio, serverio, 2, "S", C_FUNLOC(demo_fn))
+  status = ioserver_init(model, allio, nodeio, serverio, 2, "S", C_NULL_FUNPTR)
 end program
 subroutine demo_fn(i)
   implicit none
