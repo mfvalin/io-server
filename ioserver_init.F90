@@ -18,15 +18,15 @@ module ioserver_mod
   implicit none
   include 'mpif.h'
   save
-  integer :: global_comm   = MPI_COMM_WORLD
-  integer :: model_comm    = MPI_COMM_NULL
-  integer :: node_comm     = MPI_COMM_NULL
-  integer :: modelio_comm  = MPI_COMM_NULL
-  integer :: allio_comm    = MPI_COMM_NULL
-  integer :: nodeio_comm   = MPI_COMM_NULL
-  integer :: serverio_comm = MPI_COMM_NULL
-  integer :: serverio_win  = MPI_WIN_NULL
-  type(C_PTR) :: io_base   = C_NULL_PTR
+  integer :: global_comm   = MPI_COMM_WORLD    !  MPI WORLD for this set of PEs
+  integer :: model_comm    = MPI_COMM_NULL     !  model compute PEs 
+  integer :: node_comm     = MPI_COMM_NULL     !  PEs on same node
+  integer :: modelio_comm  = MPI_COMM_NULL     !  model compute and IO IO PEs
+  integer :: allio_comm    = MPI_COMM_NULL     !  all IO PEs (model IO + IO server)
+  integer :: nodeio_comm   = MPI_COMM_NULL     !  IO PEs on model nodes
+  integer :: serverio_comm = MPI_COMM_NULL     !  IO server PEs
+  integer :: serverio_win  = MPI_WIN_NULL      !  IO window (all IO PEs)
+  type(C_PTR) :: io_base   = C_NULL_PTR        !  base address os IO window (all IO PEs)
 end module ioserver_mod
 
 !!F_StArT
@@ -159,7 +159,7 @@ end function ioserver_init
 program test
   use ISO_C_BINDING
   implicit none
-  integer :: model, allio, nodeio, serverio, status
+  integer :: model, allio, nodeio, serverio, status, ierr
   procedure(), pointer :: p
   external :: demo_fn
   interface
@@ -176,7 +176,9 @@ program test
   p => demo_fn
   call p(110)
   status = ioserver_init(model, allio, nodeio, serverio, 2, "S", C_FUNLOC(demo_fn))
-  status = ioserver_init(model, allio, nodeio, serverio, 2, "S", C_NULL_FUNPTR)
+  print *,'status =',status
+!   status = ioserver_init(model, allio, nodeio, serverio, 2, "S", C_NULL_FUNPTR)
+  call MPI_Finalize(ierr)
 end program
 subroutine demo_fn(i)
   implicit none
