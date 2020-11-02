@@ -92,13 +92,13 @@
 static inline void move_integers(int *dst, int*src, int n){
   memcpy(dst, src, sizeof(int)*n);
 }
-
+//F_StArT
 //   function circular_buffer_init(p, nwords) result(limit) bind(C,name='circular_buffer_init')  ! InTf
 //     import :: C_PTR, C_INT                    ! InTf
 //     type(C_PTR), intent(IN), value :: p       ! InTf
 //     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //   end function circular_buffer_init           ! InTf
-
+//F_EnD
 // initialize a circular buffer
 // nwords is the size in 32 bit elements of the memory area
 // return pointer to buffer upon success, NULL otherwise
@@ -112,14 +112,14 @@ circular_buffer_p circular_buffer_init(circular_buffer_p p, int32_t nwords){   /
   p->m.limit = nwords - ( sizeof(fiol_management) / sizeof(int) );
   return p;
 }
-
+//F_StArT
 //   function circular_buffer_create_shared(shmid, nwords) result(p) BIND(C,name='circular_buffer_create_shared')  ! InTf
 //     import :: C_PTR, C_INT                       ! InTf
 //     integer(C_INT), intent(OUT) :: shmid         ! InTf
 //     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //     type(C_PTR) :: p                             ! InTf
 //   end function circular_buffer_create_shared     ! InTf
-
+//F_EnD
 // create and initialize a circular buffer of size nwords in "shared memory"
 // return the "shared memory segment" address of the circular buffer upon success, NULL otherwise
 // shmid will be set to the shared memory id of the "shared memory segment upon success, -1 otherwise
@@ -139,28 +139,28 @@ circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nwords){
   status = shmctl(id, IPC_RMID, &ds);        // mark segment for deletion (ONLY SAFE ON LINUX)
   if(status != 0) return NULL;               // this should not fail
   *shmid = id;
-  return (circular_buffer_init((circular_buffer_p)t, nwords) != 0) ? NULL : (circular_buffer_p)t;
+  return circular_buffer_init((circular_buffer_p)t, nwords) ;
 }
-
+//F_StArT
 //   function circular_buffer_detach_shared(p) result(status) BIND(C,name='circular_buffer_detach_shared')  ! InTf
 //     import :: C_PTR, C_INT                    ! InTf
 //     type(C_PTR), intent(IN), value :: p       ! InTf
 //     integer(C_INT) :: status                  ! InTf
 //   end function circular_buffer_detach_shared  ! InTf
-
+//F_EnD
 // detach from a "shared memory segment" circular buffer 
 // return 0 upon success, -1 otherwise
 int circular_buffer_detach_shared(circular_buffer_p p){   // InTc
   if(p == NULL) return -1;
   return shmdt(p) ;   // detach from "shared memory segment" creeated by circular_buffer_create_shared
 }
-
+//F_StArT
 //   function circular_buffer_create(nwords) result(p) BIND(C,name='circular_buffer_create')  ! InTf
 //     import :: C_PTR, C_INT                       ! InTf
 //     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //     type(C_PTR) :: p                             ! InTf
 //   end function circular_buffer_create            ! InTf
-
+//F_EnD
 // create and initialize a circular buffer of size nwords
 // return the address of the circular buffer upon success, NULL otherwise
 circular_buffer_p circular_buffer_create(int32_t nwords){   // InTc
@@ -169,16 +169,16 @@ circular_buffer_p circular_buffer_create(int32_t nwords){   // InTc
 
   if(sz < 4096) return NULL;
   t = (circular_buffer_p ) malloc(sz);
-  return (circular_buffer_init(t, nwords) != 0) ? NULL : t;
+  return circular_buffer_init(t, nwords) ;
 }
-
+//F_StArT
 //   function circular_buffer_from_pointer(ptr, nwords) result(p) BIND(C,name='circular_buffer_from_pointer')  ! InTf
 //     import :: C_PTR, C_INT                       ! InTf
 //     integer(C_INT), intent(IN), value :: nwords  ! InTf
 //     type(C_PTR), intent(IN), value :: ptr        ! InTf
 //     type(C_PTR) :: p                             ! InTf
 //   end function circular_buffer_from_pointer      ! InTf
-
+//F_EnD
 // create and initialize a circular buffer, using supplied space of size nwords at address p
 // return the address of the circular buffer upon success, NULL otherwise
 circular_buffer_p circular_buffer_from_pointer(void *p, int32_t nwords){   // InTc
@@ -187,15 +187,15 @@ circular_buffer_p circular_buffer_from_pointer(void *p, int32_t nwords){   // In
 
   if(sz < 4096) return NULL;
   t = (circular_buffer_p ) p;
-  return (circular_buffer_init(t, nwords) != 0) ? NULL : t;
+  return circular_buffer_init(t, nwords) ;
 }
-
+//F_StArT
 //   function circular_buffer_space_available(p) result(n) BIND(C,name='circular_buffer_space_available')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     integer(C_INT) :: n                         ! InTf
 //   end function circular_buffer_space_available  ! InTf
-
+//F_EnD
 // return the current number of empty slots available, -1 on error
 int circular_buffer_space_available(circular_buffer_p p){   // InTc
   int  *inp = &(p->m.in);
@@ -208,14 +208,14 @@ int circular_buffer_space_available(circular_buffer_p p){   // InTc
   out = *outp;
   return SPACE_AVAILABLE(in,out,limit);
 }
-
+//F_StArT
 //   function circular_buffer_wait_space_available(p, na) result(n) BIND(C,name='circular_buffer_wait_space_available')  ! InTf
 //     import :: C_PTR, C_INT                            ! InTf
 //     type(C_PTR), intent(IN), value :: p               ! InTf
 //     integer(C_INT), intent(IN), value :: na           ! InTf
 //     integer(C_INT) :: n                               ! InTf
 //   end function circular_buffer_wait_space_available   ! InTf
-
+//F_EnD
 // wait until at least n empty slots are available for inserting data
 // return the actual number of empty slots available, -1 on error
 int circular_buffer_wait_space_available(circular_buffer_p p, int n){   // InTc
@@ -234,13 +234,13 @@ int circular_buffer_wait_space_available(circular_buffer_p p, int n){   // InTc
   }
   return navail;
 }
-
+//F_StArT
 //   function circular_buffer_data_available(p) result(n) BIND(C,name='circular_buffer_data_available')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     integer(C_INT) :: n                         ! InTf
 //   end function circular_buffer_data_available   ! InTf
-
+//F_EnD
 // returns the current number of data tokens available, -1 on error
 int circular_buffer_data_available(circular_buffer_p p){   // InTc
   int  *inp = &(p->m.in);
@@ -254,14 +254,14 @@ int circular_buffer_data_available(circular_buffer_p p){   // InTc
   out = *outp;
   return DATA_AVAILABLE(in,out,limit);
 }
-
+//F_StArT
 //   function circular_buffer_wait_data_available(p, na) result(n) BIND(C,name='circular_buffer_wait_data_available')  ! InTf
 //     import :: C_PTR, C_INT                            ! InTf
 //     type(C_PTR), intent(IN), value :: p               ! InTf
 //     integer(C_INT), intent(IN), value :: na           ! InTf
 //     integer(C_INT) :: n                               ! InTf
 //   end function circular_buffer_wait_data_available    ! InTf
-
+//F_EnD
 // wait until at least n data tokens are available for extracting data
 // return the actual number of data tokens available
 // return -1 upon error
@@ -281,26 +281,26 @@ int circular_buffer_wait_data_available(circular_buffer_p p, int n){   // InTc
   }
   return navail;
 }
-
+//F_StArT
 //   function circular_buffer_start(p) result(start) BIND(C,name='circular_buffer_start')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     type(C_PTR) :: start                        ! InTf
 //   end function circular_buffer_start            ! InTf
-
+//F_EnD
 // get the address of the first position in the circular data buffer
 int32_t *circular_buffer_start(circular_buffer_p p){   // InTc
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
   return p->data;  // start of data buffer
 }
-
+//F_StArT
 //   function circular_buffer_data_in(p) result(inp) BIND(C,name='circular_buffer_data_in')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     type(C_PTR) :: inp                          ! InTf
 //   end function circular_buffer_data_in          ! InTf
-
+//F_EnD
 // returns a pointer to the  insertion point of the circular data buffer
 // useful in conjunction with circular_buffer_data_snoop
 int32_t *circular_buffer_data_in(circular_buffer_p p){   // InTc
@@ -308,13 +308,13 @@ int32_t *circular_buffer_data_in(circular_buffer_p p){   // InTc
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.in;
 }
-
+//F_StArT
 //   function circular_buffer_data_out(p) result(outp) BIND(C,name='circular_buffer_data_out')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     type(C_PTR) :: outp                         ! InTf
 //   end function circular_buffer_data_out         ! InTf
-
+//F_EnD
 // return a pointer to the  extraction point of the circular data buffer
 // useful in conjunction with circular_buffer_data_snoop
 int32_t *circular_buffer_data_out(circular_buffer_p p){   // InTc
@@ -322,14 +322,14 @@ int32_t *circular_buffer_data_out(circular_buffer_p p){   // InTc
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.out;
 }
-
+//F_StArT
 //   function circular_buffer_advance_in(p, n1, n2) result(inp) BIND(C,name='circular_buffer_advance_in')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     integer(C_INT), intent(OUT) :: n1, n2       ! InTf
 //     type(C_PTR) :: inp                          ! InTf
 //   end function circular_buffer_advance_in       ! InTf
-
+//F_EnD
 // return a pointer to the "in" position, assume that the caller knows the start of data buffer
 // n1 slots available at "in", n2 slots available at "start"
 // upon error, NULL is returned, and n1 and n2 are set to -1
@@ -364,14 +364,14 @@ int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n
   }
   return p->data+in;
 }
-
+//F_StArT
 //   function circular_buffer_advance_out(p, n1, n2) result(outp) BIND(C,name='circular_buffer_advance_out')  ! InTf
 //     import :: C_PTR, C_INT                      ! InTf
 //     type(C_PTR), intent(IN), value :: p         ! InTf
 //     integer(C_INT), intent(OUT) :: n1, n2       ! InTf
 //     type(C_PTR) :: outp                         ! InTf
 //   end function circular_buffer_advance_out      ! InTf
-
+//F_EnD
 // return a pointer to the "out" position, assume that the caller knows the start of data buffer
 // n1 tokens available at "out", n2 tokens available at "start"
 // upon error, NULL is returned, and n1 and n2 are set to -1
@@ -401,7 +401,7 @@ int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *
   }
   return p->data+out;
 }
-
+//F_StArT
 //   function circular_buffer_atomic_get(p, dst, ndst) result(n) BIND(C,name='circular_buffer_atomic_get') ! InTf
 //     import :: C_PTR, C_INT                            ! InTf
 //     type(C_PTR), intent(IN), value :: p               ! InTf
@@ -409,7 +409,7 @@ int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *
 //     integer(C_INT), dimension(*), intent(OUT) :: dst  ! InTf
 //     integer(C_INT) :: n                               ! InTf
 //   end function circular_buffer_atomic_get             ! InTf
-
+//F_EnD
 // atomic extraction of n tokens into the dst array
 // wait until n tokens are available
 // return the number of data tokens available after this operation
@@ -493,7 +493,7 @@ int circular_buffer_extract(circular_buffer_p p, int *dst, int n, int offset, in
   in = *inp;
   return DATA_AVAILABLE(in,out,limit);
 }
-
+//F_StArT
 //   function circular_buffer_atomic_put(p, src, nsrc) result(n) BIND(C,name='circular_buffer_atomic_put') ! InTf
 //     import :: C_PTR, C_INT                            ! InTf
 //     type(C_PTR), intent(IN), value :: p               ! InTf
@@ -501,7 +501,7 @@ int circular_buffer_extract(circular_buffer_p p, int *dst, int n, int offset, in
 //     integer(C_INT), dimension(*), intent(IN) :: src   ! InTf
 //     integer(C_INT) :: n                               ! InTf
 //   end function circular_buffer_atomic_put             ! InTf
-
+//F_EnD
 // atomic insertion of n tokens from the src array
 // wait until n free slots are available
 // return the number of free slots available after this operation
