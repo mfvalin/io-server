@@ -38,7 +38,7 @@ CCOMPILER = clang
 FCOMPILER = flang
 endif
 
-all: test_arena.Abs
+all: test_arena.Abs test_remote_circular_buffer.Abs
 
 memory_arena.inc: memory_arena.c memory_arena.h
 	grep InTf memory_arena.c | sed -e 's:^// ::' -e 's/[ ]*!InTf.*//' >memory_arena.inc
@@ -50,6 +50,10 @@ test_arena.Abs: test_memory_arena.F90 memory_arena.c memory_arena.h memory_arena
 	rm -f test_arena.Abs
 	$(CCOMPILER) -c -Wall -O2 memory_arena.c circular_buffer.c 
 	$(FMPICOMPILER) test_memory_arena.F90 memory_arena.o circular_buffer.o -o test_arena.Abs
+
+test_remote_circular_buffer.Abs: test_remote_circular_buffer.F90 circular_buffer.c circular_buffer.inc circular_buffer.h
+	$(CCOMPILER) -c -Wall -Wextra circular_buffer.c
+	$(FMPICOMPILER) test_remote_circular_buffer.F90 circular_buffer.o -o test_remote_circular_buffer.Abs
 
 clean:
 	rm -f *.o memory_arena.inc circular_buffer.inc *.Abs
