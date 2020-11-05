@@ -1,8 +1,6 @@
 
-build
-src/IO-server.*
+build*
+CMakeLists.txt.user
 
-*.o
 *.inc
-*.Abs
 
