@@ -105,7 +105,10 @@ static inline void move_integers(int *dst, int*src, int n){
 // nwords is the size in 32 bit elements of the memory area
 // return pointer to buffer upon success, NULL otherwise
 //C_StArT
-circular_buffer_p circular_buffer_init(circular_buffer_p p, int32_t nwords){   // InTc
+circular_buffer_p circular_buffer_init(
+  circular_buffer_p p, 
+  int32_t nwords
+  ){
 //C_EnD
   if(p == NULL) return NULL;
   if(nwords < 4096) return NULL;   // area is too small
@@ -129,7 +132,10 @@ circular_buffer_p circular_buffer_init(circular_buffer_p p, int32_t nwords){   /
 // return the "shared memory segment" address of the circular buffer upon success, NULL otherwise
 // shmid will be set to the shared memory id of the "shared memory segment upon success, -1 otherwise
 //C_StArT
-circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nwords){   // InTc
+circular_buffer_p circular_buffer_create_shared(
+  int32_t *shmid, 
+  int32_t nwords
+  ){
 //C_EnD
   void *t;
   size_t sz = nwords * sizeof(int);
@@ -159,7 +165,9 @@ circular_buffer_p circular_buffer_create_shared(int32_t *shmid, int32_t nwords){
 // detach from a "shared memory segment" circular buffer 
 // return 0 upon success, -1 otherwise
 //C_StArT
-int circular_buffer_detach_shared(circular_buffer_p p){   // InTc
+int circular_buffer_detach_shared(
+  circular_buffer_p p
+  ){
 //C_EnD
   if(p == NULL) return -1;
   return shmdt(p) ;   // detach from "shared memory segment" creeated by circular_buffer_create_shared
@@ -175,7 +183,9 @@ int circular_buffer_detach_shared(circular_buffer_p p){   // InTc
 // create and initialize a circular buffer of size nwords
 // return the address of the circular buffer upon success, NULL otherwise
 //C_StArT
-circular_buffer_p circular_buffer_create(int32_t nwords){   // InTc
+circular_buffer_p circular_buffer_create(
+  int32_t nwords
+  ){
 //C_EnD
   circular_buffer_p t;
   size_t sz = nwords * sizeof(int);
@@ -196,7 +206,10 @@ circular_buffer_p circular_buffer_create(int32_t nwords){   // InTc
 // create and initialize a circular buffer, using supplied space of size nwords at address p
 // return the address of the circular buffer upon success, NULL otherwise
 //C_StArT
-circular_buffer_p circular_buffer_from_pointer(void *p, int32_t nwords){   // InTc
+circular_buffer_p circular_buffer_from_pointer(
+  void *p, 
+  int32_t nwords
+  ){
 //C_EnD
   circular_buffer_p t;
   size_t sz = nwords * sizeof(int);
@@ -215,7 +228,9 @@ circular_buffer_p circular_buffer_from_pointer(void *p, int32_t nwords){   // In
 //F_EnD
 // return the current number of empty slots available, -1 on error
 //C_StArT
-int circular_buffer_space_available(circular_buffer_p p){   // InTc
+int circular_buffer_space_available(
+  circular_buffer_p p
+  ){
 //C_EnD
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
@@ -239,7 +254,10 @@ int circular_buffer_space_available(circular_buffer_p p){   // InTc
 // wait until at least n empty slots are available for inserting data
 // return the actual number of empty slots available, -1 on error
 //C_StArT
-int circular_buffer_wait_space_available(circular_buffer_p p, int n){   // InTc
+int circular_buffer_wait_space_available(
+  circular_buffer_p p, 
+  int n
+  ){
 //C_EnD
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
@@ -266,7 +284,9 @@ int circular_buffer_wait_space_available(circular_buffer_p p, int n){   // InTc
 //F_EnD
 // returns the current number of data tokens available, -1 on error
 //C_StArT
-int circular_buffer_data_available(circular_buffer_p p){   // InTc
+int circular_buffer_data_available(
+  circular_buffer_p p
+  ){
 //C_EnD
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
@@ -292,7 +312,10 @@ int circular_buffer_data_available(circular_buffer_p p){   // InTc
 // return the actual number of data tokens available
 // return -1 upon error
 //C_StArT
-int circular_buffer_wait_data_available(circular_buffer_p p, int n){   // InTc
+int circular_buffer_wait_data_available(
+  circular_buffer_p p, 
+  int n
+  ){
 //C_EnD
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
@@ -319,7 +342,9 @@ int circular_buffer_wait_data_available(circular_buffer_p p, int n){   // InTc
 //F_EnD
 // get the address of the first position in the circular data buffer
 //C_StArT
-int32_t *circular_buffer_start(circular_buffer_p p){   // InTc
+int32_t *circular_buffer_start(
+  circular_buffer_p p
+  ){
 //C_EnD
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
@@ -336,7 +361,10 @@ int32_t *circular_buffer_start(circular_buffer_p p){   // InTc
 // returns a pointer to the  insertion point of the circular data buffer
 // useful in conjunction with circular_buffer_data_snoop
 //C_StArT
-int32_t *circular_buffer_data_in(circular_buffer_p p){   // InTc
+int32_t *circular_buffer_data_in(
+  circular_buffer_p p
+  ){
+//C_EnD
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.in;
@@ -352,7 +380,9 @@ int32_t *circular_buffer_data_in(circular_buffer_p p){   // InTc
 // return a pointer to the  extraction point of the circular data buffer
 // useful in conjunction with circular_buffer_data_snoop
 //C_StArT
-int32_t *circular_buffer_data_out(circular_buffer_p p){   // InTc
+int32_t *circular_buffer_data_out(
+  circular_buffer_p p
+  ){
 //C_EnD
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
@@ -363,7 +393,8 @@ int32_t *circular_buffer_data_out(circular_buffer_p p){   // InTc
 //     import :: C_PTR, C_INT
 //     implicit none
 //     type(C_PTR), intent(IN), value :: p
-//     integer(C_INT), intent(OUT) :: n1, n2
+//     integer(C_INT), intent(OUT) :: n1
+//     integer(C_INT), intent(OUT) :: n2
 //     type(C_PTR) :: inp
 //   end function circular_buffer_advance_in
 //F_EnD
@@ -371,7 +402,11 @@ int32_t *circular_buffer_data_out(circular_buffer_p p){   // InTc
 // n1 slots available at "in", n2 slots available at "start"
 // upon error, NULL is returned, and n1 and n2 are set to -1
 //C_StArT
-int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n2){   // InTc
+int32_t *circular_buffer_advance_in(
+  circular_buffer_p p, 
+  int32_t *n1, 
+  int32_t *n2
+  ){
 //C_EnD
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
@@ -408,7 +443,8 @@ int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n
 //     import :: C_PTR, C_INT
 //     implicit none
 //     type(C_PTR), intent(IN), value :: p
-//     integer(C_INT), intent(OUT) :: n1, n2
+//     integer(C_INT), intent(OUT) :: n1
+//     integer(C_INT), intent(OUT) :: n2
 //     type(C_PTR) :: outp
 //   end function circular_buffer_advance_out
 //F_EnD
@@ -416,7 +452,11 @@ int32_t *circular_buffer_advance_in(circular_buffer_p p, int32_t *n1, int32_t *n
 // n1 tokens available at "out", n2 tokens available at "start"
 // upon error, NULL is returned, and n1 and n2 are set to -1
 //C_StArT
-int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *n2){   // InTc
+int32_t *circular_buffer_advance_out(
+  circular_buffer_p p, 
+  int32_t *n1, 
+  int32_t *n2
+  ){
 //C_EnD
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
@@ -458,7 +498,11 @@ int32_t *circular_buffer_advance_out(circular_buffer_p p, int32_t *n1, int32_t *
 // return the number of data tokens available after this operation
 // return -1 upon error
 //C_StArT
-int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){   // InTc
+int circular_buffer_atomic_get(
+  circular_buffer_p p, 
+  int *dst, 
+  int n
+  ){
 //C_EnD
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
@@ -502,7 +546,13 @@ int circular_buffer_atomic_get(circular_buffer_p p, int *dst, int n){   // InTc
 // return the number of data tokens available after this operation
 // return -1 upon error
 //C_StArT
-int circular_buffer_extract(circular_buffer_p p, int *dst, int n, int offset, int update){   // InTc
+int circular_buffer_extract(
+  circular_buffer_p p, 
+  int *dst, 
+  int n, 
+  int offset, 
+  int update
+  ){
 //C_EnD
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
@@ -555,7 +605,11 @@ int circular_buffer_extract(circular_buffer_p p, int *dst, int n, int offset, in
 // return the number of free slots available after this operation
 // return -1 upon error
 //C_StArT
-int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n){   // InTc
+int circular_buffer_atomic_put(
+  circular_buffer_p p, 
+  int *src, 
+  int n
+  ){
 //C_EnD
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
@@ -599,7 +653,13 @@ int circular_buffer_atomic_put(circular_buffer_p p, int *src, int n){   // InTc
 // return the number of free slots available after this operation
 // return -1 upon error
 //C_StArT
-int circular_buffer_insert(circular_buffer_p p, int *src, int n, int offset, int update){   // InTc
+int circular_buffer_insert(
+  circular_buffer_p p, 
+  int *src, 
+  int n, 
+  int offset, 
+  int update
+  ){
 //C_EnD
   int volatile *inp = &(p->m.in);
   int volatile *outp = &(p->m.out);
