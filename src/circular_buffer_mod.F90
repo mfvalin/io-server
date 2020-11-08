@@ -42,13 +42,13 @@ module circular_buffers
     !> \return number of empty slots available, -1 on error
     procedure :: wait_space_available   !< wait until at least na empty slots
     !> \return number of empty slots available, -1 on error
-    GENERIC   :: wait_space => space_available, wait_space_available  !< generic wait for free space
+    GENERIC   :: space => space_available, wait_space_available  !< generic wait for free space
     !> \return number of data tokens available, -1 if error
     procedure :: data_available         !< get current number of data tokens available
     !> \return number of data tokens available, -1 if error
     procedure :: wait_data_available    !< wait until at least na data tokens are available
     !> \return number of data tokens available, -1 if error
-    GENERIC   :: wait_data => data_available, wait_data_available     !< generic wait for available data
+    GENERIC   :: data => data_available, wait_data_available     !< generic wait for available data
     !> \return address of the beginning of the buffer
     procedure :: buffer_start           !< get address of the beginning ot the buffer
     !> \return address of the insertion point
@@ -66,6 +66,8 @@ module circular_buffers
   end type circular_buffer
 contains
   !> \brief initialize a circular buffer
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
+  !> p = cb\%init(nwords)
   function init(cb, nwords) result(p)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -75,6 +77,9 @@ contains
     p = cb%p
   end function init 
   !> \brief create a circular buffer in local memory
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
+  !> p = cb\%create_local(nwords)
+  !> <br>p = cb\%create(nwords)
   function create_local(cb, nwords) result(p)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -84,6 +89,9 @@ contains
     p = cb%p
   end function create_local
   !> \brief create a circular buffer in shared memory
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
+  !> p = cb\%create_shared(shmid, nwords)
+  !> <br>p = cb\%create(shmid, nwords)
   function create_shared(cb, shmid, nwords) result(p)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -94,6 +102,9 @@ contains
     p = cb%p
    end function create_shared
   !> \brief create a circular buffer from user supplied memory
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
+  !> p = cb\%create_from_pointer(ptr, nwords)
+  !> <br>p = cb\%create(ptr, nwords)
   function create_from_pointer(cb, ptr, nwords) result(p)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -104,6 +115,8 @@ contains
     p = cb%p
   end function create_from_pointer
   !> \brief detach shared memory segment used by circular buffer 
+  !> <br>type(circular_buffer) :: cb<br>integer :: status<br>
+  !> status = cb\%detach_shared()
   function detach_shared(cb) result(status)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -111,6 +124,9 @@ contains
     status = circular_buffer_detach_shared(cb%p)
   end function detach_shared
   !> \brief get number of empty slots available
+  !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
+  !> n = cb\%space_available()
+  !> <br>n = cb\%space()
   function space_available(cb) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -118,6 +134,9 @@ contains
     n = circular_buffer_space_available(cb%p)
   end function space_available
   !> \brief wait until at least na empty slots are available for inserting data
+  !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
+  !> n = cb\%wait_space_available(na)
+  !> <br>n = cb\%space(na)
   function wait_space_available(cb, na) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -126,6 +145,9 @@ contains
     n = circular_buffer_wait_space_available(cb%p, na)
   end function wait_space_available
   !> \brief get current number of data tokens available
+  !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
+  !> n = cb\%data_available()
+  !> <br>n = cb\%data()
   function data_available(cb) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -133,6 +155,9 @@ contains
     n = circular_buffer_data_available(cb%p)
   end function data_available
   !> \brief wait until at least na data tokens are available
+  !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
+  !> n = cb\%wait_data_available(na)
+  !> <br>n = cb\%data(na)
   function wait_data_available(cb, na) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -141,6 +166,8 @@ contains
     n = circular_buffer_wait_data_available(cb%p, na)
   end function wait_data_available
   !> \brief get address of the beginning of the buffer
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: start<br>
+  !> start = cb\%buffer_start()
   function buffer_start(cb) result(start)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -148,6 +175,8 @@ contains
     start = circular_buffer_start(cb%p)
   end function buffer_start
   !> \brief get address of the insertion point
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: inp<br>
+  !> inp = cb\%data_in()
   function data_in(cb) result(inp)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -155,6 +184,8 @@ contains
     inp = circular_buffer_data_in(cb%p)
   end function data_in
   !> \brief get address of the extraction point
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: outp<br>
+  !> outp = cb\%data_out()
   function data_out(cb) result(outp)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -162,6 +193,8 @@ contains
     outp = circular_buffer_data_out(cb%p)
   end function data_out
   !> \brief get pointer to the in position
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: inp<br>
+  !> inp = cb\%advance_in(n1, n2)
   function advance_in(cb, n1, n2) result(inp)
                                                             !< assume that the caller knows the start of data buffer
     implicit none
@@ -172,6 +205,8 @@ contains
     inp = circular_buffer_advance_in(cb%p, n1, n2)
   end function advance_in
   !> \brief get pointer to the "out" position
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: outp<br>
+  !> outp = cb\%advance_out(n1, n2)
   function advance_out(cb, n1, n2) result(outp)
                                                             !< assume that the caller knows the start of data buffer
     implicit none
@@ -182,6 +217,8 @@ contains
     outp = circular_buffer_advance_out(cb%p, n1, n2)
   end function advance_out
   !> \brief wait until ndst tokens are available then extract them into dst
+  !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
+  !> n = cb\%atomic_get(dst, ndst)
   function atomic_get(cb, dst, ndst) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -191,6 +228,8 @@ contains
     n = circular_buffer_atomic_get(cb%p, dst, ndst)
   end function atomic_get
   !> \brief wait until nsrc free slots are available then insert from src array
+  !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
+  !> n = cb\%atomic_put(src, nsrc)
   function atomic_put(cb, src, nsrc) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -221,14 +260,14 @@ program demo
   status = c%detach_shared()
   status = b%space_available()
   n = b%space_available()
-  n = b%wait_space()
+  n = b%space()
   n = b%wait_space_available(256)
-  n = b%wait_space()                    ! generic call
-  n = b%wait_space(256)                 ! generic call
+  n = b%space()                    ! generic call
+  n = b%space(256)                 ! generic call
   n = b%data_available()
   n = b%wait_data_available(256)
-  n = b%wait_data()                     ! generic call
-  n = b%wait_data(256)                  ! generic call
+  n = b%data()                     ! generic call
+  n = b%data(256)                  ! generic call
   
 end program demo
 #endif
