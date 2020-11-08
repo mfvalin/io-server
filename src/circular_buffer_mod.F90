@@ -247,8 +247,8 @@ program demo
   implicit none
 
   type(circular_buffer) :: b, c, d, e, f
-  integer :: shmid, n, status
-  type(C_PTR) :: p, q, r, s, t
+  integer :: shmid, n, status, n1, n2
+  type(C_PTR) :: p, q, r, s, t, x
   integer, dimension(16000), target :: local
 
   p = b%create(128000)
@@ -268,6 +268,13 @@ program demo
   n = b%wait_data_available(256)
   n = b%data()                     ! generic call
   n = b%data(256)                  ! generic call
+  x = b%buffer_start()
+  x = b%data_in()
+  x = b%data_out()
+  x = b%advance_in(n1, n2)
+  x = b%advance_out(n1, n2)
+  n = b%atomic_get(local(1000), 18)
+  n = b%atomic_put(local(2000), 45)
   
 end program demo
 #endif
