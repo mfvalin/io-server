@@ -21,18 +21,19 @@
 #define FIOL_VERSION 0x1BAD
 // in == out means buffer is empty
 // in == out-1 (or in=limit-1 && out==0) means buffer is full
-typedef struct{        // circular buffer management variables
-  int32_t version;     // version marker
-  int32_t first;       // should be 0 (assumed to be 0 in circular_buffer.c)
-  int32_t in;          // start inserting data at data[in]
-  int32_t out;         // start extracting data at data[out]
-  int32_t limit;       // size of data buffer (last available index + 1)
+//!> circular buffer management variables
+typedef struct{
+  int32_t version;     //!< version marker
+  int32_t first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  int32_t in;          //!< start inserting data at data[in]
+  int32_t out;         //!< start extracting data at data[out]
+  int32_t limit;       //!< size of data buffer (last available index + 1)
 } fiol_management;
 typedef fiol_management *fiol_management_p;
-
-typedef struct{        // skeleton for circular buffer
-  fiol_management m;   // management variables
-  int32_t data[1];     // data buffer (contains at most limit -1 useful data elements)
+//!> skeleton for circular buffer
+typedef struct{
+  fiol_management m;   //!< management variables
+  int32_t data[1];     //!< data buffer (contains at most limit -1 useful data elements)
 } circular_buffer;
 typedef circular_buffer *circular_buffer_p;
 

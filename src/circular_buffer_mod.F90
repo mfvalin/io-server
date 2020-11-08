@@ -20,28 +20,49 @@ module circular_buffers
   implicit none
   include 'circular_buffer.inc'
   !> \brief circular_buffer user defined type
-  type :: circular_buffer
+  type, public :: circular_buffer
+    !> \private
+    private
     type(C_PTR) :: p                    !< pointer to storage used by circular buffer
   contains
+    !> \return pointer to created circular buffer
     procedure :: init                   !< initialize a circular buffer
+    !> \return pointer to created circular buffer
     procedure :: create_local           !< create a circular buffer in local memory
+    !> \return pointer to created circular buffer
     procedure :: create_shared          !< create a circular buffer in shared memory
+    !> \return pointer to created circular buffer
     procedure :: create_from_pointer    !< create a circular buffer from user supplied memory
-    GENERIC   :: create => create_local, create_shared, create_from_pointer  !< generic create
+    !> \return pointer to created circular buffer
+    GENERIC   :: create => create_local, create_shared, create_from_pointer  !< generic create circular buffer
+    !> \return 0 if success, -1 if error
     procedure :: detach_shared          !< detach shared memory segment used by circular buffer
+    !> \return number of empty slots available, -1 on error
     procedure :: space_available        !< get number of empty slots available
+    !> \return number of empty slots available, -1 on error
     procedure :: wait_space_available   !< wait until at least na empty slots
-    GENERIC   :: wait_space => space_available, wait_space_available  !< generic wait for space
+    !> \return number of empty slots available, -1 on error
+    GENERIC   :: wait_space => space_available, wait_space_available  !< generic wait for free space
+    !> \return number of data tokens available, -1 if error
     procedure :: data_available         !< get current number of data tokens available
+    !> \return number of data tokens available, -1 if error
     procedure :: wait_data_available    !< wait until at least na data tokens are available
-    GENERIC   :: wait_data => data_available, wait_data_available     !< generic wait for data
+    !> \return number of data tokens available, -1 if error
+    GENERIC   :: wait_data => data_available, wait_data_available     !< generic wait for available data
+    !> \return address of the beginning of the buffer
     procedure :: buffer_start           !< get address of the beginning ot the buffer
+    !> \return address of the insertion point
     procedure :: data_in                !< get address of the insertion point
+    !> \return address of the extraction point
     procedure :: data_out               !< get address of the extraction point
+    !> \return pointer to the "in" position
     procedure :: advance_in             !< get pointer to the in position, and space available
+    !> \return pointer to the "out" position
     procedure :: advance_out            !< get pointer to the out position, and data available
-    procedure :: atomic_get             !< wait until data is available then extract data
-    procedure :: atomic_put             !< wait until space is available then insert data
+    !> \return number of data tokens available after this operation, -1 if error
+    procedure :: atomic_get             !< wait until enough data is available then extract data
+    !> \return number of free slots available after this operation, -1 if error
+    procedure :: atomic_put             !< wait until enough free slots are available then insert data
   end type circular_buffer
 contains
   !> \brief initialize a circular buffer
@@ -86,14 +107,14 @@ contains
   function detach_shared(cb) result(status)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
-    integer(C_INT) :: status                                !< 0 upon success, -1 upon error
+    integer(C_INT) :: status                                !< 0 if success, -1 if error
     status = circular_buffer_detach_shared(cb%p)
   end function detach_shared
   !> \brief get number of empty slots available
   function space_available(cb) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
-    integer(C_INT) :: n                                     !< current number of empty slots available, -1 if error
+    integer(C_INT) :: n                                     !< number of empty slots available, -1 if error
     n = circular_buffer_space_available(cb%p)
   end function space_available
   !> \brief wait until at least na empty slots are available for inserting data
@@ -101,14 +122,14 @@ contains
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT), intent(IN), value :: na                 !< needed number of available slots
-    integer(C_INT) :: n                                     !< actual number of empty slots available, -1 on error
+    integer(C_INT) :: n                                     !< number of empty slots available, -1 on error
     n = circular_buffer_wait_space_available(cb%p, na)
   end function wait_space_available
   !> \brief get current number of data tokens available
   function data_available(cb) result(n)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
-    integer(C_INT) :: n                                     !< current number of data tokens available, -1 if error
+    integer(C_INT) :: n                                     !< number of data tokens available, -1 if error
     n = circular_buffer_data_available(cb%p)
   end function data_available
   !> \brief wait until at least na data tokens are available
@@ -116,10 +137,10 @@ contains
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT), intent(IN), value :: na                 !< needed number of available tokens
-    integer(C_INT) :: n                                     !< actual number of data tokens available, -1 if error
+    integer(C_INT) :: n                                     !< number of data tokens available, -1 if error
     n = circular_buffer_wait_data_available(cb%p, na)
   end function wait_data_available
-  !> \brief get address of the beginning ot the buffer
+  !> \brief get address of the beginning of the buffer
   function buffer_start(cb) result(start)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
@@ -145,9 +166,9 @@ contains
                                                             !< assume that the caller knows the start of data buffer
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
-    integer(C_INT), intent(OUT)    :: n1                    !< number of slots available at the "in" position, -1 upon error
-    integer(C_INT), intent(OUT)    :: n2                    !< number of slots available at the "start" of the buffer, -1 upon error
-    type(C_PTR)                    :: inp                   !< pointer to the "in" position, C_NULL_PTR upon error
+    integer(C_INT), intent(OUT)    :: n1                    !< number of slots available at the "in" position, -1 if error
+    integer(C_INT), intent(OUT)    :: n2                    !< number of slots available at the "start" of the buffer, -1 if error
+    type(C_PTR)                    :: inp                   !< pointer to the "in" position, C_NULL_PTR if error
     inp = circular_buffer_advance_in(cb%p, n1, n2)
   end function advance_in
   !> \brief get pointer to the "out" position
@@ -155,9 +176,9 @@ contains
                                                             !< assume that the caller knows the start of data buffer
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
-    integer(C_INT), intent(OUT)    :: n1                    !< number of tokens available at the "out" position, -1 upon error
-    integer(C_INT), intent(OUT)    :: n2                    !< number of tokens available at the "start" of the buffer, -1 upon error
-    type(C_PTR)                    :: outp                  !< pointer to the "out" position, C_NULL_PTR upon error
+    integer(C_INT), intent(OUT)    :: n1                    !< number of tokens available at the "out" position, -1 if error
+    integer(C_INT), intent(OUT)    :: n2                    !< number of tokens available at the "start" of the buffer, -1 if error
+    type(C_PTR)                    :: outp                  !< pointer to the "out" position, C_NULL_PTR if error
     outp = circular_buffer_advance_out(cb%p, n1, n2)
   end function advance_out
   !> \brief wait until ndst tokens are available then extract them into dst
@@ -175,7 +196,7 @@ contains
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT), intent(IN), value :: nsrc               !< number of tokens to insert from src
     integer(C_INT), dimension(*), intent(IN) :: src         !< source array for data insertion
-    integer(C_INT) :: n                                     !< number of free slots available after this operation
+    integer(C_INT) :: n                                     !< number of free slots available after this operation, -1 if error
     n = circular_buffer_atomic_put(cb%p, src, nsrc)
   end function atomic_put
 
