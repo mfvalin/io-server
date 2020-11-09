@@ -65,8 +65,8 @@
 #define FIOL_VERSION 0x1BAD
 
 //!> circular buffer management variables
-//!> <br>in == out means buffer is empty
-//!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
+//   <br>in == out means buffer is empty
+//   <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct{
   int32_t version;     //!< version marker
   int32_t first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
