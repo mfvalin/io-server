@@ -96,7 +96,47 @@
 #include <sys/types.h>
 #include <sys/shm.h>
 
-#include "circular_buffer.h"
+// #include "circular_buffer.h"
+//C_StArT
+#if ! defined(FIOL_VERSION)
+//!> version marker
+#define FIOL_VERSION 0x1BAD
+
+//!> circular buffer management variables
+//!> <br>in == out means buffer is empty
+//!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
+typedef struct{
+  int32_t version;     //!< version marker
+  int32_t first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  int32_t in;          //!< start inserting data at data[in]
+  int32_t out;         //!< start extracting data at data[out]
+  int32_t limit;       //!< size of data buffer (last available index + 1)
+} fiol_management;
+
+//!> pointer to circular buffer management part
+typedef fiol_management *fiol_management_p;
+
+//!> skeleton for circular buffer
+typedef struct{
+  fiol_management m;   //!< management structure
+  int32_t data[];      //!< data buffer (contains at most limit -1 useful data elements)
+} circular_buffer;
+
+//!> pointer to circular buffer 
+typedef circular_buffer *circular_buffer_p;
+
+#include <immintrin.h>
+
+//!> memory store fence
+#define W_FENCE __asm__ volatile("": : :"memory"); _mm_sfence();
+
+//!> memory load fence
+#define R_FENCE __asm__ volatile("": : :"memory"); _mm_lfence();
+
+//!> memory load+store fence
+#define M_FENCE __asm__ volatile("": : :"memory"); _mm_mfence();
+#endif
+//C_EnD
 
 #define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
 
@@ -601,6 +641,21 @@ int32_t circular_buffer_atomic_get(
   return DATA_AVAILABLE(in,out,limit);
 }
 
+//F_StArT
+//   !> wait until ndst tokens are available then copy to dst array<br>
+//   !> DO NOT UPDATE "out" unless update flag is non zero<br>
+//   !> n = circular_buffer_extract(p, dst, ndst, offset, update)
+//   function circular_buffer_extract(p, dst, ndst, offset, update) result(n) BIND(C,name='circular_buffer_extract')
+//     import :: C_PTR, C_INT
+//     implicit none
+//     type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer 
+//     integer(C_INT), intent(IN), value :: ndst          !< number of tokens to copy to dst
+//     integer(C_INT), dimension(*), intent(OUT) :: dst   !< destination array for data extraction
+//     integer(C_INT), intent(IN), value :: offset        !< offset from the "in" position
+//     integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
+//     integer(C_INT) :: n                                !< number of free slots available after this operation
+//   end function circular_buffer_extract
+//F_EnD
 //C_StArT
 //! get n data tokens at position "out + offset", 
 //! wait until n tokens are available at that position, 
@@ -708,7 +763,21 @@ int32_t circular_buffer_atomic_put(
   out = *outp;
   return SPACE_AVAILABLE(in,out,limit);
 }
-
+//F_StArT
+//   !> wait until nsrc free slots are available then insert from src array<br>
+//   !> DO NOT UPDATE the "in" pointer unless update flag is non zero<br>
+//   !> n = circular_buffer_insert(p, src, nsrc, offset, update)
+//   function circular_buffer_insert(p, src, nsrc, offset, update) result(n) BIND(C,name='circular_buffer_insert')
+//     import :: C_PTR, C_INT
+//     implicit none
+//     type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer 
+//     integer(C_INT), intent(IN), value :: nsrc          !< number of tokens to insert from src
+//     integer(C_INT), dimension(*), intent(IN) :: src    !< source array for data insertion
+//     integer(C_INT), intent(IN), value :: offset        !< offset from the "in" position
+//     integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
+//     integer(C_INT) :: n                                !< number of free slots available after this operation
+//   end function circular_buffer_insert
+//F_EnD
 //C_StArT
 //! insert n tokens from the src array at position "in + offset", 
 //! wait until n free slots are available, 

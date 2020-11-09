@@ -60,6 +60,44 @@
    x = useful data       . = free space
  \endverbatim
 */
+#if ! defined(FIOL_VERSION)
+//!> version marker
+#define FIOL_VERSION 0x1BAD
+
+//!> circular buffer management variables
+//   <br>in == out means buffer is empty
+//   <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
+typedef struct{
+  int32_t version;     //!< version marker
+  int32_t first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  int32_t in;          //!< start inserting data at data[in]
+  int32_t out;         //!< start extracting data at data[out]
+  int32_t limit;       //!< size of data buffer (last available index + 1)
+} fiol_management;
+
+//!> pointer to circular buffer management part
+typedef fiol_management *fiol_management_p;
+
+//!> skeleton for circular buffer
+typedef struct{
+  fiol_management m;   //!< management structure
+  int32_t data[];      //!< data buffer (contains at most limit -1 useful data elements)
+} circular_buffer;
+
+//!> pointer to circular buffer 
+typedef circular_buffer *circular_buffer_p;
+
+#include <immintrin.h>
+
+//!> memory store fence
+#define W_FENCE __asm__ volatile("": : :"memory"); _mm_sfence();
+
+//!> memory load fence
+#define R_FENCE __asm__ volatile("": : :"memory"); _mm_lfence();
+
+//!> memory load+store fence
+#define M_FENCE __asm__ volatile("": : :"memory"); _mm_mfence();
+#endif
 //! initialize a circular buffer
 //! <br> = circular_buffer_init(p, nwords)
 //! @return pointer to buffer upon success, NULL upon error
