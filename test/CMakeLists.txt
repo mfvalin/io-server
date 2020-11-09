@@ -38,7 +38,7 @@ set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
 # WHAT TO COMPILE
 
-add_executable(${PROJECT_NAME}_circ_buffer remote_circular_buffer.F90)
+add_executable(${PROJECT_NAME}_circ_buffer circular_buffer.F90)
 set_target_properties(${PROJECT_NAME}_circ_buffer PROPERTIES VERSION ${PROJECT_VERSION})
 target_link_libraries(${PROJECT_NAME}_circ_buffer io-server)
 target_include_directories(
