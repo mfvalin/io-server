@@ -14,7 +14,8 @@
 ! License along with this program; if not, write to the
 ! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! Boston, MA 02111-1307, USA.
-program test_circular_buffer
+
+program test_remote_circular_buffer
 
   use ISO_C_BINDING
   implicit none
@@ -22,43 +23,37 @@ program test_circular_buffer
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
   integer, parameter :: NUM_DATA_ELEMENTS = 10
 
-  include 'memory_arena.inc'
-  include 'circular_buffer.inc'
+  include 'remote_circular_buffer.inc'
   include 'mpif.h'
 
-  integer     :: error, i
+  integer     :: error !, i
   integer     :: rank, comm_size
   type(C_PTR) :: circ_buffer
-  integer     :: available
+!  integer     :: available
 
-  integer     :: in_data(NUM_DATA_ELEMENTS), out_data(NUM_DATA_ELEMENTS)
+!  integer     :: in_data(NUM_DATA_ELEMENTS), out_data(NUM_DATA_ELEMENTS)
 
   call MPI_init(error)
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
-  circ_buffer = circular_buffer_create(NUM_BUFFER_ELEMENTS)
+  print *, 'Program test_remote_circular_buffer', rank
+
+  circ_buffer = remote_circular_buffer_create(MPI_COMM_WORLD, 0, rank, NUM_BUFFER_ELEMENTS)
 
   if (.not. c_associated(circ_buffer)) then
     print *, 'Could not create a circular buffer!', rank
     goto 777
   endif
 
-  out_data = -1
-  do i = 1, NUM_DATA_ELEMENTS
-    in_data(i) = i + 100 * rank
-  enddo
+  circ_buffer = remote_circular_buffer_print(circ_buffer)
 
-  print *, 'in_data ', rank, ':', in_data
-
-  available = circular_buffer_atomic_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
-  available = circular_buffer_atomic_get(circ_buffer, out_data, NUM_DATA_ELEMENTS)
-
-  print *, 'out_data', rank, ':', out_data
-
+  call remote_circular_buffer_delete(circ_buffer)
 
 777 CONTINUE
 
   call MPI_finalize(error)
 
-end program test_circular_buffer
+  print *, 'Program test_remote_circular_buffer', rank
+
+end program test_remote_circular_buffer
