@@ -91,6 +91,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <sys/ipc.h>
 #include <sys/types.h>
@@ -140,7 +141,7 @@ typedef circular_buffer *circular_buffer_p;
 
 #define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
 
-#define DATA_AVAILABLE(in,out,limit)  ((in >= out) ? in-out : limit-out+in-1)
+#define DATA_AVAILABLE(in,out,limit)  ((in >= out) ? in-out : limit-out+in)
 
 static inline void move_integers(int *dst, int*src, int n){
   memcpy(dst, src, sizeof(int)*n);
@@ -166,7 +167,7 @@ circular_buffer_p circular_buffer_init(
   ){
 //C_EnD
   if(p == NULL) return NULL;
-  if(nwords < 4096) return NULL;   // area is too small
+  if(nwords < 128) return NULL;   // area is too small
   p->m.version = FIOL_VERSION;
   p->m.first = 0;
   p->m.in    = 0;
@@ -259,7 +260,7 @@ circular_buffer_p circular_buffer_create(
   circular_buffer_p t;
   size_t sz = nwords * sizeof(int);
 
-  if(sz < 4096) return NULL;
+  if(sz < 128) return NULL;
   t = (circular_buffer_p ) malloc(sz);
   return circular_buffer_init(t, nwords) ;
 }
@@ -286,7 +287,7 @@ circular_buffer_p circular_buffer_from_pointer(
   circular_buffer_p t;
   size_t sz = nwords * sizeof(int);
 
-  if(sz < 4096) return NULL;
+  if(sz < 128) return NULL;
   t = (circular_buffer_p ) p;
   return circular_buffer_init(t, nwords) ;
 }
@@ -609,13 +610,17 @@ int32_t circular_buffer_atomic_get(
   int volatile *outp = &(p->m.out);
   int *buf = p->data;
   int in, out, limit, navail, ni;
+  useconds_t delay = 10;   // 10 microseconds
 
   if(p == NULL || dst == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;
   // wait until enough data is available
   limit = p->m.limit;
-  navail = 0; in = 0 ; out = 0;
+  in = *inp;
+  out = *outp;
+  navail = DATA_AVAILABLE(in,out,limit);
   while(navail <n){
+    usleep(delay);
     in = *inp;
     out = *outp;
     navail = DATA_AVAILABLE(in,out,limit);
@@ -732,13 +737,17 @@ int32_t circular_buffer_atomic_put(
   int volatile *outp = &(p->m.out);
   int *buf = p->data;
   int in, out, limit, navail, ni;
+  useconds_t delay = 10;    // 10 microseconds
 
   if(p == NULL || src == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;
   // wait until there is enough room to insert data
   limit = p->m.limit;
-  navail = 0; in = 0 ; out = 0;
+  in = *inp;
+  out = *outp;
+  navail = SPACE_AVAILABLE(in,out,limit);
   while(navail <n){
+    usleep(delay);
     in = *inp;
     out = *outp;
     navail = SPACE_AVAILABLE(in,out,limit);
