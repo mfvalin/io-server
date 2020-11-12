@@ -96,7 +96,7 @@ function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena
 import :: C_PTR, C_INT
 type(C_PTR), intent(IN), value :: mem            !< pointer to master memory arena (see  memory_arena_init)
 integer(C_INT), intent(IN), value :: nsym        !< size of symbol table to allocate (max number of blocks expected)
-integer(C_INT), intent(IN), value :: size        !< size of memory area in 32 bit units
+integer(C_INT), intent(IN), value :: size        !< size of memory area for master arena in 32 bit units
 integer(C_INT) :: id                             !< id of current process
 end function master_arena_init
 
@@ -105,7 +105,7 @@ end function master_arena_init
 !> ptr = memory_block_find(mem, size, flags, name)
 function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memory_block_find')
 import :: C_PTR, C_INT, C_CHAR
-type(C_PTR), intent(IN), value :: mem                    !< pointer to master memory arena (see  memory_arena_init)
+type(C_PTR), intent(IN), value :: mem                    !< pointer to memory arena (see  memory_arena_init)
 integer(C_INT), intent(OUT) :: size                      !< size of memory block in 32 bit units (0 if not found)
 integer(C_INT), intent(OUT) :: flags                     !< block flags (0 if not found)
 character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)

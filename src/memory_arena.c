@@ -114,10 +114,10 @@ typedef struct{              //!< MUST BE CONSISTENT WITH arena_header
 
 //!> description of a memory arena
 typedef struct{
-  uint64_t arena_name;       //!< name of segment (max 8 characters)
+  uint64_t arena_name;       //!< name of segment (max 8 characters, stops at null or space)
   size_t   arena_sz;         //!< size of segment
-  int      arena_id;         //!< shared memory id of shared memory segment
-  int      owner_id;         //!< id of process that owns the segment
+  int32_t  arena_id;         //!< shared memory id of shared memory segment
+  int32_t  owner_id;         //!< id of process that owns the segment
 }master_entry;               //!< there will be one entry per memory arena in master table
 
 //!> max number of arenas in master arena
@@ -127,8 +127,8 @@ typedef struct{
 //!> header of master arena (only used to compute the master header size)
 typedef struct{
   uint32_t lock;             //!< to lock master arena
-  int      arena_id;         //!< shared memory id of master arena
-  uint64_t arena_name;       //!< name of master arena  (max 8 characters)
+  int32_t  arena_id;         //!< shared memory id of master arena
+  uint64_t arena_name;       //!< name of master arena  (max 8 characters, stops at null or space)
   size_t   arena_sz;         //!< size of master arena segment
   master_entry me[MAX_MASTER];
 } master_header;
@@ -136,11 +136,11 @@ typedef struct{
 #define OldMasterHeaderSize64 (sizeof(master_header) / sizeof(uint64_t))
 #endif
 
-//!> master arena contains the master table, followed by a memory arena
+//!> master arena contains the master table, followed by a memory for its own arena
 typedef struct{
   uint32_t lock;             //!< to lock master arena
-  int      arena_id;         //!< shared memory id of master arena
-  uint64_t arena_name;       //!< name of master arena
+  int32_t  arena_id;         //!< shared memory id of master arena
+  uint64_t arena_name;       //!< name of master arena (max 8 characters, stops at null or space)
   size_t   arena_sz;         //!< size of master arena segment
   master_entry me[MAX_MASTER];  //!< size of the master table
   memory_arena ma;           //!< master memory arena, will contain the other arenas
@@ -158,10 +158,10 @@ typedef struct{
 //!> copy in local process memory pointing to memory arenas
 typedef struct{
   uint32_t     lock;            //!< should not be necessary
-  int          master_id;       //!< shared memory id of master arena
+  int32_t      master_id;       //!< shared memory id of master arena
   size_t       master_sz;       //!< size of segment
   master_arena *MA;             //!< pointer to master arena
-  local_entry  le[MAX_MASTER];  //!< table in local memory describing memory arenas
+  local_entry  le[MAX_MASTER];  //!< table in local memory describing memory arenas in the master arena
 }local_arena;
 
 //!> memory block header
@@ -182,6 +182,8 @@ typedef struct{
 //!> size of memory block trailer
 #define BlockTailSize64 (sizeof(block_tail) / sizeof(uint64_t))
 
+// ======= memory "fencing" macros (X86 family) =======
+
 //!> memory store fence
 #define W_FENCE asm volatile("": : :"memory"); _mm_sfence();
 
@@ -196,9 +198,13 @@ typedef struct{
 
 // memory arena management code
 
+// ===============  start of global data  ===============
+
 static uint32_t me = 999999999;  // identifier for this process (usually MPI rank) (alternative : getpid() )
 
-static local_arena LA;
+static local_arena LA;           // local information about master arena
+
+// ===============  end of global data  ===============
 
 //F_StArT
 // !> set owner's id (usually MPI rank) for memory arenas<br>
@@ -227,6 +233,7 @@ int32_t memory_arena_set_id(
 
 // translate char string (max 8 characters) into a 64 bit unsigned token
 // translation will stop at first null or space character
+// character string is CASE SENSITIVE (ASCII 128)
 static inline uint64_t block_name(unsigned char *name){
   int i;
   uint64_t name64 = 0;
@@ -372,7 +379,7 @@ uint32_t update_local_table(
   memory_arena *ma = (memory_arena *) &(MA->ma);
   int i;
 
-  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master arena
+  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master arena to get a consistent image
 
   LA.lock      = 0;
   LA.master_id = me;
@@ -380,9 +387,12 @@ uint32_t update_local_table(
   LA.MA        = MA;
 
   LA.le[0].arena_sz    = ma->arena_size;                 // memory arena associated to master arena
-  LA.le[0].arena_name  = block_name((unsigned char *)(unsigned char *)"MaStEr");
+  LA.le[0].arena_name  = block_name((unsigned char *)"MaStEr");
   LA.le[0].ma          = ma;
-fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",0, MA->me[0].arena_id, LA.le[0].ma, LA.le[0].arena_sz);
+#if defined(DEBUG)
+  fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",
+          0, MA->me[0].arena_id, LA.le[0].ma, LA.le[0].arena_sz);
+#endif
 
   for(i=1 ; i<MAX_MASTER ; i++){   // zero rest of local table
     if(LA.le[i].arena_sz == 0){                     // not initialized yet
@@ -394,7 +404,10 @@ fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",0
         break;
       }
     }
-fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",i, MA->me[i].arena_id, LA.le[i].ma, LA.le[i].arena_sz);
+#if defined(DEBUG)
+  fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",
+          i, MA->me[i].arena_id, LA.le[i].ma, LA.le[i].arena_sz);
+#endif
   }
 
   __sync_val_compare_and_swap(&(MA->lock), me, 0); // unlock master arena
@@ -409,7 +422,7 @@ fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",i
 //   import :: C_PTR, C_INT
 //   type(C_PTR), intent(IN), value :: mem            !< pointer to master memory arena (see  memory_arena_init)
 //   integer(C_INT), intent(IN), value :: nsym        !< size of symbol table to allocate (max number of blocks expected)
-//   integer(C_INT), intent(IN), value :: size        !< size of memory area in 32 bit units
+//   integer(C_INT), intent(IN), value :: size        !< size of memory area for master arena in 32 bit units
 //   integer(C_INT) :: id                             !< id of current process
 // end function master_arena_init
 //F_EnD
@@ -420,7 +433,7 @@ fprintf(stderr,"local update, arena = %d, id = %d, address = %p, size = %ld\n",i
 uint32_t master_arena_init(
   void *mem,                     //!< [in] pointer to master memory arena
   uint32_t nsym,                 //!< [in] size of symbol table to allocate (max number of blocks expected)
-  uint32_t size                  //!< [in] size of memory area in 32 bit units
+  uint32_t size                  //!< [in] size of memory area for master arena in 32 bit units
   ){
 //C_EnD
   master_arena *MA = (master_arena *) mem;
@@ -429,11 +442,11 @@ uint32_t master_arena_init(
 
   size = size - MasterHeaderSize64 * 2;     // space left for memory arena proper
 
-  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master arena
+  while(__sync_val_compare_and_swap(&(MA->lock), 0, me) != 0); // lock master arena while modifying it
 
-  for(i=0 ; i<MAX_MASTER ; i++){   // zero all entries in master table
-    MA->me[i].arena_name = 0;
-    MA->me[i].arena_sz   = 0;
+  for(i=0 ; i<MAX_MASTER ; i++){   // nullify all entries in master table
+    MA->me[i].arena_name =  0;
+    MA->me[i].arena_sz   =  0;
     MA->me[i].arena_id   = -1;
     MA->me[i].owner_id   = -1;
   }
@@ -466,7 +479,7 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
 // !> ptr = memory_block_find(mem, size, flags, name)
 // function memory_block_find(mem, size, flags, name) result(ptr) BIND(C,name='memory_block_find')
 //   import :: C_PTR, C_INT, C_CHAR
-//   type(C_PTR), intent(IN), value :: mem                    !< pointer to master memory arena (see  memory_arena_init)
+//   type(C_PTR), intent(IN), value :: mem                    !< pointer to memory arena (see  memory_arena_init)
 //   integer(C_INT), intent(OUT) :: size                      !< size of memory block in 32 bit units (0 if not found)
 //   integer(C_INT), intent(OUT) :: flags                     !< block flags (0 if not found)
 //   character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
@@ -478,7 +491,7 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
 //! ptr = memory_block_find(mem, size, flags, name)
 //! @return local address of memory block (NULL if not found)
 void *memory_block_find(
-  void *mem,                      //!< [in]  pointer to master memory arena
+  void *mem,                      //!< [in]  pointer to memory arena
   uint32_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
@@ -507,7 +520,7 @@ void *memory_block_find(
 }
 
 //F_StArT
-// !> same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)<br>
+// !> same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 // !> ptr = memory_block_find_wait(mem, size, flags, name, timeout)
 // function memory_block_find_wait(mem, size, flags, name, timeout) result(ptr) BIND(C,name='memory_block_find_wait')
 //   import :: C_PTR, C_INT, C_CHAR
@@ -520,11 +533,11 @@ void *memory_block_find(
 // end function memory_block_find_wait
 //F_EnD
 //C_StArT
-//! same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)<br>
+//! same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 //! ptr = memory_block_find_wait(mem, size, flags, name, timeout)
 //! @return local address of memory block (NULL if not found)
 void *memory_block_find_wait(
-  void *mem,                      //!< [in]  pointer to memory arena
+  void *mem,                      //!< [in]  pointer to memory arena (see  memory_arena_init)
   uint32_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
