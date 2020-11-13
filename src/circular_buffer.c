@@ -89,7 +89,6 @@
 //C_EnD
 
 #include <stdio.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -99,6 +98,8 @@
 
 // #include "circular_buffer.h"
 //C_StArT
+#include <stdint.h>
+
 #if ! defined(FIOL_VERSION)
 //!> version marker
 #define FIOL_VERSION 0x1BAD
