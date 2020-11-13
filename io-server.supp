@@ -1,0 +1,52 @@
+
+{
+    <OpenMPI_supp>
+    Memcheck:Param
+    writev(vector[...])
+    fun:writev
+    fun:OPAL_MCA_PMIX3X_pmix_ptl_base_send_handler
+    fun:opal_libevent2022_event_base_loop
+    obj:/usr/lib/openmpi/openmpi/mca_pmix_pmix3x.so
+    fun:start_thread
+    fun:clone
+}
+
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: all
+    fun:calloc
+    ...
+    fun:ompi_mpi_init
+}
+
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: all
+    fun:malloc
+    ...
+    fun:ompi_mpi_init
+}
+
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: all
+    fun:malloc
+    ...
+    fun:orte_init
+}
+
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: all
+    fun:malloc
+    ...
+    fun:opal_libevent2022_event_base_loop
+}
+
+
+
+
