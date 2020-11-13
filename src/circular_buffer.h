@@ -60,6 +60,8 @@
    x = useful data       . = free space
  \endverbatim
 */
+#include <stdint.h>
+
 #if ! defined(FIOL_VERSION)
 //!> version marker
 #define FIOL_VERSION 0x1BAD

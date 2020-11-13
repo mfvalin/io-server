@@ -58,8 +58,8 @@ integer(C_INT), intent(IN), value :: id                   !< owner's id (usually
 integer(C_INT) :: me                                      !< -1 upon error, value > 0 otherwise
 end function memory_arena_set_id
 
-set id for memory management arena, return identifier (-1 in case of error)
-id must be a POSITIVE INTEGER
+!> set id for memory management arena, return identifier (-1 in case of error)
+!> id must be a POSITIVE INTEGER
 
 
 !> dump arena header and symbol table (description of contents of memory arena)<br>
@@ -113,7 +113,7 @@ type(C_PTR) :: ptr                                       !< local address of mem
 end function memory_block_find
 
 
-!> same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)<br>
+!> same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 !> ptr = memory_block_find_wait(mem, size, flags, name, timeout)
 function memory_block_find_wait(mem, size, flags, name, timeout) result(ptr) BIND(C,name='memory_block_find_wait')
 import :: C_PTR, C_INT, C_CHAR
