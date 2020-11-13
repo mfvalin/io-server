@@ -24,65 +24,141 @@
 
 #include "circular_buffer.h"
 
+/**
+  * @brief All information necessary to manage a set of circuler buffers accessed remotely, whose entire data is
+  * located in a single process.
+  *
+  * This struct is a "collective" object, in the sense that every process that wants a remote circular buffer must have
+  * an instance of it, including the "root" process. The root process is also called the "consumer" and holds the data
+  * of all the collectively created circular buffers. The other processes are the "producers" and each only hold a copy
+  * of the header of its circular buffer instance. The data on the producer process also forms an MPI window, which is
+  * accessible by every other process that collectively own this remote buffer. In every communication, the consumer
+  * process is always passive; this removes any need for explicit synchronization related to data transfer.
+  */
 typedef struct {
-  MPI_Comm communicator;
-  MPI_Win window;
-  int32_t root;
-  int32_t rank;
-  int32_t comm_size;
-  int32_t window_offset;
-  int32_t num_bytes;
+  MPI_Comm communicator;  //!< Communicator through which the processes sharing the remote buffer can communicate
+  MPI_Win window;         //!< MPI window into the buffers, on the process which holds all data
+  int32_t root;           //!< Rank of the process which actually stores the data
+  int32_t rank;           //!< Rank of the process that initialized this particular instance of the remote buffer
+  int32_t comm_size;      //!< How many processes share this remote buffer
+  int32_t window_offset;  //!< Offset into the MPI window at which this producer's circular buffer is located
+  int32_t num_bytes;      //!< How many bytes of data form a single circular buffer instance in this remote buffer
   union {
-    circular_buffer* queue;
-    int8_t* raw_data;
+    circular_buffer* queue; //!< Pointer to the header of the circular buffer (only valid for producers)
+    int8_t* raw_data;       //!< Pointer to the data holding the entire set of circular buffers (only valid for the consumer)
   };
 } remote_circular_buffer;
 
 typedef remote_circular_buffer *remote_circular_buffer_p;
 
-static int available_space(const int in, const int out, const int limit)
-{
-//    printf("available_space: in = %d, out = %d, limit = %d\n", in, out, limit);
+//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static int available_space(
+    const int in,     //!< [in] Index of insertion location in the buffer
+    const int out,    //!< [in] Index of extraction location in the buffer
+    const int limit   //!< [in] Number of elements that the buffer can hold
+  ) {
   return (in < out) ? out - in - 1 : limit - in + out - 1;
 }
 
-static int available_data(const int in, const int out, const int limit)
-{
+//! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static int available_data(
+    const int in,     //!< [in] Index of insertion location in the buffer
+    const int out,    //!< [in] Index of extraction location in the buffer
+    const int limit   //!< [in] Number of elements that the buffer can hold
+  ) {
   return (in >= out) ? in - out : limit - out + in - 1;
 }
 
-static int get_available_space(const circular_buffer_p buffer)
-{
-    volatile int32_t *in = &buffer->m.in;
-    volatile int32_t *out = &buffer->m.out;
-    return available_space(*in, *out, buffer->m.limit);
+//! Compute how much space is available in a given circular buffer
+static int get_available_space(
+    const circular_buffer_p buffer //!< [in] The buffer we want to query
+  ) {
+  // Make sure that the values are really read by accessing them through a volatile pointer
+  volatile int32_t *in = &buffer->m.in;
+  volatile int32_t *out = &buffer->m.out;
+  return available_space(*in, *out, buffer->m.limit);
 }
 
-static int get_available_data(const circular_buffer_p buffer)
-{
-    volatile int32_t *in = &buffer->m.in;
-    volatile int32_t *out = &buffer->m.out;
-    return available_data(*in, *out, buffer->m.limit);
+//! Compute how much data is stored in a given circular buffer
+static int get_available_data(
+    const circular_buffer_p buffer //!< [in] The buffer we want to query
+  ) {
+  // Make sure that the values are really read by accessing them through a volatile pointer
+  volatile int32_t *in = &buffer->m.in;
+  volatile int32_t *out = &buffer->m.out;
+  return available_data(*in, *out, buffer->m.limit);
 }
 
-static void sleep_us(const int num_us)
-{
+//! Do nothing for a certain number of microseconds
+static void sleep_us(
+    const int num_us  //!< [in] How many microseconds we want to wait
+  ) {
   struct timespec ts = {0, num_us * 1000};
   nanosleep(&ts, NULL);
 }
 
-static circular_buffer_p get_circular_buffer(remote_circular_buffer_p remote, const int buffer_id)
-{
+//! Retrieve a pointer to a certain circular buffer managed by the given "remote" circular buffer
+static circular_buffer_p get_circular_buffer(
+    remote_circular_buffer_p remote,  //!< [in] The remote buffer from which we want a circular buffer
+    const int buffer_id               //!< [in] ID of the circular buffer within the remote buffer
+  ) {
   return (circular_buffer_p)(remote->raw_data + buffer_id * remote->num_bytes);
 }
 
+//! Print info about a circular buffer (for debugging)
 static void print_buf(circular_buffer_p b, int rank)
 {
   printf("version %d, first %d, in %d, out %d, limit %d, rank %d\n",
          b->m.version, b->m.first, b->m.in, b->m.out, b->m.limit, rank);
 }
 
+//! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
+//! space is available
+//! @return The number of 4-byte elements that can still be store in the before
+static int get_available_space_from_remote(
+    const remote_circular_buffer_p buffer   //!< [in] The buffer we want to query
+  ) {
+  MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
 
+  // TODO only get the "out" pointer rather than the entire structure?
+  const int num_int = sizeof(circular_buffer) / sizeof(int32_t);
+  MPI_Get(buffer->queue, num_int, MPI_INTEGER, buffer->root, buffer->window_offset, num_int, MPI_INTEGER,
+          buffer->window);
+
+  MPI_Win_unlock(buffer->root, buffer->window);
+
+  return get_available_space(buffer->queue);
+}
+
+//! Stop and wait until there is enough space in this circular buffer instance.
+//! If the latest copy of the header shows enough space, return immediately. Otherwise, copy metadata from the consumer
+//! process and check, until there is enough space.
+//! @return The number of available elements according to the latest copy of the header. If there was not enough
+//! initially, that copy is updated.
+static int remote_circular_buffer_wait_space_available(
+    remote_circular_buffer_p buffer,  //!< [in]  Pointer to a circular buffer
+    int num_requested                 //!< [in]  Needed number of available slots
+  ) {
+  if (buffer == NULL || buffer->rank == buffer->root) return -1;
+
+  const circular_buffer_p queue = buffer->queue;
+  if (num_requested < 0 || queue->m.version != FIOL_VERSION) return -1;
+
+  // First check locally
+  int num_available = get_available_space(queue);
+  if (num_available >= num_requested) return num_available;
+
+  // Then get info from remote location, until there is enough
+  while(num_available = get_available_space_from_remote(buffer), num_available < num_requested)
+    sleep_us(100);
+
+  return num_available;
+}
+
+
+//! @{ \name Remote circular buffer public interface
 
 //F_StArT
 //    function remote_circular_buffer_create(f_communicator, root, rank, comm_size, num_words) result(p) BIND(C, name = 'remote_circular_buffer_create')
@@ -96,6 +172,12 @@ static void print_buf(circular_buffer_p b, int rank)
 //      type(C_PTR) :: p                                    !< Pointer to created remote circular buffer
 //   end function remote_circular_buffer_create
 //F_EnD
+//! @brief Create a remote circular buffer on a set of processes.
+//!
+//! One of the processes is the root (consumer) and holds the
+//! data for a circular buffer for each other process. The other processes only get a copy of the header of their
+//! circular buffer, as well as an offset that points to the location of their data on the root process.
+//! @return A pointer to a newly-allocated remote circular buffer struct that contains all the relevant info
 remote_circular_buffer_p remote_circular_buffer_create(
     int32_t f_communicator,     //!< [in]  Communicator on which the remote buffer is shared (in Fortran)
     int32_t root,               //!< [in]  Process rank on which buffer data is located
@@ -165,7 +247,7 @@ remote_circular_buffer_p remote_circular_buffer_create(
 //  end subroutine remote_circular_buffer_print
 //F_EnD
 void remote_circular_buffer_print(
-  remote_circular_buffer_p buffer //!< [in] Buffer for which to print data
+    remote_circular_buffer_p buffer //!< [in] Buffer for which to print data
   ) {
   printf("Comm: %ld, window: %ld, root: %d, rank: %d, queue %ld\n",
          (long)buffer->communicator, (long)buffer->window, buffer->root, buffer->rank, (long)buffer->queue);
@@ -190,6 +272,7 @@ void remote_circular_buffer_print(
 //    type(C_PTR), intent(IN), value :: buffer !< Buffer to delete
 //  end subroutine remote_circular_buffer_delete
 //F_EnD
+//! Release all data used by the given remote circular buffer
 void remote_circular_buffer_delete(
     remote_circular_buffer_p buffer //!< [in,out] Buffer to delete
   ) {
@@ -197,42 +280,6 @@ void remote_circular_buffer_delete(
   if (buffer->rank != buffer->root)
     free(buffer->queue);
   free(buffer);
-}
-
-
-static int get_available_space_from_remote(const remote_circular_buffer_p buffer)
-{
-  MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
-
-  // TODO only get the "in" pointer rather than the entire structure?
-  const int num_int = sizeof(circular_buffer) / sizeof(int32_t);
-  MPI_Get(buffer->queue, num_int, MPI_INTEGER, buffer->root, buffer->window_offset, num_int, MPI_INTEGER,
-          buffer->window);
-
-  MPI_Win_unlock(buffer->root, buffer->window);
-
-  return get_available_space(buffer->queue);
-}
-
-
-static int remote_circular_buffer_wait_space_available(
-  remote_circular_buffer_p buffer,  //!< [in]  Pointer to a circular buffer
-  int num_requested                 //!< [in]  Needed number of available slots
-  ) {
-  if (buffer == NULL || buffer->rank == buffer->root) return -1;
-
-  const circular_buffer_p queue = buffer->queue;
-  if (num_requested < 0 || queue->m.version != FIOL_VERSION) return -1;
-
-  // First check locally
-  int num_available = get_available_space(queue);
-  if (num_available >= num_requested) return num_available;
-
-  // Then get info from remote location, until there is enough
-  while(num_available = get_available_space_from_remote(buffer), num_available < num_requested)
-    sleep_us(100);
-
-  return num_available;
 }
 
 //F_StArT
@@ -245,14 +292,16 @@ static int remote_circular_buffer_wait_space_available(
 //    integer(C_INT) :: num_available
 //  end function remote_circular_buffer_put
 //F_EnD
-//! @brief Insert data into the given buffer, once there is enough space (will wait)
+//! @brief Insert data into the given buffer, once there is enough space (will wait if there isn't enough initially)
+//!
+//! The data will be inserted into the buffer instance associated with the calling process.
 //! We use the MPI_Accumulate function along with the MPI_REPLACE operation, rather than MPI_Put, to ensure the order
 //! in which the memory transfers are done. We need to have finished the transfer of the data itself before updating
 //! the insertion pointer on the remote node (otherwise it might try to read data that has not yet arrived).
 int remote_circular_buffer_put(
-  remote_circular_buffer_p buffer,
-  int32_t * const src_data,
-  const int num_elements
+    remote_circular_buffer_p buffer,  //!< Remote buffer in which we want to put data
+    int32_t * const src_data,         //!< Pointer to the data we want to insert
+    const int num_elements            //!< How many 4-byte elements we want to insert
   ) {
   remote_circular_buffer_wait_space_available(buffer, num_elements);
 
@@ -300,6 +349,8 @@ int remote_circular_buffer_put(
 
   return get_available_space(buffer->queue);
 }
+
+//! @}
 
 //F_StArT
 //  subroutine buffer_write_test(buffer) BIND(C, name = 'buffer_write_test')
