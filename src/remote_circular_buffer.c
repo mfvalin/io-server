@@ -34,7 +34,7 @@ typedef struct {
   int32_t num_bytes;
   union {
     circular_buffer* queue;
-    int32_t* raw_data;
+    int8_t* raw_data;
   };
 } remote_circular_buffer;
 
@@ -73,15 +73,15 @@ static void sleep_us(const int num_us)
 
 static circular_buffer_p get_circular_buffer(remote_circular_buffer_p remote, const int buffer_id)
 {
-  if (buffer_id > 0)
-  {
-    printf("Getting buffer id %d\n", buffer_id);
-    printf("addition = %d\n", buffer_id * remote->num_bytes);
-    printf("Address before: %ld\n", (long)remote->raw_data);
-    printf("address after:  %ld\n", (long)(remote->raw_data + buffer_id * remote->num_bytes / sizeof(int32_t)));
-  }
-  return (circular_buffer_p)(remote->raw_data + buffer_id * remote->num_bytes / sizeof(int32_t));
+  return (circular_buffer_p)(remote->raw_data + buffer_id * remote->num_bytes);
 }
+
+static void print_buf(circular_buffer_p b, int rank)
+{
+  printf("version %d, first %d, in %d, out %d, limit %d, rank %d\n",
+         b->m.version, b->m.first, b->m.in, b->m.out, b->m.limit, rank);
+}
+
 
 
 //F_StArT
@@ -119,8 +119,6 @@ remote_circular_buffer_p remote_circular_buffer_create(
 
   if (rank == root)
   {
-    fprintf(stderr, "allocated %ld at %ld. Divided into %d buffers of %d bytes\n",
-            win_size, (long)buffer->raw_data, num_buffers, buffer->num_bytes);
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of elements (int32_t).
     int current_index  = 0;
@@ -129,9 +127,7 @@ remote_circular_buffer_p remote_circular_buffer_create(
       if (i != root)
       {
         circular_buffer_p buffer_address = get_circular_buffer(buffer, current_index);
-        fprintf(stderr, "initializing circ buffer at %ld, diff = %ld\n", (long)buffer_address, (long)((int32_t*)buffer_address - (int32_t*)buffer->raw_data));
         circular_buffer_init(buffer_address, num_words);
-
 
         const int current_offset = current_index * buffer->num_bytes / sizeof(int32_t);
         MPI_Send(&current_offset, 1, MPI_INTEGER, i, 0, buffer->communicator);
@@ -296,19 +292,13 @@ int remote_circular_buffer_put(
   }
 
   // Update insertion index remotely and locally
-  const int32_t window_offset = window_offset_base + offsetof(fiol_management, in) / sizeof(int32_t); //TODO IS THIS OK??
+  const int32_t window_offset = buffer->window_offset + offsetof(fiol_management, in) / sizeof(int32_t); //TODO IS THIS OK??
   MPI_Accumulate(&in_index, 1, MPI_INTEGER, buffer->root, window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
   buffer->queue->m.in = in_index;
 
   MPI_Win_unlock(buffer->root, buffer->window);
 
   return get_available_space(buffer->queue);
-}
-
-static void print_buf(circular_buffer_p b, int rank)
-{
-  printf("version %d, first %d, in %d, out %d, limit %d, rank %d\n",
-         b->m.version, b->m.first, b->m.in, b->m.out, b->m.limit, rank);
 }
 
 //F_StArT
@@ -320,20 +310,36 @@ static void print_buf(circular_buffer_p b, int rank)
 //F_EnD
 void buffer_write_test(remote_circular_buffer_p buffer)
 {
-  if (buffer->rank != buffer->root)
+  if (buffer->rank == buffer->root)
   {
+    MPI_Barrier(buffer->communicator);
     const int num_bufs = buffer->comm_size - 1;
     for (int i = 0; i < num_bufs; i++)
+    {
+      printf("printing buf root -- ");
       print_buf(get_circular_buffer(buffer, i), buffer->rank);
+    }
+    MPI_Barrier(buffer->communicator);
 
     MPI_Barrier(buffer->communicator);
+    for (int i = 0; i < num_bufs; i++)
+    {
+      printf("printing buf root after -- ");
+      print_buf(get_circular_buffer(buffer, i), buffer->rank);
+    }
   }
   else
   {
     print_buf(buffer->queue, buffer->rank);
+    MPI_Barrier(buffer->communicator);
+    MPI_Barrier(buffer->communicator);
+    MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
 
-//    MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
-//    MPI_Win_unlock(buffer->root, buffer->window);
+    int val = -1;
+    MPI_Accumulate(&val, 1, MPI_INTEGER, buffer->root, buffer->window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
+
+
+    MPI_Win_unlock(buffer->root, buffer->window);
     MPI_Barrier(buffer->communicator);
   }
 }

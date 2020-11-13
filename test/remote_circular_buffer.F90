@@ -38,7 +38,6 @@ program test_remote_circular_buffer
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
-  print *, 'Program test_remote_circular_buffer', rank
 
   circ_buffer = remote_circular_buffer_create(MPI_COMM_WORLD, ROOT, rank, comm_size, NUM_BUFFER_ELEMENTS)
 
@@ -52,21 +51,19 @@ program test_remote_circular_buffer
       in_data(i) = rank * 1000 + i;
     end do
 
-!    available = remote_circular_buffer_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
+    available = remote_circular_buffer_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
   else
 
   end if
 
   call MPI_Barrier(MPI_COMM_WORLD, error)
-  call buffer_write_test(circ_buffer)
+!  call buffer_write_test(circ_buffer)
 
-!  call remote_circular_buffer_print(circ_buffer)
+  call remote_circular_buffer_print(circ_buffer)
   call remote_circular_buffer_delete(circ_buffer)
 
 777 CONTINUE
 
   call MPI_finalize(error)
-
-  print *, 'Program test_remote_circular_buffer', rank
 
 end program test_remote_circular_buffer
