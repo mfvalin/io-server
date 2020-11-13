@@ -22,16 +22,17 @@ program test_remote_circular_buffer
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
   integer, parameter :: NUM_DATA_ELEMENTS = 10
+  integer, parameter :: ROOT = 1
 
   include 'remote_circular_buffer.inc'
   include 'mpif.h'
 
-  integer     :: error !, i
+  integer     :: error, i
   integer     :: rank, comm_size
   type(C_PTR) :: circ_buffer
-!  integer     :: available
+  integer     :: available
 
-!  integer     :: in_data(NUM_DATA_ELEMENTS), out_data(NUM_DATA_ELEMENTS)
+  integer, dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
 
   call MPI_init(error)
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
@@ -39,15 +40,27 @@ program test_remote_circular_buffer
 
   print *, 'Program test_remote_circular_buffer', rank
 
-  circ_buffer = remote_circular_buffer_create(MPI_COMM_WORLD, 0, rank, NUM_BUFFER_ELEMENTS)
+  circ_buffer = remote_circular_buffer_create(MPI_COMM_WORLD, ROOT, rank, comm_size, NUM_BUFFER_ELEMENTS)
 
   if (.not. c_associated(circ_buffer)) then
     print *, 'Could not create a circular buffer!', rank
     goto 777
-  endif
+  end if
 
-  circ_buffer = remote_circular_buffer_print(circ_buffer)
+  if (rank /= ROOT) then
+    do i = 1, NUM_DATA_ELEMENTS
+      in_data(i) = rank * 1000 + i;
+    end do
 
+!    available = remote_circular_buffer_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
+  else
+
+  end if
+
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  call buffer_write_test(circ_buffer)
+
+!  call remote_circular_buffer_print(circ_buffer)
   call remote_circular_buffer_delete(circ_buffer)
 
 777 CONTINUE
