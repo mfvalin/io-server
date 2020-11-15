@@ -215,8 +215,8 @@ static local_arena LA;           // local information about master arena
 //   integer(C_INT) :: me                                      !< -1 upon error, value > 0 otherwise
 // end function memory_arena_set_id
 //
-// set id for memory management arena, return identifier (-1 in case of error)
-// id must be a POSITIVE INTEGER
+// !> set id for memory management arena, return identifier (-1 in case of error)
+// !> id must be a POSITIVE INTEGER
 //F_EnD
 //C_StArT
 //! set owner's id (usually MPI rank) for memory arenas<br>

@@ -4,8 +4,7 @@ foreach(C_FILE ${C_TO_INC_FILES})
     set(INC_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${FILE_NAME}.inc")
     add_custom_command(
         OUTPUT ${INC_FILE}
-        #COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_BINARY_DIR}/include/"
-        COMMAND grep InTf ${CMAKE_CURRENT_SOURCE_DIR}/${C_FILE} | sed -e 's:^// ::' -e 's/[ ]*!InTf.*//' > ${INC_FILE}
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh ${CMAKE_CURRENT_SOURCE_DIR}/${C_FILE} > ${INC_FILE}
         DEPENDS ${C_FILE})
     list(APPEND INC_FILES ${INC_FILE})
 endforeach(C_FILE)

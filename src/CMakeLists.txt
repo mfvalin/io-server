@@ -48,6 +48,7 @@ set(CMAKE_VERBOSE_MAKEFILE TRUE)
 file(GLOB PROJECT_C_FILES
   *.c
 )
+
 file(GLOB PROJECT_F_FILES
   *.F90
   *.F
@@ -55,20 +56,27 @@ file(GLOB PROJECT_F_FILES
   *.f90
 )
 
-file(GLOB PROJECT_INCLUDE_FILES *.h *.inc)
+file(GLOB PROJECT_INCLUDE_FILES
+  *.h
+  *.inc
+)
 
 set(C_TO_INC_FILES
   memory_arena.c
   circular_buffer.c
+  remote_circular_buffer.c
 )
 
-add_library(${PROJECT_NAME} ${PROJECT_C_FILES} ${PROJECT_F_FILES})
+set(C_TO_H_FILES ${C_TO_INC_FILES})
+
+add_library(${PROJECT_NAME} ${PROJECT_C_FILES} ${PROJECT_F_FILES} ${PROJECT_INCLUDE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/.)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${PROJECT_INCLUDE_FILES}")
 
 include(generate_inc.cmake)
+include(generate_h.cmake)
 
 install(
   TARGETS ${PROJECT_NAME}

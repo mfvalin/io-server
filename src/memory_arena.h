@@ -201,7 +201,7 @@ void *memory_block_find(
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   );
-//! same as memory_block_find, but wait until block is created (or timeout in milliseconds expires)<br>
+//! same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 //! ptr = memory_block_find_wait(mem, size, flags, name, timeout)
 //! @return local address of memory block (NULL if not found)
 void *memory_block_find_wait(

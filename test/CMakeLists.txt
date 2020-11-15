@@ -38,7 +38,7 @@ set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
 # WHAT TO COMPILE
 
-add_executable(${PROJECT_NAME}_circ_buffer remote_circular_buffer.F90)
+add_executable(${PROJECT_NAME}_circ_buffer circular_buffer.F90)
 set_target_properties(${PROJECT_NAME}_circ_buffer PROPERTIES VERSION ${PROJECT_VERSION})
 target_link_libraries(${PROJECT_NAME}_circ_buffer io-server)
 target_include_directories(
@@ -46,10 +46,10 @@ target_include_directories(
   PRIVATE "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
 )
 
-add_executable(${PROJECT_NAME}_memory_arena memory_arena.F90)
-set_target_properties(${PROJECT_NAME}_memory_arena PROPERTIES VERSION ${PROJECT_VERSION})
-target_link_libraries(${PROJECT_NAME}_memory_arena io-server)
+add_executable(${PROJECT_NAME}_remote_circ_buffer remote_circular_buffer.F90)
+set_target_properties(${PROJECT_NAME}_remote_circ_buffer PROPERTIES VERSION ${PROJECT_VERSION})
+target_link_libraries(${PROJECT_NAME}_remote_circ_buffer io-server)
 target_include_directories(
-  ${PROJECT_NAME}_memory_arena
+  ${PROJECT_NAME}_remote_circ_buffer
   PRIVATE "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
 )
