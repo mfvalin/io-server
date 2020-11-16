@@ -432,9 +432,9 @@ int remote_circular_buffer_get(
 
   // Update actual extraction pointer
   M_FENCE // Make sure everything has been read, and the temp pointer actually updated
-  buffer->queue->m.out = out_index;
+  queue->m.out = out_index;
 
-  return get_available_data(buffer->queue);
+  return get_available_data(queue);
 }
 
 //! @}
