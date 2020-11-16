@@ -43,7 +43,9 @@ set_target_properties(${PROJECT_NAME}_circ_buffer PROPERTIES VERSION ${PROJECT_V
 target_link_libraries(${PROJECT_NAME}_circ_buffer io-server)
 target_include_directories(
   ${PROJECT_NAME}_circ_buffer
-  PRIVATE "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
+  PRIVATE
+  "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
+  "$<TARGET_PROPERTY:io-server,BINARY_DIR>"
 )
 
 add_executable(${PROJECT_NAME}_remote_circ_buffer remote_circular_buffer.F90)
@@ -51,5 +53,7 @@ set_target_properties(${PROJECT_NAME}_remote_circ_buffer PROPERTIES VERSION ${PR
 target_link_libraries(${PROJECT_NAME}_remote_circ_buffer io-server)
 target_include_directories(
   ${PROJECT_NAME}_remote_circ_buffer
-  PRIVATE "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
+  PRIVATE
+  "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
+  "$<TARGET_PROPERTY:io-server,BINARY_DIR>"
 )

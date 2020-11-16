@@ -18,20 +18,21 @@
 program test_remote_circular_buffer
 
   use ISO_C_BINDING
+  use remote_circular_buffers
   implicit none
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
   integer, parameter :: NUM_DATA_ELEMENTS = 10
   integer, parameter :: ROOT = 1
 
-  include 'remote_circular_buffer.inc'
   include 'mpif.h'
 
-  integer     :: error, i
-  integer     :: rank, comm_size
-  type(C_PTR) :: circ_buffer
-  integer     :: available
+  integer :: error, i
+  integer :: rank, comm_size
+  integer :: available
+  logical :: success
 
+  type(remote_circular_buffer)          :: circ_buffer
   integer, dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
 
   call MPI_init(error)
@@ -39,9 +40,9 @@ program test_remote_circular_buffer
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
 
-  circ_buffer = remote_circular_buffer_create(MPI_COMM_WORLD, ROOT, rank, comm_size, NUM_BUFFER_ELEMENTS)
+  success = circ_buffer % create(MPI_COMM_WORLD, ROOT, rank, comm_size, NUM_BUFFER_ELEMENTS)
 
-  if (.not. c_associated(circ_buffer)) then
+  if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
     goto 777
   end if
@@ -51,20 +52,22 @@ program test_remote_circular_buffer
       in_data(i) = rank * 1000 + i;
     end do
 
-    available = remote_circular_buffer_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
+    available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
   else
-    available = remote_circular_buffer_get(circ_buffer, 0, out_data, NUM_DATA_ELEMENTS)
+    available = circ_buffer % get(0, out_data, NUM_DATA_ELEMENTS)
     print *, 'Read from 1st producer: ', out_data
+    print *, 'It now has: ', available
 
-    available = remote_circular_buffer_get(circ_buffer, 1, out_data, NUM_DATA_ELEMENTS)
+    available = circ_buffer % get(1, out_data, NUM_DATA_ELEMENTS)
     print *, 'Read from 2nd producer: ', out_data
+    print *, 'It now has: ', available
   end if
 
-  call MPI_Barrier(MPI_COMM_WORLD, error)
+!  call MPI_Barrier(MPI_COMM_WORLD, error)
 !  call buffer_write_test(circ_buffer)
 
-  call remote_circular_buffer_print(circ_buffer)
-  call remote_circular_buffer_delete(circ_buffer)
+  call circ_buffer % print()
+  call circ_buffer % delete()
 
 777 CONTINUE
 
