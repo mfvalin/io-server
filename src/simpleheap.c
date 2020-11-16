@@ -70,6 +70,73 @@
 //!> heap element (32 bits for now)
 typedef int32_t heap_element ;     // "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
 
+//!> maximum number of registered heaps
+#define MAX_HEAPS 64
+//!> number of registered heaps
+static int32_t nheaps = 0 ;
+//!> table of heap limits
+static heap_element *heaps[MAX_HEAPS][2] ;
+
+//! which heap does this address belong to ?
+//! @return heap base address if within a registered heap, NULL otherwise
+heap_element *ServerHeapContains(
+  void *addr                    //!< [in]  address possibly in a registered heap
+  ){
+  heap_element *b = (heap_element *) addr ;
+  int i;
+
+  for(i=0 ; i<nheaps ; i++){
+    if( (b >= heaps[i][0] ) && (b < heaps[i][1]) ){ // address is within heap boundaries
+      return heaps[i][0] ;                          // base address of heap this address belongs to
+    }
+  }
+  return NULL ;    // not within a registered heap
+}
+
+//! is this a block that belongs to a registered heap
+//! @return 0 if valid block from registered heap, -1 if unknown heap, 1 if inside a registered heap but not a proper block pointer
+int32_t ServerHeapValidBlock(
+  void *addr                    //!< [in]  putative valid block address
+  ){
+  heap_element *b = (heap_element *) addr ;
+  heap_element *h ;
+  heap_element sz ;
+
+  if( (h = ServerHeapContains(addr)) != NULL) {    // inside a registered heap ?
+    b-- ;                                      // base of block structure (1 element below user block address)
+    sz = b[0] > 0 ? b[0] : -b[0] ;             // get block size (negative means block is in use)
+    if(sz < 2)               return 1 ;        // invalid block size
+    if(b + sz >= h + h[0] )  return 1 ;        // top of block would be out of heap
+    if(b[sz-1] != sz)        return 1 ;        // wrong trailer size marker
+    return 0 ;                                 // this looks like a valid block
+  }
+
+  return -1 ; // address not within bounds of registered heap
+}
+
+//! register a  Heap in the heap table
+//! @return number of registered heaps if successful, -1 otherwise
+int32_t ServerHeapRegister(
+  void *addr                    //!< [in]  heap address
+  ){
+  heap_element *h = (heap_element *) addr ;
+  int i;
+  int target = -1 ;
+
+  for(i=0 ; i<MAX_HEAPS ; i++) if(heaps[i][0] == NULL) {
+    target = i ;   // unused entry found in table ?
+    break;
+  }
+  if(target == -1) return -1 ;    // table is full
+
+  heaps[target][0] = h ;          // base of heap
+  heaps[target][1] = h + h[0] ;   // 1 element beyond top of heap
+// printf("registered target = %d, heap = %p %p",target,heaps[target][0],heaps[target][1]);
+  if(target >= nheaps)nheaps++ ;  // bump heaps counter if not recycling an entry
+// printf(", nheaps = %d\n",nheaps);
+  return nheaps ;                 // number of registered heaps
+}
+
 //! initialize a Server Heap
 //! @return address of Server Heap if successful, NULL otherwise
 void *ServerHeapInit(
@@ -86,7 +153,9 @@ void *ServerHeapInit(
   h[1] = heap_sz -2 ;           // size of first block (head)
   h[heap_sz - 2] = heap_sz -2 ; // size of first block (tail)
   h[heap_sz - 1] = 0 ;          // last block (not locked)
-  return h ; // O.K.
+
+  ServerHeapRegister(h) ;       // register Heap for block validation purpose
+  return h ;                    // O.K. return address of Heap
 }
 
 //! check integrity of Server Heap
@@ -207,12 +276,16 @@ int32_t ServerHeapFreeBlock(
     ){
   heap_element *h = (heap_element *) addr ;
   heap_element nw ;
+  int status ;
+
+  if((status = ServerHeapValidBlock(addr)) != 0) {   // is this the address of a valid block ?
+    return -1 ;                                      // unknown heap or invalid block pointer 
+  }
 
   h-- ;                            // point to count (one element below block)
   nw = h[0];                       // if block is in use, nw will be negative
   if(nw >= 0) return -1 ;          // certainly not a block in use
   nw = -nw ;                       // make count positive
-  if(h[nw - 1] != nw) return -1 ;  // backward count not found or not consistent
   h[0] = nw ;                      // mark memory block as free
   return 0;
 }
@@ -268,10 +341,9 @@ int main ( int argc, char *argv[] )
     int *heap ;
   } mem_layout;
   mem_layout sm = {0, NULL, NULL} ;
-  void *myheap ;
   int32_t *t ;
 
-  int rank, size, shared_elem = 0, i, status;
+  int rank, size, i, status;
   MPI_Aint ssize; 
   int *shared;
   int errors = 0 ;
@@ -295,7 +367,10 @@ int main ( int argc, char *argv[] )
     sm.heap   = shared + 1 + NINDEXES ;
     for(i=0 ; i<NINDEXES ; i++) sm.index[i] = 0 ;
 
-    myheap = ServerHeapInit(sm.heap, 32*1024) ; // create heap
+    sm.heap = ServerHeapInit(sm.heap, 32*1024) ; // create and initialize heap
+    printf("registered heap 1\n");
+    status = ServerHeapRegister(sm.heap);
+    printf("registered heap %d\n",status);  // re register heap
     // Heap check (pristine Heap)
     status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
     printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
@@ -326,20 +401,36 @@ int main ( int argc, char *argv[] )
   sm.nindx  = shared[0] ;    // get local addresses for basic sm structure
   sm.index  = shared+1 ;
   sm.heap   = shared + 1 + NINDEXES ;
+  if(rank != 0){
+    status = ServerHeapRegister(sm.heap);
+    printf("registered heap %d\n",status);
+    status = ServerHeapRegister(sm.heap);  // re register heap
+    printf("registered heap %d\n",status);
+    errors = 0 ;
+    for(i=0 ; i<NINDEXES ; i++) if(sm.index[i] != 0 )errors++;
+    printf("process %d detected %d block(s), index size = %d\n", rank, errors, sm.nindx) ;
+  }
+
+  MPI_Barrier(MPI_COMM_WORLD) ;    // all ranks now aware of existing heap
 
   if(rank == 1){      // rank 1 process
     errors = 0 ;
     for(i=0 ; i<NINDEXES ; i++) if(sm.index[i] != 0 ) {
-      printf("index[%d] = %d \n", i, sm.index[i]) ;
+      printf("index[%d] = %d, ", i, sm.index[i]) ;
       errors++;
     }
-    printf("process %d detected %d block(s), index size = %d\n", rank, errors, sm.nindx) ;
+    printf("\n");
     status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
     printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
            rank, free_blocks, free_space, used_blocks, used_space, status);
     // now free all allocated blocks
     for(i=0 ; i < NINDEXES ; i++) {
       if(sm.index[i] != 0) {
+
+        status = ServerHeapFreeBlock(sm.heap + sm.index[i] + 1) ; // this is an invalid address
+        if(status == 0) 
+          printf("ERROR: phony free status = %d, should not be 0\n",status);
+
         ServerHeapFreeBlock(sm.heap + sm.index[i]) ;
         printf("block %d freed at index %d\n",i,sm.index[i]);
       }
@@ -365,7 +456,7 @@ int main ( int argc, char *argv[] )
           rank, free_blocks, free_space, used_blocks, used_space, status);
 
 //=======================================================================================//
-  MPI_Barrier(MPI_COMM_WORLD) ;        // NEEDED for the next part of the test code to work
+  MPI_Barrier(MPI_COMM_WORLD) ;        // NEEDED for the previous part of the test code to work
 //=======================================================================================//
   size = ssize / sizeof(int) ;
   if(rank==0){         // rank 0 populates shared memory
