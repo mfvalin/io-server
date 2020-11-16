@@ -227,7 +227,7 @@ void *ServerHeapAllocBlock(
 
   sz = h[0] ;
   limit = sz - 1 ;
-// printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
+printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
 //   bsz *= sizeof(heap_element) ;
   t = NULL ;
   if(h[limit] > 1  || h[limit] < -1) return NULL  ;  // not a Server Heap or corrupted information
