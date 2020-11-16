@@ -18,6 +18,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 #include <mpi.h>
@@ -50,6 +51,11 @@ typedef struct {
 } remote_circular_buffer;
 
 typedef remote_circular_buffer *remote_circular_buffer_p;
+
+const int SPACE_CHECK_WAIT_TIME_US = 100;
+const int DATA_CHECK_WAIT_TIME_US  = 100;
+
+//! @{ \name Helper functions
 
 //! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
@@ -139,7 +145,7 @@ static int get_available_space_from_remote(
 //! initially, that copy is updated.
 static int remote_circular_buffer_wait_space_available(
     remote_circular_buffer_p buffer,  //!< [in]  Pointer to a circular buffer
-    int num_requested                 //!< [in]  Needed number of available slots
+    const int num_requested           //!< [in]  Needed number of available slots
   ) {
   if (buffer == NULL || buffer->rank == buffer->root) return -1;
 
@@ -152,11 +158,34 @@ static int remote_circular_buffer_wait_space_available(
 
   // Then get info from remote location, until there is enough
   while(num_available = get_available_space_from_remote(buffer), num_available < num_requested)
-    sleep_us(100);
+    sleep_us(SPACE_CHECK_WAIT_TIME_US);
 
   return num_available;
 }
 
+static int remote_circular_buffer_wait_data_available(
+     const remote_circular_buffer_p buffer, //!< [in] Buffer we are querying
+     const int buffer_id,                   //!< [in] Which specific circular buffer we want to query (there are multiple ones)
+     const int num_requested                //!< [in] Number of elements we want to read
+  ) {
+  if (buffer == NULL ||
+      buffer->rank != buffer->root ||
+      num_requested < 0)
+    return -1;
+
+  const circular_buffer_p queue = get_circular_buffer(buffer, buffer_id);
+  if (queue->m.version != FIOL_VERSION)
+    return -1;
+
+  // Only check locally, waiting a bit between each check
+  int num_available = 0;
+  while (num_available = get_available_data(queue), num_available < num_requested)
+    sleep_us(DATA_CHECK_WAIT_TIME_US);
+
+  return num_available;
+}
+
+//! @}
 
 //! @{ \name Remote circular buffer public interface
 
@@ -298,12 +327,14 @@ void remote_circular_buffer_delete(
 //! We use the MPI_Accumulate function along with the MPI_REPLACE operation, rather than MPI_Put, to ensure the order
 //! in which the memory transfers are done. We need to have finished the transfer of the data itself before updating
 //! the insertion pointer on the remote node (otherwise it might try to read data that has not yet arrived).
+//!
+//! @return How many elements can still fit after the insertion, if everything went smoothly, -1 otherwise
 int remote_circular_buffer_put(
     remote_circular_buffer_p buffer,  //!< Remote buffer in which we want to put data
     int32_t * const src_data,         //!< Pointer to the data we want to insert
     const int num_elements            //!< How many 4-byte elements we want to insert
   ) {
-  remote_circular_buffer_wait_space_available(buffer, num_elements);
+  if (remote_circular_buffer_wait_space_available(buffer, num_elements) < 0) return -1;
 
   MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
 
@@ -326,17 +357,17 @@ int remote_circular_buffer_put(
     MPI_Accumulate(src_data, num_elem_segment_1, MPI_INTEGER, buffer->root, window_offset_1, num_elem_segment_1,
                    MPI_INTEGER, MPI_REPLACE, buffer->window);
 
-    // Update insertion pointer
+    // Update temporary insertion pointer
     in_index += num_elem_segment_1;
     if (in_index >= limit) in_index = 0;
 
-    // Second segment
+    // Second segment (if there is one)
     const int num_elem_segment_2 = num_elements - num_elem_segment_1;
     const int32_t window_offset_2 = window_offset_base + in_index;
     MPI_Accumulate(src_data + num_elem_segment_1, num_elem_segment_2, MPI_INTEGER, buffer->root, window_offset_2,
                    num_elem_segment_2, MPI_INTEGER, MPI_REPLACE, buffer->window);
 
-    // Update insertion pointer
+    // Update temporary insertion pointer
     in_index += num_elem_segment_2;
   }
 
@@ -350,7 +381,65 @@ int remote_circular_buffer_put(
   return get_available_space(buffer->queue);
 }
 
+//F_StArT
+//  function remote_circular_buffer_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'remote_circular_buffer_get')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value              :: buffer
+//    integer(C_INT), intent(in), value           :: buffer_id
+//    integer(C_INT), dimension(*), intent(inout) :: dest_data
+//    integer(C_INT), intent(in), value           :: num_elements
+//    integer(C_INT) :: num_available
+//  end function remote_circular_buffer_get
+//F_EnD
+int remote_circular_buffer_get(
+    remote_circular_buffer_p buffer,
+    const int buffer_id,
+    int32_t* dest_data,
+    const int num_elements
+  ) {
+  if (remote_circular_buffer_wait_data_available(buffer, buffer_id, num_elements) < 0) return -1;
+
+  circular_buffer_p queue = get_circular_buffer(buffer, buffer_id);
+
+  const int32_t in_index = queue->m.in;
+  int32_t out_index      = queue->m.out;
+  const int32_t limit    = queue->m.limit;
+
+  const int32_t * const buffer_data = queue->data;
+
+  if (out_index < in_index) {
+    // 1 segment
+    memcpy(dest_data, buffer_data + out_index, num_elements * sizeof(int32_t));
+    out_index += num_elements;
+  }
+  else {
+    // 1st segment
+    const int num_elements_1 = num_elements > (limit - out_index) ? (limit - out_index) : num_elements;
+    memcpy(dest_data, buffer_data + out_index, num_elements_1);
+
+    // Update temporary extraction pointer
+    out_index += num_elements_1;
+    if(out_index >= limit) out_index = 0;
+
+    // 2nd segment (if there is one)
+    const int num_elements_2 = num_elements - num_elements_1;
+    memcpy(dest_data + num_elements_1, buffer_data + out_index, num_elements_2 * sizeof(int32_t));
+
+    // Update temporary extraction pointer
+    out_index += num_elements_2;
+  }
+
+  // Update actual extraction pointer
+  M_FENCE // Make sure everything has been read, and the temp pointer actually updated
+  buffer->queue->m.out = out_index;
+
+  return get_available_data(buffer->queue);
+}
+
 //! @}
+
+//! @{ \name Testing stuff
 
 //F_StArT
 //  subroutine buffer_write_test(buffer) BIND(C, name = 'buffer_write_test')
@@ -394,3 +483,5 @@ void buffer_write_test(remote_circular_buffer_p buffer)
     MPI_Barrier(buffer->communicator);
   }
 }
+
+//! @}

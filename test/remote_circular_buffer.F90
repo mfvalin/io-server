@@ -53,7 +53,11 @@ program test_remote_circular_buffer
 
     available = remote_circular_buffer_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
   else
+    available = remote_circular_buffer_get(circ_buffer, 0, out_data, NUM_DATA_ELEMENTS)
+    print *, 'Read from 1st producer: ', out_data
 
+    available = remote_circular_buffer_get(circ_buffer, 1, out_data, NUM_DATA_ELEMENTS)
+    print *, 'Read from 2nd producer: ', out_data
   end if
 
   call MPI_Barrier(MPI_COMM_WORLD, error)

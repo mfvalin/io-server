@@ -36,6 +36,17 @@ integer(C_INT) :: num_available
 end function remote_circular_buffer_put
 
 
+function remote_circular_buffer_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'remote_circular_buffer_get')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value              :: buffer
+integer(C_INT), intent(in), value           :: buffer_id
+integer(C_INT), dimension(*), intent(inout) :: dest_data
+integer(C_INT), intent(in), value           :: num_elements
+integer(C_INT) :: num_available
+end function remote_circular_buffer_get
+
+
 subroutine buffer_write_test(buffer) BIND(C, name = 'buffer_write_test')
 import :: C_PTR
 implicit none
