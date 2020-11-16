@@ -18,7 +18,7 @@
 program test_remote_circular_buffer
 
   use ISO_C_BINDING
-  use remote_circular_buffers
+  use remote_circular_buffer_module, only : remote_circular_buffer
   implicit none
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
