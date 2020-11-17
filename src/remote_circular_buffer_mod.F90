@@ -20,6 +20,8 @@ module remote_circular_buffer_module
   implicit none
   include 'remote_circular_buffer.inc'
 
+  private
+
   !> A set of FIFO queues used by multiple pairs of processes, with their data stored on a single one of these processes
   type, public :: remote_circular_buffer
     private

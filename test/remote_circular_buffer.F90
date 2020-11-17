@@ -26,6 +26,7 @@ program test_remote_circular_buffer
   integer, parameter :: ROOT = 1
 
   include 'mpif.h'
+  include 'remote_circular_buffer.inc'
 
   integer :: error, i
   integer :: rank, comm_size
@@ -48,8 +49,11 @@ program test_remote_circular_buffer
   end if
 
   if (rank /= ROOT) then
+
+    call sleep_us(20000)
+
     do i = 1, NUM_DATA_ELEMENTS
-      in_data(i) = rank * 1000 + i;
+      in_data(i) = rank * 1000 + i
     end do
 
     available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)

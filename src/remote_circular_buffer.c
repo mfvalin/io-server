@@ -59,7 +59,7 @@ const int DATA_CHECK_WAIT_TIME_US  = 100;
 
 //! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static int available_space(
+static inline int available_space(
     const int in,     //!< [in] Index of insertion location in the buffer
     const int out,    //!< [in] Index of extraction location in the buffer
     const int limit   //!< [in] Number of elements that the buffer can hold
@@ -69,16 +69,16 @@ static int available_space(
 
 //! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static int available_data(
+static inline int available_data(
     const int in,     //!< [in] Index of insertion location in the buffer
     const int out,    //!< [in] Index of extraction location in the buffer
     const int limit   //!< [in] Number of elements that the buffer can hold
   ) {
-  return (in >= out) ? in - out : limit - out + in - 1;
+  return (in >= out) ? in - out : limit - out + in;
 }
 
 //! Compute how much space is available in a given circular buffer
-static int get_available_space(
+static inline int get_available_space(
     const circular_buffer_p buffer //!< [in] The buffer we want to query
   ) {
   // Make sure that the values are really read by accessing them through a volatile pointer
@@ -88,7 +88,7 @@ static int get_available_space(
 }
 
 //! Compute how much data is stored in a given circular buffer
-static int get_available_data(
+static inline int get_available_data(
     const circular_buffer_p buffer //!< [in] The buffer we want to query
   ) {
   // Make sure that the values are really read by accessing them through a volatile pointer
@@ -97,16 +97,23 @@ static int get_available_data(
   return available_data(*in, *out, buffer->m.limit);
 }
 
+//F_StArT
+//  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
+//    import :: C_INT
+//    implicit none
+//    integer(C_INT), intent(in), value :: num_us    !< How many microseconds to sleep
+//  end subroutine sleep_us
+//F_EnD
 //! Do nothing for a certain number of microseconds
-static void sleep_us(
+void sleep_us(
     const int num_us  //!< [in] How many microseconds we want to wait
   ) {
-  struct timespec ts = {0, num_us * 1000};
+  struct timespec ts; ts.tv_sec = num_us / 1000000; ts.tv_nsec = num_us % 1000000 * 1000;
   nanosleep(&ts, NULL);
 }
 
 //! Retrieve a pointer to a certain circular buffer managed by the given "remote" circular buffer
-static circular_buffer_p get_circular_buffer(
+static inline circular_buffer_p get_circular_buffer(
     remote_circular_buffer_p remote,  //!< [in] The remote buffer from which we want a circular buffer
     const int buffer_id               //!< [in] ID of the circular buffer within the remote buffer
   ) {
@@ -114,7 +121,7 @@ static circular_buffer_p get_circular_buffer(
 }
 
 //! Print info about a circular buffer (for debugging)
-static void print_buf(circular_buffer_p b, int rank)
+static inline void print_buf(circular_buffer_p b, int rank)
 {
   printf("version %d, first %d, in %d, out %d, limit %d, rank %d\n",
          b->m.version, b->m.first, b->m.in, b->m.out, b->m.limit, rank);
@@ -123,7 +130,7 @@ static void print_buf(circular_buffer_p b, int rank)
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
 //! space is available
 //! @return The number of 4-byte elements that can still be store in the before
-static int get_available_space_from_remote(
+static inline int get_available_space_from_remote(
     const remote_circular_buffer_p buffer   //!< [in] The buffer we want to query
   ) {
   MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
@@ -189,18 +196,6 @@ static int remote_circular_buffer_wait_data_available(
 
 //! @{ \name Remote circular buffer public interface
 
-//F_StArT
-//    function remote_circular_buffer_create(f_communicator, root, rank, comm_size, num_words) result(p) BIND(C, name = 'remote_circular_buffer_create')
-//      import :: C_PTR, C_INT
-//      implicit none
-//      integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the remote buffer is shared
-//      integer(C_INT), intent(IN), value :: root           !< Process rank on which buffer data is located
-//      integer(C_INT), intent(IN), value :: rank           !< Rank of the current process
-//      integer(C_INT), intent(IN), value :: comm_size      !< Number of processes in the communicator
-//      integer(C_INT), intent(IN), value :: num_words      !< Number of 32-bit elements in the circular buffer
-//      type(C_PTR) :: p                                    !< Pointer to created remote circular buffer
-//   end function remote_circular_buffer_create
-//F_EnD
 //! @brief Create a remote circular buffer on a set of processes.
 //!
 //! One of the processes is the root (consumer) and holds the
@@ -208,7 +203,7 @@ static int remote_circular_buffer_wait_data_available(
 //! circular buffer, as well as an offset that points to the location of their data on the root process.
 //! @return A pointer to a newly-allocated remote circular buffer struct that contains all the relevant info
 remote_circular_buffer_p remote_circular_buffer_create(
-    int32_t f_communicator,     //!< [in]  Communicator on which the remote buffer is shared (in Fortran)
+    MPI_Comm communicator,      //!< [in]  Communicator on which the remote buffer is shared
     int32_t root,               //!< [in]  Process rank on which buffer data is located
     int32_t rank,               //!< [in]  Rank of the current process
     int32_t comm_size,          //!< [in]  Number of processes in the communicator
@@ -216,7 +211,7 @@ remote_circular_buffer_p remote_circular_buffer_create(
   ) {
   remote_circular_buffer_p buffer = (remote_circular_buffer*) malloc(sizeof(remote_circular_buffer));
 
-  buffer->communicator = MPI_Comm_f2c(f_communicator);
+  buffer->communicator = communicator;
   buffer->root         = root;
   buffer->rank         = rank;
   buffer->comm_size    = comm_size;
@@ -255,7 +250,7 @@ remote_circular_buffer_p remote_circular_buffer_create(
     MPI_Recv(&buffer->window_offset, 1, MPI_INTEGER, buffer->root, 0, buffer->communicator, &status);
   }
 
-  MPI_Win_fence(0, buffer->window);
+  MPI_Barrier(buffer->communicator);
   if (rank != root)
   {
     const int num_int = sizeof(circular_buffer) / sizeof(int32_t);
@@ -266,6 +261,28 @@ remote_circular_buffer_p remote_circular_buffer_create(
   }
 
   return buffer;
+}
+
+//F_StArT
+//    function remote_circular_buffer_create(f_communicator, root, rank, comm_size, num_words) result(p) BIND(C, name = 'remote_circular_buffer_create_f')
+//      import :: C_PTR, C_INT
+//      implicit none
+//      integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the remote buffer is shared
+//      integer(C_INT), intent(IN), value :: root           !< Process rank on which buffer data is located
+//      integer(C_INT), intent(IN), value :: rank           !< Rank of the current process
+//      integer(C_INT), intent(IN), value :: comm_size      !< Number of processes in the communicator
+//      integer(C_INT), intent(IN), value :: num_words      !< Number of 32-bit elements in the circular buffer
+//      type(C_PTR) :: p                                    !< Pointer to created remote circular buffer
+//   end function remote_circular_buffer_create
+//F_EnD
+remote_circular_buffer_p remote_circular_buffer_create_f(
+    int32_t f_communicator,     //!< [in]  Communicator on which the remote buffer is shared (in Fortran)
+    int32_t root,               //!< [in]  Process rank on which buffer data is located
+    int32_t rank,               //!< [in]  Rank of the current process
+    int32_t comm_size,          //!< [in]  Number of processes in the communicator
+    int32_t num_words           //!< [in]  Number of 32-bit elements in the buffer
+  ) {
+    return remote_circular_buffer_create(MPI_Comm_f2c(f_communicator), root, rank, comm_size, num_words);
 }
 
 //F_StArT

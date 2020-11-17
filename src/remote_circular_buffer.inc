@@ -1,6 +1,13 @@
 interface
 
-function remote_circular_buffer_create(f_communicator, root, rank, comm_size, num_words) result(p) BIND(C, name = 'remote_circular_buffer_create')
+subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
+import :: C_INT
+implicit none
+integer(C_INT), intent(in), value :: num_us    !< How many microseconds to sleep
+end subroutine sleep_us
+
+
+function remote_circular_buffer_create(f_communicator, root, rank, comm_size, num_words) result(p) BIND(C, name = 'remote_circular_buffer_create_f')
 import :: C_PTR, C_INT
 implicit none
 integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the remote buffer is shared
