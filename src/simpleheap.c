@@ -101,7 +101,7 @@ int32_t ServerHeapValidBlock(
   heap_element *b = (heap_element *) addr ;
   heap_element *h ;
   heap_element sz ;
-
+printf("ServerHeapValidBlock checking address %p\n",addr);
   if( (h = ServerHeapContains(addr)) != NULL) {    // inside a registered heap ?
     b-- ;                                      // base of block structure (1 element below user block address)
     sz = b[0] > 0 ? b[0] : -b[0] ;             // get block size (negative means block is in use)
@@ -131,9 +131,9 @@ int32_t ServerHeapRegister(
 
   heaps[target][0] = h ;          // base of heap
   heaps[target][1] = h + h[0] ;   // 1 element beyond top of heap
-// printf("registered target = %d, heap = %p %p",target,heaps[target][0],heaps[target][1]);
+printf("registered target = %d, heap = %p %p",target,heaps[target][0],heaps[target][1]);
   if(target >= nheaps)nheaps++ ;  // bump heaps counter if not recycling an entry
-// printf(", nheaps = %d\n",nheaps);
+printf(", nheaps = %d\n",nheaps);
   return nheaps ;                 // number of registered heaps
 }
 
@@ -159,7 +159,7 @@ void *ServerHeapInit(
 }
 
 //! check integrity of Server Heap
-//! @return 0 if successful, 0 if O.K., nonzero if not
+//! @return 0 if O.K., nonzero if not
 int32_t ServerHeapCheck(
   void *addr,                     //!< [in]  address of Server Heap to check
   int32_t *free_blocks,           //!< [out] number of free blocks
@@ -278,13 +278,15 @@ int32_t ServerHeapFreeBlock(
   heap_element nw ;
   int status ;
 
-  if((status = ServerHeapValidBlock(addr)) != 0) {   // is this the address of a valid block ?
+  status = ServerHeapValidBlock(addr);
+printf("after ServerHeapValidBlock, status = %d\n",status);
+  if(status != 0) {   // is this the address of a valid block ?
     return -1 ;                                      // unknown heap or invalid block pointer 
   }
 
   h-- ;                            // point to count (one element below block)
   nw = h[0];                       // if block is in use, nw will be negative
-  if(nw >= 0) return -1 ;          // certainly not a block in use
+  if(nw >= 0) return -2 ;          // certainly not a block in use
   nw = -nw ;                       // make count positive
   h[0] = nw ;                      // mark memory block as free
   return 0;
