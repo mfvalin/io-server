@@ -7,9 +7,9 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="140mm"
-   height="155.91641mm"
-   viewBox="0 0 140 155.91641"
+   width="156.18356mm"
+   height="129.5mm"
+   viewBox="0 0 156.18356 129.5"
    version="1.1"
    id="svg2118"
    inkscape:version="1.0.1 (3bc2e813f5, 2020-09-07)"
@@ -200,8 +200,8 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="1.4"
-     inkscape:cx="239.96195"
-     inkscape:cy="150.18459"
+     inkscape:cx="301.12815"
+     inkscape:cy="199.43787"
      inkscape:document-units="mm"
      inkscape:current-layer="layer1"
      inkscape:document-rotation="0"
@@ -221,8 +221,8 @@
        units="mm"
        spacingx="1"
        spacingy="1"
-       originx="-47.500001"
-       originy="80.808713" />
+       originx="-31.316441"
+       originy="61.999995" />
   </sodipodi:namedview>
   <metadata
      id="metadata2115">
@@ -240,7 +240,7 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-47.5,80.808718)">
+     transform="translate(-31.316442,62)">
     <rect
        style="fill:none;fill-opacity:1;stroke:#0080ff;stroke-width:4;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
        id="rect2683"
@@ -530,28 +530,30 @@
     <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:7.05556px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
-       x="50.915798"
-       y="74.445419"
-       id="text4422"><tspan
+       x="-60.464546"
+       y="46.463032"
+       id="text4422"
+       transform="rotate(-90)"><tspan
          sodipodi:role="line"
          id="tspan4420"
-         x="50.915798"
-         y="74.445419"
+         x="-60.464546"
+         y="46.463032"
          style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:7.05556px;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;stroke-width:0.264583">IO Server node</tspan></text>
     <text
        xml:space="preserve"
        style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:7.05556px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
-       x="53.926292"
-       y="-75.165215"
-       id="text4422-2"><tspan
+       x="5.3104782"
+       y="36.959946"
+       id="text4422-2"
+       transform="rotate(-90)"><tspan
          sodipodi:role="line"
-         id="tspan4442"
-         x="53.926292"
-         y="-75.165215">Relay processes</tspan><tspan
+         id="tspan5656"
+         x="5.3104782"
+         y="36.959946">Relay processes</tspan><tspan
          sodipodi:role="line"
-         id="tspan4444"
-         x="53.926292"
-         y="-66.345764">(each on its own node)</tspan></text>
+         id="tspan5658"
+         x="5.3104782"
+         y="45.779396">(separate nodes)</tspan></text>
     <path
        style="fill:none;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1;marker-start:url(#DotM);marker-end:url(#DotM)"
        d="m 64.999999,-17 h 14.999999 v 28 h 10.000001 v 6"
