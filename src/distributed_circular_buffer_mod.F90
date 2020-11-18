@@ -47,13 +47,13 @@ contains
   end function is_valid
 
   !> Create and initialize a remote circular buffer. See remote_circular_buffer_create
-  function create(this, communicator, root, rank, comm_size, num_words) result(is_valid)
+  function create(this, communicator, rank, comm_size, num_producers, num_words) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT), intent(in)                        :: communicator
-    integer(C_INT), intent(in)                        :: root
     integer(C_INT), intent(in)                        :: rank
     integer(C_INT), intent(in)                        :: comm_size
+    integer(C_INT), intent(in)                        :: num_producers
     integer(C_INT), intent(in)                        :: num_words
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
 
@@ -61,7 +61,7 @@ contains
       call this % delete()
     end if
 
-    this % c_buffer = distributed_circular_buffer_create(communicator, root, rank, comm_size, num_words)
+    this % c_buffer = distributed_circular_buffer_create(communicator, rank, comm_size, num_producers, num_words)
     is_valid = this % is_valid()
   end function create
 

@@ -23,7 +23,7 @@ program test_distributed_circular_buffer
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
   integer, parameter :: NUM_DATA_ELEMENTS = 10
-  integer, parameter :: ROOT = 1
+  integer, parameter :: NUM_CONSUMERS = 1
 
   include 'mpif.h'
   include 'distributed_circular_buffer.inc'
@@ -41,14 +41,14 @@ program test_distributed_circular_buffer
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
 
-  success = circ_buffer % create(MPI_COMM_WORLD, ROOT, rank, comm_size, NUM_BUFFER_ELEMENTS)
+  success = circ_buffer % create(MPI_COMM_WORLD, rank, comm_size, comm_size - NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
     goto 777
   end if
 
-  if (rank /= ROOT) then
+  if (rank < comm_size - NUM_CONSUMERS) then
 
     call sleep_us(200)
 

@@ -50,11 +50,11 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
 typedef struct {
   MPI_Comm communicator;  //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;        //!< MPI window into the circular buffers themselves, on the process which holds all data
-  int32_t  root;          //!< Rank of the process which actually stores the data
   int32_t  rank;          //!< Rank of the process that initialized this instance of the distributed buffer description
-  int32_t  comm_size;     //!< How many processes share this distributed buffer
+  int32_t  comm_size;     //!< How many processes share this distributed buffer set
+  int32_t  num_producers; //!< How many producer processes share this distributed buffer set
   int32_t  window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
-  int32_t  num_bytes;     //!< How many bytes of data form a single circular buffer instance in this buffer set
+  int32_t  num_bytes_per_instance; //!< How many bytes of data form a single circular buffer instance in this buffer set
   union {
     circular_buffer_instance local_header; //!< Header of the circular buffer instance (only valid for producers)
     int8_t* raw_data; //!< Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
@@ -122,11 +122,19 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
   nanosleep(&ts, NULL);
 }
 
+static inline int is_consumer(distributed_circular_buffer_p buffer) {
+  return (buffer->rank >= buffer->num_producers);
+}
+
+static inline int is_producer(distributed_circular_buffer_p buffer) {
+  return !is_consumer(buffer);
+}
+
 static inline circular_buffer_instance_p get_circular_buffer_instance(
     distributed_circular_buffer_p buffer_set, //!< [in] The buffer set from which we want the circ buffer instance
     const int                     buffer_id   //!< [in] ID of the circ buffer instance within the buffer set
 ) {
-  return (circular_buffer_instance_p)(buffer_set->raw_data + buffer_id * buffer_set->num_bytes);
+  return (circular_buffer_instance_p)(buffer_set->raw_data + buffer_id * buffer_set->num_bytes_per_instance);
 }
 
 //! Retrieve a pointer to a certain circular buffer managed by the given distributed circular buffer set
@@ -150,14 +158,14 @@ static inline void print_buf(
 static inline void update_local_header_from_remote(
     distributed_circular_buffer_p buffer //!< [in] Buffer set from which we want to update a single instance
 ) {
-  MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
+  MPI_Win_lock(MPI_LOCK_SHARED, buffer->num_producers, 0, buffer->window);
 
   const int num_int = sizeof(circular_buffer_instance) / sizeof(int32_t);
   MPI_Get(
-      &buffer->local_header, num_int, MPI_INTEGER, buffer->root, buffer->window_offset, num_int, MPI_INTEGER,
+      &buffer->local_header, num_int, MPI_INTEGER, buffer->num_producers, buffer->window_offset, num_int, MPI_INTEGER,
       buffer->window);
 
-  MPI_Win_unlock(buffer->root, buffer->window);
+  MPI_Win_unlock(buffer->num_producers, buffer->window);
 }
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
@@ -180,7 +188,7 @@ static int distributed_circular_buffer_wait_space_available(
     distributed_circular_buffer_p buffer,       //!< [in] Pointer to the distributed buffer we're waiting for
     const int                     num_requested //!< [in] Needed number of available slots
 ) {
-  if (buffer == NULL || buffer->rank == buffer->root)
+  if (buffer == NULL || is_consumer(buffer))
     return -1;
 
   const circular_buffer_p instance = &buffer->local_header.buf;
@@ -207,7 +215,7 @@ static int distributed_circular_buffer_wait_data_available(
     const int buffer_id,    //!< [in] Which specific circular buffer we want to query (there are multiple ones)
     const int num_requested //!< [in] Number of elements we want to read
 ) {
-  if (buffer == NULL || buffer->rank != buffer->root || num_requested < 0)
+  if (buffer == NULL || is_producer(buffer) || num_requested < 0)
     return -1;
 
   const circular_buffer_p instance = get_circular_buffer(buffer, buffer_id);
@@ -236,57 +244,54 @@ static int distributed_circular_buffer_wait_data_available(
 //!
 //! @return A pointer to a newly-allocated distributed circular buffer struct that contains all the relevant info
 distributed_circular_buffer_p distributed_circular_buffer_create(
-    MPI_Comm communicator, //!< [in]  Communicator on which the distributed buffer is shared
-    int32_t  root,         //!< [in]  Process rank on which buffer data is located
-    int32_t  rank,         //!< [in]  Rank of the current process
-    int32_t  comm_size,    //!< [in]  Number of processes in the communicator
-    int32_t  num_words     //!< [in]  Number of 32-bit elements in the buffer
+    MPI_Comm communicator,  //!< [in]  Communicator on which the distributed buffer is shared
+    int32_t  rank,          //!< [in]  Rank of the current process
+    int32_t  comm_size,     //!< [in]  Number of processes in the communicator
+    int32_t  num_producers, //!< [in] Number of producer processes in the communicator
+    int32_t  num_words      //!< [in]  Number of 32-bit elements in the buffer
 ) {
   distributed_circular_buffer_p buffer = (distributed_circular_buffer*)malloc(sizeof(distributed_circular_buffer));
 
-  buffer->communicator = communicator;
-  buffer->root         = root;
-  buffer->rank         = rank;
-  buffer->comm_size    = comm_size;
-  buffer->num_bytes    = num_words * sizeof(int32_t);
+  buffer->communicator           = communicator;
+  buffer->rank                   = rank;
+  buffer->comm_size              = comm_size;
+  buffer->num_producers          = num_producers;
+  buffer->num_bytes_per_instance = num_words * sizeof(int32_t);
 
   // Allocate space asymmetrically and set it as a window. The root gets all the space, everyone else gets nothing
-  const int      num_buffers = (rank == root) ? comm_size - 1 : 1;
-  const MPI_Aint win_size    = (rank == root) ? num_buffers * buffer->num_bytes : 0;
-  MPI_Win_allocate(win_size, sizeof(int32_t), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data, &buffer->window);
+  const int      num_buffers = (rank == num_producers) ? num_producers : 0;
+  const MPI_Aint win_size    = num_buffers * buffer->num_bytes_per_instance;
 
-  if (rank == root) {
+  MPI_Win_allocate_shared(
+      win_size, sizeof(int32_t), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data, &buffer->window);
+
+  if (rank == num_producers) {
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of elements (int32_t).
-    int current_index = 0;
-    for (int i = 0; i < comm_size; i++) {
-      if (i != root) {
-        circular_buffer_instance_p inst_addr      = get_circular_buffer_instance(buffer, current_index);
-        circular_buffer_p          buffer_address = get_circular_buffer(buffer, current_index);
+    for (int i = 0; i < num_producers; i++) {
+      circular_buffer_p buffer_address = get_circular_buffer(buffer, i);
 
-        const int size_diff = (sizeof(circular_buffer_instance) - sizeof(circular_buffer)) / sizeof(int32_t);
-        printf("instance: %ld, buffer: %ld\n", (long)inst_addr, (long)buffer_address);
-        circular_buffer_init(buffer_address, num_words - size_diff);
+      const int size_diff = (sizeof(circular_buffer_instance) - sizeof(circular_buffer)) / sizeof(int32_t);
+      circular_buffer_init(buffer_address, num_words - size_diff);
 
-        const int current_offset = current_index * buffer->num_bytes / sizeof(int32_t);
-        MPI_Send(&current_offset, 1, MPI_INTEGER, i, 0, buffer->communicator);
-
-        current_index++;
-      }
+      const int current_offset = i * buffer->num_bytes_per_instance / sizeof(int32_t);
+      MPI_Send(&current_offset, 1, MPI_INTEGER, i, 0, buffer->communicator);
     }
+  }
+  else if (is_consumer(buffer)) { // Consumer nodes that are _not_ the first one
   }
   else {
     // Allocate space for the circular buffer header (and the data pointer, but there is no data)
     //    buffer->queue = (circular_buffer*)malloc(sizeof(circular_buffer) * num_buffers);
     MPI_Status status;
-    MPI_Recv(&buffer->window_offset, 1, MPI_INTEGER, buffer->root, 0, buffer->communicator, &status);
+    MPI_Recv(&buffer->window_offset, 1, MPI_INTEGER, buffer->num_producers, 0, buffer->communicator, &status);
   }
 
   // --------------------------------
   MPI_Barrier(buffer->communicator);
   // --------------------------------
 
-  if (rank != root) {
+  if (is_producer(buffer)) {
     update_local_header_from_remote(buffer);
   }
 
@@ -294,26 +299,26 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
 }
 
 //F_StArT
-//  function distributed_circular_buffer_create(f_communicator, root, rank, comm_size, num_words) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
+//  function distributed_circular_buffer_create(f_communicator, rank, comm_size, num_producers, num_words) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
-//    integer(C_INT), intent(IN), value :: root           !< Process rank on which buffer data is located
-//    integer(C_INT), intent(IN), value :: rank           !< Rank of the current process
+//    integer(C_INT), intent(IN), value :: rank           !< Rank of the calling process
 //    integer(C_INT), intent(IN), value :: comm_size      !< Number of processes in the communicator
+//    integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
 //    integer(C_INT), intent(IN), value :: num_words      !< Number of 32-bit elements in the circular buffer
 //    type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
 //   end function distributed_circular_buffer_create
 //F_EnD
 //! Wrapper function to call from Fortran code, with a Fortran MPI communicator
 distributed_circular_buffer_p distributed_circular_buffer_create_f(
-    int32_t f_communicator, //!< [in]  Communicator on which the distributed buffer is shared (in Fortran)
-    int32_t root,           //!< [in]  Process rank on which buffer data is located
-    int32_t rank,           //!< [in]  Rank of the current process
-    int32_t comm_size,      //!< [in]  Number of processes in the communicator
-    int32_t num_words       //!< [in]  Number of 32-bit elements in the buffer
+    int32_t f_communicator, //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
+    int32_t rank,           //!< [in] Rank of the current process
+    int32_t comm_size,      //!< [in] Number of processes in the communicator
+    int32_t num_producers,  //!< [in] Number or producers (circular buffer instances)
+    int32_t num_words       //!< [in] Number of 32-bit elements in the buffer
 ) {
-  return distributed_circular_buffer_create(MPI_Comm_f2c(f_communicator), root, rank, comm_size, num_words);
+  return distributed_circular_buffer_create(MPI_Comm_f2c(f_communicator), rank, comm_size, num_producers, num_words);
 }
 
 //F_StArT
@@ -325,10 +330,8 @@ distributed_circular_buffer_p distributed_circular_buffer_create_f(
 //F_EnD
 void distributed_circular_buffer_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which to print data
 ) {
-  printf(
-      "Comm: %ld, window: %ld, root: %d, rank: %d\n", (long)buffer->communicator, (long)buffer->window, buffer->root,
-      buffer->rank);
-  if (buffer->rank != buffer->root) {
+  printf("Comm: %ld, window: %ld, rank: %d\n", (long)buffer->communicator, (long)buffer->window, buffer->rank);
+  if (is_producer(buffer)) {
     printf("Num elems: %d (rank %d)\n", get_available_data(&buffer->local_header.buf), buffer->rank);
   }
   else {
@@ -379,7 +382,7 @@ int distributed_circular_buffer_put(
   if (distributed_circular_buffer_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
-  MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
+  MPI_Win_lock(MPI_LOCK_SHARED, buffer->num_producers, 0, buffer->window);
 
   int32_t       in_index  = buffer->local_header.buf.m.in;
   const int32_t out_index = buffer->local_header.buf.m.out;
@@ -390,8 +393,8 @@ int distributed_circular_buffer_put(
     // 1 segment
     const int32_t window_offset = window_offset_base + in_index;
     MPI_Accumulate(
-        src_data, num_elements, MPI_INTEGER, buffer->root, window_offset, num_elements, MPI_INTEGER, MPI_REPLACE,
-        buffer->window);
+        src_data, num_elements, MPI_INTEGER, buffer->num_producers, window_offset, num_elements, MPI_INTEGER,
+        MPI_REPLACE, buffer->window);
     in_index += num_elements;
   }
   else {
@@ -399,8 +402,8 @@ int distributed_circular_buffer_put(
     const int     num_elem_segment_1 = num_elements > (limit - in_index) ? (limit - in_index) : num_elements;
     const int32_t window_offset_1    = window_offset_base + in_index;
     MPI_Accumulate(
-        src_data, num_elem_segment_1, MPI_INTEGER, buffer->root, window_offset_1, num_elem_segment_1, MPI_INTEGER,
-        MPI_REPLACE, buffer->window);
+        src_data, num_elem_segment_1, MPI_INTEGER, buffer->num_producers, window_offset_1, num_elem_segment_1,
+        MPI_INTEGER, MPI_REPLACE, buffer->window);
 
     // Update temporary insertion pointer
     in_index += num_elem_segment_1;
@@ -411,7 +414,7 @@ int distributed_circular_buffer_put(
     const int     num_elem_segment_2 = num_elements - num_elem_segment_1;
     const int32_t window_offset_2    = window_offset_base + in_index;
     MPI_Accumulate(
-        src_data + num_elem_segment_1, num_elem_segment_2, MPI_INTEGER, buffer->root, window_offset_2,
+        src_data + num_elem_segment_1, num_elem_segment_2, MPI_INTEGER, buffer->num_producers, window_offset_2,
         num_elem_segment_2, MPI_INTEGER, MPI_REPLACE, buffer->window);
 
     // Update temporary insertion pointer
@@ -422,10 +425,11 @@ int distributed_circular_buffer_put(
   const int     index_byte_offset = offsetof(circular_buffer_instance, buf) + offsetof(fiol_management, in);
   const int     index_elem_offset = index_byte_offset / sizeof(int32_t);
   const int32_t window_offset     = buffer->window_offset + index_elem_offset; // TODO IS THIS OK??
-  MPI_Accumulate(&in_index, 1, MPI_INTEGER, buffer->root, window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
+  MPI_Accumulate(
+      &in_index, 1, MPI_INTEGER, buffer->num_producers, window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
   buffer->local_header.buf.m.in = in_index;
 
-  MPI_Win_unlock(buffer->root, buffer->window);
+  MPI_Win_unlock(buffer->num_producers, buffer->window);
 
   return get_available_space(&buffer->local_header.buf);
 }
@@ -500,7 +504,7 @@ int distributed_circular_buffer_get(
 //  end subroutine buffer_write_test
 //F_EnD
 void buffer_write_test(distributed_circular_buffer_p buffer) {
-  if (buffer->rank == buffer->root) {
+  if (is_consumer(buffer)) {
     MPI_Barrier(buffer->communicator);
     const int num_bufs = buffer->comm_size - 1;
     for (int i = 0; i < num_bufs; i++) {
@@ -519,13 +523,13 @@ void buffer_write_test(distributed_circular_buffer_p buffer) {
     print_buf(&buffer->local_header.buf, buffer->rank);
     MPI_Barrier(buffer->communicator);
     MPI_Barrier(buffer->communicator);
-    MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
+    MPI_Win_lock(MPI_LOCK_SHARED, buffer->num_producers, 0, buffer->window);
 
     int val = -1;
     MPI_Accumulate(
-        &val, 1, MPI_INTEGER, buffer->root, buffer->window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
+        &val, 1, MPI_INTEGER, buffer->num_producers, buffer->window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
 
-    MPI_Win_unlock(buffer->root, buffer->window);
+    MPI_Win_unlock(buffer->num_producers, buffer->window);
     MPI_Barrier(buffer->communicator);
   }
 }
