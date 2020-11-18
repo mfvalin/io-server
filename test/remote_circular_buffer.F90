@@ -50,14 +50,24 @@ program test_remote_circular_buffer
 
   if (rank /= ROOT) then
 
-    call sleep_us(20000)
+    call sleep_us(200)
 
     do i = 1, NUM_DATA_ELEMENTS
       in_data(i) = rank * 1000 + i
     end do
 
     available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
+
+    if (available < 0) then
+      print *, 'Unable to insert stuff in the buffer!!!!!'
+    else
+      print *, 'There is now that many slots available in the buffer: ', available
+    end if
+
+
   else
+!    call sleep_us(20000)
+
     available = circ_buffer % get(0, out_data, NUM_DATA_ELEMENTS)
     print *, 'Read from 1st producer: ', out_data
     print *, 'It now has: ', available

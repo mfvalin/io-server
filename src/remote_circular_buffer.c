@@ -25,6 +25,14 @@
 
 #include "circular_buffer.h"
 
+typedef struct {
+  int             dummy;
+  int             dummy2;
+  circular_buffer buf;
+} circular_buffer_instance;
+
+typedef circular_buffer_instance* circular_buffer_instance_p;
+
 /**
  * @brief All information necessary to manage a set of circuler buffers accessed remotely, whose entire data is
  * located in a single process.
@@ -45,7 +53,7 @@ typedef struct {
   int32_t  window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
   int32_t  num_bytes;     //!< How many bytes of data form a single circular buffer instance in this remote buffer
   union {
-    circular_buffer* queue; //!< Pointer to the header of the circular buffer (only valid for producers)
+    circular_buffer_instance local_header; //!< Header of the circular buffer (only valid for producers)
     int8_t* raw_data; //!< Pointer to the data holding the entire set of circular buffers (only valid for the consumer)
   };
 } remote_circular_buffer;
@@ -111,12 +119,19 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
   nanosleep(&ts, NULL);
 }
 
+static inline circular_buffer_instance_p get_circular_buffer_instance(
+    remote_circular_buffer_p remote,   //!< [in] The remote buffer from which we want the circ buffer instance
+    const int                buffer_id //!< [in] ID of the circ buffer instance within the remote buffer
+) {
+  return (circular_buffer_instance_p)(remote->raw_data + buffer_id * remote->num_bytes);
+}
+
 //! Retrieve a pointer to a certain circular buffer managed by the given "remote" circular buffer
 static inline circular_buffer_p get_circular_buffer(
     remote_circular_buffer_p remote,   //!< [in] The remote buffer from which we want a circular buffer
     const int                buffer_id //!< [in] ID of the circular buffer within the remote buffer
 ) {
-  return (circular_buffer_p)(remote->raw_data + buffer_id * remote->num_bytes);
+  return &get_circular_buffer_instance(remote, buffer_id)->buf;
 }
 
 //! Print info about a circular buffer (for debugging)
@@ -126,21 +141,25 @@ static inline void print_buf(circular_buffer_p b, int rank) {
       b->m.limit, rank);
 }
 
+static inline void update_local_header_from_remote(remote_circular_buffer_p buffer) {
+  MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
+
+  const int num_int = sizeof(circular_buffer_instance) / sizeof(int32_t);
+  MPI_Get(
+      &buffer->local_header, num_int, MPI_INTEGER, buffer->root, buffer->window_offset, num_int, MPI_INTEGER,
+      buffer->window);
+
+  MPI_Win_unlock(buffer->root, buffer->window);
+}
+
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
 //! space is available
 //! @return The number of 4-byte elements that can still be store in the before
 static inline int get_available_space_from_remote(
     const remote_circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
-  MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
-
-  const int num_int = sizeof(circular_buffer) / sizeof(int32_t);
-  MPI_Get(
-      buffer->queue, num_int, MPI_INTEGER, buffer->root, buffer->window_offset, num_int, MPI_INTEGER, buffer->window);
-
-  MPI_Win_unlock(buffer->root, buffer->window);
-
-  return get_available_space(buffer->queue);
+  update_local_header_from_remote(buffer);
+  return get_available_space(&buffer->local_header.buf);
 }
 
 //! Stop and wait until there is enough space in this circular buffer instance.
@@ -155,7 +174,7 @@ static int remote_circular_buffer_wait_space_available(
   if (buffer == NULL || buffer->rank == buffer->root)
     return -1;
 
-  const circular_buffer_p queue = buffer->queue;
+  const circular_buffer_p queue = &buffer->local_header.buf;
   if (num_requested < 0 || queue->m.version != FIOL_VERSION)
     return -1;
 
@@ -180,13 +199,17 @@ static int remote_circular_buffer_wait_data_available(
     return -1;
 
   const circular_buffer_p queue = get_circular_buffer(buffer, buffer_id);
+  printf("address = %ld\n", (long)queue);
   if (queue->m.version != FIOL_VERSION)
     return -1;
 
   // Only check locally, waiting a bit between each check
   int num_available = 0;
-  while (num_available = get_available_data(queue), num_available < num_requested)
+  while (num_available = get_available_data(queue), num_available < num_requested) {
+    //    printf("There is now %d data available\n", num_available);
+    print_buf(get_circular_buffer(buffer, buffer_id), buffer->rank);
     sleep_us(DATA_CHECK_WAIT_TIME_US);
+  }
 
   return num_available;
 }
@@ -227,8 +250,12 @@ remote_circular_buffer_p remote_circular_buffer_create(
     int current_index = 0;
     for (int i = 0; i < comm_size; i++) {
       if (i != root) {
-        circular_buffer_p buffer_address = get_circular_buffer(buffer, current_index);
-        circular_buffer_init(buffer_address, num_words);
+        circular_buffer_instance_p inst_addr      = get_circular_buffer_instance(buffer, current_index);
+        circular_buffer_p          buffer_address = get_circular_buffer(buffer, current_index);
+
+        const int size_diff = (sizeof(circular_buffer_instance) - sizeof(circular_buffer)) / sizeof(int32_t);
+        printf("instance: %ld, buffer: %ld\n", (long)inst_addr, (long)buffer_address);
+        circular_buffer_init(buffer_address, num_words - size_diff);
 
         const int current_offset = current_index * buffer->num_bytes / sizeof(int32_t);
         MPI_Send(&current_offset, 1, MPI_INTEGER, i, 0, buffer->communicator);
@@ -239,18 +266,17 @@ remote_circular_buffer_p remote_circular_buffer_create(
   }
   else {
     // Allocate space for the circular buffer header (and the data pointer, but there is no data)
-    buffer->queue = (circular_buffer*)malloc(sizeof(circular_buffer) * num_buffers);
+    //    buffer->queue = (circular_buffer*)malloc(sizeof(circular_buffer) * num_buffers);
     MPI_Status status;
     MPI_Recv(&buffer->window_offset, 1, MPI_INTEGER, buffer->root, 0, buffer->communicator, &status);
   }
 
+  // --------------------------------
   MPI_Barrier(buffer->communicator);
+  // --------------------------------
+
   if (rank != root) {
-    const int num_int = sizeof(circular_buffer) / sizeof(int32_t);
-    MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
-    MPI_Get(
-        buffer->queue, num_int, MPI_INTEGER, buffer->root, buffer->window_offset, num_int, MPI_INTEGER, buffer->window);
-    MPI_Win_unlock(buffer->root, buffer->window);
+    update_local_header_from_remote(buffer);
   }
 
   return buffer;
@@ -288,10 +314,10 @@ remote_circular_buffer_p remote_circular_buffer_create_f(
 void remote_circular_buffer_print(remote_circular_buffer_p buffer //!< [in] Buffer for which to print data
 ) {
   printf(
-      "Comm: %ld, window: %ld, root: %d, rank: %d, queue %ld\n", (long)buffer->communicator, (long)buffer->window,
-      buffer->root, buffer->rank, (long)buffer->queue);
+      "Comm: %ld, window: %ld, root: %d, rank: %d\n", (long)buffer->communicator, (long)buffer->window, buffer->root,
+      buffer->rank);
   if (buffer->rank != buffer->root) {
-    printf("Num elems: %d (rank %d)\n", get_available_data(buffer->queue), buffer->rank);
+    printf("Num elems: %d (rank %d)\n", get_available_data(&buffer->local_header.buf), buffer->rank);
   }
   else {
     for (int i = 0; i < buffer->comm_size - 1; i++) {
@@ -312,8 +338,8 @@ void remote_circular_buffer_print(remote_circular_buffer_p buffer //!< [in] Buff
 void remote_circular_buffer_delete(remote_circular_buffer_p buffer //!< [in,out] Buffer to delete
 ) {
   MPI_Win_free(&buffer->window);
-  if (buffer->rank != buffer->root)
-    free(buffer->queue);
+  //  if (buffer->rank != buffer->root)
+  //    free(buffer->queue);
   free(buffer);
 }
 
@@ -340,16 +366,18 @@ int remote_circular_buffer_put(
     int32_t* const           src_data,    //!< Pointer to the data we want to insert
     const int                num_elements //!< How many 4-byte elements we want to insert
 ) {
+  printf("Trying to put stuff in the buffer! (%d)\n", buffer->rank);
+
   if (remote_circular_buffer_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
   MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
 
-  int32_t       in_index  = buffer->queue->m.in;
-  const int32_t out_index = buffer->queue->m.out;
-  const int32_t limit     = buffer->queue->m.limit;
+  int32_t       in_index  = buffer->local_header.buf.m.in;
+  const int32_t out_index = buffer->local_header.buf.m.out;
+  const int32_t limit     = buffer->local_header.buf.m.limit;
 
-  const int32_t window_offset_base = buffer->window_offset + sizeof(fiol_management) / sizeof(int32_t);
+  const int32_t window_offset_base = buffer->window_offset + sizeof(circular_buffer_instance) / sizeof(int32_t);
   if (in_index < out_index) {
     // 1 segment
     const int32_t window_offset = window_offset_base + in_index;
@@ -383,14 +411,18 @@ int remote_circular_buffer_put(
   }
 
   // Update insertion index remotely and locally
-  const int32_t window_offset =
-      buffer->window_offset + offsetof(fiol_management, in) / sizeof(int32_t); // TODO IS THIS OK??
+  const int     index_byte_offset = offsetof(circular_buffer_instance, buf) + offsetof(fiol_management, in);
+  const int     index_elem_offset = index_byte_offset / sizeof(int32_t);
+  printf("byte offset: %d, elem offset: %d\n", index_byte_offset, index_elem_offset);
+  const int32_t window_offset     = buffer->window_offset + index_elem_offset; // TODO IS THIS OK??
   MPI_Accumulate(&in_index, 1, MPI_INTEGER, buffer->root, window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
-  buffer->queue->m.in = in_index;
+  buffer->local_header.buf.m.in = in_index;
 
   MPI_Win_unlock(buffer->root, buffer->window);
 
-  return get_available_space(buffer->queue);
+  printf("Finished putting stuff in the buffer (%d)\n", buffer->rank);
+
+  return get_available_space(&buffer->local_header.buf);
 }
 
 //F_StArT
@@ -406,6 +438,8 @@ int remote_circular_buffer_put(
 //F_EnD
 int remote_circular_buffer_get(
     remote_circular_buffer_p buffer, const int buffer_id, int32_t* dest_data, const int num_elements) {
+  printf("Trying to read stuff from the buffer\n");
+
   if (remote_circular_buffer_wait_data_available(buffer, buffer_id, num_elements) < 0)
     return -1;
 
@@ -441,8 +475,10 @@ int remote_circular_buffer_get(
   }
 
   // Update actual extraction pointer
-  M_FENCE // Make sure everything has been read, and the temp pointer actually updated
-      queue->m.out = out_index;
+  M_FENCE; // Make sure everything has been read, and the temp pointer actually updated
+  queue->m.out = out_index;
+
+  printf("Finished reading stuff from the buffer\n");
 
   return get_available_data(queue);
 }
@@ -475,7 +511,7 @@ void buffer_write_test(remote_circular_buffer_p buffer) {
     }
   }
   else {
-    print_buf(buffer->queue, buffer->rank);
+    print_buf(&buffer->local_header.buf, buffer->rank);
     MPI_Barrier(buffer->communicator);
     MPI_Barrier(buffer->communicator);
     MPI_Win_lock(MPI_LOCK_SHARED, buffer->root, 0, buffer->window);
