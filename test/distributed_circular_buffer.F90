@@ -15,10 +15,10 @@
 ! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! Boston, MA 02111-1307, USA.
 
-program test_remote_circular_buffer
+program test_distributed_circular_buffer
 
   use ISO_C_BINDING
-  use remote_circular_buffer_module, only : remote_circular_buffer
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
@@ -26,14 +26,14 @@ program test_remote_circular_buffer
   integer, parameter :: ROOT = 1
 
   include 'mpif.h'
-  include 'remote_circular_buffer.inc'
+  include 'distributed_circular_buffer.inc'
 
   integer :: error, i
   integer :: rank, comm_size
   integer :: available
   logical :: success
 
-  type(remote_circular_buffer)          :: circ_buffer
+  type(distributed_circular_buffer)     :: circ_buffer
   integer, dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
 
   call MPI_init(error)
@@ -87,4 +87,4 @@ program test_remote_circular_buffer
 
   call MPI_finalize(error)
 
-end program test_remote_circular_buffer
+end program test_distributed_circular_buffer

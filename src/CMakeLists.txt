@@ -62,9 +62,9 @@ file(GLOB PROJECT_INCLUDE_FILES
 )
 
 set(C_TO_INC_FILES
-  memory_arena.c
   circular_buffer.c
-  remote_circular_buffer.c
+  distributed_circular_buffer.c
+  memory_arena.c
 )
 
 set(C_TO_H_FILES ${C_TO_INC_FILES})
