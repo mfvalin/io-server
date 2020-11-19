@@ -101,8 +101,9 @@ int32_t ShmemHeapPtr2Offset(
   heap_element *p = (heap_element *) addr ;
   heap_element *h ;
 
-  if( (h = ShmemHeapContains(addr)) != NULL) {    // inside a registered heap ?
-    return (p - h) ;                              // yes, return displacement with respect to base of heap
+  h = ShmemHeapContains(addr) ; // address is within a heap if h != NULL
+  if( h != NULL) {              // base of a known heap ?
+    return (p - h) ;            // yes, return displacement with respect to base of heap
   }
 
   return -1 ; // address not within bounds of registered heap
@@ -139,9 +140,10 @@ void *ShmemHeapPtr(
   heap_element sz;
 
   if(h == NULL) return NULL ; // not a heap
+  if(h != addr) return NULL ; // not the base of a heap
 
   sz = h[0] ;    // size of heap
-  return ( ((h + offset) > (h + sz -2)) ? NULL : (h + offset) ) ;
+  return ( ((h + offset) > (h + sz -2)) ? NULL : (h + offset) ) ;  // null if outside of heap
 }
 
 //! register a  Heap in the heap table

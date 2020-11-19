@@ -35,7 +35,7 @@ module shmemheap
     procedure :: alloc                  !< allocate a block in a registered heap
 
     !> \return                          0 if O.K., nonzero if error
-    procedure, NOPASS :: free           !< free an allocated block
+    procedure, NOPASS :: free           !< free an allocated block by address in memory
 
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
@@ -140,19 +140,19 @@ module shmemheap
     p = h%p
   end function clone 
 
-  !> \brief allocate a block in a heap
+  !> \brief allocate a memory block in a heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
   !> p = h\%alloc(nwords, safe)
   function alloc(h, nwords, safe) result(p)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the desired block
-    integer(C_INT), intent(IN), value :: safe               !< if nonzero perform operation under memory lock
+    integer(C_INT), intent(IN), value :: safe               !< if nonzero perform operation under lock (atomic operation)
     type(C_PTR) :: p                                        !< address of created heap
     p = ShmemHeapAllocBlock(h%p, nwords, safe)
   end function alloc 
   
-  !> \brief free block by address
+  !> \brief free block by address in memory
   !> <br>type(heap) :: h<br>integer(C_INT) :: status<br>
   !> status = h\%free(addr)
   function free(addr) result(status)
