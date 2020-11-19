@@ -47,6 +47,36 @@
     fun:opal_libevent2022_event_base_loop
 }
 
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:calloc
+    ...
+    fun:opal_hwloc_base_get_topology
+    fun:orte_ess_base_proc_binding
+}
+
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    ...
+    fun:opal_hwloc_base_get_topology
+    fun:orte_ess_base_proc_binding
+}
+
+{
+    <OpenMPI_leak>
+    Memcheck:Leak
+    match-leak-kinds: reachable
+    fun:malloc
+    ...
+    fun:ompi_mpi_finalize
+    fun:mpi_finalize
+}
+
 
 
 
