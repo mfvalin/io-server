@@ -1,4 +1,4 @@
-module simpleheap
+module shmemheap
   use ISO_C_BINDING
   !> \brief heap user defined type
   type, public :: heap
@@ -22,59 +22,59 @@ module simpleheap
     procedure, NOPASS :: free           !< free an allocated block
   end type heap
   interface
-    function ServerHeapInit(p, nwords) result(h) bind(C,name='ServerHeapInit')
+    function ShmemHeapInit(p, nwords) result(h) bind(C,name='ShmemHeapInit')
       import :: C_INT, C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: p
       integer(C_INT), intent(IN), value :: nwords
       type(C_PTR) :: h
-    end function ServerHeapInit
+    end function ShmemHeapInit
 
-    function ServerHeapCheck(p, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ServerHeapCheck')
+    function ShmemHeapCheck(p, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ShmemHeapCheck')
       import :: C_INT, C_PTR, C_SIZE_T
       implicit none
       type(C_PTR), intent(IN), value :: p
       integer(C_INT), intent(OUT) :: free_blocks, used_blocks
       integer(C_SIZE_T), intent(OUT) :: free_space, used_space
       integer(C_INT) :: status
-    end function ServerHeapCheck
+    end function ShmemHeapCheck
 
-    function ServerHeapAllocBlock(p, nwords, safe) result(b) bind(C,name='ServerHeapAllocBlock')
+    function ShmemHeapAllocBlock(p, nwords, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
       import :: C_INT, C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: p
       integer(C_INT), intent(IN), value :: nwords
       integer(C_INT), intent(IN), value :: safe
       type(C_PTR) :: b
-    end function ServerHeapAllocBlock
+    end function ShmemHeapAllocBlock
 
-    function ServerHeapFreeBlock(addr) result(status) bind(C,name='ServerHeapFreeBlock')
+    function ShmemHeapFreeBlock(addr) result(status) bind(C,name='ShmemHeapFreeBlock')
       import :: C_INT, C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: addr
       integer(C_INT) :: status
-    end function ServerHeapFreeBlock
+    end function ShmemHeapFreeBlock
 
-    function ServerHeapRegister(p) result(status) bind(C,name='ServerHeapRegister')
+    function ShmemHeapRegister(p) result(status) bind(C,name='ShmemHeapRegister')
       import :: C_INT, C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: p
       integer(C_INT) :: status
-    end function ServerHeapRegister
+    end function ShmemHeapRegister
 
-    function ServerHeapContains(addr) result(p) bind(C,name='ServerHeapContains')
+    function ShmemHeapContains(addr) result(p) bind(C,name='ShmemHeapContains')
       import :: C_INT, C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: addr
       type(C_PTR) :: p
-    end function ServerHeapContains
+    end function ShmemHeapContains
 
-    function ServerHeapValidBlock(addr) result(status) bind(C,name='ServerHeapValidBlock')
+    function ShmemHeapValidBlock(addr) result(status) bind(C,name='ShmemHeapValidBlock')
       import :: C_INT, C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: addr
       integer(C_INT) :: status
-    end function ServerHeapValidBlock
+    end function ShmemHeapValidBlock
 
   end interface
 contains
@@ -88,7 +88,7 @@ contains
     type(C_PTR), intent(IN), value :: addr                  !< memory address
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the heap
     type(C_PTR) :: p                                        !< pointer to created heap
-    h%p = ServerHeapInit(addr, nwords)
+    h%p = ShmemHeapInit(addr, nwords)
     p = h%p
   end function create 
 
@@ -101,7 +101,7 @@ contains
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the heap
     integer(C_INT), intent(IN), value :: safe               !< if nonzero perform operation under memory lock
     type(C_PTR) :: p                                        !< pointer to created heap
-    p = ServerHeapAllocBlock(h%p, nwords, safe)
+    p = ShmemHeapAllocBlock(h%p, nwords, safe)
   end function alloc 
   
   !> \brief free a previously allocated block
@@ -111,7 +111,7 @@ contains
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address of block to free
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
-    status = ServerHeapFreeBlock(addr)
+    status = ShmemHeapFreeBlock(addr)
   end function free 
   
   !> \brief register a heap
@@ -123,7 +123,7 @@ contains
     type(C_PTR), intent(IN), value :: addr      !< memory address
     integer(C_INT) :: nheaps                    !< number of registered heaps if successful, -1 otherwise
     h%p = addr
-    nheaps = ServerHeapRegister(addr)
+    nheaps = ShmemHeapRegister(addr)
   end function register 
   
   !> \brief check a heap
@@ -135,7 +135,7 @@ contains
     integer(C_INT), intent(OUT)    :: free_blocks, used_blocks
     integer(C_SIZE_T), intent(OUT) :: free_space, used_space
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
-    status = ServerHeapCheck(h%p, free_blocks, free_space, used_blocks, used_space)
+    status = ShmemHeapCheck(h%p, free_blocks, free_space, used_blocks, used_space)
   end function check 
   
   !> \brief find if address belongs to a registered heap
@@ -145,7 +145,7 @@ contains
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
     type(C_PTR) :: p                            !< pointer to heap (NULL if not in a registered heap)
-    p = ServerHeapContains(addr)
+    p = ShmemHeapContains(addr)
   end function contains 
   
   !> \brief find if address belongs to a block from a registered heap
@@ -157,10 +157,10 @@ contains
     integer(C_INT) :: status                    !< 0 if valid block from registered heap, 
                                                 !< -1 if unknown heap, 
                                                 !< 1 if inside a registered heap but not a proper block pointer
-    status = ServerHeapValidBlock(addr)
+    status = ShmemHeapValidBlock(addr)
   end function validblock 
   
-end module simpleheap
+end module shmemheap
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
 
@@ -168,7 +168,7 @@ end module simpleheap
 #define NPTEST 125
 #define MAXINDEXES  1024
 program demo
-  use simpleheap
+  use shmemheap
   implicit none
   include 'mpif.h'
   integer :: myrank, nprocs, ierr, win, disp_unit, i, status

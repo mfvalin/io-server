@@ -24,7 +24,7 @@
  code extracted from file memory_arena.c
  \verbatim
 
-  ServerHeap : A quick and dirty heap management package
+  ShmemHeap : A quick and dirty heap management package
                (mostly intended for use in managing shared memory across processes)
 
   Server Heap layout
@@ -79,7 +79,7 @@ static heap_element *heaps[MAX_HEAPS][2] ;
 
 //! which heap does this address belong to ?
 //! @return heap base address if within a registered heap, NULL otherwise
-heap_element *ServerHeapContains(
+heap_element *ShmemHeapContains(
   void *addr                    //!< [in]  address possibly in a registered heap
   ){
   heap_element *b = (heap_element *) addr ;
@@ -95,14 +95,14 @@ heap_element *ServerHeapContains(
 
 //! is this a block that belongs to a registered heap
 //! @return 0 if valid block from registered heap, -1 if unknown heap, 1 if inside a registered heap but not a proper block pointer
-int32_t ServerHeapValidBlock(
+int32_t ShmemHeapValidBlock(
   void *addr                    //!< [in]  putative valid block address
   ){
   heap_element *b = (heap_element *) addr ;
   heap_element *h ;
   heap_element sz ;
-printf("ServerHeapValidBlock checking address %p\n",addr);
-  if( (h = ServerHeapContains(addr)) != NULL) {    // inside a registered heap ?
+printf("ShmemHeapValidBlock checking address %p\n",addr);
+  if( (h = ShmemHeapContains(addr)) != NULL) {    // inside a registered heap ?
     b-- ;                                      // base of block structure (1 element below user block address)
     sz = b[0] > 0 ? b[0] : -b[0] ;             // get block size (negative means block is in use)
     if(sz < 2)               return 1 ;        // invalid block size
@@ -116,7 +116,7 @@ printf("ServerHeapValidBlock checking address %p\n",addr);
 
 //! register a  Heap in the heap table
 //! @return number of registered heaps if successful, -1 otherwise
-int32_t ServerHeapRegister(
+int32_t ShmemHeapRegister(
   void *addr                    //!< [in]  heap address
   ){
   heap_element *h = (heap_element *) addr ;
@@ -139,7 +139,7 @@ printf(", nheaps = %d\n",nheaps);
 
 //! initialize a Server Heap
 //! @return address of Server Heap if successful, NULL otherwise
-void *ServerHeapInit(
+void *ShmemHeapInit(
   void *addr,                    //!< [in]  desired heap address, if NULL, allocate space with malloc
   size_t sz                      //!< [in]  size in bytes of space pointed to by addr
   ){
@@ -154,13 +154,13 @@ void *ServerHeapInit(
   h[heap_sz - 2] = heap_sz -2 ; // size of first block (tail)
   h[heap_sz - 1] = 0 ;          // last block (not locked)
 
-  ServerHeapRegister(h) ;       // register Heap for block validation purpose
+  ShmemHeapRegister(h) ;       // register Heap for block validation purpose
   return h ;                    // O.K. return address of Heap
 }
 
 //! check integrity of Server Heap
 //! @return 0 if O.K., nonzero if not
-int32_t ServerHeapCheck(
+int32_t ShmemHeapCheck(
   void *addr,                     //!< [in]  address of Server Heap to check
   int32_t *free_blocks,           //!< [out] number of free blocks
   size_t *free_space,             //!< [out] available space in bytes
@@ -216,7 +216,7 @@ int32_t ServerHeapCheck(
 
 //! allocate space on a Server Heap
 //! @return address of block
-void *ServerHeapAllocBlock(
+void *ShmemHeapAllocBlock(
   void *addr,                      //!< [in]  address of Server Heap
   int32_t bsz,                     //!< [in]  size of block to allocate
   int32_t safe                     //!< [in]  if nonzero, perform operation under lock
@@ -271,15 +271,15 @@ printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
 
 //! allocate space on a Server Heap
 //! @return 0 if O.K., nonzero if error
-int32_t ServerHeapFreeBlock(
+int32_t ShmemHeapFreeBlock(
   void *addr                       //!< [in]  address of block
     ){
   heap_element *h = (heap_element *) addr ;
   heap_element nw ;
   int status ;
 
-  status = ServerHeapValidBlock(addr);
-printf("after ServerHeapValidBlock, status = %d\n",status);
+  status = ShmemHeapValidBlock(addr);
+printf("after ShmemHeapValidBlock, status = %d\n",status);
   if(status != 0) {   // is this the address of a valid block ?
     return -1 ;                                      // unknown heap or invalid block pointer 
   }
@@ -294,7 +294,7 @@ printf("after ServerHeapValidBlock, status = %d\n",status);
 
 //! check if Server Heap is locked
 //! @return 0 if not locked, nonzero if locked
-int32_t ServerHeapIslocked(
+int32_t ShmemHeapIslocked(
   void *addr                      //!< [in]  address of Server Heap
   ){
   heap_element *h = (heap_element *) addr ;
@@ -306,7 +306,7 @@ int32_t ServerHeapIslocked(
 
 //! lock Server Heap
 //! @return none
-void ServerHeapLock(
+void ShmemHeapLock(
   void *addr                      //!< [in]  address of Server Heap
   ){
   heap_element *h = (heap_element *) addr ;
@@ -319,7 +319,7 @@ void ServerHeapLock(
 
 //! unlock Server Heap
 //! @return none
-void ServerHeapUnlock(
+void ShmemHeapUnlock(
   void *addr                      //!< [in]  address of Server Heap
   ){
   heap_element *h = (heap_element *) addr ;
@@ -369,17 +369,17 @@ int main ( int argc, char *argv[] )
     sm.heap   = shared + 1 + NINDEXES ;
     for(i=0 ; i<NINDEXES ; i++) sm.index[i] = 0 ;
 
-    sm.heap = ServerHeapInit(sm.heap, 32*1024) ; // create and initialize heap
+    sm.heap = ShmemHeapInit(sm.heap, 32*1024) ; // create and initialize heap
     printf("registered heap 1\n");
-    status = ServerHeapRegister(sm.heap);
+    status = ShmemHeapRegister(sm.heap);
     printf("registered heap %d\n",status);  // re register heap
     // Heap check (pristine Heap)
-    status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
+    status = ShmemHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
     printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
            rank, free_blocks, free_space, used_blocks, used_space, status);
 
     for(i=0 ; i<64 ; i++){      // allocate 64 blocks if possible
-      t = (int32_t *)ServerHeapAllocBlock(sm.heap, 1025, 0) ;    // try to allocate block
+      t = (int32_t *)ShmemHeapAllocBlock(sm.heap, 1025, 0) ;    // try to allocate block
       if(t == NULL) {                                            // not enough room left
         printf("allocation failed, block number = %d\n",i);
         break ;
@@ -388,7 +388,7 @@ int main ( int argc, char *argv[] )
       printf("block %i allocated at %p, heap = %p, index = %d\n",i,t,sm.heap,sm.index[i]);
     }
     // Heap check (Heap with data blocks)
-    status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
+    status = ShmemHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
     printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
            rank, free_blocks, free_space, used_blocks, used_space, status);
   }else{           // all other processes
@@ -404,9 +404,9 @@ int main ( int argc, char *argv[] )
   sm.index  = shared+1 ;
   sm.heap   = shared + 1 + NINDEXES ;
   if(rank != 0){
-    status = ServerHeapRegister(sm.heap);
+    status = ShmemHeapRegister(sm.heap);
     printf("registered heap %d\n",status);
-    status = ServerHeapRegister(sm.heap);  // re register heap
+    status = ShmemHeapRegister(sm.heap);  // re register heap
     printf("registered heap %d\n",status);
     errors = 0 ;
     for(i=0 ; i<NINDEXES ; i++) if(sm.index[i] != 0 )errors++;
@@ -422,27 +422,27 @@ int main ( int argc, char *argv[] )
       errors++;
     }
     printf("\n");
-    status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
+    status = ShmemHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
     printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
            rank, free_blocks, free_space, used_blocks, used_space, status);
     // now free all allocated blocks
     for(i=0 ; i < NINDEXES ; i++) {
       if(sm.index[i] != 0) {
 
-        status = ServerHeapFreeBlock(sm.heap + sm.index[i] + 1) ; // this is an invalid address
+        status = ShmemHeapFreeBlock(sm.heap + sm.index[i] + 1) ; // this is an invalid address
         if(status == 0) 
           printf("ERROR: phony free status = %d, should not be 0\n",status);
 
-        ServerHeapFreeBlock(sm.heap + sm.index[i]) ;
+        ShmemHeapFreeBlock(sm.heap + sm.index[i]) ;
         printf("block %d freed at index %d\n",i,sm.index[i]);
       }
       sm.index[i] = 0 ;
     }
     // Heap check (Heap after all blocks have been freed)
-    status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
+    status = ShmemHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
     printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
            rank, free_blocks, free_space, used_blocks, used_space, status);
-    t = (int32_t *)ServerHeapAllocBlock(sm.heap, 10, 0) ;
+    t = (int32_t *)ShmemHeapAllocBlock(sm.heap, 10, 0) ;
     sm.index[0] = t - sm.heap ;   // lone block just allocated
   }
 
@@ -453,7 +453,7 @@ int main ( int argc, char *argv[] )
     printf("index[%d] = %d \n", i, sm.index[i]) ;
   }
   // Heap check (there should only be 1 free block and 1 used block because of free block coalescing)
-  status = ServerHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
+  status = ShmemHeapCheck(sm.heap, &free_blocks, &free_space, &used_blocks, &used_space) ;
   printf("process %d, free_blocks = %d, free_space = %ld, used_blocks = %d, used_space = %ld, status = %d\n",
           rank, free_blocks, free_space, used_blocks, used_space, status);
 
