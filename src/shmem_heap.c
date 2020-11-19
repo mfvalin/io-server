@@ -93,6 +93,21 @@ heap_element *ShmemHeapContains(
   return NULL ;    // not within a registered heap
 }
 
+//! translate address to index in a heap
+//! @return offset with respect to base of heap this address belongs to in heap_element units
+int32_t ShmemHeapPtr2Offset(
+  void *addr                    //!< [in]  address to translate to index
+  ){
+  heap_element *p = (heap_element *) addr ;
+  heap_element *h ;
+
+  if( (h = ShmemHeapContains(addr)) != NULL) {    // inside a registered heap ?
+    return (p - h) ;                              // yes, return displacement with respect to base of heap
+  }
+
+  return -1 ; // address not within bounds of registered heap
+}
+
 //! is this a block that belongs to a registered heap
 //! @return 0 if valid block from registered heap, -1 if unknown heap, 1 if inside a registered heap but not a proper block pointer
 int32_t ShmemHeapValidBlock(
@@ -101,7 +116,7 @@ int32_t ShmemHeapValidBlock(
   heap_element *b = (heap_element *) addr ;
   heap_element *h ;
   heap_element sz ;
-printf("ShmemHeapValidBlock checking address %p\n",addr);
+
   if( (h = ShmemHeapContains(addr)) != NULL) {    // inside a registered heap ?
     b-- ;                                      // base of block structure (1 element below user block address)
     sz = b[0] > 0 ? b[0] : -b[0] ;             // get block size (negative means block is in use)
@@ -112,6 +127,21 @@ printf("ShmemHeapValidBlock checking address %p\n",addr);
   }
 
   return -1 ; // address not within bounds of registered heap
+}
+
+//! translate offset from base of heap into actual address
+//! @return address, NULL if offset out of heap
+void *ShmemHeapPtr(
+  void *addr,                   //!< [in]  heap address
+  int32_t offset                //!< [in]  offset into heap
+  ){
+  heap_element *h = ShmemHeapContains(addr) ;  // base of heap containing address
+  heap_element sz;
+
+  if(h == NULL) return NULL ; // not a heap
+
+  sz = h[0] ;    // size of heap
+  return ( ((h + offset) > (h + sz -2)) ? NULL : (h + offset) ) ;
 }
 
 //! register a  Heap in the heap table
@@ -227,7 +257,7 @@ void *ShmemHeapAllocBlock(
 
   sz = h[0] ;
   limit = sz - 1 ;
-printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
+// printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
 //   bsz *= sizeof(heap_element) ;
   t = NULL ;
   if(h[limit] > 1  || h[limit] < -1) return NULL  ;  // not a Server Heap or corrupted information
@@ -279,7 +309,7 @@ int32_t ShmemHeapFreeBlock(
   int status ;
 
   status = ShmemHeapValidBlock(addr);
-printf("after ShmemHeapValidBlock, status = %d\n",status);
+
   if(status != 0) {   // is this the address of a valid block ?
     return -1 ;                                      // unknown heap or invalid block pointer 
   }

@@ -4,23 +4,43 @@ module shmemheap
   type, public :: heap
     !> \private
     private
-    type(C_PTR) :: p                    !< pointer to storage used by heap
+    type(C_PTR) :: p                    !< address of storage used by heap
   contains
-    !> \return pointer to heap
-    procedure :: create                 !< create and initialize a heap at specified address
-    !> \return pointer to heap
+
+    !> \return                          address of heap
+    procedure :: create                 !< create, initialize, register a heap at specified address
+
+    !> \return                          address of heap
+    procedure :: clone                  !< clone a heap object using the address of an existing heap
+
+    !> \return                          address of heap
     procedure :: register               !< register an existing heap at specified address
-    !> \return 0 if O.K., nonzero if not
+
+    !> \return                          0 if O.K., nonzero if not
     procedure :: check                  !< heap integrity check
-    !> \return pointer to heap (NULL if not in a registered heap)
-    procedure, NOPASS :: contains       !< find if address belongs to a registered heap
-    !> \return 0 if valid block, -1 unknown heap, 1 not block pointer
+
+    !> \return                          address of heap (NULL if not in a registered heap)
+    procedure, NOPASS :: inheap         !< find if address belongs to a registered heap
+
+    !> \return                          offset in heap (-1 if not in a registered heap)
+    procedure, NOPASS :: offset         !< translate address to offset in heap
+
+    !> \return                          address for offset in heap, NULL if address not a heap
+    procedure :: address                !< translate offset in heap into actual address
+
+    !> \return                          0 if valid block, -1 unknown heap, 1 not block pointer
     procedure, NOPASS :: validblock     !< find if address belongs to a registered heap
-    !> \return block address, NULL if allocation fails
+
+    !> \return                          block address, NULL if allocation fails
     procedure :: alloc                  !< allocate a block in a registered heap
-    !> \return 0 if O.K., nonzero if error
+
+    !> \return                          0 if O.K., nonzero if error
     procedure, NOPASS :: free           !< free an allocated block
+
+    !> \return                           0 if O.K., nonzero if error
+    procedure :: freebyoffset           !< free space associated to offset into heap
   end type heap
+
   interface
     function ShmemHeapInit(p, nwords) result(h) bind(C,name='ShmemHeapInit')
       import :: C_INT, C_PTR
@@ -76,62 +96,104 @@ module shmemheap
       integer(C_INT) :: status
     end function ShmemHeapValidBlock
 
-  end interface
-contains
+    function ShmemHeapPtr2Offset(addr) result(offset) bind(C,name='ShmemHeapPtr2Offset')
+      import :: C_INT, C_PTR
+      implicit none
+      type(C_PTR), intent(IN), value :: addr
+      integer(C_INT) :: offset
+    end function ShmemHeapPtr2Offset
 
-  !> \brief create and initialize a heap
+    function ShmemHeapPtr(addr, offset) result(p) bind(C,name='ShmemHeapPtr')
+      import :: C_INT, C_PTR
+      implicit none
+      type(C_PTR), intent(IN), value :: addr
+      integer(C_INT), intent(IN), value :: offset
+      type(C_PTR) :: p
+    end function ShmemHeapPtr
+
+  end interface
+
+  contains
+
+  !> \brief create a heap, perform a full setup of this heap, register heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
   !> p = h\%create(nwords)
   function create(h, addr, nwords) result(p)
     implicit none
-    class(heap), intent(INOUT) :: h                         !< heap
+    class(heap), intent(INOUT) :: h                         !< heap object
     type(C_PTR), intent(IN), value :: addr                  !< memory address
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the heap
-    type(C_PTR) :: p                                        !< pointer to created heap
+    type(C_PTR) :: p                                        !< address of created heap
     h%p = ShmemHeapInit(addr, nwords)
     p = h%p
   end function create 
+
+  !> \brief create a heap object using the address of an existing heap (NO SETUP)
+  !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
+  !> p = h\%clone(nwords)
+  function clone(h, addr) result(p)
+    implicit none
+    class(heap), intent(INOUT) :: h                         !< heap object
+    type(C_PTR), intent(IN), value :: addr                  !< memory address
+    type(C_PTR) :: p                                        !< address of created heap
+    h%p = addr
+    p = h%p
+  end function clone 
 
   !> \brief allocate a block in a heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
   !> p = h\%alloc(nwords, safe)
   function alloc(h, nwords, safe) result(p)
     implicit none
-    class(heap), intent(INOUT) :: h                         !< heap
-    integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the heap
+    class(heap), intent(INOUT) :: h                         !< heap object
+    integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the desired block
     integer(C_INT), intent(IN), value :: safe               !< if nonzero perform operation under memory lock
-    type(C_PTR) :: p                                        !< pointer to created heap
+    type(C_PTR) :: p                                        !< address of created heap
     p = ShmemHeapAllocBlock(h%p, nwords, safe)
   end function alloc 
   
-  !> \brief free a previously allocated block
-  !> <br>type(heap) :: h<br>itype(C_PTR) :: p<br>
-  !> p = h\%validblock(addr)
+  !> \brief free block by address
+  !> <br>type(heap) :: h<br>integer(C_INT) :: status<br>
+  !> status = h\%free(addr)
   function free(addr) result(status)
     implicit none
-    type(C_PTR), intent(IN), value :: addr      !< memory address of block to free
+    type(C_PTR), intent(IN), value :: addr      !< address of block to free
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
     status = ShmemHeapFreeBlock(addr)
   end function free 
+  
+  !> \brief free block by offset in heap
+  !> <br>type(heap) :: h<br>integer(C_INT) :: status<br>
+  !> status = h\%validblock(offset)
+  function freebyoffset(h, offset) result(status)
+    implicit none
+    class(heap), intent(INOUT) :: h                   !< heap object
+    integer(C_INT), intent(IN), value :: offset       !< offset into heap of block to free
+    integer(C_INT) :: status                          !< 0 if O.K., nonzero if error
+    type(C_PTR) :: addr
+
+    addr   = ShmemHeapPtr(h%p, offset)
+    status = ShmemHeapFreeBlock(addr)
+  end function freebyoffset 
   
   !> \brief register a heap
   !> <br>type(heap) :: h<br>integer(C_INT) :: nheaps<br>
   !> nheaps = h\%register(addr)
   function register(h, addr) result(nheaps)
     implicit none
-    class(heap), intent(INOUT) :: h             !< heap
+    class(heap), intent(INOUT) :: h             !< heap object
     type(C_PTR), intent(IN), value :: addr      !< memory address
     integer(C_INT) :: nheaps                    !< number of registered heaps if successful, -1 otherwise
     h%p = addr
     nheaps = ShmemHeapRegister(addr)
   end function register 
   
-  !> \brief check a heap
+  !> \brief check integrity of a heap
   !> <br>type(heap) :: h<br>integer(C_INT) :: status<br>
   !> status = h\%check(addr)
   function check(h, free_blocks, free_space, used_blocks, used_space) result(status)
     implicit none
-    class(heap), intent(INOUT) :: h             !< heap to check
+    class(heap), intent(INOUT) :: h             !< heap object
     integer(C_INT), intent(OUT)    :: free_blocks, used_blocks
     integer(C_SIZE_T), intent(OUT) :: free_space, used_space
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
@@ -139,17 +201,17 @@ contains
   end function check 
   
   !> \brief find if address belongs to a registered heap
-  !> <br>type(heap) :: h<br>itype(C_PTR) :: p<br>
-  !> p = h\%contains(addr)
-  function contains(addr) result(p)
+  !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
+  !> p = h\%inheap(addr)
+  function inheap(addr) result(p)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
-    type(C_PTR) :: p                            !< pointer to heap (NULL if not in a registered heap)
+    type(C_PTR) :: p                            !< address of heap (NULL if not in a registered heap)
     p = ShmemHeapContains(addr)
-  end function contains 
+  end function inheap 
   
   !> \brief find if address belongs to a block from a registered heap
-  !> <br>type(heap) :: h<br>itype(C_PTR) :: p<br>
+  !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
   !> p = h\%validblock(addr)
   function validblock(addr) result(status)
     implicit none
@@ -159,6 +221,28 @@ contains
                                                 !< 1 if inside a registered heap but not a proper block pointer
     status = ShmemHeapValidBlock(addr)
   end function validblock 
+  
+  !> \brief get offset into heap for a memory address
+  !> <br>type(heap) :: h<br>integer(C_INT) :: off<br>
+  !> off = h\%offset(addr)
+  function offset(addr) result(off)
+    implicit none
+    type(C_PTR), intent(IN), value :: addr      !< memory address to check
+    integer(C_INT) :: off                       !< offset from base of registered heap, 
+                                                !< -1 if unknown heap, 
+    off = ShmemHeapPtr2Offset(addr)
+  end function offset 
+  
+  !> \brief translate offset in heap into address
+  !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
+  !> p = h\%address(off)
+  function address(h, off) result(p)
+    implicit none
+    class(heap), intent(INOUT) :: h             !< heap object
+    integer(C_INT), intent(IN), value :: off    !< offset into heap
+    type(C_PTR) :: p                            !< address, NULL if invalid offset/heap combination
+    p = ShmemHeapPtr(h%p, off)
+  end function address 
   
 end module shmemheap
 
@@ -185,7 +269,7 @@ program demo
   end type mem_layout
   type(mem_layout) :: memory
   integer(C_INT), dimension(:), pointer :: index, ram, myheap
-  integer(KIND=MPI_ADDRESS_KIND) :: offset
+!   integer(KIND=MPI_ADDRESS_KIND) :: disp
 
   myrank = 0
   nprocs = 1
@@ -218,13 +302,14 @@ program demo
   if(myrank == 0) then
     p = h%create(p, 1024*32)           ! create heap
     do i = 1, 10
-      blocks(i) = h%alloc(1025, 0)
+      blocks(i) = h%alloc(1025, 0)     ! attempt to allocate block
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
       endif
-      index(i) = (transfer(blocks(i),offset) - transfer(memory%pheap,offset)) / 4
-      print *,'index =',index(i)
+!       index(i) = (transfer(blocks(i),disp) - transfer(memory%pheap,disp)) / 4
+      index(i) = h%offset(blocks(i))
+      print *,'index =',index(i),h%offset(h%address(index(i))),h%offset(blocks(i))
     enddo
   endif
 
@@ -236,15 +321,17 @@ program demo
     enddo
     i = h%register(p)
     print *,'process',myrank,', nheaps =',i
-    print '(A,Z16.16)' , 'RAM address =',loc(ram)
-    print '(A,Z16.16)' , 'HEAP address =',p
+    print '(A,Z16.16)' , 'RAM address  :',loc(ram)
+    print '(A,Z16.16)' , 'HEAP address :',p
     status = h%check(free_blocks, free_space, used_blocks, used_space)
     print *,free_blocks,' free blocks,',used_blocks,' used blocks'
     print *,free_space,' free space,',used_space,' used space'
     do i = 1, MAXINDEXES,2
       if(index(i) > 0) then
-        status = h%free(C_LOC(myheap(1+index(i))))
-        print *,'status =',status
+!         status = h%free(C_LOC(myheap(1+index(i))))
+        status = h%freebyoffset(index(i))
+!         print *,'h%free status =',status,h%offset(C_LOC(myheap(1+index(i))))
+        print *,'h%free status =',status,h%offset(h%address(index(i)))
       endif
     enddo
     status = h%check(free_blocks, free_space, used_blocks, used_space)
