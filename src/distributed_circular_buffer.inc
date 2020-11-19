@@ -7,14 +7,14 @@ integer(C_INT), intent(in), value :: num_us    !< How many microseconds to sleep
 end subroutine sleep_us
 
 
-function distributed_circular_buffer_create(f_communicator, rank, comm_size, num_producers, num_words) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
+function distributed_circular_buffer_create(f_communicator, rank, comm_size, num_producers, num_elements) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
 import :: C_PTR, C_INT
 implicit none
 integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
 integer(C_INT), intent(IN), value :: rank           !< Rank of the calling process
 integer(C_INT), intent(IN), value :: comm_size      !< Number of processes in the communicator
 integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
-integer(C_INT), intent(IN), value :: num_words      !< Number of 32-bit elements in the circular buffer
+integer(C_INT), intent(IN), value :: num_elements   !< Number of 32-bit elements in the circular buffer
 type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
 end function distributed_circular_buffer_create
 
@@ -52,12 +52,5 @@ integer(C_INT), dimension(*), intent(inout) :: dest_data
 integer(C_INT), intent(in), value           :: num_elements
 integer(C_INT) :: num_available
 end function distributed_circular_buffer_get
-
-
-subroutine buffer_write_test(buffer) BIND(C, name = 'buffer_write_test')
-import :: C_PTR
-implicit none
-type(C_PTR), intent(in), value :: buffer
-end subroutine buffer_write_test
 
 end interface

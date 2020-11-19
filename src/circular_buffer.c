@@ -115,16 +115,19 @@ typedef struct{
   int32_t limit;       //!< size of data buffer (last available index + 1)
 } fiol_management;
 
-//!> pointer to circular buffer management part
+//! pointer to circular buffer management part
 typedef fiol_management *fiol_management_p;
 
-//!> skeleton for circular buffer
+//! Type of individual elements stored in a circular buffer
+typedef int32_t cb_element;
+
+//! skeleton for circular buffer
 typedef struct{
   fiol_management m;   //!< management structure
-  int32_t data[];      //!< data buffer (contains at most limit -1 useful data elements)
+  cb_element data[];   //!< data buffer (contains at most limit -1 useful data elements)
 } circular_buffer;
 
-//!> pointer to circular buffer 
+//! pointer to circular buffer
 typedef circular_buffer *circular_buffer_p;
 
 #include <immintrin.h>
@@ -147,6 +150,7 @@ typedef circular_buffer *circular_buffer_p;
 static inline void move_integers(int *dst, int*src, int n){
   memcpy(dst, src, sizeof(int)*n);
 }
+
 //F_StArT
 //   !> initialize a circular buffer<br>
 //   !> buffer = circular_buffer_init(p, nwords)
@@ -154,7 +158,7 @@ static inline void move_integers(int *dst, int*src, int n){
 //     import :: C_PTR, C_INT
 //     implicit none
 //     type(C_PTR), intent(IN), value :: p           !< pointer to a circular buffer 
-//     integer(C_INT), intent(IN), value :: nwords   !< the size in 32 bit elements of the circular buffer
+//     integer(C_INT), intent(IN), value :: nwords   !< the size in elements of the circular buffer
 //     type(C_PTR) :: buffer                         !< pointer(C_PTR) to buffer upon success, C_NULL_PTR upon error
 //   end function circular_buffer_init
 //F_EnD
@@ -164,7 +168,7 @@ static inline void move_integers(int *dst, int*src, int n){
 //! @return pointer to buffer upon success, NULL upon error
 circular_buffer_p circular_buffer_init(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  int32_t nwords                           //!< [in]  size in 32 bit elements of the circular buffer
+  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#cb_element)
   ){
 //C_EnD
   if(p == NULL) return NULL;
@@ -173,9 +177,10 @@ circular_buffer_p circular_buffer_init(
   p->m.first = 0;
   p->m.in    = 0;
   p->m.out   = 0;
-  p->m.limit = nwords - ( sizeof(fiol_management) / sizeof(int) );
+  p->m.limit = nwords - ( sizeof(fiol_management) / sizeof(cb_element) );
   return p;
 }
+
 //F_StArT
 //   !> create and initialize a circular buffer of size nwords in "shared memory"<br>
 //   !> p = circular_buffer_create_shared(shmid, nwords)
@@ -199,11 +204,11 @@ circular_buffer_p circular_buffer_init(
 //! @return pointer to buffer upon success, NULL upon error
 circular_buffer_p circular_buffer_create_shared(
   int32_t *shmid,                          //!< [out] identifier of shared memory area (see man shmget) (-1 upon error)
-  int32_t nwords                           //!< [in]  size in 32 bit elements of the circular buffer
+  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#cb_element)
   ){
 //C_EnD
   void *t;
-  size_t sz = nwords * sizeof(int);
+  size_t sz = nwords * sizeof(cb_element);
   int id;
   struct shmid_ds ds;
   int status;
@@ -219,6 +224,7 @@ circular_buffer_p circular_buffer_create_shared(
   *shmid = id;
   return circular_buffer_init((circular_buffer_p)t, nwords) ;
 }
+
 //F_StArT
 //   !> detach "shared memory segment" used by circular buffer <br>
 //   !> status = circular_buffer_detach_shared(p)
@@ -240,6 +246,7 @@ int32_t circular_buffer_detach_shared(
   if(p == NULL) return -1;
   return shmdt(p) ;   // detach from "shared memory segment" creeated by circular_buffer_create_shared
 }
+
 //F_StArT
 //   !> create and initialize a circular buffer of size nwords in process memory<br>
 //   !> p = circular_buffer_create(nwords)
@@ -255,16 +262,17 @@ int32_t circular_buffer_detach_shared(
 //! <br> = circular_buffer_create(nwords)
 //! @return address of the circular buffer upon success, NULL otherwise
 circular_buffer_p circular_buffer_create(
-  int32_t nwords                           //!< [in]  size in 32 bit elements of the circular buffer
+  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#cb_element)
   ){
 //C_EnD
   circular_buffer_p t;
-  size_t sz = nwords * sizeof(int);
+  size_t sz = nwords * sizeof(cb_element);
 
   if(sz < 128) return NULL;
   t = (circular_buffer_p ) malloc(sz);
   return circular_buffer_init(t, nwords) ;
 }
+
 //F_StArT
 //   !> create and initialize a circular buffer of size nwords from user supplied memory<br>
 //   !> p = circular_buffer_from_pointer(ptr, nwords)
@@ -282,16 +290,17 @@ circular_buffer_p circular_buffer_create(
 //! @return address of the circular buffer upon success, NULL otherwise
 circular_buffer_p circular_buffer_from_pointer(
   void *p,                                 //!< [in]  pointer to user supplied memory space
-  int32_t nwords                           //!< [in]  size in 32 bit elements of the circular buffer
+  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#cb_element)
   ){
 //C_EnD
   circular_buffer_p t;
-  size_t sz = nwords * sizeof(int);
+  size_t sz = nwords * sizeof(cb_element);
 
   if(sz < 128) return NULL;
   t = (circular_buffer_p ) p;
   return circular_buffer_init(t, nwords) ;
 }
+
 //F_StArT
 //   !> return the current number of empty slots available<br>
 //   !> n = circular_buffer_space_available(p)
@@ -310,9 +319,9 @@ int32_t circular_buffer_space_available(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   ){
 //C_EnD
-  int  *inp = &(p->m.in);
-  int  *outp = &(p->m.out);
-  int in, out, limit;
+  int32_t *inp = &(p->m.in);
+  int32_t *outp = &(p->m.out);
+  int32_t in, out, limit;
 
   if(p == NULL) return -1;
   limit = p->m.limit;
@@ -320,6 +329,7 @@ int32_t circular_buffer_space_available(
   out = *outp;
   return SPACE_AVAILABLE(in,out,limit);
 }
+
 //F_StArT
 //   !> wait until at least na empty slots are available for inserting data<br>
 //   !> n = circular_buffer_wait_space_available(p, na)
@@ -337,12 +347,12 @@ int32_t circular_buffer_space_available(
 //! @return actual number of empty slots available, -1 on error
 int32_t circular_buffer_wait_space_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  int n                                    //!< [in]  needed number of available slots
+  int n                                    //!< [in]  needed number of available slots (#cb_element)
   ){
 //C_EnD
-  int volatile *inp = &(p->m.in);
-  int volatile *outp = &(p->m.out);
-  int in, out, limit, navail;
+  int32_t volatile *inp = &(p->m.in);
+  int32_t volatile *outp = &(p->m.out);
+  int32_t in, out, limit, navail;
 
   if(p == NULL) return -1;
   if(n < 0 || p->m.version != FIOL_VERSION) return -1;
@@ -355,6 +365,7 @@ int32_t circular_buffer_wait_space_available(
   }
   return navail;
 }
+
 //F_StArT
 //   !> get the current number of data tokens available<br>
 //   !> p = circular_buffer_data_available(p)
@@ -373,9 +384,9 @@ int32_t circular_buffer_data_available(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   ){
 //C_EnD
-  int  *inp = &(p->m.in);
-  int  *outp = &(p->m.out);
-  int in, out, limit;
+  int32_t *inp = &(p->m.in);
+  int32_t *outp = &(p->m.out);
+  int32_t in, out, limit;
 
   if(p == NULL) return -1;
   if(p->m.version != FIOL_VERSION) return -1;
@@ -384,6 +395,7 @@ int32_t circular_buffer_data_available(
   out = *outp;
   return DATA_AVAILABLE(in,out,limit);
 }
+
 //F_StArT
 //   !> wait until at least n data tokens are available for extracting data<br>
 //   !> p = circular_buffer_wait_data_available(p, na)
@@ -401,12 +413,12 @@ int32_t circular_buffer_data_available(
 //! @return actual number of data tokens available, -1 if error
 int32_t circular_buffer_wait_data_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  int n                                    //!< [in]  needed number of available tokens
+  int n                                    //!< [in]  needed number of available  #cb_element tokens
   ){
 //C_EnD
-  int volatile *inp = &(p->m.in);
-  int volatile *outp = &(p->m.out);
-  int in, out, limit, navail;
+  int32_t volatile *inp = &(p->m.in);
+  int32_t volatile *outp = &(p->m.out);
+  int32_t in, out, limit, navail;
 
   if(p == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;
@@ -419,6 +431,7 @@ int32_t circular_buffer_wait_data_available(
   }
   return navail;
 }
+
 //F_StArT
 //   !> get the address of the first position in the circular data buffer<br>
 //   !> start = circular_buffer_start(p)
@@ -442,6 +455,7 @@ int32_t *circular_buffer_start(
   if(p->m.version != FIOL_VERSION) return NULL;
   return p->data;  // start of data buffer
 }
+
 //F_StArT
 //   !> get the address of the  insertion point in the circular data buffer (data snoop)<br>
 //   !> inp = circular_buffer_data_in(p)
@@ -464,6 +478,7 @@ int32_t *circular_buffer_data_in(
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.in;
 }
+
 //F_StArT
 //   !> get the address of the extraction point in the circular data buffer (data snoop)<br>
 //   !> outp = circular_buffer_data_out(p)
@@ -486,6 +501,7 @@ int32_t *circular_buffer_data_out(
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.out;
 }
+
 //F_StArT
 //   !> get pointer to the in position, assume that the caller knows the start of data buffer<br>
 //   !> inp = circular_buffer_advance_in(p, n1, n2)
@@ -504,13 +520,13 @@ int32_t *circular_buffer_data_out(
 //! @return 
 int32_t *circular_buffer_advance_in(
   circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
-  int32_t *n1,                            //!< [out] number of tokens available at the "in" position, -1 upon error
-  int32_t *n2                             //!< [out] number of tokens available at the "start" of the buffer, -1 upon error
+  int32_t *n1,                            //!< [out] number of #cb_element tokens available at the "in" position, -1 upon error
+  int32_t *n2                             //!< [out] number of #cb_element tokens available at the "start" of the buffer, -1 upon error
   ){
 //C_EnD
-  int  *inp = &(p->m.in);
-  int  *outp = &(p->m.out);
-  int in, out, limit;
+  int32_t *inp = &(p->m.in);
+  int32_t *outp = &(p->m.out);
+  int32_t in, out, limit;
 
   *n1 = -1;
   *n2 = -1;
@@ -538,6 +554,7 @@ int32_t *circular_buffer_advance_in(
   }
   return p->data+in;
 }
+
 //F_StArT
 //   !> get pointer to the "out" position, assume that the caller knows the start of data buffer<br>
 //   !> outp = circular_buffer_advance_out(p, n1, n2)
@@ -556,8 +573,8 @@ int32_t *circular_buffer_advance_in(
 //! @return pointer to the "out" position, upon error, NULL is returned
 int32_t *circular_buffer_advance_out(
   circular_buffer_p p,                   //!< [in]  pointer to a circular buffer
-  int32_t *n1,                           //!< [out] number of tokens available at the "out" position, -1 upon error
-  int32_t *n2                            //!< [out] number of tokens available at the "start" of the buffer, -1 upon error
+  int32_t *n1,                           //!< [out] number of #cb_element tokens available at the "out" position, -1 upon error
+  int32_t *n2                            //!< [out] number of #cb_element tokens available at the "start" of the buffer, -1 upon error
   ){
 //C_EnD
   int  *inp = &(p->m.in);
@@ -585,6 +602,7 @@ int32_t *circular_buffer_advance_out(
   }
   return p->data+out;
 }
+
 //F_StArT
 //   !> wait until ndst tokens are available then extract them into dst<br>
 //   !> n = circular_buffer_atomic_get(p, dst, ndst)
@@ -604,13 +622,13 @@ int32_t *circular_buffer_advance_out(
 int32_t circular_buffer_atomic_get(
   circular_buffer_p p,                       //!< [in]  pointer to a circular buffer
   int *dst,                                  //!< [out] destination array for data extraction
-  int n                                      //!< [in]  number of data items to extract
+  int n                                      //!< [in]  number of #cb_element data items to extract
   ){
 //C_EnD
-  int volatile *inp = &(p->m.in);
-  int volatile *outp = &(p->m.out);
-  int *buf = p->data;
-  int in, out, limit, navail, ni;
+  int32_t volatile *inp = &(p->m.in);
+  int32_t volatile *outp = &(p->m.out);
+  cb_element *buf = p->data;
+  int32_t in, out, limit, navail, ni;
   useconds_t delay = 10;   // 10 microseconds
 
   if(p == NULL || dst == NULL) return -1;
@@ -671,15 +689,15 @@ int32_t circular_buffer_atomic_get(
 int32_t circular_buffer_extract(
   circular_buffer_p p,                      //!< [in]  pointer to a circular buffer
   int *dst,                                 //!< [out] destination array for data extraction
-  int n,                                    //!< [in]  number of data items to extract
+  int n,                                    //!< [in]  number of #cb_element data items to extract
   int offset,                               //!< [in]  offset from the "out" position
   int update                                //!< [in]  if nonzero, update the "out" pointer
   ){
 //C_EnD
-  int volatile *inp = &(p->m.in);
-  int volatile *outp = &(p->m.out);
-  int *buf = p->data;
-  int in, out, limit, navail, ni;
+  int32_t volatile *inp = &(p->m.in);
+  int32_t volatile *outp = &(p->m.out);
+  cb_element *buf = p->data;
+  int32_t in, out, limit, navail, ni;
 
   if(p == NULL || dst == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;
@@ -712,6 +730,7 @@ int32_t circular_buffer_extract(
   in = *inp;
   return DATA_AVAILABLE(in,out,limit);
 }
+
 //F_StArT
 //   !> wait until nsrc free slots are available then insert from src array<br>
 //   !> n = circular_buffer_atomic_put(p, src, nsrc)
@@ -731,13 +750,13 @@ int32_t circular_buffer_extract(
 int32_t circular_buffer_atomic_put(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int *src,                                //!< [in]  source array for data insertion
-  int n                                    //!< [in]  number of data items to insert
+  int n                                    //!< [in]  number of #cb_element data items to insert
   ){
 //C_EnD
-  int volatile *inp = &(p->m.in);
-  int volatile *outp = &(p->m.out);
-  int *buf = p->data;
-  int in, out, limit, navail, ni;
+  int32_t volatile *inp = &(p->m.in);
+  int32_t volatile *outp = &(p->m.out);
+  cb_element *buf = p->data;
+  int32_t in, out, limit, navail, ni;
   useconds_t delay = 10;    // 10 microseconds
 
   if(p == NULL || src == NULL) return -1;
@@ -797,15 +816,15 @@ int32_t circular_buffer_atomic_put(
 int32_t circular_buffer_insert(
   circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
   int *src,                               //!< [in]  source array for data insertion
-  int n,                                  //!< [in]  number of data items to insert
+  int n,                                  //!< [in]  number of #cb_element data items to insert
   int offset,                             //!< [in]  offset from the "in" position
   int update                              //!< [in]  if nonzero, update the "in" pointer
   ){
 //C_EnD
-  int volatile *inp = &(p->m.in);
-  int volatile *outp = &(p->m.out);
-  int *buf = p->data;
-  int in, out, limit, navail, ni;
+  int32_t volatile *inp = &(p->m.in);
+  int32_t volatile *outp = &(p->m.out);
+  cb_element *buf = p->data;
+  int32_t in, out, limit, navail, ni;
 
   if(p == NULL || src == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;

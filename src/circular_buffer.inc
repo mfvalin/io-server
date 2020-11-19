@@ -68,7 +68,7 @@ function circular_buffer_init(p, nwords) result(buffer) bind(C,name='circular_bu
 import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(IN), value :: p           !< pointer to a circular buffer 
-integer(C_INT), intent(IN), value :: nwords   !< the size in 32 bit elements of the circular buffer
+integer(C_INT), intent(IN), value :: nwords   !< the size in elements of the circular buffer
 type(C_PTR) :: buffer                         !< pointer(C_PTR) to buffer upon success, C_NULL_PTR upon error
 end function circular_buffer_init
 
