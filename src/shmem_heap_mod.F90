@@ -1,3 +1,5 @@
+!> \file
+!> \brief shared memory heap Fortran module (object oriented)
 module shmemheap
   use ISO_C_BINDING
   !> \brief heap user defined type
@@ -40,8 +42,10 @@ module shmemheap
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
   end type heap
-
+! tell doxygen to ignore the following block
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface
+
     function ShmemHeapInit(p, nwords) result(h) bind(C,name='ShmemHeapInit')
       import :: C_INT, C_PTR
       implicit none
@@ -112,6 +116,7 @@ module shmemheap
     end function ShmemHeapPtr
 
   end interface
+#endif
 
   contains
 
