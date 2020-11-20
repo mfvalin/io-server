@@ -257,6 +257,9 @@ contains
 end module circular_buffers
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
+
+#if defined(SLEF_TEST)
+
 #define NPTEST 125
 program demo
   use circular_buffers
@@ -389,4 +392,5 @@ program demo
   enddo
 #endif
 end program demo
+#endif
 #endif

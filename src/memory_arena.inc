@@ -1,4 +1,3 @@
-interface
 
 !> \file
 !> \brief memory arena management package (C and Fortran)
@@ -48,6 +47,9 @@ interface
 !>    than likely to have said memory segment mapped at different addresses
 !>
 !> \endverbatim
+
+
+interface
 
 
 !> set owner's id (usually MPI rank) for memory arenas<br>
@@ -205,4 +207,6 @@ integer, intent(IN), value :: shmid           !< master arena segment id (from m
 type(C_PTR) :: ptr                            !< local memory addres of memory arena of master arena
 end function memory_arena_from_master_id
 
+
 end interface
+

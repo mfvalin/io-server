@@ -207,6 +207,10 @@ static local_arena LA;           // local information about master arena
 // ===============  end of global data  ===============
 
 //F_StArT
+//  interface
+//F_EnD
+
+//F_StArT
 // !> set owner's id (usually MPI rank) for memory arenas<br>
 // !> me = memory_arena_set_id(id)
 // function memory_arena_set_id(id) result(me) BIND(C,name='memory_arena_set_id')
@@ -838,7 +842,11 @@ void *memory_arena_from_master_id(
   MA = (master_arena *) shmaddr;
   return &(MA->ma);
 }
-// end interface                                                                     !<
+
+//F_StArT
+//  end interface
+//F_EnD
+                                                                !<
 #if defined(SELF_TEST)
 #include <errno.h>
 

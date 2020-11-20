@@ -129,6 +129,11 @@ static inline int get_available_data(const circular_buffer_p buffer //!< [in] Th
 }
 
 //F_StArT
+//  integer, parameter :: CB_ELEMENT = C_INT
+//  interface
+//F_EnD
+
+//F_StArT
 //  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 //    import :: C_INT
 //    implicit none
@@ -436,10 +441,10 @@ void distributed_circular_buffer_delete(distributed_circular_buffer_p buffer //!
 
 //F_StArT
 //  function distributed_circular_buffer_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_put')
-//    import :: C_PTR, C_INT
+//    import :: C_PTR, C_INT, CB_ELEMENT
 //    implicit none
 //    type(C_PTR), intent(in), value           :: buffer
-//    integer(C_INT), dimension(*), intent(in) :: src_data
+//    integer(CB_ELEMENT), dimension(*), intent(in) :: src_data
 //    integer(C_INT), intent(in), value        :: num_elements
 //    integer(C_INT) :: num_available
 //  end function distributed_circular_buffer_put
@@ -515,11 +520,11 @@ int distributed_circular_buffer_put(
 
 //F_StArT
 //  function distributed_circular_buffer_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_get')
-//    import :: C_PTR, C_INT
+//    import :: C_PTR, C_INT, CB_ELEMENT
 //    implicit none
 //    type(C_PTR), intent(in), value              :: buffer
 //    integer(C_INT), intent(in), value           :: buffer_id
-//    integer(C_INT), dimension(*), intent(inout) :: dest_data
+//    integer(CB_ELEMENT), dimension(*), intent(inout) :: dest_data
 //    integer(C_INT), intent(in), value           :: num_elements
 //    integer(C_INT) :: num_available
 //  end function distributed_circular_buffer_get
@@ -572,3 +577,6 @@ int distributed_circular_buffer_get(
 }
 
 //! @}
+//F_StArT
+//  end interface
+//F_EnD
