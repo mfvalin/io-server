@@ -1,6 +1,6 @@
 !> \file
 !> \brief shared memory heap Fortran module (object oriented)
-module shmemheap
+module shmem_heap
   use ISO_C_BINDING
   !> \brief heap user defined type
   type, public :: heap
@@ -249,7 +249,7 @@ module shmemheap
     p = ShmemHeapPtr(h%p, off)
   end function address 
   
-end module shmemheap
+end module shmem_heap
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
 
@@ -257,7 +257,7 @@ end module shmemheap
 #define NPTEST 125
 #define MAXINDEXES  1024
 program demo
-  use shmemheap
+  use shmem_heap
   implicit none
   include 'mpif.h'
   integer :: myrank, nprocs, ierr, win, disp_unit, i, status
@@ -275,6 +275,7 @@ program demo
   type(mem_layout) :: memory
   integer(C_INT), dimension(:), pointer :: index, ram, myheap
 !   integer(KIND=MPI_ADDRESS_KIND) :: disp
+  logical, parameter :: bugged = .false.
 
   myrank = 0
   nprocs = 1
@@ -300,11 +301,14 @@ program demo
   memory%pindex   = C_LOC(ram(2))                   ! index array
   memory%pheap    = C_LOC(ram(MAXINDEXES+2))        ! start of heap
   call c_f_pointer(memory%pindex, index, [MAXINDEXES]) ! index now points to index table
-  index = -1
   p = memory%pheap                                  ! p points to heap
   call c_f_pointer(p, myheap, [1024*8]);
+  if(bugged) then
+    index = -1                                       ! this is a bug (potential race condition)
+  endif
 
   if(myrank == 0) then
+    index = -1
     p = h%create(p, 1024*32)           ! create heap
     do i = 1, 10
       blocks(i) = h%alloc(1025, 0)     ! attempt to allocate block
@@ -331,7 +335,12 @@ program demo
     status = h%check(free_blocks, free_space, used_blocks, used_space)
     print *,free_blocks,' free blocks,',used_blocks,' used blocks'
     print *,free_space,' free space,',used_space,' used space'
-    do i = 1, MAXINDEXES,2
+  endif
+
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
+  if(myrank .ne. 0) then
+    do i = myrank, used_blocks-1,nprocs-1
       if(index(i) > 0) then
 !         status = h%free(C_LOC(myheap(1+index(i))))
         status = h%freebyoffset(index(i))
@@ -339,10 +348,13 @@ program demo
         print *,'h%free status =',status,h%offset(h%address(index(i)))
       endif
     enddo
+  endif
+
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
     status = h%check(free_blocks, free_space, used_blocks, used_space)
     print *,free_blocks,' free blocks,',used_blocks,' used blocks'
     print *,free_space,' free space,',used_space,' used space'
-  endif
 
   call Mpi_Finalize(ierr)
   stop
