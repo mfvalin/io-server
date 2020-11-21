@@ -263,21 +263,21 @@ program demo
   implicit none
   include 'mpif.h'
   integer :: myrank, nprocs, ierr, win, disp_unit, i, status
-  type(heap) :: h
+  type, bind(C) :: mem_layout             ! shared memory layout description
+    integer(C_INT) :: nindexes            ! size of index table
+    type(C_PTR)    :: pindex              ! pointer to index table (nindexes elements)
+    type(C_PTR)    :: pheap               ! pointer to heap
+  end type mem_layout
+  type(mem_layout) :: memory
+  type(heap)  :: h
   type(C_PTR) :: p
-  type(C_PTR), dimension(128) :: blocks
+  type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase, mysize
   integer(C_INT)    :: free_blocks, used_blocks
   integer(C_SIZE_T) :: free_space, used_space
-  type, bind(C) :: mem_layout
-    integer(C_INT) :: nindexes
-    type(C_PTR)    :: pindex
-    type(C_PTR)    :: pheap
-  end type mem_layout
-  type(mem_layout) :: memory
-  integer(C_INT), dimension(:), pointer :: index, ram
-  integer(HEAP_ELEMENT), dimension(:), pointer :: myheap
-  integer(HEAP_ELEMENT) :: he
+  integer(C_INT), dimension(:), pointer :: index   ! index table (integer array)
+  integer(C_INT), dimension(:), pointer :: ram     ! shared memory (addressable as an integer array)
+  integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
   logical, parameter :: bugged = .false.
 
   myrank = 0
@@ -305,28 +305,26 @@ program demo
   memory%pindex   = C_LOC(ram(2))                   ! pointer to index table
   memory%pheap    = C_LOC(ram(MAXINDEXES+2))        ! pointer to start of heap
   call c_f_pointer(memory%pindex, index, [MAXINDEXES]) ! variable index now points to index table
-  p = memory%pheap                                  ! p points to heap
-  call c_f_pointer(p, myheap, [1024*8]);            ! variable myheap pouints to the heap
+  p = memory%pheap                                  ! p points to the heap
   if(bugged) then
-    index = -1                                       ! this is a bug (potential race condition)
+    index = -1                                      ! this is a bug (potential race condition)
   endif
 
-  if(myrank == 0) then
+  if(myrank == 0) then                              ! create, initialize, register the heap
     index = -1
-    p = h%create(p, 1024*8*C_SIZEOF(he))           ! create heap, 32 KBytes
+    p = h%create(p, 1024*8*C_SIZEOF(he))            ! create heap, 32 KBytes
     do i = 1, 10
       blocks(i) = h%alloc(1025*C_SIZEOF(he), 0)     ! attempt to allocate block
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
       endif
-!       index(i) = (transfer(blocks(i),disp) - transfer(memory%pheap,disp)) / 4
       index(i) = h%offset(blocks(i))
-      print *,'index =',index(i),h%offset(h%address(index(i))),h%offset(blocks(i))
+      print *,'index =',index(i),h%offset(h%address(index(i))),h%offset(blocks(i))  ! test of address and offset methods
     enddo
   endif
 
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! wait for heap creation and block allocation
 
   if(myrank .ne. 0) then
     do i = 1, MAXINDEXES
@@ -340,20 +338,18 @@ program demo
            ,free_space,' free bytes,',used_space,' bytes in use'
   endif
 
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! allow check to complete for all processes before freeing blocks
 
   if(myrank .ne. 0) then
     do i = myrank, used_blocks-1,nprocs-1
       if(index(i) > 0) then
-!         status = h%free(C_LOC(myheap(1+index(i))))
         status = h%freebyoffset(index(i))
-!         print *,'h%free status =',status,h%offset(C_LOC(myheap(1+index(i))))
         print 3,'h%free status =',status,', offset =',h%offset(h%address(index(i)))
       endif
     enddo
   endif
 
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! allow all free operations to complete
 
   status = h%check(free_blocks, free_space, used_blocks, used_space)
   print 2,free_blocks,' free block(s),',used_blocks,' used block(s)' &
