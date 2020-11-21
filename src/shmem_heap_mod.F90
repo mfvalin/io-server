@@ -277,6 +277,7 @@ program demo
   type(mem_layout) :: memory
   integer(C_INT), dimension(:), pointer :: index, ram
   integer(HEAP_ELEMENT), dimension(:), pointer :: myheap
+  integer(HEAP_ELEMENT) :: he
   logical, parameter :: bugged = .false.
 
   myrank = 0
@@ -312,9 +313,9 @@ program demo
 
   if(myrank == 0) then
     index = -1
-    p = h%create(p, 1024*8*4_8)           ! create heap, 32 KBytes
+    p = h%create(p, 1024*8*C_SIZEOF(he))           ! create heap, 32 KBytes
     do i = 1, 10
-      blocks(i) = h%alloc(1025*4_8, 0)     ! attempt to allocate block
+      blocks(i) = h%alloc(1025*C_SIZEOF(he), 0)     ! attempt to allocate block
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
@@ -333,7 +334,7 @@ program demo
     enddo
     i = h%register(p)
     print *,'process',myrank,', nheaps =',i
-    print 1 , 'RAM address  :',loc(ram), ', HEAP address :',p
+    print 1 , 'RAM address  :',loc(ram), ', HEAP address :',transfer(p,baseptr)
     status = h%check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
            ,free_space,' free bytes,',used_space,' bytes in use'
