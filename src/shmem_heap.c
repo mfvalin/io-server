@@ -240,9 +240,9 @@ int32_t ShmemHeapCheck(
   }
 //   printf("free = %d, space_free = %d, used = %d, space_used = %d\n",free, space_free, used, space_used);
   *free_blocks = free ;
-  *free_space  = space_free ;
+  *free_space  = space_free * sizeof(heap_element) ;
   *used_blocks = used ;
-  *used_space  = space_used ;
+  *used_space  = space_used * sizeof(heap_element) ;
   return 0 ;
 }
 
@@ -250,7 +250,7 @@ int32_t ShmemHeapCheck(
 //! @return address of block
 void *ShmemHeapAllocBlock(
   void *addr,                      //!< [in]  address of Server Heap
-  int32_t bsz,                     //!< [in]  size of block to allocate
+  size_t bsz,                      //!< [in]  size in bytes of block to allocate
   int32_t safe                     //!< [in]  if nonzero, perform operation under lock
   ){
   heap_element *h = (heap_element *) addr ;
@@ -260,7 +260,7 @@ void *ShmemHeapAllocBlock(
   sz = h[0] ;
   limit = sz - 1 ;
 // printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
-//   bsz *= sizeof(heap_element) ;
+  bsz /= sizeof(heap_element) ;
   t = NULL ;
   if(h[limit] > 1  || h[limit] < -1) return NULL  ;  // not a Server Heap or corrupted information
   if(safe){                                          // lock heap

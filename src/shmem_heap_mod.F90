@@ -42,15 +42,17 @@ module shmem_heap
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
   end type heap
+  
+  integer, parameter :: HEAP_ELEMENT = C_INT   !<  type of a heap element (must be consistent with C code)
 ! tell doxygen to ignore the following block
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface
 
-    function ShmemHeapInit(p, nwords) result(h) bind(C,name='ShmemHeapInit')
-      import :: C_INT, C_PTR
+    function ShmemHeapInit(p, nbytes) result(h) bind(C,name='ShmemHeapInit')
+      import :: C_INT, C_PTR, C_SIZE_T
       implicit none
       type(C_PTR), intent(IN), value :: p
-      integer(C_INT), intent(IN), value :: nwords
+      integer(C_SIZE_T), intent(IN), value :: nbytes
       type(C_PTR) :: h
     end function ShmemHeapInit
 
@@ -63,11 +65,11 @@ module shmem_heap
       integer(C_INT) :: status
     end function ShmemHeapCheck
 
-    function ShmemHeapAllocBlock(p, nwords, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
-      import :: C_INT, C_PTR
+    function ShmemHeapAllocBlock(p, nbytes, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
+      import :: C_INT, C_PTR, C_SIZE_T
       implicit none
       type(C_PTR), intent(IN), value :: p
-      integer(C_INT), intent(IN), value :: nwords
+      integer(C_SIZE_T), intent(IN), value :: nbytes
       integer(C_INT), intent(IN), value :: safe
       type(C_PTR) :: b
     end function ShmemHeapAllocBlock
@@ -122,20 +124,20 @@ module shmem_heap
 
   !> \brief create a heap, perform a full setup of this heap, register heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
-  !> p = h\%create(nwords)
-  function create(h, addr, nwords) result(p)
+  !> p = h\%create(nbytes)
+  function create(h, addr, nbytes) result(p)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
     type(C_PTR), intent(IN), value :: addr                  !< memory address
-    integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the heap
+    integer(C_SIZE_T), intent(IN), value :: nbytes          !< size in bytes of the heap
     type(C_PTR) :: p                                        !< address of created heap
-    h%p = ShmemHeapInit(addr, nwords)
+    h%p = ShmemHeapInit(addr, nbytes)
     p = h%p
   end function create 
 
   !> \brief create a heap object using the address of an existing heap (NO SETUP)
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
-  !> p = h\%clone(nwords)
+  !> p = h\%clone(nbytes)
   function clone(h, addr) result(p)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
@@ -147,14 +149,14 @@ module shmem_heap
 
   !> \brief allocate a memory block in a heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
-  !> p = h\%alloc(nwords, safe)
-  function alloc(h, nwords, safe) result(p)
+  !> p = h\%alloc(nbytes, safe)
+  function alloc(h, nbytes, safe) result(p)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
-    integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the desired block
+    integer(C_SIZE_T), intent(IN), value :: nbytes          !< size in bytes of the desired block
     integer(C_INT), intent(IN), value :: safe               !< if nonzero perform operation under lock (atomic operation)
     type(C_PTR) :: p                                        !< address of created heap
-    p = ShmemHeapAllocBlock(h%p, nwords, safe)
+    p = ShmemHeapAllocBlock(h%p, nbytes, safe)
   end function alloc 
   
   !> \brief free block by address in memory
@@ -273,8 +275,8 @@ program demo
     type(C_PTR)    :: pheap
   end type mem_layout
   type(mem_layout) :: memory
-  integer(C_INT), dimension(:), pointer :: index, ram, myheap
-!   integer(KIND=MPI_ADDRESS_KIND) :: disp
+  integer(C_INT), dimension(:), pointer :: index, ram
+  integer(HEAP_ELEMENT), dimension(:), pointer :: myheap
   logical, parameter :: bugged = .false.
 
   myrank = 0
@@ -283,7 +285,7 @@ program demo
   call mpi_init(ierr)
   call mpi_comm_size(MPI_COMM_WORLD, nprocs, ierr)
   call mpi_comm_rank(MPI_COMM_WORLD, myrank, ierr)
-  print *,'this is PE', myrank+1, ' of', nprocs
+  print 3,'this is PE', myrank+1, ' of', nprocs
 
   winsize = 1024*1024
   disp_unit = 4
@@ -293,25 +295,26 @@ program demo
   p = transfer(mybase, C_NULL_PTR)
   call c_f_pointer(p, ram,[winsize/4])              ! ram points to shared memory segment
   if(myrank == 0) then
-    ram(1) = MAXINDEXES
+    ram(1) = MAXINDEXES                             ! post index table size
   endif
+
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
-  memory%nindexes = ram(1)                          ! sizze of index table
-  memory%pindex   = C_LOC(ram(2))                   ! index array
-  memory%pheap    = C_LOC(ram(MAXINDEXES+2))        ! start of heap
-  call c_f_pointer(memory%pindex, index, [MAXINDEXES]) ! index now points to index table
+  memory%nindexes = ram(1)                          ! get size of index table
+  memory%pindex   = C_LOC(ram(2))                   ! pointer to index table
+  memory%pheap    = C_LOC(ram(MAXINDEXES+2))        ! pointer to start of heap
+  call c_f_pointer(memory%pindex, index, [MAXINDEXES]) ! variable index now points to index table
   p = memory%pheap                                  ! p points to heap
-  call c_f_pointer(p, myheap, [1024*8]);
+  call c_f_pointer(p, myheap, [1024*8]);            ! variable myheap pouints to the heap
   if(bugged) then
     index = -1                                       ! this is a bug (potential race condition)
   endif
 
   if(myrank == 0) then
     index = -1
-    p = h%create(p, 1024*32)           ! create heap
+    p = h%create(p, 1024*8*4_8)           ! create heap, 32 KBytes
     do i = 1, 10
-      blocks(i) = h%alloc(1025, 0)     ! attempt to allocate block
+      blocks(i) = h%alloc(1025*4_8, 0)     ! attempt to allocate block
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
@@ -326,15 +329,14 @@ program demo
 
   if(myrank .ne. 0) then
     do i = 1, MAXINDEXES
-      if(index(i) > 0) print *,'index',i,index(i)
+      if(index(i) > 0 .and. myrank == nprocs - 1) print *,'index',i,index(i)
     enddo
     i = h%register(p)
     print *,'process',myrank,', nheaps =',i
-    print '(A,Z16.16)' , 'RAM address  :',loc(ram)
-    print '(A,Z16.16)' , 'HEAP address :',p
+    print 1 , 'RAM address  :',loc(ram), ', HEAP address :',p
     status = h%check(free_blocks, free_space, used_blocks, used_space)
-    print *,free_blocks,' free blocks,',used_blocks,' used blocks'
-    print *,free_space,' free space,',used_space,' used space'
+    print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
+           ,free_space,' free bytes,',used_space,' bytes in use'
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
@@ -345,19 +347,22 @@ program demo
 !         status = h%free(C_LOC(myheap(1+index(i))))
         status = h%freebyoffset(index(i))
 !         print *,'h%free status =',status,h%offset(C_LOC(myheap(1+index(i))))
-        print *,'h%free status =',status,h%offset(h%address(index(i)))
+        print 3,'h%free status =',status,', offset =',h%offset(h%address(index(i)))
       endif
     enddo
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
-    status = h%check(free_blocks, free_space, used_blocks, used_space)
-    print *,free_blocks,' free blocks,',used_blocks,' used blocks'
-    print *,free_space,' free space,',used_space,' used space'
+  status = h%check(free_blocks, free_space, used_blocks, used_space)
+  print 2,free_blocks,' free block(s),',used_blocks,' used block(s)' &
+         ,free_space,' free bytes,',used_space,' bytes in use'
 
   call Mpi_Finalize(ierr)
   stop
+1 format(2(A,Z16.16))
+2 format(4(I8,A))
+3 format(2(A,I8))
 end program
 #endif
 
