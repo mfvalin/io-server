@@ -44,7 +44,8 @@ module shmem_heap
   end type heap
   
   integer, parameter :: HEAP_ELEMENT = C_INT   !<  type of a heap element (must be consistent with C code)
-! tell doxygen to ignore the following block
+
+! tell doxygen to ignore the following block (for now)
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface
 
@@ -122,7 +123,7 @@ module shmem_heap
 
   contains
 
-  !> \brief create a heap, perform a full setup of this heap, register heap
+  !> \brief create, perform a full, register heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
   !> p = h\%create(nbytes)
   function create(h, addr, nbytes) result(p)

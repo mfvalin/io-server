@@ -130,6 +130,38 @@ int32_t ShmemHeapValidBlock(
   return -1 ; // address not within bounds of registered heap
 }
 
+//! find the size of a used memory block (in bytes)<br>
+//! uses either addr or heap and offset
+//! @return size of used block in bytes, 0 if not a block or block not in use
+size_t ShmemHeapBlockSize(
+  void *heap,                   //!< [in]  heap address (if NULL, only addr is used, offset is ignored)
+  void *addr,                   //!< [in]  block address (if NULL, heap must be a valid heap)
+  int32_t offset                //!< [in]  offset into heap (ignored if heap is NULL)
+  ){
+  heap_element *h = (heap_element *) heap ;
+  heap_element *b = (heap_element *) addr ;
+  heap_element sz ;
+  heap_element *limit ;
+
+  if(h == NULL){                  // no heap address specified
+    if(b == NULL)      return 0 ; // block address mandatory if heap is NULL
+    h = ShmemHeapContains(addr) ;
+    if(h == NULL)      return 0 ; // address not found in any known heap
+    b-- ;                         // point to what should be the start of a block
+    sz = b[0] ;
+    if(sz >= 0)        return 0 ; // cannot be a used block
+    sz = -sz ;
+    limit = h + h[0] ;            // address above top of heap
+    if(b + sz > limit) return 0 ; // not a good block
+    if(b[sz-1] != sz)  return 0 ; // not a good block
+    return (sz - 2) * sizeof(heap_element) ;
+  }else{
+    if(offset <= 0)    return 0 ; // offset is mandatory
+    b = h + offset ;
+  }
+  return 0 ;
+}
+
 //! translate offset from base of heap into actual address
 //! @return address, NULL if offset out of heap
 void *ShmemHeapPtr(
@@ -163,9 +195,9 @@ int32_t ShmemHeapRegister(
 
   heaps[target][0] = h ;          // base of heap
   heaps[target][1] = h + h[0] ;   // 1 element beyond top of heap
-printf("registered target = %d, heap = %p %p",target,heaps[target][0],heaps[target][1]);
+// printf("registered target = %d, heap = %p %p",target,heaps[target][0],heaps[target][1]);
   if(target >= nheaps)nheaps++ ;  // bump heaps counter if not recycling an entry
-printf(", nheaps = %d\n",nheaps);
+// printf(", nheaps = %d\n",nheaps);
   return nheaps ;                 // number of registered heaps
 }
 
