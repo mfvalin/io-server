@@ -7,9 +7,9 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="212.05692mm"
-   height="131.44183mm"
-   viewBox="0 0 212.05692 131.44183"
+   width="215.05692mm"
+   height="134.44183mm"
+   viewBox="0 0 215.05692 134.44183"
    version="1.1"
    id="svg1400"
    inkscape:version="1.0.1 (3bc2e813f5, 2020-09-07)"
@@ -90,16 +90,16 @@
      inkscape:pageopacity="0.0"
      inkscape:pageshadow="2"
      inkscape:zoom="0.98994949"
-     inkscape:cx="221.01463"
-     inkscape:cy="133.48266"
+     inkscape:cx="226.68392"
+     inkscape:cy="139.15195"
      inkscape:document-units="mm"
      inkscape:current-layer="layer1"
      inkscape:document-rotation="0"
      showgrid="true"
-     fit-margin-top="0.5"
-     fit-margin-bottom="0.5"
-     fit-margin-right="0.5"
-     fit-margin-left="0.5"
+     fit-margin-top="2"
+     fit-margin-bottom="2"
+     fit-margin-right="2"
+     fit-margin-left="2"
      inkscape:window-width="1920"
      inkscape:window-height="1015"
      inkscape:window-x="1600"
@@ -112,8 +112,8 @@
        spacingx="1"
        spacingy="1"
        empspacing="6"
-       originx="-5"
-       originy="-1.5581592" />
+       originx="-3.5000001"
+       originy="-0.058159186" />
   </sodipodi:namedview>
   <metadata
      id="metadata1397">
@@ -131,7 +131,7 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-5,-1.5581592)">
+     transform="translate(-3.5,-0.05815919)">
     <rect
        style="fill:none;fill-opacity:0.295936;stroke:#00ff00;stroke-width:1;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
        id="rect1965"
@@ -492,14 +492,18 @@
        id="path2244" />
     <text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.58611px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583;"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:4.58611px;line-height:1.25;font-family:sans-serif;-inkscape-font-specification:'sans-serif, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.264583"
        x="77.45237"
        y="85.313416"
        id="text2553"><tspan
          sodipodi:role="line"
-         id="tspan2801">Blocks can vary in size</tspan><tspan
+         id="tspan2801"
+         x="77.45237"
+         y="85.313416">Blocks can vary in size</tspan><tspan
          sodipodi:role="line"
-         id="tspan2803">     (and be empty)</tspan></text>
+         id="tspan2803"
+         x="77.45237"
+         y="91.046051">     (and be empty)</tspan></text>
     <path
        style="fill:none;stroke:#000000;stroke-width:0.264583px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
        d="m 71.999998,72.999999 13,6.999999"
