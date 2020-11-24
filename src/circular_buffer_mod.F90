@@ -34,9 +34,11 @@ module circular_buffers
     !> \return pointer to created circular buffer
     procedure :: create_from_pointer    !< create a circular buffer from user supplied memory
     !> \return pointer to created circular buffer
-    procedure :: create_from_other      !< public creaator
+    procedure :: create_from_other      !< public creator
     !> \return pointer to created circular buffer
-    GENERIC   :: create => create_local, create_shared, create_from_pointer, create_from_other  !< generic create circular buffer
+    procedure :: create_clone           !< clone existing circular buffer object
+    !> \return pointer to created circular buffer
+    GENERIC   :: create => create_local, create_shared, create_from_pointer, create_from_other, create_clone  !< generic create circular buffer
     !> \return 0 if success, -1 if error
     procedure :: detach_shared          !< detach shared memory segment used by circular buffer
     !> \return number of empty slots available, -1 on error
@@ -128,6 +130,18 @@ contains
     cb%p = ptr
     p = cb%p
   end function create_from_other
+  !> \brief create a circular buffer from address of another circular buffer
+  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
+  !> p = cb\%create_from_other(ptr)
+  !> <br>p = cb\%create(ptr)
+  function create_clone(cb, cb2) result(p)
+    implicit none
+    class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
+    class(circular_buffer), intent(INOUT) :: cb2            !< circular_buffer to be cloned
+    type(C_PTR) :: p                                        !< pointer to created circular buffer 
+    cb%p = cb2%p
+    p = cb%p
+  end function create_clone
   
   !> \brief detach shared memory segment used by circular buffer 
   !> <br>type(circular_buffer) :: cb<br>integer :: status<br>
@@ -257,6 +271,9 @@ contains
 end module circular_buffers
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
+
+#if defined(SELF_TEST)
+
 #define NPTEST 125
 program demo
   use circular_buffers
@@ -301,6 +318,7 @@ program demo
   q = transfer(sendbase, C_NULL_PTR)  !  pointer to my target's circular buffer
   p = a%create(p, 128)                !  create my circular buffer
   q = b%create(q)                     !  point to target's circular buffer
+  r = c%create(b)
   call C_F_POINTER(p, cb, [128])      !  array cb points to my circular buffer
   print 2,'CB :',cb(1:15)             ! initial state of circular buffer
 2 format(A,20I8)
@@ -343,9 +361,11 @@ program demo
     p = b%create(128000)
     p = b%init(128000)
     s = c%create_shared(shmid, 128000)
+    s = c%create_clone(b)
     q = d%create(128000)                  ! generic call
     r = d%create(shmid, 128000)           ! generic call
     t = d%create(C_LOC(local), 128000)    ! generic call
+    t = e%create(d)
     status = c%detach_shared()
     status = b%space_available()
     n = b%space_available()
@@ -389,4 +409,5 @@ program demo
   enddo
 #endif
 end program demo
+#endif
 #endif

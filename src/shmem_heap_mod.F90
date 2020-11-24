@@ -33,6 +33,12 @@ module shmem_heap
     !> \return                          0 if valid block, -1 unknown heap, 1 not block pointer
     procedure, NOPASS :: validblock     !< find if address belongs to a registered heap
 
+    !> \return                          block size marker if valid block, -1 unknown heap, 1 not block pointer
+    procedure, NOPASS :: blockcode     !< get block size (elements) of a heap block (negative if block in use)
+
+    !> \return                          block size marker if valid block, -1 unknown heap, 1 not block pointer
+    procedure, NOPASS :: blocksize     !< get block size (elements) of a heap block (negative if block in use)
+
     !> \return                          block address, NULL if allocation fails
     procedure :: alloc                  !< allocate a block in a registered heap
 
@@ -103,6 +109,22 @@ module shmem_heap
       integer(C_INT) :: status
     end function ShmemHeapValidBlock
 
+    function ShmemHeapBlockSizeCode(addr) result(bsz) bind(C,name='ShmemHeapBlockSizeCode')
+      import :: C_INT, C_PTR, HEAP_ELEMENT
+      implicit none
+      type(C_PTR), intent(IN), value :: addr
+      integer(HEAP_ELEMENT) :: bsz
+    end function ShmemHeapBlockSizeCode
+
+    function ShmemHeapBlockSize(heap, addr, offset) result(bsz) bind(C,name='ShmemHeapBlockSize')
+      import :: C_INT, C_PTR, C_SIZE_T, HEAP_ELEMENT
+      implicit none
+      type(C_PTR), intent(IN), value :: heap
+      type(C_PTR), intent(IN), value :: addr
+      integer(HEAP_ELEMENT) :: offset
+      integer(C_SIZE_T) :: bsz
+    end function ShmemHeapBlockSize
+
     function ShmemHeapPtr2Offset(addr) result(offset) bind(C,name='ShmemHeapPtr2Offset')
       import :: C_INT, C_PTR
       implicit none
@@ -111,10 +133,10 @@ module shmem_heap
     end function ShmemHeapPtr2Offset
 
     function ShmemHeapPtr(addr, offset) result(p) bind(C,name='ShmemHeapPtr')
-      import :: C_INT, C_PTR
+      import :: C_INT, C_PTR, HEAP_ELEMENT
       implicit none
       type(C_PTR), intent(IN), value :: addr
-      integer(C_INT), intent(IN), value :: offset
+      integer(HEAP_ELEMENT), intent(IN), value :: offset
       type(C_PTR) :: p
     end function ShmemHeapPtr
 
@@ -143,7 +165,7 @@ module shmem_heap
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
     type(C_PTR), intent(IN), value :: addr                  !< memory address
-    type(C_PTR) :: p                                        !< address of created heap
+    type(C_PTR) :: p                                        !< address of already created heap
     h%p = addr
     p = h%p
   end function clone 
@@ -219,16 +241,43 @@ module shmem_heap
   end function inheap 
   
   !> \brief find if address belongs to a block from a registered heap
-  !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
-  !> p = h\%validblock(addr)
+  !> <br>type(heap) :: h<br>integer(C_INT) :: status<br>
+  !> status = h\%validblock(addr)
   function validblock(addr) result(status)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
     integer(C_INT) :: status                    !< 0 if valid block from registered heap, 
                                                 !< -1 if unknown heap, 
-                                                !< 1 if inside a registered heap but not a proper block pointer
+                                                !< 1 if not a proper block pointer
     status = ShmemHeapValidBlock(addr)
   end function validblock 
+  
+  !> \brief get the size code of a heap block
+  !> <br>type(heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
+  !> bsz = h\%blocksize(p, addr, offset)<br>
+  !> bsz = h\%blocksize(h\%address(0), addr, offset)
+  function blocksize(p, addr, offset) result(bsz)
+    implicit none
+    type(C_PTR), intent(IN), value :: p         !< address of heap (if C_NULL_PTR, addr is needed)
+    type(C_PTR), intent(IN), value :: addr      !< memory address to check
+    integer(HEAP_ELEMENT), intent(IN), value :: offset  !< offset from base of registered heap, 
+    integer(C_SIZE_T) :: bsz                    !< size if valid block from known heap,
+                                                !< -1 if unknown heap, 
+                                                !< 1 if not a proper block pointer
+    bsz = ShmemHeapBlockSize(p, addr, offset)
+  end function blocksize
+  
+  !> \brief get the size code of a heap block
+  !> <br>type(heap) :: h<br>integer(HEAP_ELEMENT) :: bsz<br>
+  !> bsz = h\%blockcode(addr)
+  function blockcode(addr) result(bsz)
+    implicit none
+    type(C_PTR), intent(IN), value :: addr      !< memory address to check
+    integer(HEAP_ELEMENT) :: bsz                !< size marker if valid block from registered heap, (< 0 if block in use)
+                                                !< -1 if unknown heap, 
+                                                !< 1 if inside a registered heap but not a proper block pointer
+    bsz = ShmemHeapBlockSizeCode(addr)
+  end function blockcode
   
   !> \brief get offset into heap for a memory address
   !> <br>type(heap) :: h<br>integer(C_INT) :: off<br>
@@ -259,7 +308,7 @@ end module shmem_heap
 #if defined(SELF_TEST)
 #define NPTEST 125
 #define MAXINDEXES  1024
-program demo
+program heap_test
   use shmem_heap
   implicit none
   include 'mpif.h'
@@ -276,7 +325,7 @@ program demo
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase, mysize
   integer(C_INT)    :: free_blocks, used_blocks
   integer(C_SIZE_T) :: free_space, used_space
-  integer(C_INT), dimension(:), pointer :: index   ! index table (integer array)
+  integer(C_INT), dimension(:), pointer :: ixtab   ! index table (integer array)
   integer(C_INT), dimension(:), pointer :: ram     ! shared memory (addressable as an integer array)
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
   logical, parameter :: bugged = .false.
@@ -300,28 +349,29 @@ program demo
     ram(1) = MAXINDEXES                             ! post index table size
   endif
 
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! all processes have access to ram(1)
 
   memory%nindexes = ram(1)                          ! get size of index table
   memory%pindex   = C_LOC(ram(2))                   ! pointer to index table
   memory%pheap    = C_LOC(ram(MAXINDEXES+2))        ! pointer to start of heap
-  call c_f_pointer(memory%pindex, index, [MAXINDEXES]) ! variable index now points to index table
+  call c_f_pointer(memory%pindex, ixtab, [MAXINDEXES]) ! variable index now points to index table
   p = memory%pheap                                  ! p points to the heap
+
   if(bugged) then
-    index = -1                                      ! this is a bug (potential race condition)
+    ixtab = -1                                      ! this is a bug (potential race condition)
   endif
 
   if(myrank == 0) then                              ! create, initialize, register the heap
-    index = -1
+    ixtab = -1
     p = h%create(p, 1024*8*C_SIZEOF(he))            ! create heap, 32 KBytes
     do i = 1, 10
-      blocks(i) = h%alloc(1025*C_SIZEOF(he), 0)     ! attempt to allocate block
+      blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
       endif
-      index(i) = h%offset(blocks(i))
-      print *,'index =',index(i),h%offset(h%address(index(i))),h%offset(blocks(i))  ! test of address and offset methods
+      ixtab(i) = h%offset(blocks(i))
+      print *,'ixtab =',ixtab(i),h%offset(h%address(ixtab(i))),h%offset(blocks(i))  ! test of address and offset methods
     enddo
   endif
 
@@ -329,9 +379,9 @@ program demo
 
   if(myrank .ne. 0) then
     do i = 1, MAXINDEXES
-      if(index(i) > 0 .and. myrank == nprocs - 1) print *,'index',i,index(i)
+      if(ixtab(i) > 0 .and. myrank == nprocs - 1) print *,'ixtab',i,ixtab(i)
     enddo
-    i = h%register(p)
+    i = h%register(p)                               ! register heap on this process (other than process 0)
     print *,'process',myrank,', nheaps =',i
     print 1 , 'RAM address  :',loc(ram), ', HEAP address :',transfer(p,baseptr)
     status = h%check(free_blocks, free_space, used_blocks, used_space)
@@ -342,10 +392,11 @@ program demo
   call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! allow check to complete for all processes before freeing blocks
 
   if(myrank .ne. 0) then
-    do i = myrank, used_blocks-1,nprocs-1
-      if(index(i) > 0) then
-        status = h%freebyoffset(index(i))
-        print 3,'h%free status =',status,', offset =',h%offset(h%address(index(i)))
+    do i = myrank, used_blocks-1,nprocs-1           ! each process will free some blocks
+      if(ixtab(i) > 0) then                         ! block allocated previously by process 0
+        status = h%freebyoffset(ixtab(i))
+        print 3,'h%free status =',status,', offset =',h%offset(h%address(ixtab(i)))
+        if(status == 0) ixtab(i) = 0                ! set index to free
       endif
     enddo
   endif
@@ -355,12 +406,16 @@ program demo
   status = h%check(free_blocks, free_space, used_blocks, used_space)
   print 2,free_blocks,' free block(s),',used_blocks,' used block(s)' &
          ,free_space,' free bytes,',used_space,' bytes in use'
+  if(myrank == 0) then
+    print 4, 'IXTAB(1:10) =',ixtab(1:10)
+  endif
 
   call Mpi_Finalize(ierr)
   stop
 1 format(2(A,Z16.16))
 2 format(4(I8,A))
 3 format(2(A,I8))
+4 format(A,20I8)
 end program
 #endif
 

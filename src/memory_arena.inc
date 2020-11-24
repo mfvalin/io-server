@@ -50,6 +50,9 @@ interface
 !> \endverbatim
 
 
+interface
+
+
 !> set owner's id (usually MPI rank) for memory arenas<br>
 !> me = memory_arena_set_id(id)
 function memory_arena_set_id(id) result(me) BIND(C,name='memory_arena_set_id')
@@ -204,5 +207,8 @@ import :: C_PTR, C_INT
 integer, intent(IN), value :: shmid           !< master arena segment id (from master_arena_create_shared)
 type(C_PTR) :: ptr                            !< local memory addres of memory arena of master arena
 end function memory_arena_from_master_id
+
+
+end interface
 
 end interface
