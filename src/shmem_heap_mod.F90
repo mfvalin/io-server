@@ -27,7 +27,7 @@ module shmem_heap
     !> \return                          offset in heap (-1 if not in a registered heap)
     procedure, NOPASS :: offset         !< translate address to offset in heap
 
-    !> \return                          address for offset in heap, NULL if address not a heap
+    !> \return                          address from offset in heap, NULL if not a heap
     procedure :: address                !< translate offset in heap into actual address
 
     !> \return                          0 if valid block, -1 unknown heap, 1 not block pointer
@@ -38,6 +38,9 @@ module shmem_heap
 
     !> \return                          block size marker if valid block, -1 unknown heap, 1 not block pointer
     procedure, NOPASS :: blocksize     !< get block size (elements) of a heap block (negative if block in use)
+
+    !> \return                          size of heap in bytes , -1 if error
+    procedure :: heapsize              !< get size of a known heap
 
     !> \return                          block address, NULL if allocation fails
     procedure :: alloc                  !< allocate a block in a registered heap
@@ -55,52 +58,59 @@ module shmem_heap
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface
 
-    function ShmemHeapInit(p, nbytes) result(h) bind(C,name='ShmemHeapInit')
-      import :: C_INT, C_PTR, C_SIZE_T
+    function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
+      import :: C_PTR, C_SIZE_T
       implicit none
-      type(C_PTR), intent(IN), value :: p
+      type(C_PTR), intent(IN), value :: heap
       integer(C_SIZE_T), intent(IN), value :: nbytes
       type(C_PTR) :: h
     end function ShmemHeapInit
 
-    function ShmemHeapCheck(p, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ShmemHeapCheck')
+    function ShmemHeapCheck(heap, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ShmemHeapCheck')
       import :: C_INT, C_PTR, C_SIZE_T
       implicit none
-      type(C_PTR), intent(IN), value :: p
-      integer(C_INT), intent(OUT) :: free_blocks, used_blocks
+      type(C_PTR), intent(IN), value :: heap
+      integer(C_INT), intent(OUT)    :: free_blocks, used_blocks
       integer(C_SIZE_T), intent(OUT) :: free_space, used_space
       integer(C_INT) :: status
     end function ShmemHeapCheck
 
-    function ShmemHeapAllocBlock(p, nbytes, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
+    function ShmemHeapAllocBlock(heap, nbytes, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
       import :: C_INT, C_PTR, C_SIZE_T
       implicit none
-      type(C_PTR), intent(IN), value :: p
+      type(C_PTR), intent(IN), value :: heap
       integer(C_SIZE_T), intent(IN), value :: nbytes
       integer(C_INT), intent(IN), value :: safe
       type(C_PTR) :: b
     end function ShmemHeapAllocBlock
 
-    function ShmemHeapFreeBlock(addr) result(status) bind(C,name='ShmemHeapFreeBlock')
+    function ShmemHeapFreeBlock(block) result(status) bind(C,name='ShmemHeapFreeBlock')
       import :: C_INT, C_PTR
       implicit none
-      type(C_PTR), intent(IN), value :: addr
+      type(C_PTR), intent(IN), value :: block
       integer(C_INT) :: status
     end function ShmemHeapFreeBlock
 
-    function ShmemHeapRegister(p) result(status) bind(C,name='ShmemHeapRegister')
+    function ShmemHeapRegister(heap) result(status) bind(C,name='ShmemHeapRegister')
       import :: C_INT, C_PTR
       implicit none
-      type(C_PTR), intent(IN), value :: p
+      type(C_PTR), intent(IN), value :: heap
       integer(C_INT) :: status
     end function ShmemHeapRegister
 
     function ShmemHeapContains(addr) result(p) bind(C,name='ShmemHeapContains')
-      import :: C_INT, C_PTR
+      import :: C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: addr
       type(C_PTR) :: p
     end function ShmemHeapContains
+
+    function ShmemHeapSize(heap) result(s) bind(C,name='ShmemHeapSize')
+      import :: C_PTR, HEAP_ELEMENT
+      implicit none
+      type(C_PTR), intent(IN), value :: heap
+      integer(HEAP_ELEMENT) :: s
+    end function ShmemHeapSize
 
     function ShmemHeapValidBlock(addr) result(status) bind(C,name='ShmemHeapValidBlock')
       import :: C_INT, C_PTR
@@ -110,14 +120,14 @@ module shmem_heap
     end function ShmemHeapValidBlock
 
     function ShmemHeapBlockSizeCode(addr) result(bsz) bind(C,name='ShmemHeapBlockSizeCode')
-      import :: C_INT, C_PTR, HEAP_ELEMENT
+      import :: C_PTR, HEAP_ELEMENT
       implicit none
       type(C_PTR), intent(IN), value :: addr
       integer(HEAP_ELEMENT) :: bsz
     end function ShmemHeapBlockSizeCode
 
     function ShmemHeapBlockSize(heap, addr, offset) result(bsz) bind(C,name='ShmemHeapBlockSize')
-      import :: C_INT, C_PTR, C_SIZE_T, HEAP_ELEMENT
+      import :: C_PTR, C_SIZE_T, HEAP_ELEMENT
       implicit none
       type(C_PTR), intent(IN), value :: heap
       type(C_PTR), intent(IN), value :: addr
@@ -126,16 +136,16 @@ module shmem_heap
     end function ShmemHeapBlockSize
 
     function ShmemHeapPtr2Offset(addr) result(offset) bind(C,name='ShmemHeapPtr2Offset')
-      import :: C_INT, C_PTR
+      import :: C_PTR, HEAP_ELEMENT
       implicit none
       type(C_PTR), intent(IN), value :: addr
-      integer(C_INT) :: offset
+      integer(HEAP_ELEMENT) :: offset
     end function ShmemHeapPtr2Offset
 
-    function ShmemHeapPtr(addr, offset) result(p) bind(C,name='ShmemHeapPtr')
-      import :: C_INT, C_PTR, HEAP_ELEMENT
+    function ShmemHeapPtr(heap, offset) result(p) bind(C,name='ShmemHeapPtr')
+      import :: C_PTR, HEAP_ELEMENT
       implicit none
-      type(C_PTR), intent(IN), value :: addr
+      type(C_PTR), intent(IN), value :: heap
       integer(HEAP_ELEMENT), intent(IN), value :: offset
       type(C_PTR) :: p
     end function ShmemHeapPtr
@@ -252,6 +262,16 @@ module shmem_heap
     status = ShmemHeapValidBlock(addr)
   end function validblock 
   
+  !> \brief get the size of a heap
+  !> <br>type(heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
+  !> bsz = h\%heapsize(p, addr, offset)
+  function heapsize(h) result(bsz)
+    implicit none
+    class(heap), intent(INOUT) :: h             !< heap object
+    integer(C_SIZE_T) :: bsz                    !< size if known heap, -1 otherwise
+    bsz = ShmemHeapSize(h%p)
+  end function heapsize
+  
   !> \brief get the size code of a heap block
   !> <br>type(heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
   !> bsz = h\%blocksize(p, addr, offset)<br>
@@ -339,7 +359,7 @@ program heap_test
   print 3,'this is PE', myrank+1, ' of', nprocs
 
   winsize = 1024*1024
-  disp_unit = 4
+  disp_unit = C_SIZEOF(he)                          ! size of a heap element
   call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
   call MPI_Win_shared_query(win, 0, mysize, disp_unit, mybase,   ierr)  ! get my base address
 

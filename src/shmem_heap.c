@@ -86,6 +86,24 @@ static int32_t nheaps = 0 ;
 //!> table containing heap bounds
 static heap_element *heaps[MAX_HEAPS][2] ;
 
+//! is this a known heap ?
+//! @return size if a known heap, 0 otherwise
+heap_element ShmemHeapSize(
+  void *addr                    //!< [in]  address possibly in a known heap
+  ){
+  heap_element *b = (heap_element *) addr ;
+  int i;
+
+  if(addr == NULL) return -1 ;  // obviously not a heap
+
+  for(i=0 ; i<nheaps ; i++){
+    if( b == heaps[i][0] ){     // does the heap base address match ?
+      return b[0] ;             // size of heap
+    }
+  }
+  return -1 ;                   // not a known heap
+}
+
 //! which known heap does this address belong to ?
 //! @return heap base address if within a known heap, NULL otherwise
 heap_element *ShmemHeapContains(
@@ -103,7 +121,7 @@ heap_element *ShmemHeapContains(
 }
 
 //! translate address to offset within a heap
-//! @return offset with respect to base of heap this address belongs to in heap_element units (NOT bytes)
+//! @return offset with respect to base of heap in heap_element units (NOT bytes)
 int32_t ShmemHeapPtr2Offset(
   void *addr                    //!< [in]  address to translate to index
   ){
@@ -139,12 +157,11 @@ int32_t ShmemHeapValidBlock(
     if(b[sz-1] != sz)        return 1 ;        // wrong trailer size marker
     return 0 ;                                 // this looks like a valid block
   }
-
   return -1 ; // address not within bounds of known heap
 }
 
-//! is this a block that belongs to a known heap ?<br>
-//! same as ShmemHeapValidBlock but returns block size code instead of boolean type information
+//! is this the address of a block belonging to a known heap ?<br>
+//! same as ShmemHeapValidBlock but returns block size code instead of true/false information
 //! @return block size code if valid block from known heap,<br>
 //!        -1 if unknown heap,<br>
 //!         1 if inside known heap but not a proper block
@@ -165,7 +182,6 @@ heap_element ShmemHeapBlockSizeCode(
     if(b[sz-1] != sz)        return 1 ;        // wrong trailer size marker
     return b[0] ;                              // this looks like a valid block, return block size code
   }
-
   return -1 ; // address not within bounds of known heap
 }
 
@@ -202,16 +218,15 @@ size_t ShmemHeapBlockSize(
 //! @return address, NULL if offset out of heap
 void *ShmemHeapPtr(
   void *addr,                   //!< [in]  heap address
-  int32_t offset                //!< [in]  offset into heap
+  heap_element offset           //!< [in]  offset into heap
   ){
-  heap_element *h = ShmemHeapContains(addr) ;  // base of heap containing address
-  heap_element sz;
+  heap_element *h = addr ;               // base of putative heap
+  heap_element sz = ShmemHeapSize(addr);
 
-  if(h == NULL) return NULL ; // not a heap
-  if(h != addr) return NULL ; // addr was not the base of a heap
+  if(sz <= 0) return NULL ;       // not a known heap
+  if(offset <= 0) return NULL ;   // invalid offset
 
-  sz = h[0] ;    // size of heap
-  return ( offset > (sz -2) ) ? NULL : (h + offset) ;  // null if outside of heap
+  return ( offset > (sz -2) ) ? NULL : (h + offset) ;  // offset is too large (out of heap)
 }
 
 //! register a  Heap in the heap table
@@ -223,11 +238,18 @@ int32_t ShmemHeapRegister(
   int i;
   int target = -1 ;
 
+  if(nheaps == 0){                    // first time around, initialize heaps
+    for(i=0 ; i<MAX_HEAPS ; i++) {
+      heaps[i][0] = NULL ;
+      heaps[i][1] = NULL ;
+    }
+  }
+
   for(i=0 ; i<MAX_HEAPS ; i++) if(heaps[i][0] == NULL) {
     target = i ;                  // unused entry found in table ?
     break;
   }
-  if(target == -1) return -1 ;    // table is full
+  if(target == -1) return -1 ;    // table is full, sorry !
 
   heaps[target][0] = h ;          // base of heap
   heaps[target][1] = h + h[0] ;   // 1 element beyond top of heap
@@ -357,14 +379,14 @@ void *ShmemHeapAllocBlock(
     if(bsz <= sz){                                   // block large enough to satisfy request
       t = h + cur + 2 ;                              // point to element following size marker
       if(sz - bsz > 64) { //  split block if worth it (more than 64 extra elements)
-        h[cur]       =  -bsz ;      // head count
-        h[cur+1]     =  HEAD ;
-        h[cur+bsz-2] =  TAIL ;
-        h[cur+bsz-1] =   bsz ;      // tail count
-        h[cur+bsz]    = sz - bsz ;  // head (next block)
-        h[cur+bsz+1]  = HEAD ;
-        h[cur + sz - 2] = TAIL ;
-        h[cur + sz - 1] = sz - bsz ;  // tail marker (next block)
+        h[cur]       =  -bsz ;        // head count (lower block)
+        h[cur+1]     =  HEAD ;        // low  marker
+        h[cur+bsz-2] =  TAIL ;        // tail marker
+        h[cur+bsz-1] =   bsz ;        // tail count (lower block)
+        h[cur+bsz]      = sz - bsz ;  // head count (upper block)
+        h[cur+bsz+1]    = HEAD ;      // low  marker
+        h[cur + sz - 2] = TAIL ;      // tail marker
+        h[cur + sz - 1] = sz - bsz ;  // tail count (upper block)
       }
     }else{
 //       printf("block is too small to allocate, need %d, have %d\n", bsz, sz-2);
@@ -392,7 +414,7 @@ int32_t ShmemHeapFreeBlock(
     return -1 ;                                      // unknown heap or invalid block pointer 
   }
 
-  h-- ;                            // point to count (one element below block)
+  h = h - 2;                       // point to count (two elements below block)
   nw = h[0];                       // if block is in use, nw will be negative
   if(nw >= 0) return -2 ;          // certainly not a block in use
   nw = -nw ;                       // make count positive
