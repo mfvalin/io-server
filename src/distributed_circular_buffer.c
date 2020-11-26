@@ -25,6 +25,10 @@
 
 #include "circular_buffer.h"
 
+static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(cb_element) == sizeof(int32_t)   ? MPI_INTEGER
+                                                : sizeof(cb_element) == sizeof(int64_t) ? MPI_LONG_LONG_INT
+                                                                                        : MPI_DATATYPE_NULL;
+
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
  * distributed circular buffers.
@@ -59,7 +63,7 @@ typedef struct {
   int32_t  rank;          //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t  comm_size;     //!< How many processes share this distributed buffer set
   int32_t  num_producers; //!< How many producer processes share this distributed buffer set
-  int32_t  window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
+  cb_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
   int32_t  num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
 
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
@@ -77,59 +81,63 @@ typedef distributed_circular_buffer* distributed_circular_buffer_p;
 
 /**
  * @brief Small header located at the beginning of the shared memory region on consumer processes. Stores the offset
- * of every instance within that shared memory region
+ * of every instance within that shared memory region.
+ * It will be stored in the remotely-accessible MPI window, so everything in it must have a size that is a multiple of
+ * the size of an element to be addressable individually
  */
 typedef struct {
-  int num_offsets;      //!< How many offsets there are ( = number of producer processes)
-  int size;             //!< Size in number of #cb_element
-  int window_offsets[]; //!< The offsets. Please don't change this type
+  cb_element num_offsets;      //!< How many offsets there are ( = number of producer processes)
+  cb_element size;             //!< Size in number of #cb_element
+  cb_index   window_offsets[]; //!< The offsets.
 } offset_header;
 
-const int SPACE_CHECK_WAIT_TIME_US = 100; //!< How long to wait between checks for free space in a buffer (microseconds)
-const int DATA_CHECK_WAIT_TIME_US  = 100; //!< How long to wait between checks for data in a buffer (microseconds)
+//! How long to wait between checks for free space in a buffer (microseconds)
+static const int SPACE_CHECK_WAIT_TIME_US = 100;
+//! How long to wait between checks for data in a buffer (microseconds)
+static const int DATA_CHECK_WAIT_TIME_US = 100;
 
 //! @{ \name Helper functions
 
 //! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline int available_space(
-    const int in,   //!< [in] Index of insertion location in the buffer
-    const int out,  //!< [in] Index of extraction location in the buffer
-    const int limit //!< [in] Number of elements that the buffer can hold
+static inline cb_index available_space(
+    const cb_index in,   //!< [in] Index of insertion location in the buffer
+    const cb_index out,  //!< [in] Index of extraction location in the buffer
+    const cb_index limit //!< [in] Number of elements that the buffer can hold
 ) {
   return (in < out) ? out - in - 1 : limit - in + out - 1;
 }
 
 //! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline int available_data(
-    const int in,   //!< [in] Index of insertion location in the buffer
-    const int out,  //!< [in] Index of extraction location in the buffer
-    const int limit //!< [in] Number of elements that the buffer can hold
+static inline cb_index available_data(
+    const cb_index in,   //!< [in] Index of insertion location in the buffer
+    const cb_index out,  //!< [in] Index of extraction location in the buffer
+    const cb_index limit //!< [in] Number of elements that the buffer can hold
 ) {
   return (in >= out) ? in - out : limit - out + in;
 }
 
 //! Compute how much space (in number of #cb_element) is available in a given circular buffer
-static inline int get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
+static inline cb_index get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile int32_t* in  = &buffer->m.in;
-  volatile int32_t* out = &buffer->m.out;
+  volatile cb_index* in  = &buffer->m.in;
+  volatile cb_index* out = &buffer->m.out;
   return available_space(*in, *out, buffer->m.limit);
 }
 
 //! Compute how much data (in number of #cb_element) is stored in a given circular buffer
-static inline int get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
+static inline cb_index get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile int32_t* in  = &buffer->m.in;
-  volatile int32_t* out = &buffer->m.out;
+  volatile cb_index* in  = &buffer->m.in;
+  volatile cb_index* out = &buffer->m.out;
   return available_data(*in, *out, buffer->m.limit);
 }
 
 //F_StArT
-//  integer, parameter :: CB_ELEMENT = C_INT
+//  include 'circular_buffer.inc'
 //  interface
 //F_EnD
 
@@ -160,11 +168,11 @@ static inline int is_producer(distributed_circular_buffer_p buffer) {
 }
 
 //! Size of the offset header, in number of #cb_element tokens
-static inline int compute_offset_header_size(const distributed_circular_buffer_p buffer_set) {
-  const int num_offsets  = buffer_set->num_producers;
-  const int num_bytes    = sizeof(offset_header) + num_offsets * sizeof(int);
-  const int addition     = num_bytes % sizeof(cb_element) == 0 ? 0 : 1;
-  const int num_elements = num_bytes / sizeof(cb_element) + addition;
+static inline cb_index compute_offset_header_size(const distributed_circular_buffer_p buffer_set) {
+  const cb_index num_offsets  = buffer_set->num_producers;
+  const size_t   num_bytes    = sizeof(offset_header) + num_offsets * sizeof(cb_element);
+  const size_t   addition     = num_bytes % sizeof(cb_element) == 0 ? 0 : 1;
+  const cb_index num_elements = num_bytes / sizeof(cb_element) + addition;
 
   return num_elements;
 }
@@ -187,6 +195,7 @@ static inline void init_offset_header(
 
   for (int i = 0; i < header->num_offsets; i++) {
     header->window_offsets[i] = header->size + i * buffer_set->num_element_per_instance;
+    printf("Set window offset of buffer %d to %ld\n", i, (int64_t)header->window_offsets[i]);
   }
 }
 
@@ -213,14 +222,14 @@ static inline void print_buf(
     int               rank //!< [in] Rank of the caller
 ) {
   printf(
-      "version %d, first %d, in %d, out %d, limit %d, rank %d\n", b->m.version, b->m.first, b->m.in, b->m.out,
+      "version %ld, first %ld, in %ld, out %ld, limit %ld, rank %d\n", b->m.version, b->m.first, b->m.in, b->m.out,
       b->m.limit, rank);
 }
 
 //! Retrieve the window offset of the appropriate circular buffer instance within the given distributed buffer (according to the rank)
 static void retrieve_window_offset_from_remote(distributed_circular_buffer_p buffer //!<
 ) {
-  const int num_elem = (sizeof(offset_header) + buffer->rank * sizeof(int)) / sizeof(cb_element);
+  const int num_elem = (sizeof(offset_header) + buffer->rank * sizeof(cb_index)) / sizeof(cb_element);
 
   MPI_Win_lock(MPI_LOCK_SHARED, buffer->num_producers, 0, buffer->window);
   MPI_Get(&buffer->window_offset, 1, MPI_INTEGER, buffer->num_producers, num_elem, 1, MPI_INTEGER, buffer->window);
@@ -244,7 +253,7 @@ static inline void update_local_header_from_remote(
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
 //! space is available
 //! @return The number of #cb_element tokens that can still be stored in the buffer
-static inline int get_available_space_from_remote(
+static inline cb_index get_available_space_from_remote(
     const distributed_circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
   update_local_header_from_remote(buffer);
@@ -257,7 +266,7 @@ static inline int get_available_space_from_remote(
 //! process and check, until there is enough space.
 //! @return The number of available elements according to the latest copy of the header. If there was not enough
 //! initially, that copy is updated.
-static int distributed_circular_buffer_wait_space_available(
+static cb_index distributed_circular_buffer_wait_space_available(
     distributed_circular_buffer_p buffer,       //!< [in] Pointer to the distributed buffer we're waiting for
     const int                     num_requested //!< [in] Needed number of available #cb_element slots
 ) {
@@ -269,12 +278,12 @@ static int distributed_circular_buffer_wait_space_available(
     return -1;
 
   // First check locally
-  int num_available = get_available_space(instance);
+  cb_index num_available = get_available_space(instance);
   if (num_available >= num_requested)
     return num_available;
 
   // Then get info from remote location, until there is enough
-  while (num_available = get_available_space_from_remote(buffer), num_available < num_requested)
+  while ((void)(num_available = get_available_space_from_remote(buffer)), num_available < num_requested)
     sleep_us(SPACE_CHECK_WAIT_TIME_US);
 
   return num_available;
@@ -283,7 +292,7 @@ static int distributed_circular_buffer_wait_space_available(
 //! Stop and wait until there is enough data in this circular buffer instance
 //!
 //! @return The number of data elements in the buffer, if everything goes smoothly, -1 otherwise.
-static int distributed_circular_buffer_wait_data_available(
+static cb_index distributed_circular_buffer_wait_data_available(
     const distributed_circular_buffer_p buffer, //!< [in] Buffer we are querying
     const int buffer_id,    //!< [in] Which specific circular buffer we want to query (there are multiple ones)
     const int num_requested //!< [in] Number of elements we want to read
@@ -296,8 +305,8 @@ static int distributed_circular_buffer_wait_data_available(
     return -1;
 
   // Only check locally, waiting a bit between each check
-  int num_available = 0;
-  while (num_available = get_available_data(instance), num_available < num_requested) {
+  cb_index num_available = 0;
+  while ((void)(num_available = get_available_data(instance)), num_available < num_requested) {
     sleep_us(DATA_CHECK_WAIT_TIME_US);
   }
 
@@ -334,7 +343,7 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
 
   buffer->local_header.target_rank = num_producers; // Producers will initially use the 1st consumer as a source
 
-  const int offset_header_size = compute_offset_header_size(buffer);
+  const cb_index offset_header_size = compute_offset_header_size(buffer);
 
   // Allocate space asymmetrically and set it as a window. The root gets all the space, everyone else gets nothing
   const MPI_Aint win_size =
@@ -347,7 +356,7 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of elements (int32_t).
 
-    init_offset_header(buffer, offset_header_size);
+    init_offset_header(buffer);
 
     const int extra_elem = (sizeof(circular_buffer_instance) - sizeof(circular_buffer)) % sizeof(cb_element);
     const int instance_overhead =
@@ -415,12 +424,12 @@ void distributed_circular_buffer_print(distributed_circular_buffer_p buffer //!<
 ) {
   printf("Printing distributed circ buf, rank: %d\n", buffer->rank);
   if (is_producer(buffer)) {
-    printf("Num elems: %d (rank %d)\n", get_available_data(&buffer->local_header.buf), buffer->rank);
+    printf("Num elems: %ld (rank %d)\n", (int64_t)get_available_data(&buffer->local_header.buf), buffer->rank);
   }
   else if (buffer->rank == buffer->num_producers) {
     for (int i = 0; i < buffer->num_producers; i++) {
       const circular_buffer_p b = get_circular_buffer(buffer, i);
-      printf("From root: buffer %d has %d data in it\n", i, get_available_data(b));
+      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)get_available_data(b));
     }
   }
 }
@@ -457,7 +466,7 @@ void distributed_circular_buffer_delete(distributed_circular_buffer_p buffer //!
 //! the insertion pointer on the root node (otherwise it might try to read data that has not yet arrived).
 //!
 //! @return How many elements can still fit after the insertion, if everything went smoothly, -1 otherwise
-int distributed_circular_buffer_put(
+cb_index distributed_circular_buffer_put(
     distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
     cb_element* const             src_data,    //!< Pointer to the data we want to insert
     const int                     num_elements //!< How many 4-byte elements we want to insert
@@ -469,26 +478,26 @@ int distributed_circular_buffer_put(
 
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, 0, buffer->window);
 
-  int32_t       in_index  = buffer->local_header.buf.m.in;
-  const int32_t out_index = buffer->local_header.buf.m.out;
-  const int32_t limit     = buffer->local_header.buf.m.limit;
+  cb_index       in_index  = buffer->local_header.buf.m.in;
+  const cb_index out_index = buffer->local_header.buf.m.out;
+  const cb_index limit     = buffer->local_header.buf.m.limit;
 
-  const int32_t window_offset_base = buffer->window_offset + sizeof(circular_buffer_instance) / sizeof(cb_element);
+  const cb_index window_offset_base = buffer->window_offset + sizeof(circular_buffer_instance) / sizeof(cb_element);
   if (in_index < out_index) {
     // 1 segment
-    const int32_t window_offset = window_offset_base + in_index;
+    const cb_index window_offset = window_offset_base + in_index;
     MPI_Accumulate(
-        src_data, num_elements, MPI_INTEGER, target_rank, window_offset, num_elements, MPI_INTEGER, MPI_REPLACE,
-        buffer->window);
+        src_data, num_elements, CB_MPI_ELEMENT_TYPE, target_rank, window_offset, num_elements, CB_MPI_ELEMENT_TYPE,
+        MPI_REPLACE, buffer->window);
     in_index += num_elements;
   }
   else {
     // First segment
-    const int     num_elem_segment_1 = num_elements > (limit - in_index) ? (limit - in_index) : num_elements;
-    const int32_t window_offset_1    = window_offset_base + in_index;
+    const int      num_elem_segment_1 = num_elements > (limit - in_index) ? (limit - in_index) : num_elements;
+    const cb_index window_offset_1    = window_offset_base + in_index;
     MPI_Accumulate(
-        src_data, num_elem_segment_1, MPI_INTEGER, target_rank, window_offset_1, num_elem_segment_1, MPI_INTEGER,
-        MPI_REPLACE, buffer->window);
+        src_data, num_elem_segment_1, CB_MPI_ELEMENT_TYPE, target_rank, window_offset_1, num_elem_segment_1,
+        CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
 
     // Update temporary insertion pointer
     in_index += num_elem_segment_1;
@@ -496,24 +505,30 @@ int distributed_circular_buffer_put(
       in_index = 0;
 
     // Second segment (if there is one)
-    const int     num_elem_segment_2 = num_elements - num_elem_segment_1;
-    const int32_t window_offset_2    = window_offset_base + in_index;
+    const int      num_elem_segment_2 = num_elements - num_elem_segment_1;
+    const cb_index window_offset_2    = window_offset_base + in_index;
     MPI_Accumulate(
-        src_data + num_elem_segment_1, num_elem_segment_2, MPI_INTEGER, target_rank, window_offset_2,
-        num_elem_segment_2, MPI_INTEGER, MPI_REPLACE, buffer->window);
+        src_data + num_elem_segment_1, num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank, window_offset_2,
+        num_elem_segment_2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
 
     // Update temporary insertion pointer
     in_index += num_elem_segment_2;
   }
 
   // Update insertion index remotely and locally
-  const int     index_byte_offset = offsetof(circular_buffer_instance, buf) + offsetof(fiol_management, in);
-  const int     index_elem_offset = index_byte_offset / sizeof(cb_element);
-  const int32_t window_offset     = buffer->window_offset + index_elem_offset; // TODO IS THIS OK??
+  const int      index_byte_offset = offsetof(circular_buffer_instance, buf) + offsetof(fiol_management, in);
+  const int      index_elem_offset = index_byte_offset / sizeof(cb_element);
+  const cb_index window_offset     = buffer->window_offset + index_elem_offset; // TODO IS THIS OK??
+
+  printf("Updating index at offset %ld (buffer %d)\n", window_offset, buffer->rank);
+
   MPI_Accumulate(&in_index, 1, MPI_INTEGER, target_rank, window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
   buffer->local_header.buf.m.in = in_index;
 
   MPI_Win_unlock(buffer->num_producers, buffer->window);
+
+  printf("There is now %ld elements in buffer %d\n", get_available_data(&buffer->local_header.buf), buffer->rank);
+  print_buf(&buffer->local_header.buf, buffer->rank);
 
   return get_available_space(&buffer->local_header.buf);
 }
@@ -535,6 +550,9 @@ int distributed_circular_buffer_get(
     int32_t*                      dest_data,   //!<
     const int                     num_elements //!<
 ) {
+  printf("Reading from buffer %d (consumer id %d)\n", buffer_id, buffer->rank);
+  print_buf(get_circular_buffer(buffer, buffer_id), buffer_id);
+
   if (distributed_circular_buffer_wait_data_available(buffer, buffer_id, num_elements) < 0)
     return -1;
 
@@ -544,7 +562,7 @@ int distributed_circular_buffer_get(
   int32_t       out_index = queue->m.out;
   const int32_t limit     = queue->m.limit;
 
-  const int32_t* const buffer_data = queue->data;
+  const cb_element* const buffer_data = queue->data;
 
   if (out_index < in_index) {
     // 1 segment

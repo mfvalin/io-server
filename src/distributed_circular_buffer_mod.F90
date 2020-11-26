@@ -89,7 +89,7 @@ contains
   function put(this, src_data, num_elements) result(num_space_available)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT), dimension(*), intent(in)          :: src_data
+    integer(CB_ELEMENT), dimension(*), intent(in)     :: src_data
     integer(C_INT), intent(in)                        :: num_elements
     integer(C_INT) :: num_space_available !< The return value of remote_circular_buffer_put
 
@@ -101,7 +101,7 @@ contains
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT), intent(in)                        :: buffer_id
-    integer(C_INT), dimension(*), intent(inout)       :: dest_data
+    integer(CB_ELEMENT), dimension(*), intent(inout)  :: dest_data
     integer(C_INT), intent(in)                        :: num_elements
     integer(C_INT) :: num_data_available !< The return value of remote_circular_buffer_get
 

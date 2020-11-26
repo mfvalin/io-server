@@ -1,5 +1,5 @@
 
-integer, parameter :: CB_ELEMENT = C_INT
+include 'circular_buffer.inc'
 interface
 
 

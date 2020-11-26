@@ -33,8 +33,8 @@ program test_distributed_circular_buffer
   integer :: available
   logical :: success
 
-  type(distributed_circular_buffer)     :: circ_buffer
-  integer, dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
+  type(distributed_circular_buffer)                 :: circ_buffer
+  integer(CB_ELEMENT), dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
   integer :: num_producers, consumer_id
 
   call MPI_init(error)
@@ -56,6 +56,9 @@ program test_distributed_circular_buffer
 
     call sleep_us(200)
 
+    in_data(:) = -1
+    out_data(:) = -2
+
     do i = 1, NUM_DATA_ELEMENTS
       in_data(i) = rank * 1000 + i
     end do
@@ -68,7 +71,6 @@ program test_distributed_circular_buffer
       print *, 'There is now that many slots available in the buffer: ', available
     end if
 
-
   else
 !    call sleep_us(20000)
     block
@@ -79,7 +81,7 @@ program test_distributed_circular_buffer
       first_prod = consumer_id * num_prod_local
       last_prod = min(first_prod + num_prod_local, num_producers) - 1
 
-      print *, 'Reading buffers from ', first_prod, last_prod
+!      print *, 'Reading buffers from ', first_prod, last_prod
       do i_prod = first_prod, last_prod
         print *, 'Reading from producer ', i_prod
         available = circ_buffer % get(i_prod, out_data, NUM_DATA_ELEMENTS)
@@ -91,7 +93,7 @@ program test_distributed_circular_buffer
 
   end if
 
-!  call MPI_Barrier(MPI_COMM_WORLD, error)
+  call MPI_Barrier(MPI_COMM_WORLD, error)
 !  call buffer_write_test(circ_buffer)
 
   call circ_buffer % print()

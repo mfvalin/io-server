@@ -31,7 +31,7 @@ program test_circular_buffer
   type(C_PTR) :: circ_buffer
   integer     :: available
 
-  integer     :: in_data(NUM_DATA_ELEMENTS), out_data(NUM_DATA_ELEMENTS)
+  integer(CB_ELEMENT) :: in_data(NUM_DATA_ELEMENTS), out_data(NUM_DATA_ELEMENTS)
 
   call MPI_init(error)
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
