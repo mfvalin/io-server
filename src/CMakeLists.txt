@@ -75,8 +75,18 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/.)
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${PROJECT_INCLUDE_FILES}")
 
-include(generate_inc.cmake)
-include(generate_h.cmake)
+include(cmake_shared/gen_headers.cmake)
+
+gen_headers(
+  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh
+  INPUT_FILES ${C_TO_INC_FILES}
+  OUTPUT_SUFFIX inc)
+
+gen_headers(
+  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh
+  INPUT_FILES ${C_TO_INC_FILES}
+  OUTPUT_SUFFIX h)
+
 
 install(
   TARGETS ${PROJECT_NAME}

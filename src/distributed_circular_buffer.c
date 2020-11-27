@@ -195,7 +195,6 @@ static inline void init_offset_header(
 
   for (int i = 0; i < header->num_offsets; i++) {
     header->window_offsets[i] = header->size + i * buffer_set->num_element_per_instance;
-    printf("Set window offset of buffer %d to %ld\n", i, (int64_t)header->window_offsets[i]);
   }
 }
 
@@ -520,15 +519,10 @@ cb_index distributed_circular_buffer_put(
   const int      index_elem_offset = index_byte_offset / sizeof(cb_element);
   const cb_index window_offset     = buffer->window_offset + index_elem_offset; // TODO IS THIS OK??
 
-  printf("Updating index at offset %ld (buffer %d)\n", window_offset, buffer->rank);
-
   MPI_Accumulate(&in_index, 1, MPI_INTEGER, target_rank, window_offset, 1, MPI_INTEGER, MPI_REPLACE, buffer->window);
   buffer->local_header.buf.m.in = in_index;
 
   MPI_Win_unlock(buffer->num_producers, buffer->window);
-
-  printf("There is now %ld elements in buffer %d\n", get_available_data(&buffer->local_header.buf), buffer->rank);
-  print_buf(&buffer->local_header.buf, buffer->rank);
 
   return get_available_space(&buffer->local_header.buf);
 }
@@ -550,9 +544,6 @@ int distributed_circular_buffer_get(
     int32_t*                      dest_data,   //!<
     const int                     num_elements //!<
 ) {
-  printf("Reading from buffer %d (consumer id %d)\n", buffer_id, buffer->rank);
-  print_buf(get_circular_buffer(buffer, buffer_id), buffer_id);
-
   if (distributed_circular_buffer_wait_data_available(buffer, buffer_id, num_elements) < 0)
     return -1;
 
