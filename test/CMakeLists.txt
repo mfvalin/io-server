@@ -36,24 +36,17 @@ message(STATUS "Build architecture: ${BUILD_ARCH}")
 
 set(CMAKE_VERBOSE_MAKEFILE TRUE)
 
+include(gen_test_target.cmake)
+
+
 # WHAT TO COMPILE
 
-add_executable(${PROJECT_NAME}_circ_buffer circular_buffer.F90)
-set_target_properties(${PROJECT_NAME}_circ_buffer PROPERTIES VERSION ${PROJECT_VERSION})
-target_link_libraries(${PROJECT_NAME}_circ_buffer io-server)
-target_include_directories(
-  ${PROJECT_NAME}_circ_buffer
-  PRIVATE
-  "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
-  "$<TARGET_PROPERTY:io-server,BINARY_DIR>"
+gen_test_target(
+   NAME circ_buffer
+   INPUT_FILES circular_buffer.F90
 )
 
-add_executable(${PROJECT_NAME}_distributed_circ_buffer distributed_circular_buffer.F90)
-set_target_properties(${PROJECT_NAME}_distributed_circ_buffer PROPERTIES VERSION ${PROJECT_VERSION})
-target_link_libraries(${PROJECT_NAME}_distributed_circ_buffer io-server)
-target_include_directories(
-  ${PROJECT_NAME}_distributed_circ_buffer
-  PRIVATE
-  "$<TARGET_PROPERTY:io-server,INCLUDE_DIRECTORIES>"
-  "$<TARGET_PROPERTY:io-server,BINARY_DIR>"
+gen_test_target(
+   NAME distributed_circ_buffer
+   INPUT_FILES distributed_circular_buffer.F90
 )
