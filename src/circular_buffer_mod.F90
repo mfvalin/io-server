@@ -15,7 +15,7 @@
 ! ====================================================
 !> \file
 !> \brief circular buffer Fortran module (object oriented)
-module circular_buffers
+module circular_buffer_module
   use ISO_C_BINDING
   implicit none
   include 'circular_buffer.inc'
@@ -25,6 +25,9 @@ module circular_buffers
     private
     type(C_PTR) :: p                    !< pointer to storage used by circular buffer
   contains
+
+    procedure :: is_valid !< check if the circular buffer is properly created
+
     !> \return pointer to created circular buffer
     procedure :: init                   !< initialize a circular buffer
     !> \return pointer to created circular buffer
@@ -67,6 +70,14 @@ module circular_buffers
     procedure :: atomic_put             !< wait until enough free slots are available then insert data
   end type circular_buffer
 contains
+
+  function is_valid(cb)
+    implicit none
+    class(circular_buffer), intent(INOUT) :: cb
+    logical :: is_valid
+    is_valid = c_associated(cb % p)
+  end function is_valid
+
   !> \brief initialize a circular buffer
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
   !> p = cb\%init(nwords)
@@ -78,6 +89,7 @@ contains
     cb%p = circular_buffer_init(cb%p, nwords)
     p = cb%p
   end function init 
+
   !> \brief create a circular buffer in local memory
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
   !> p = cb\%create_local(nwords)
@@ -90,6 +102,7 @@ contains
     cb%p = circular_buffer_create(nwords)
     p = cb%p
   end function create_local
+
   !> \brief create a circular buffer in shared memory
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
   !> p = cb\%create_shared(shmid, nwords)
@@ -102,7 +115,8 @@ contains
     type(C_PTR) :: p                                        !< pointer to created circular buffer 
     cb%p = circular_buffer_create_shared(shmid, nwords)
     p = cb%p
-   end function create_shared
+  end function create_shared
+
   !> \brief create a circular buffer from user supplied memory
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
   !> p = cb\%create_from_pointer(ptr, nwords)
@@ -116,6 +130,7 @@ contains
     cb%p = circular_buffer_from_pointer(ptr, nwords)
     p = cb%p
   end function create_from_pointer
+
   !> \brief create a circular buffer from address of another circular buffer
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
   !> p = cb\%create_from_other(ptr)
@@ -138,6 +153,7 @@ contains
     integer(C_INT) :: status                                !< 0 if success, -1 if error
     status = circular_buffer_detach_shared(cb%p)
   end function detach_shared
+
   !> \brief get number of empty slots available
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%space_available()
@@ -148,6 +164,7 @@ contains
     integer(C_INT) :: n                                     !< number of empty slots available, -1 if error
     n = circular_buffer_space_available(cb%p)
   end function space_available
+
   !> \brief wait until at least na empty slots are available for inserting data
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%wait_space_available(na)
@@ -159,6 +176,7 @@ contains
     integer(C_INT) :: n                                     !< number of empty slots available, -1 on error
     n = circular_buffer_wait_space_available(cb%p, na)
   end function wait_space_available
+
   !> \brief get current number of data tokens available
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%data_available()
@@ -169,6 +187,7 @@ contains
     integer(C_INT) :: n                                     !< number of data tokens available, -1 if error
     n = circular_buffer_data_available(cb%p)
   end function data_available
+
   !> \brief wait until at least na data tokens are available
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%wait_data_available(na)
@@ -180,6 +199,7 @@ contains
     integer(C_INT) :: n                                     !< number of data tokens available, -1 if error
     n = circular_buffer_wait_data_available(cb%p, na)
   end function wait_data_available
+
   !> \brief get address of the beginning of the buffer
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: start<br>
   !> start = cb\%buffer_start()
@@ -189,6 +209,7 @@ contains
     type(C_PTR) :: start                                    !< address of the start of the circular data buffer
     start = circular_buffer_start(cb%p)
   end function buffer_start
+
   !> \brief get address of the insertion point
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: inp<br>
   !> inp = cb\%data_in()
@@ -198,6 +219,7 @@ contains
     type(C_PTR) :: inp                                      !< address of the insertion point in the circular data buffer
     inp = circular_buffer_data_in(cb%p)
   end function data_in
+
   !> \brief get address of the extraction point
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: outp<br>
   !> outp = cb\%data_out()
@@ -207,6 +229,7 @@ contains
     type(C_PTR) :: outp                                     !< address of the extraction point in the circular data buffer
     outp = circular_buffer_data_out(cb%p)
   end function data_out
+
   !> \brief get pointer to the in position
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: inp<br>
   !> inp = cb\%advance_in(n1, n2)
@@ -219,6 +242,7 @@ contains
     type(C_PTR)                    :: inp                   !< pointer to the "in" position, C_NULL_PTR if error
     inp = circular_buffer_advance_in(cb%p, n1, n2)
   end function advance_in
+
   !> \brief get pointer to the "out" position
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: outp<br>
   !> outp = cb\%advance_out(n1, n2)
@@ -231,6 +255,7 @@ contains
     type(C_PTR)                    :: outp                  !< pointer to the "out" position, C_NULL_PTR if error
     outp = circular_buffer_advance_out(cb%p, n1, n2)
   end function advance_out
+
   !> \brief wait until ndst tokens are available then extract them into dst
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%atomic_get(dst, ndst)
@@ -242,6 +267,7 @@ contains
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
     n = circular_buffer_atomic_get(cb%p, dst, ndst)
   end function atomic_get
+
   !> \brief wait until nsrc free slots are available then insert from src array
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%atomic_put(src, nsrc)
@@ -254,7 +280,7 @@ contains
     n = circular_buffer_atomic_put(cb%p, src, nsrc)
   end function atomic_put
 
-end module circular_buffers
+end module circular_buffer_module
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
 
@@ -262,7 +288,7 @@ end module circular_buffers
 
 #define NPTEST 125
 program demo
-  use circular_buffers
+  use circular_buffer_module
   implicit none
   include 'mpif.h'
 

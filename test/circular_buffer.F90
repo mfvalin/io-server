@@ -17,29 +17,31 @@
 program test_circular_buffer
 
   use ISO_C_BINDING
+  use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
   implicit none
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
   integer, parameter :: NUM_DATA_ELEMENTS = 10
 
   include 'memory_arena.inc'
-  include 'circular_buffer.inc'
+!  include 'circular_buffer.inc'
   include 'mpif.h'
 
   integer     :: error, i
   integer     :: rank, comm_size
-  type(C_PTR) :: circ_buffer
   integer     :: available
+  type(C_PTR) :: do_not_use
 
+  type(circular_buffer) :: circ_buffer
   integer(DATA_ELEMENT) :: in_data(NUM_DATA_ELEMENTS), out_data(NUM_DATA_ELEMENTS)
 
   call MPI_init(error)
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
-  circ_buffer = circular_buffer_create(NUM_BUFFER_ELEMENTS)
+  do_not_use = circ_buffer % create(NUM_BUFFER_ELEMENTS)
 
-  if (.not. c_associated(circ_buffer)) then
+  if (.not. circ_buffer % is_valid()) then
     print *, 'Could not create a circular buffer!', rank
     goto 777
   endif
@@ -51,8 +53,8 @@ program test_circular_buffer
 
   print *, 'in_data ', rank, ':', in_data
 
-  available = circular_buffer_atomic_put(circ_buffer, in_data, NUM_DATA_ELEMENTS)
-  available = circular_buffer_atomic_get(circ_buffer, out_data, NUM_DATA_ELEMENTS)
+  available = circ_buffer % atomic_put(in_data, NUM_DATA_ELEMENTS)
+  available = circ_buffer % atomic_get(out_data, NUM_DATA_ELEMENTS)
 
   print *, 'out_data', rank, ':', out_data
 
