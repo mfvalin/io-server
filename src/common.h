@@ -19,11 +19,11 @@ static inline void memory_fence() {
   _mm_mfence();
 }
 
-//! Type of individual elements stored in a circular buffer
-typedef int32_t cb_element;
-//! Type of index for computing offsets in a circular buffer (must be at least the same size as #cb_element)
-typedef int32_t cb_index;
-//C_EnD
+//! Type of individual elements stored in a container
+typedef int32_t data_element;
+//! Type of index for computing offsets in a container (must be at least the same size as #data_element)
+typedef int32_t data_index;
+
 //F_StArT
-//  integer, parameter :: CB_ELEMENT = C_INT !< Circular buffer element type. Must match the size of #cb_element
+//  integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element
 //F_EnD

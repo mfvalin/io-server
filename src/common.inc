@@ -1,3 +1,3 @@
 
-integer, parameter :: CB_ELEMENT = C_INT !< Circular buffer element type. Must match the size of #cb_element
+integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element
 

@@ -33,8 +33,8 @@ program test_distributed_circular_buffer
   integer :: available
   logical :: success
 
-  type(distributed_circular_buffer)                 :: circ_buffer
-  integer(CB_ELEMENT), dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
+  type(distributed_circular_buffer)                   :: circ_buffer
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
   integer :: num_producers, consumer_id
 
   call MPI_init(error)

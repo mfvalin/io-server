@@ -236,9 +236,9 @@ contains
   !> n = cb\%atomic_get(dst, ndst)
   function atomic_get(cb, dst, ndst) result(n)
     implicit none
-    class(circular_buffer), intent(INOUT)          :: cb    !< circular_buffer
-    integer(C_INT), intent(IN), value              :: ndst  !< number of tokens to extract
-    integer(CB_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+    class(circular_buffer), intent(INOUT)            :: cb    !< circular_buffer
+    integer(C_INT), intent(IN), value                :: ndst  !< number of tokens to extract
+    integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
     n = circular_buffer_atomic_get(cb%p, dst, ndst)
   end function atomic_get
@@ -247,9 +247,9 @@ contains
   !> n = cb\%atomic_put(src, nsrc)
   function atomic_put(cb, src, nsrc) result(n)
     implicit none
-    class(circular_buffer), intent(INOUT)         :: cb    !< circular_buffer
-    integer(C_INT), intent(IN), value             :: nsrc  !< number of tokens to insert from src
-    integer(CB_ELEMENT), dimension(*), intent(IN) :: src   !< source array for data insertion
+    class(circular_buffer), intent(INOUT)           :: cb    !< circular_buffer
+    integer(C_INT), intent(IN), value               :: nsrc  !< number of tokens to insert from src
+    integer(DATA_ELEMENT), dimension(*), intent(IN) :: src   !< source array for data insertion
     integer(C_INT) :: n                                    !< number of free slots available after this operation, -1 if error
     n = circular_buffer_atomic_put(cb%p, src, nsrc)
   end function atomic_put

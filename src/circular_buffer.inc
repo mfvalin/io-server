@@ -217,11 +217,11 @@ end function circular_buffer_advance_out
 !> wait until ndst tokens are available then extract them into dst<br>
 !> n = circular_buffer_atomic_get(p, dst, ndst)
 function circular_buffer_atomic_get(p, dst, ndst) result(n) BIND(C,name='circular_buffer_atomic_get')
-import :: C_PTR, C_INT, CB_ELEMENT
+import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: ndst          !< number of tokens to extract
-integer(CB_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
 integer(C_INT) :: n                                !< number of data tokens available after this operation, -1 if error
 end function circular_buffer_atomic_get
 
@@ -230,11 +230,11 @@ end function circular_buffer_atomic_get
 !> DO NOT UPDATE "out" unless update flag is non zero<br>
 !> n = circular_buffer_extract(p, dst, ndst, offset, update)
 function circular_buffer_extract(p, dst, ndst, offset, update) result(n) BIND(C,name='circular_buffer_extract')
-import :: C_PTR, C_INT, CB_ELEMENT
+import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: ndst          !< number of tokens to copy to dst
-integer(CB_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array for data extraction
+integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array for data extraction
 integer(C_INT), intent(IN), value :: offset        !< offset from the "in" position
 integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
 integer(C_INT) :: n                                !< number of free slots available after this operation
@@ -244,11 +244,11 @@ end function circular_buffer_extract
 !> wait until nsrc free slots are available then insert from src array<br>
 !> n = circular_buffer_atomic_put(p, src, nsrc)
 function circular_buffer_atomic_put(p, src, nsrc) result(n) BIND(C,name='circular_buffer_atomic_put')
-import :: C_PTR, C_INT, CB_ELEMENT
+import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: nsrc          !< number of tokens to insert from src
-integer(CB_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
+integer(DATA_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
 integer(C_INT) :: n                                !< number of free slots available after this operation
 end function circular_buffer_atomic_put
 
@@ -257,11 +257,11 @@ end function circular_buffer_atomic_put
 !> DO NOT UPDATE the "in" pointer unless update flag is non zero<br>
 !> n = circular_buffer_insert(p, src, nsrc, offset, update)
 function circular_buffer_insert(p, src, nsrc, offset, update) result(n) BIND(C,name='circular_buffer_insert')
-import :: C_PTR, C_INT, CB_ELEMENT
+import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: nsrc          !< number of tokens to insert from src
-integer(CB_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
+integer(DATA_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
 integer(C_INT), intent(IN), value :: offset        !< offset from the "in" position
 integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
 integer(C_INT) :: n                                !< number of free slots available after this operation

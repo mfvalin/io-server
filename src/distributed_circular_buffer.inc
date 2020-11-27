@@ -37,21 +37,21 @@ end subroutine distributed_circular_buffer_delete
 
 
 function distributed_circular_buffer_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_put')
-import :: C_PTR, C_INT, CB_ELEMENT
+import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(in), value           :: buffer
-integer(CB_ELEMENT), dimension(*), intent(in) :: src_data
+integer(DATA_ELEMENT), dimension(*), intent(in) :: src_data
 integer(C_INT), intent(in), value        :: num_elements
 integer(C_INT) :: num_available
 end function distributed_circular_buffer_put
 
 
 function distributed_circular_buffer_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_get')
-import :: C_PTR, C_INT, CB_ELEMENT
+import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(in), value              :: buffer
 integer(C_INT), intent(in), value           :: buffer_id
-integer(CB_ELEMENT), dimension(*), intent(inout) :: dest_data
+integer(DATA_ELEMENT), dimension(*), intent(inout) :: dest_data
 integer(C_INT), intent(in), value           :: num_elements
 integer(C_INT) :: num_available
 end function distributed_circular_buffer_get

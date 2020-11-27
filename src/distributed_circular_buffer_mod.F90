@@ -88,9 +88,9 @@ contains
   !> Insert elements into a remote circular buffer. See remote_circular_buffer_put
   function put(this, src_data, num_elements) result(num_space_available)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
-    integer(CB_ELEMENT), dimension(*), intent(in)     :: src_data
-    integer(C_INT), intent(in)                        :: num_elements
+    class(distributed_circular_buffer), intent(inout)   :: this
+    integer(DATA_ELEMENT), dimension(*), intent(in)     :: src_data
+    integer(C_INT), intent(in)                          :: num_elements
     integer(C_INT) :: num_space_available !< The return value of remote_circular_buffer_put
 
     num_space_available = distributed_circular_buffer_put(this % c_buffer, src_data, num_elements)
@@ -99,10 +99,10 @@ contains
   !> Extract elements from a remote circular buffer. See remote_circular_buffer_get
   function get(this, buffer_id, dest_data, num_elements) result(num_data_available)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT), intent(in)                        :: buffer_id
-    integer(CB_ELEMENT), dimension(*), intent(inout)  :: dest_data
-    integer(C_INT), intent(in)                        :: num_elements
+    class(distributed_circular_buffer), intent(inout)   :: this
+    integer(C_INT), intent(in)                          :: buffer_id
+    integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
+    integer(C_INT), intent(in)                          :: num_elements
     integer(C_INT) :: num_data_available !< The return value of remote_circular_buffer_get
 
     num_data_available = distributed_circular_buffer_get(this % c_buffer, buffer_id, dest_data, num_elements)
