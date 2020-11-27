@@ -62,12 +62,17 @@ file(GLOB PROJECT_INCLUDE_FILES
 )
 
 set(C_TO_INC_FILES
+  common.h
   circular_buffer.c
   distributed_circular_buffer.c
   memory_arena.c
 )
 
-set(C_TO_H_FILES ${C_TO_INC_FILES})
+set(C_TO_H_FILES
+  circular_buffer.c
+  distributed_circular_buffer.c
+  memory_arena.c
+)
 
 add_library(${PROJECT_NAME} ${PROJECT_C_FILES} ${PROJECT_F_FILES} ${PROJECT_INCLUDE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/.)
@@ -84,7 +89,7 @@ gen_headers(
 
 gen_headers(
   SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh
-  INPUT_FILES ${C_TO_INC_FILES}
+  INPUT_FILES ${C_TO_H_FILES}
   OUTPUT_SUFFIX h)
 
 

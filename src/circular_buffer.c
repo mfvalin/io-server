@@ -96,29 +96,20 @@
 #include <sys/types.h>
 #include <sys/shm.h>
 
-// #include "circular_buffer.h"
-//C_StArT
-#include <stdint.h>
-
-#if ! defined(FIOL_VERSION)
-//!> version marker
-#define FIOL_VERSION 0x1BAD
-//C_EnD
-
-
-//C_StArT
-//! Type of individual elements stored in a circular buffer
-typedef int32_t cb_element;
-//! Type of index for computing offsets in a circular buffer (must be at least the same size as #cb_element)
-typedef int32_t cb_index;
-//C_EnD
 //F_StArT
-//  integer, parameter :: CB_ELEMENT = C_INT !< Circular buffer element type. Must match the size of #cb_element
+//  include 'common.inc'
 //  interface
 //F_EnD
 
 
 //C_StArT
+#include "common.h"
+
+#if ! defined(FIOL_VERSION)
+//!> version marker
+#define FIOL_VERSION 0x1BAD
+
+
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
@@ -142,33 +133,40 @@ typedef struct{
 //! pointer to circular buffer
 typedef circular_buffer *circular_buffer_p;
 
-#include <immintrin.h>
 
-//!> memory store fence
-#define W_FENCE __asm__ volatile("": : :"memory"); _mm_sfence();
+//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline cb_index available_space(
+    const cb_index in,   //!< [in] Index of insertion location in the buffer
+    const cb_index out,  //!< [in] Index of extraction location in the buffer
+    const cb_index limit //!< [in] Number of elements that the buffer can hold
+) {
+  return (in < out) ? out - in - 1 : limit - in + out - 1;
+}
 
-//!> memory load fence
-#define R_FENCE __asm__ volatile("": : :"memory"); _mm_lfence();
-
-//!> memory load+store fence
-#define M_FENCE __asm__ volatile("": : :"memory"); _mm_mfence();
-#endif
-//C_EnD
-
-#define SPACE_AVAILABLE(in,out,limit)  ((in < out) ? out-in-1 : limit-in+out-1)
-
-#define DATA_AVAILABLE(in,out,limit)  ((in >= out) ? in-out : limit-out+in)
+//! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline cb_index available_data(
+    const cb_index in,   //!< [in] Index of insertion location in the buffer
+    const cb_index out,  //!< [in] Index of extraction location in the buffer
+    const cb_index limit //!< [in] Number of elements that the buffer can hold
+) {
+  return (in >= out) ? in - out : limit - out + in;
+}
 
 /**
  * @brief Copy buffer elements into another array (either into or out of the buffer)
  */
 static inline void copy_elements(
-    cb_element *dst, //!< [out] Where to copy the elements
-    cb_element *src, //!< [in]  The elements to copy
-    int n            //!< [in] How many we want to copy
-){
+    cb_element*       dst, //!< [out] Where to copy the elements
+    const cb_element* src, //!< [in]  The elements to copy
+    int               n    //!< [in] How many we want to copy
+) {
   memcpy(dst, src, sizeof(cb_element) * (size_t)n);
 }
+
+#endif
+//C_EnD
 
 //F_StArT
 //   !> initialize a circular buffer<br>
@@ -347,7 +345,7 @@ int32_t circular_buffer_space_available(
   limit = p->m.limit;
   in = *inp;
   out = *outp;
-  return SPACE_AVAILABLE(in,out,limit);
+  return available_space(in,out,limit);
 }
 
 //F_StArT
@@ -381,7 +379,7 @@ int32_t circular_buffer_wait_space_available(
   while(navail <n){
     in = *inp;
     out = *outp;
-    navail = SPACE_AVAILABLE(in,out,limit);
+    navail = available_space(in,out,limit);
   }
   return navail;
 }
@@ -413,7 +411,7 @@ int32_t circular_buffer_data_available(
   limit = p->m.limit;
   in = *inp;
   out = *outp;
-  return DATA_AVAILABLE(in,out,limit);
+  return available_data(in,out,limit);
 }
 
 //F_StArT
@@ -447,7 +445,7 @@ int32_t circular_buffer_wait_data_available(
   while(navail <n){
     in = *inp;
     out = *outp;
-    navail = DATA_AVAILABLE(in,out,limit);
+    navail = available_data(in,out,limit);
   }
   return navail;
 }
@@ -657,12 +655,12 @@ int32_t circular_buffer_atomic_get(
   limit = p->m.limit;
   in = *inp;
   out = *outp;
-  navail = DATA_AVAILABLE(in,out,limit);
+  navail = available_data(in,out,limit);
   while(navail <n){
     usleep(delay);
     in = *inp;
     out = *outp;
-    navail = DATA_AVAILABLE(in,out,limit);
+    navail = available_data(in,out,limit);
   }
 
   if(out < in){         // 1 segment
@@ -678,11 +676,11 @@ int32_t circular_buffer_atomic_get(
     copy_elements(dst, buf+out, n);
     out += n;
   }
-  M_FENCE;  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+  memory_fence();  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
   *outp = out;
   in = *inp;
 //   out = *outp;
-  return DATA_AVAILABLE(in,out,limit);
+  return available_data(in,out,limit);
 }
 
 //F_StArT
@@ -727,7 +725,7 @@ int32_t circular_buffer_extract(
   out = *outp;
   while(navail < (n + offset)){  // we need n tokens after position "out + offset" (modulo limit)
     in = *inp;
-    navail = DATA_AVAILABLE(in,out,limit);
+    navail = available_data(in,out,limit);
   }
 
   out = out + offset ;  // acccount for offset
@@ -746,9 +744,9 @@ int32_t circular_buffer_extract(
     copy_elements(dst, buf+out, n);
     out += n;
   }
-  if(update) { M_FENCE ; *outp = out; }  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+  if(update) { memory_fence(); *outp = out; }  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
   in = *inp;
-  return DATA_AVAILABLE(in,out,limit);
+  return available_data(in,out,limit);
 }
 
 //F_StArT
@@ -785,12 +783,12 @@ int32_t circular_buffer_atomic_put(
   limit = p->m.limit;
   in = *inp;
   out = *outp;
-  navail = SPACE_AVAILABLE(in,out,limit);
+  navail = available_space(in,out,limit);
   while(navail <n){
     usleep(delay);
     in = *inp;
     out = *outp;
-    navail = SPACE_AVAILABLE(in,out,limit);
+    navail = available_space(in,out,limit);
   }
 
   if(in < out){         // 1 segment
@@ -806,11 +804,11 @@ int32_t circular_buffer_atomic_put(
     copy_elements(buf+in, src, n);
     in += n;
   }
-  W_FENCE ;  // write fence, make sure everything is in memory before adjusting the "in" pointer
+  write_fence(); // make sure everything is in memory before adjusting the "in" pointer
   *inp = in;
 //   in = *inp;
   out = *outp;
-  return SPACE_AVAILABLE(in,out,limit);
+  return available_space(in,out,limit);
 }
 //F_StArT
 //   !> wait until nsrc free slots are available then insert from src array<br>
@@ -854,7 +852,7 @@ int32_t circular_buffer_insert(
   in = *inp;
   while(navail < (n + offset)){  // we need to insert n tokens after position "in + offset" (modulo limit)
     out = *outp;
-    navail = SPACE_AVAILABLE(in,out,limit);
+    navail = available_space(in,out,limit);
   }
 
   in = in + offset ;    // acccount for offset
@@ -873,9 +871,12 @@ int32_t circular_buffer_insert(
     copy_elements(buf+in, src, n);
     in += n;
   }
-  if(update) { W_FENCE ; *inp = in; }   // write fence, make sure everything is in memory before adjusting the "in" pointer
+  if(update) {
+    write_fence(); // make sure everything is in memory before adjusting the "in" pointer
+    *inp = in;
+  }
   out = *outp;
-  return SPACE_AVAILABLE(in,out,limit);
+  return available_space(in,out,limit);
 }
 
 //F_StArT

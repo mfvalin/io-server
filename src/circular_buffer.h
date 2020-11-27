@@ -60,15 +60,13 @@
    x = useful data       . = free space
  \endverbatim
 */
-#include <stdint.h>
+#include "common.h"
 
 #if ! defined(FIOL_VERSION)
 //!> version marker
 #define FIOL_VERSION 0x1BAD
-//! Type of individual elements stored in a circular buffer
-typedef int32_t cb_element;
-//! Type of index for computing offsets in a circular buffer (must be at least the same size as #cb_element)
-typedef int32_t cb_index;
+
+
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
@@ -92,16 +90,38 @@ typedef struct{
 //! pointer to circular buffer
 typedef circular_buffer *circular_buffer_p;
 
-#include <immintrin.h>
 
-//!> memory store fence
-#define W_FENCE __asm__ volatile("": : :"memory"); _mm_sfence();
+//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline cb_index available_space(
+    const cb_index in,   //!< [in] Index of insertion location in the buffer
+    const cb_index out,  //!< [in] Index of extraction location in the buffer
+    const cb_index limit //!< [in] Number of elements that the buffer can hold
+) {
+  return (in < out) ? out - in - 1 : limit - in + out - 1;
+}
 
-//!> memory load fence
-#define R_FENCE __asm__ volatile("": : :"memory"); _mm_lfence();
+//! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline cb_index available_data(
+    const cb_index in,   //!< [in] Index of insertion location in the buffer
+    const cb_index out,  //!< [in] Index of extraction location in the buffer
+    const cb_index limit //!< [in] Number of elements that the buffer can hold
+) {
+  return (in >= out) ? in - out : limit - out + in;
+}
 
-//!> memory load+store fence
-#define M_FENCE __asm__ volatile("": : :"memory"); _mm_mfence();
+/**
+ * @brief Copy buffer elements into another array (either into or out of the buffer)
+ */
+static inline void copy_elements(
+    cb_element*       dst, //!< [out] Where to copy the elements
+    const cb_element* src, //!< [in]  The elements to copy
+    int               n    //!< [in] How many we want to copy
+) {
+  memcpy(dst, src, sizeof(cb_element) * (size_t)n);
+}
+
 #endif
 //! initialize a circular buffer
 //! <br> = circular_buffer_init(p, nwords)

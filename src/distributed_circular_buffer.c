@@ -18,7 +18,6 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include <time.h>
 
 #include <mpi.h>
@@ -97,26 +96,6 @@ static const int SPACE_CHECK_WAIT_TIME_US = 100;
 static const int DATA_CHECK_WAIT_TIME_US = 100;
 
 //! @{ \name Helper functions
-
-//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
-//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline cb_index available_space(
-    const cb_index in,   //!< [in] Index of insertion location in the buffer
-    const cb_index out,  //!< [in] Index of extraction location in the buffer
-    const cb_index limit //!< [in] Number of elements that the buffer can hold
-) {
-  return (in < out) ? out - in - 1 : limit - in + out - 1;
-}
-
-//! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
-//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline cb_index available_data(
-    const cb_index in,   //!< [in] Index of insertion location in the buffer
-    const cb_index out,  //!< [in] Index of extraction location in the buffer
-    const cb_index limit //!< [in] Number of elements that the buffer can hold
-) {
-  return (in >= out) ? in - out : limit - out + in;
-}
 
 //! Compute how much space (in number of #cb_element) is available in a given circular buffer
 static inline cb_index get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
@@ -557,13 +536,13 @@ int distributed_circular_buffer_get(
 
   if (out_index < in_index) {
     // 1 segment
-    memcpy(dest_data, buffer_data + out_index, num_elements * sizeof(cb_element));
+    copy_elements(dest_data, buffer_data + out_index, num_elements);
     out_index += num_elements;
   }
   else {
     // 1st segment
     const int num_elements_1 = num_elements > (limit - out_index) ? (limit - out_index) : num_elements;
-    memcpy(dest_data, buffer_data + out_index, num_elements_1);
+    copy_elements(dest_data, buffer_data + out_index, num_elements_1);
 
     // Update temporary extraction pointer
     out_index += num_elements_1;
@@ -572,13 +551,13 @@ int distributed_circular_buffer_get(
 
     // 2nd segment (if there is one)
     const int num_elements_2 = num_elements - num_elements_1;
-    memcpy(dest_data + num_elements_1, buffer_data + out_index, num_elements_2 * sizeof(cb_element));
+    copy_elements(dest_data + num_elements_1, buffer_data + out_index, num_elements_2);
 
     // Update temporary extraction pointer
     out_index += num_elements_2;
   }
 
-  M_FENCE; // Make sure everything has been read, and the temp pointer actually updated
+  memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
   queue->m.out = out_index; // Update actual extraction pointer
 
