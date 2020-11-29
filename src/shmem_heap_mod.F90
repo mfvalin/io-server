@@ -50,13 +50,41 @@ module shmem_heap
 
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
+
+    !> \return                           a fortran pointer
+    procedure   ::            I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
+                              I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
+                              I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
+                              I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
+                              R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
+                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
+    GENERIC   :: allocate =>  I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
+                              I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
+                              I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
+                              I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
+                              R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
+                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
   end type heap
+
+  interface sm_allocate   ! generic procedure
+    module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
+                     I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
+                     I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
+                     I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
+                     R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
+                     R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
+  end interface
   
   integer, parameter :: HEAP_ELEMENT = C_INT   !<  type of a heap element (must be consistent with C code)
 
 ! tell doxygen to ignore the following block (for now)
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface
+    function malloc(sz) result(p) BIND(C,name='malloc')
+      import :: C_PTR, C_SIZE_T
+      integer(C_SIZE_T), value :: sz
+      type(C_PTR) :: p
+    end function malloc
 
     function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
       import :: C_PTR, C_SIZE_T
@@ -151,9 +179,12 @@ module shmem_heap
     end function ShmemHeapPtr
 
   end interface
+
 #endif
 
   contains
+
+  include 'f_alloc.inc'
 
   !> \brief create, perform a full, register heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
@@ -376,6 +407,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_INT)    :: free_blocks, used_blocks
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
+  integer(C_INT), dimension(:,:,:), pointer :: demo
 
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
@@ -417,12 +449,16 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he)) ! create heap, 8 K + 128*rank elements
     blocks = C_NULL_PTR
     do i = 1 , 2 + myrank * 2
-      blocks(i) = h%alloc((1100+i*10+myrank)*C_SIZEOF(he), 0)     ! attempt to allocate block
+!       blocks(i) = h%alloc((1100+i*10+myrank)*C_SIZEOF(he), 0)     ! try to allocate block
+!       call sm_allocate(h, demo, [1100+i*10+myrank])
+      call h%allocate(demo, [1100+i*10+myrank,1,1])    ! 3D integer array
+      blocks(i) = C_LOC(demo(1,1,1))
+
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
       endif
-      print *,'block ',i,', allocated at index =',h%offset(blocks(i))
+      print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
       ixtab(i) = h%offset(blocks(i))
     enddo
     print 6,'ixtab =', ixtab(1:10)
@@ -496,6 +532,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 3 format(4(A,I8))
 5 format(A,I3,A,Z16.16,2(A,I8))
 6 format(A,10I6)
+7 format(A,I3,A,I8,A,10I6)
 end subroutine relay_test
 
 subroutine base_test(nprocs, myrank)
@@ -521,6 +558,7 @@ subroutine base_test(nprocs, myrank)
   integer(C_INT), dimension(:), pointer :: ram     ! shared memory (addressable as an integer array)
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
   logical, parameter :: bugged = .false.
+  integer(C_INT), dimension(:), pointer :: demo
 
   print 3,'==================== BASIC TEST ===================='
   winsize = 1024*1024
@@ -550,7 +588,9 @@ subroutine base_test(nprocs, myrank)
     ixtab = -1
     p = h%create(p, 1024*8*C_SIZEOF(he))            ! create heap, 32 KBytes
     do i = 1, 10
-      blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
+!       blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
+      call sm_allocate(h, demo, [1022+i])
+      blocks(i) = C_LOC(demo(1))
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
