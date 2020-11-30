@@ -97,24 +97,6 @@ static const int DATA_CHECK_WAIT_TIME_US = 100;
 
 //! @{ \name Helper functions
 
-//! Compute how much space (in number of #data_element) is available in a given circular buffer
-static inline data_index get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
-) {
-  // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.in;
-  volatile data_index* out = &buffer->m.out;
-  return available_space(*in, *out, buffer->m.limit);
-}
-
-//! Compute how much data (in number of #data_element) is stored in a given circular buffer
-static inline data_index get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
-) {
-  // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.in;
-  volatile data_index* out = &buffer->m.out;
-  return available_data(*in, *out, buffer->m.limit);
-}
-
 //F_StArT
 //  include 'circular_buffer.inc'
 //  interface
@@ -194,15 +176,6 @@ static inline circular_buffer_p get_circular_buffer(
   return &get_circular_buffer_instance(buffer_set, buffer_id)->buf;
 }
 
-//! Print info about a circular buffer (for debugging)
-static inline void print_buf(
-    circular_buffer_p b,   //!< [in] Pointer to the buffer to print
-    int               rank //!< [in] Rank of the caller
-) {
-  printf(
-      "version %ld, first %ld, in %ld, out %ld, limit %ld, rank %d\n", b->m.version, b->m.first, b->m.in, b->m.out,
-      b->m.limit, rank);
-}
 
 //! Retrieve the window offset of the appropriate circular buffer instance within the given distributed buffer (according to the rank)
 static void retrieve_window_offset_from_remote(distributed_circular_buffer_p buffer //!<
@@ -235,7 +208,7 @@ static inline data_index get_available_space_from_remote(
     const distributed_circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
   update_local_header_from_remote(buffer);
-  return get_available_space(&buffer->local_header.buf);
+  return circular_buffer_get_available_space(&buffer->local_header.buf);
 }
 
 //! Stop and wait until there is enough space in this circular buffer instance.
@@ -256,7 +229,7 @@ static data_index distributed_circular_buffer_wait_space_available(
     return -1;
 
   // First check locally
-  data_index num_available = get_available_space(instance);
+  data_index num_available = circular_buffer_get_available_space(instance);
   if (num_available >= num_requested)
     return num_available;
 
@@ -284,7 +257,7 @@ static data_index distributed_circular_buffer_wait_data_available(
 
   // Only check locally, waiting a bit between each check
   data_index num_available = 0;
-  while ((void)(num_available = get_available_data(instance)), num_available < num_requested) {
+  while ((void)(num_available = circular_buffer_get_available_data(instance)), num_available < num_requested) {
     sleep_us(DATA_CHECK_WAIT_TIME_US);
   }
 
@@ -402,12 +375,14 @@ void distributed_circular_buffer_print(distributed_circular_buffer_p buffer //!<
 ) {
   printf("Printing distributed circ buf, rank: %d\n", buffer->rank);
   if (is_producer(buffer)) {
-    printf("Num elems: %ld (rank %d)\n", (int64_t)get_available_data(&buffer->local_header.buf), buffer->rank);
+    printf(
+        "Num elems: %ld (rank %d)\n", (int64_t)circular_buffer_get_available_data(&buffer->local_header.buf),
+        buffer->rank);
   }
   else if (buffer->rank == buffer->num_producers) {
     for (int i = 0; i < buffer->num_producers; i++) {
       const circular_buffer_p b = get_circular_buffer(buffer, i);
-      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)get_available_data(b));
+      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)circular_buffer_get_available_data(b));
     }
   }
 }
@@ -503,7 +478,7 @@ data_index distributed_circular_buffer_put(
 
   MPI_Win_unlock(buffer->num_producers, buffer->window);
 
-  return get_available_space(&buffer->local_header.buf);
+  return circular_buffer_get_available_space(&buffer->local_header.buf);
 }
 
 //F_StArT
@@ -561,7 +536,7 @@ int distributed_circular_buffer_get(
 
   queue->m.out = out_index; // Update actual extraction pointer
 
-  return get_available_data(queue);
+  return circular_buffer_get_available_data(queue);
 }
 
 //! @}

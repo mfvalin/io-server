@@ -123,6 +123,10 @@ static inline void copy_elements(
 }
 
 #endif
+//! Print buffer header (to help debugging)
+void circular_buffer_print_header(
+    circular_buffer_p b   //!< [in] Pointer to the buffer to print
+);
 //! initialize a circular buffer
 //! <br> = circular_buffer_init(p, nwords)
 //! @return pointer to buffer upon success, NULL upon error
@@ -159,24 +163,22 @@ circular_buffer_p circular_buffer_from_pointer(
   void *p,                                 //!< [in]  pointer to user supplied memory space
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
   );
-//! return the current number of empty slots available
-//! <br> = circular_buffer_space_available(p)
+//! Compute how much space (in number of #data_element) is available in a given circular buffer
 //! @return How many elements can still be added
-int32_t circular_buffer_space_available(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  );
+data_index circular_buffer_get_available_space(
+    const circular_buffer_p buffer //!< [in] The buffer we want to query
+);
+//! Compute how much data (in number of #data_element) is stored in a given circular buffer
+//! @return How many elements are stored in the buffer
+data_index circular_buffer_get_available_data(
+    const circular_buffer_p buffer //!< [in] The buffer we want to query
+);
 //! wait until at least na empty slots are available for inserting data
 //! <br> = circular_buffer_wait_space_available(p, n)
 //! @return actual number of empty slots available, -1 on error
 int32_t circular_buffer_wait_space_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int n                                    //!< [in]  needed number of available slots (#data_element)
-  );
-//! get the current number of data tokens available
-//! <br> = circular_buffer_data_available(p)
-//! @return current number of data tokens available, -1 if error
-int32_t circular_buffer_data_available(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   );
 //! wait until at least n data tokens are available for extracting data
 //! <br> = circular_buffer_wait_data_available(p, n)

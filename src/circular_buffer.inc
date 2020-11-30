@@ -65,6 +65,13 @@ include 'common.inc'
 interface
 
 
+subroutine circular_buffer_print_header(buffer) bind(C, name = 'circular_buffer_print_header')
+import :: C_PTR
+implicit none
+type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
+end subroutine circular_buffer_print_header
+
+
 !> initialize a circular buffer<br>
 !> buffer = circular_buffer_init(p, nwords)
 function circular_buffer_init(p, nwords) result(buffer) bind(C,name='circular_buffer_init')
@@ -118,14 +125,20 @@ type(C_PTR) :: p                              !< pointer to created circular buf
 end function circular_buffer_from_pointer
 
 
-!> return the current number of empty slots available<br>
-!> n = circular_buffer_space_available(p)
-function circular_buffer_space_available(p) result(n) BIND(C,name='circular_buffer_space_available')
-import :: C_PTR, C_INT
+function circular_buffer_get_available_space(buffer) result(num_elements) BIND(C, name = 'circular_buffer_get_available_space')
+import C_PTR, C_INT
 implicit none
-type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-integer(C_INT) :: n                    !< current number of empty slots available, -1 if error
-end function circular_buffer_space_available
+type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
+integer(C_INT) :: num_elements           !< How many slots are free
+end function circular_buffer_get_available_space
+
+
+function circular_buffer_get_available_data(buffer) result(num_elements) BIND(C, name = 'circular_buffer_get_available_data')
+import C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
+integer(C_INT) :: num_elements           !< How many elements are stored in the buffer
+end function circular_buffer_get_available_data
 
 
 !> wait until at least na empty slots are available for inserting data<br>
@@ -137,16 +150,6 @@ type(C_PTR), intent(IN), value :: p          !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: na      !< needed number of available slots
 integer(C_INT) :: n                          !< actual number of empty slots available, -1 on error
 end function circular_buffer_wait_space_available
-
-
-!> get the current number of data tokens available<br>
-!> p = circular_buffer_data_available(p)
-function circular_buffer_data_available(p) result(n) BIND(C,name='circular_buffer_data_available')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: p            !< pointer to a circular buffer
-integer(C_INT) :: n                            !< current number of data tokens available, -1 if error
-end function circular_buffer_data_available
 
 
 !> wait until at least n data tokens are available for extracting data<br>

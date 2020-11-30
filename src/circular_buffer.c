@@ -169,6 +169,23 @@ static inline void copy_elements(
 //C_EnD
 
 //F_StArT
+//  subroutine circular_buffer_print_header(buffer) bind(C, name = 'circular_buffer_print_header')
+//    import :: C_PTR
+//    implicit none
+//    type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
+//  end subroutine circular_buffer_print_header
+//F_EnD
+//C_StArT
+//! Print buffer header (to help debugging)
+void circular_buffer_print_header(
+    circular_buffer_p b   //!< [in] Pointer to the buffer to print
+){
+//C_EnD
+  printf("version %ld, first %ld, in %ld, out %ld, limit %ld\n",
+         (long)b->m.version, (long)b->m.first, (long)b->m.in, (long)b->m.out, (long)b->m.limit);
+}
+
+//F_StArT
 //   !> initialize a circular buffer<br>
 //   !> buffer = circular_buffer_init(p, nwords)
 //   function circular_buffer_init(p, nwords) result(buffer) bind(C,name='circular_buffer_init')
@@ -320,32 +337,45 @@ circular_buffer_p circular_buffer_from_pointer(
 }
 
 //F_StArT
-//   !> return the current number of empty slots available<br>
-//   !> n = circular_buffer_space_available(p)
-//   function circular_buffer_space_available(p) result(n) BIND(C,name='circular_buffer_space_available')
-//     import :: C_PTR, C_INT
-//     implicit none
-//     type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-//     integer(C_INT) :: n                    !< current number of empty slots available, -1 if error
-//   end function circular_buffer_space_available
+//  function circular_buffer_get_available_space(buffer) result(num_elements) BIND(C, name = 'circular_buffer_get_available_space')
+//    import C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
+//    integer(C_INT) :: num_elements           !< How many slots are free
+//  end function circular_buffer_get_available_space
 //F_EnD
 //C_StArT
-//! return the current number of empty slots available
-//! <br> = circular_buffer_space_available(p)
+//! Compute how much space (in number of #data_element) is available in a given circular buffer
 //! @return How many elements can still be added
-int32_t circular_buffer_space_available(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  ){
+data_index circular_buffer_get_available_space(
+    const circular_buffer_p buffer //!< [in] The buffer we want to query
+){
 //C_EnD
-  data_index *inp = &(p->m.in);
-  data_index *outp = &(p->m.out);
-  data_index in, out, limit;
+  // Make sure that the values are really read by accessing them through a volatile pointer
+  volatile data_index* in  = &buffer->m.in;
+  volatile data_index* out = &buffer->m.out;
+  return available_space(*in, *out, buffer->m.limit);
+}
 
-  if(p == NULL) return -1;
-  limit = p->m.limit;
-  in = *inp;
-  out = *outp;
-  return available_space(in,out,limit);
+//F_StArT
+//  function circular_buffer_get_available_data(buffer) result(num_elements) BIND(C, name = 'circular_buffer_get_available_data')
+//    import C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
+//    integer(C_INT) :: num_elements           !< How many elements are stored in the buffer
+//  end function circular_buffer_get_available_data
+//F_EnD
+//C_StArT
+//! Compute how much data (in number of #data_element) is stored in a given circular buffer
+//! @return How many elements are stored in the buffer
+data_index circular_buffer_get_available_data(
+    const circular_buffer_p buffer //!< [in] The buffer we want to query
+){
+//C_EnD
+  // Make sure that the values are really read by accessing them through a volatile pointer
+  volatile data_index* in  = &buffer->m.in;
+  volatile data_index* out = &buffer->m.out;
+  return available_data(*in, *out, buffer->m.limit);
 }
 
 //F_StArT
@@ -368,50 +398,14 @@ int32_t circular_buffer_wait_space_available(
   int n                                    //!< [in]  needed number of available slots (#data_element)
   ){
 //C_EnD
-  data_index volatile *inp = &(p->m.in);
-  data_index volatile *outp = &(p->m.out);
-  data_index in, out, limit, navail;
-
   if(p == NULL) return -1;
   if(n < 0 || p->m.version != FIOL_VERSION) return -1;
-  limit = p->m.limit;
-  navail = 0;
-  while(navail <n){
-    in = *inp;
-    out = *outp;
-    navail = available_space(in,out,limit);
-  }
-  return navail;
-}
 
-//F_StArT
-//   !> get the current number of data tokens available<br>
-//   !> p = circular_buffer_data_available(p)
-//   function circular_buffer_data_available(p) result(n) BIND(C,name='circular_buffer_data_available')
-//     import :: C_PTR, C_INT
-//     implicit none
-//     type(C_PTR), intent(IN), value :: p            !< pointer to a circular buffer
-//     integer(C_INT) :: n                            !< current number of data tokens available, -1 if error
-//   end function circular_buffer_data_available
-//F_EnD
-//C_StArT
-//! get the current number of data tokens available
-//! <br> = circular_buffer_data_available(p)
-//! @return current number of data tokens available, -1 if error
-int32_t circular_buffer_data_available(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  ){
-//C_EnD
-  data_index *inp = &(p->m.in);
-  data_index *outp = &(p->m.out);
-  data_index in, out, limit;
+  data_index num_available = circular_buffer_get_available_space(p);
+  while (num_available < n)
+      circular_buffer_get_available_space(p);
 
-  if(p == NULL) return -1;
-  if(p->m.version != FIOL_VERSION) return -1;
-  limit = p->m.limit;
-  in = *inp;
-  out = *outp;
-  return available_data(in,out,limit);
+  return num_available;
 }
 
 //F_StArT
@@ -434,20 +428,14 @@ int32_t circular_buffer_wait_data_available(
   int n                                    //!< [in]  needed number of available  #data_element tokens
   ){
 //C_EnD
-  int32_t volatile *inp = &(p->m.in);
-  int32_t volatile *outp = &(p->m.out);
-  int32_t in, out, limit, navail;
-
   if(p == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;
-  limit = p->m.limit;
-  navail = 0;
-  while(navail <n){
-    in = *inp;
-    out = *outp;
-    navail = available_data(in,out,limit);
-  }
-  return navail;
+
+  data_index num_available = circular_buffer_get_available_data(p);
+  while (num_available < n)
+      num_available = circular_buffer_get_available_data(p);
+
+  return num_available;
 }
 
 //F_StArT

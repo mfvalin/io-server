@@ -27,6 +27,7 @@ module circular_buffer_module
   contains
 
     procedure :: is_valid !< check if the circular buffer is properly created
+    procedure :: print_header !< Print the buffer header (to help debugging)
 
     !> \return pointer to created circular buffer
     procedure :: init                   !< initialize a circular buffer
@@ -77,6 +78,12 @@ contains
     logical :: is_valid
     is_valid = c_associated(cb % p)
   end function is_valid
+
+  subroutine print_header(cb)
+    implicit none
+    class(circular_buffer), intent(INOUT) :: cb
+    call circular_buffer_print_header(cb % p)
+  end subroutine print_header
 
   !> \brief initialize a circular buffer
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
@@ -162,7 +169,7 @@ contains
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT) :: n                                     !< number of empty slots available, -1 if error
-    n = circular_buffer_space_available(cb%p)
+    n = circular_buffer_get_available_space(cb%p)
   end function space_available
 
   !> \brief wait until at least na empty slots are available for inserting data
@@ -185,7 +192,7 @@ contains
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT) :: n                                     !< number of data tokens available, -1 if error
-    n = circular_buffer_data_available(cb%p)
+    n = circular_buffer_get_available_data(cb%p)
   end function data_available
 
   !> \brief wait until at least na data tokens are available
