@@ -26,7 +26,7 @@ program test_distributed_circular_buffer
   integer, parameter :: NUM_CONSUMERS = 2
 
   include 'mpif.h'
-  include 'distributed_circular_buffer.inc'
+  include 'io-server/distributed_circular_buffer.inc'
 
   integer :: error, i
   integer :: rank, comm_size

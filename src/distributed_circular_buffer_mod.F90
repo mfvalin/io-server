@@ -18,7 +18,7 @@
 module distributed_circular_buffer_module
   use ISO_C_BINDING
   implicit none
-  include 'distributed_circular_buffer.inc'
+  include 'io-server/distributed_circular_buffer.inc'
 
   private
 

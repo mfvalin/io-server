@@ -22,7 +22,7 @@
 
 #include <mpi.h>
 
-#include "circular_buffer.h"
+#include "io-server/circular_buffer.h"
 
 static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INTEGER
                                                 : sizeof(data_element) == sizeof(int64_t) ? MPI_LONG_LONG_INT

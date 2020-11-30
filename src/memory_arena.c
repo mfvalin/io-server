@@ -79,7 +79,7 @@
 #include <sys/types.h>
 #include <immintrin.h>
 
-#include "memory_arena.h"
+#include "io-server/memory_arena.h"
 
 // memory arena definitions follow, they should already have been included from memory_arena.h
 

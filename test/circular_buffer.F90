@@ -23,7 +23,7 @@ program test_circular_buffer
   integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
   integer, parameter :: NUM_DATA_ELEMENTS = 10
 
-  include 'memory_arena.inc'
+  include 'io-server/memory_arena.inc'
 !  include 'circular_buffer.inc'
   include 'mpif.h'
 

@@ -82,16 +82,20 @@ set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${PROJECT_INCLUD
 
 include(cmake_shared/gen_headers.cmake)
 
-gen_headers(
-  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh
-  INPUT_FILES ${C_TO_INC_FILES}
-  OUTPUT_SUFFIX inc)
+#gen_headers(
+#  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh
+#  INPUT_FILES ${C_TO_INC_FILES}
+#  OUTPUT_SUFFIX inc)
 
-gen_headers(
-  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh
-  INPUT_FILES ${C_TO_H_FILES}
-  OUTPUT_SUFFIX h)
+#gen_headers(
+#  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh
+#  INPUT_FILES ${C_TO_H_FILES}
+#  OUTPUT_SUFFIX h)
 
+#gen_headers(
+#  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/shape_f_pointer.sh
+#  INPUT_FILES f_alloc.inc
+#  OUTPUT_SUFFIX inc)
 
 install(
   TARGETS ${PROJECT_NAME}

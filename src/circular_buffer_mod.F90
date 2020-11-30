@@ -18,7 +18,7 @@
 module circular_buffer_module
   use ISO_C_BINDING
   implicit none
-  include 'circular_buffer.inc'
+  include 'io-server/circular_buffer.inc'
   !> \brief circular_buffer user defined type
   type, public :: circular_buffer
     !> \private
