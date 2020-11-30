@@ -14,7 +14,7 @@
 ! */
 ! ====================================================
 !> \file
-!> \brief Remote circular buffer object Fortran module
+!> \brief distributed circular buffer object Fortran module
 module distributed_circular_buffer_module
   use ISO_C_BINDING
   implicit none
@@ -25,14 +25,14 @@ module distributed_circular_buffer_module
   !> A set of FIFO queues used by multiple pairs of processes, with their data stored on a single one of these processes
   type, public :: distributed_circular_buffer
     private
-    type(C_PTR) :: c_buffer = C_NULL_PTR !< Pointer to the C struct containing all remote circular buffer info
+    type(C_PTR) :: c_buffer = C_NULL_PTR !< Pointer to the C struct containing all distributed circular buffer info
   contains
-    procedure :: is_valid !< remote_circular_buffer_module::is_valid
-    procedure :: create   !< remote_circular_buffer_module::create
-    procedure :: delete   !< remote_circular_buffer_module::delete
-    procedure :: print    !< remote_circular_buffer_module::print
-    procedure :: put      !< remote_circular_buffer_module::put
-    procedure :: get      !< remote_circular_buffer_module::get
+    procedure :: is_valid !< distributed_circular_buffer_module::is_valid
+    procedure :: create   !< distributed_circular_buffer_module::create
+    procedure :: delete   !< distributed_circular_buffer_module::delete
+    procedure :: print    !< distributed_circular_buffer_module::print
+    procedure :: put      !< distributed_circular_buffer_module::put
+    procedure :: get      !< distributed_circular_buffer_module::get
   end type distributed_circular_buffer
 
 contains
@@ -46,7 +46,7 @@ contains
     is_valid = c_associated(this % c_buffer)
   end function is_valid
 
-  !> Create and initialize a remote circular buffer. See remote_circular_buffer_create
+  !> Create and initialize a distributed circular buffer. See distributed_circular_buffer_create
   function create(this, communicator, rank, comm_size, num_producers, num_words) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
@@ -65,7 +65,7 @@ contains
     is_valid = this % is_valid()
   end function create
 
-  !> Free the memory used by a remote circular buffer. See remote_circular_buffer_delete
+  !> Free the memory used by a distributed circular buffer. See distributed_circular_buffer_delete
   subroutine delete(this)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
@@ -77,7 +77,7 @@ contains
     this % c_buffer = C_NULL_PTR
   end subroutine delete
 
-  !> Print info about a remote circular buffer. See remote_circular_buffer_print
+  !> Print info about a distributed circular buffer. See distributed_circular_buffer_print
   subroutine print(this)
     implicit none
     class(distributed_circular_buffer), intent(in)  :: this
@@ -85,25 +85,25 @@ contains
     call distributed_circular_buffer_print(this % c_buffer)
   end subroutine print
 
-  !> Insert elements into a remote circular buffer. See remote_circular_buffer_put
+  !> Insert elements into a distributed circular buffer. See distributed_circular_buffer_put
   function put(this, src_data, num_elements) result(num_space_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(DATA_ELEMENT), dimension(*), intent(in)     :: src_data
     integer(C_INT), intent(in)                          :: num_elements
-    integer(C_INT) :: num_space_available !< The return value of remote_circular_buffer_put
+    integer(C_INT) :: num_space_available !< The return value of distributed_circular_buffer_put
 
     num_space_available = distributed_circular_buffer_put(this % c_buffer, src_data, num_elements)
   end function put
 
-  !> Extract elements from a remote circular buffer. See remote_circular_buffer_get
+  !> Extract elements from a distributed circular buffer. See distributed_circular_buffer_get
   function get(this, buffer_id, dest_data, num_elements) result(num_data_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(C_INT), intent(in)                          :: buffer_id
     integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
     integer(C_INT), intent(in)                          :: num_elements
-    integer(C_INT) :: num_data_available !< The return value of remote_circular_buffer_get
+    integer(C_INT) :: num_data_available !< The return value of distributed_circular_buffer_get
 
     num_data_available = distributed_circular_buffer_get(this % c_buffer, buffer_id, dest_data, num_elements)
   end function get
