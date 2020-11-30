@@ -291,7 +291,7 @@ end module circular_buffer_module
 
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
 
-#if defined(SLEF_TEST)
+#if defined(SELF_TEST)
 
 #define NPTEST 125
 program demo
