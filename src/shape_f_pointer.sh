@@ -3,15 +3,15 @@ MALLOC=ShmemHeapAllocBlock
 # MALLOC=LocalAllocBlock
 # same calling sequence as shared memory heap allocator, but calls malloc
 cat <<EOT
-
-  function LocalAllocBlock(heap, nbytes, safe) result(b)
-    implicit none
-    type(C_PTR), intent(IN), value :: heap
-    integer(C_SIZE_T), intent(IN), value :: nbytes
-    integer(C_INT), intent(IN), value :: safe
-    type(C_PTR) :: b
-    b = malloc(nbytes)
-  end function LocalAllocBlock
+!> \file
+!  function LocalAllocBlock(heap, nbytes, safe) result(b)
+!    implicit none
+!    type(C_PTR), intent(IN), value :: heap
+!    integer(C_SIZE_T), intent(IN), value :: nbytes
+!    integer(C_INT), intent(IN), value :: safe
+!    type(C_PTR) :: b
+!    b = malloc(nbytes)
+!  end function LocalAllocBlock
 
 !! ====================  using ${MALLOC} allocator ====================
 
@@ -42,11 +42,12 @@ for RI in I R ; do
     [[ $D == 1 ]] && DIMENSION=':'
     cat <<EOT
 !! ===============================  ${TYPE}*${L} ${D}D  ===============================
+!> \brief ${TYPE}*${L} ${D}D array allocator
 subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    ! heap
-  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p
-  integer, dimension(:), intent(IN) :: di   ! array dimensions (size must be the same as rank of p)
+  class(heap), intent(INOUT) :: h    !< heap object
+  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
+  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   $TYPE($KIND) :: pref
 
   nullify(p)                        ! in case of allocation failure

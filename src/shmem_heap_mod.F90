@@ -51,21 +51,30 @@ module shmem_heap
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
 
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
     !> \return                           a fortran pointer
-    procedure   ::            I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
+    procedure   ::            &  !< specific procedures needed for generic type associated allocate
+                              I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
                               I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
                               I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
                               R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
-    GENERIC   :: allocate =>  I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
+                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D 
+#endif
+    !> \return     a fortran pointer to 1 - 5 dimensional integer and real arrays (see f_alloc.inc)
+    GENERIC   :: allocate =>  &
+                              I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
                               I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
                               I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
                               R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
+                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D       !< generic Fortran array type associated allocatior
   end type heap
 
+  integer, parameter :: HEAP_ELEMENT = C_INT   !<  type of a heap element (must be consistent with C code)
+
+! tell doxygen to ignore the following block (for now)
+#ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface sm_allocate   ! generic procedure
     module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                      I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
@@ -75,10 +84,6 @@ module shmem_heap
                      R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
   end interface
   
-  integer, parameter :: HEAP_ELEMENT = C_INT   !<  type of a heap element (must be consistent with C code)
-
-! tell doxygen to ignore the following block (for now)
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
   interface
     function malloc(sz) result(p) BIND(C,name='malloc')
       import :: C_PTR, C_SIZE_T
@@ -184,7 +189,7 @@ module shmem_heap
 
   contains
 
-  include 'f_alloc.inc'
+#include "f_alloc.inc"
 
   !> \brief create, perform a full, register heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>
@@ -265,8 +270,10 @@ module shmem_heap
   function check(h, free_blocks, free_space, used_blocks, used_space) result(status)
     implicit none
     class(heap), intent(INOUT) :: h             !< heap object
-    integer(C_INT), intent(OUT)    :: free_blocks, used_blocks
-    integer(C_SIZE_T), intent(OUT) :: free_space, used_space
+    integer(C_INT), intent(OUT)    :: free_blocks   !< number of free blocks in heap
+    integer(C_INT), intent(OUT)    :: used_blocks   !< number of used blocks in heap
+    integer(C_SIZE_T), intent(OUT) :: free_space    !< available space in heap (bytes)
+    integer(C_SIZE_T), intent(OUT) :: used_space    !< used space in heap (bytes)
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
     status = ShmemHeapCheck(h%p, free_blocks, free_space, used_blocks, used_space)
   end function check 
