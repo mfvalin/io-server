@@ -46,6 +46,8 @@ gen_test_target(
    INPUT_FILES circular_buffer.F90
 )
 
+gen_test_target(NAME circ_buffer_single_thread INPUT_FILES circular_buffer_single_thread.F90)
+
 gen_test_target(
    NAME distributed_circ_buffer
    INPUT_FILES distributed_circular_buffer.F90
