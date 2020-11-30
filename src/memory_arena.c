@@ -13,8 +13,8 @@
  *
  */
 // tell doxygen to ignore this file
-// with PREDEFINED = DOXYGEN_SHOULD_SKIP_THIS in config file
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
+// as the following condition should always be false
+//! \cond DOXYGEN_SHOULD_NOT_SKIP_THIS
 //C_StArT
 /**
 //C_EnD
@@ -896,4 +896,4 @@ int main(int argc, char **argv){
   err = MPI_Finalize();
 }
 #endif
-#endif
+//! \endcond
