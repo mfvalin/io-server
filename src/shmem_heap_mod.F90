@@ -71,7 +71,10 @@ module shmem_heap
                               R8_5D, R8_4D, R8_3D, R8_2D, R8_1D       !< generic Fortran array type associated allocatior
   end type heap
 
-  integer, parameter :: HEAP_ELEMENT = C_INT   !<  type of a heap element (must be consistent with C code)
+  include 'common.inc'
+
+! type of a heap element (must be consistent with io-server definition)
+  integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS

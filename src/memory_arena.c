@@ -13,8 +13,8 @@
  *
  */
 // tell doxygen to ignore this file
-// with PREDEFINED = DOXYGEN_SHOULD_SKIP_THIS in config file
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
+// as the following condition should always be false
+//! \cond DOXYGEN_SHOULD_NOT_SKIP_THIS
 //C_StArT
 /**
 //C_EnD
@@ -673,8 +673,8 @@ void *memory_block_create(
 // !> ptr = memory_allocate_shared(shmid, size)
 // function memory_allocate_shared(shmid, size) result(ptr) BIND(C,name='memory_allocate_shared')
 //   import :: C_PTR, C_INT
-//   integer, intent(OUT) :: shmid              !< shared memory id of segment (set by memory_allocate_shared) (see shmget)
-//   integer, intent(IN), value :: size         !< size of segment in 32 bit units
+//   integer(C_INT), intent(OUT) :: shmid       !< shared memory id of segment (set by memory_allocate_shared) (see shmget)
+//   integer(C_INT), intent(IN), value :: size  !< size of segment in 32 bit units
 //   type(C_PTR) :: ptr                         !< local address of memory segment
 // end function memory_allocate_shared
 //F_EnD
@@ -710,9 +710,9 @@ void *memory_allocate_shared(
 // !> ptr = memory_arena_create_shared(shmid, nsym, size)
 // function memory_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='memory_arena_create_shared')
 //   import :: C_PTR, C_INT
-//   integer, intent(OUT) :: shmid                  !< shared memory id of segment (see shmget)
-//   integer, intent(IN), value :: nsym             !< size of symbol table to allocate (max number of blocks expected)
-//   integer, intent(IN), value :: size             !< size of arena in 32 bit units
+//   integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (see shmget)
+//   integer(C_INT), intent(IN), value :: nsym      !< size of symbol table to allocate (max number of blocks expected)
+//   integer(C_INT), intent(IN), value :: size      !< size of arena in 32 bit units
 //   type(C_PTR) :: ptr                             !< local address of memory arena
 // end function memory_arena_create_shared
 //F_EnD
@@ -742,9 +742,9 @@ void *memory_arena_create_shared(
 // !> ptr = master_arena_create_shared(shmid, nsym, size)
 // function master_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='master_arena_create_shared')
 //   import :: C_PTR, C_INT
-//   integer, intent(OUT) :: shmid                  !< shared memory id of segment (see shmget)
-//   integer, intent(IN), value :: nsym             !< size of symbol table to allocate (max number of blocks expected)
-//   integer, intent(IN), value :: size             !< size of arena in 32 bit units
+//   integer(C_INT), intent(OUT) :: shmid                  !< shared memory id of segment (see shmget)
+//   integer(C_INT), intent(IN), value :: nsym             !< size of symbol table to allocate (max number of blocks expected)
+//   integer(C_INT), intent(IN), value :: size             !< size of arena in 32 bit units
 //   type(C_PTR) :: ptr                             !< local address of master memory arena
 // end function master_arena_create_shared
 //F_EnD
@@ -781,7 +781,7 @@ printf("MA = %p, id = %d\n",MA, MA->arena_id);
 // !> ptr = memory_address_from_id(shmid)
 // function memory_address_from_id(shmid) result(ptr) BIND(C,name='memory_address_from_id')
 //   import :: C_PTR, C_INT
-//   integer, intent(OUT) :: shmid                  !< shared memory id of segment (see shmget)
+//   integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (see shmget)
 //   type(C_PTR) :: ptr                             !< local memory addres of shared memory segment
 // end function memory_address_from_id
 //F_EnD
@@ -822,7 +822,7 @@ void *memory_arena_from_master(
 // !> 
 // function memory_arena_from_master_id(shmid) result(ptr) BIND(C,name='memory_arena_from_master_id')
 //   import :: C_PTR, C_INT
-//   integer, intent(IN), value :: shmid           !< master arena segment id (from master_arena_create_shared)
+//   integer(C_INT), intent(IN), value :: shmid    !< master arena segment id (from master_arena_create_shared)
 //   type(C_PTR) :: ptr                            !< local memory addres of memory arena of master arena
 // end function memory_arena_from_master_id
 //F_EnD
@@ -846,7 +846,7 @@ void *memory_arena_from_master_id(
 //F_StArT
 //  end interface
 //F_EnD
-                                                                !<
+
 #if defined(SELF_TEST)
 #include <errno.h>
 
@@ -896,4 +896,4 @@ int main(int argc, char **argv){
   err = MPI_Finalize();
 }
 #endif
-#endif
+//! \endcond

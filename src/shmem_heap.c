@@ -74,8 +74,11 @@
 //!> TAIL marker above block
 #define TAIL 0xBEBEFADA
 
-//!> heap element (32 bits for now)
-typedef int32_t heap_element ;     // "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
+#include <common.h>
+
+//!> heap element (see data_element in common.h)<br>
+//! if data_element is int32_t, "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
+typedef data_element heap_element ;     // remain consistent with io-server package
 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 64
