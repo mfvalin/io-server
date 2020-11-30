@@ -3,13 +3,6 @@ include 'io-server/circular_buffer.inc'
 interface
 
 
-subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
-import :: C_INT
-implicit none
-integer(C_INT), intent(in), value :: num_us    !< How many microseconds to sleep
-end subroutine sleep_us
-
-
 function distributed_circular_buffer_create(f_communicator, rank, comm_size, num_producers, num_elements) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
 import :: C_PTR, C_INT
 implicit none

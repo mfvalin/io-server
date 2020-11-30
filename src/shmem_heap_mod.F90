@@ -191,7 +191,7 @@ module shmem_heap
 !> \endcond
   contains
 
-#include 'io-server/f_alloc.inc'
+  include 'io-server/f_alloc.inc'
 
   !> \brief create, perform a full, register heap
   !> <br>type(heap) :: h<br>type(C_PTR) :: p<br>

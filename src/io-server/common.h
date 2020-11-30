@@ -1,3 +1,4 @@
+
 #include <immintrin.h>
 #include <stdint.h>
 
@@ -18,12 +19,10 @@ static inline void memory_fence() {
   __asm__ volatile("" : : : "memory");
   _mm_mfence();
 }
-
 //! Type of individual elements stored in a container
 typedef int32_t data_element;
 //! Type of index for computing offsets in a container (must be at least the same size as #data_element)
 typedef int32_t data_index;
-
-//F_StArT
-//  integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element
-//F_EnD
+//! Do nothing for a certain number of microseconds
+void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
+);

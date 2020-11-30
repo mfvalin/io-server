@@ -56,23 +56,28 @@ file(GLOB PROJECT_F_FILES
   *.f90
 )
 
-file(GLOB PROJECT_INCLUDE_FILES
-  *.h
-  *.inc
-)
-
 set(C_TO_INC_FILES
-  common.h
+  common.c
   circular_buffer.c
   distributed_circular_buffer.c
   memory_arena.c
 )
 
 set(C_TO_H_FILES
+  common.c
   circular_buffer.c
   distributed_circular_buffer.c
   memory_arena.c
 )
+
+set(F_ALLOC_FILE ${CMAKE_CURRENT_SOURCE_DIR}/io-server/f_alloc.inc)
+
+file(GLOB PROJECT_INCLUDE_FILES
+  io-server/*.h
+  io-server/*.inc
+)
+
+list(APPEND PROJECT_INCLUDE_FILES ${F_ALLOC_FILE})
 
 add_library(${PROJECT_NAME} ${PROJECT_C_FILES} ${PROJECT_F_FILES} ${PROJECT_INCLUDE_FILES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/.)
@@ -80,22 +85,26 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${PROJECT_SOURCE_DIR}/.)
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(${PROJECT_NAME} PROPERTIES PUBLIC_HEADER "${PROJECT_INCLUDE_FILES}")
 
+add_custom_command(
+  OUTPUT ${F_ALLOC_FILE}
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/shape_f_pointer.sh > ${F_ALLOC_FILE}
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/shape_f_pointer.sh
+  COMMENT Generating ${F_ALLOC_FILE}
+)
+
 include(cmake_shared/gen_headers.cmake)
 
-#gen_headers(
-#  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh
-#  INPUT_FILES ${C_TO_INC_FILES}
-#  OUTPUT_SUFFIX inc)
+gen_headers(
+  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh
+  INPUT_FILES ${C_TO_INC_FILES}
+  OUTPUT_DIR ${PROJECT_SOURCE_DIR}/io-server
+  OUTPUT_SUFFIX inc)
 
-#gen_headers(
-#  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh
-#  INPUT_FILES ${C_TO_H_FILES}
-#  OUTPUT_SUFFIX h)
-
-#gen_headers(
-#  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/shape_f_pointer.sh
-#  INPUT_FILES f_alloc.inc
-#  OUTPUT_SUFFIX inc)
+gen_headers(
+  SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh
+  INPUT_FILES ${C_TO_H_FILES}
+  OUTPUT_DIR ${PROJECT_SOURCE_DIR}/io-server
+  OUTPUT_SUFFIX h)
 
 install(
   TARGETS ${PROJECT_NAME}

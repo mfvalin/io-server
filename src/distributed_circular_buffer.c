@@ -98,25 +98,9 @@ static const int DATA_CHECK_WAIT_TIME_US = 100;
 //! @{ \name Helper functions
 
 //F_StArT
-//  include 'circular_buffer.inc'
+//  include 'io-server/circular_buffer.inc'
 //  interface
 //F_EnD
-
-//F_StArT
-//  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
-//    import :: C_INT
-//    implicit none
-//    integer(C_INT), intent(in), value :: num_us    !< How many microseconds to sleep
-//  end subroutine sleep_us
-//F_EnD
-//! Do nothing for a certain number of microseconds
-void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
-) {
-  struct timespec ts;
-  ts.tv_sec  = num_us / 1000000;
-  ts.tv_nsec = num_us % 1000000 * 1000;
-  nanosleep(&ts, NULL);
-}
 
 //! Check if the caller is a consumer process (according to its distributed_circular_buffer)
 static inline int is_consumer(distributed_circular_buffer_p buffer) {

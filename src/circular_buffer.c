@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2018  Environnement Canada
+ * Copyright (C) 2020  Environnement Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -97,7 +97,7 @@
 #include <sys/shm.h>
 
 //F_StArT
-//  include 'common.inc'
+//  include 'io-server/common.inc'
 //  interface
 //F_EnD
 
