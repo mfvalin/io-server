@@ -109,6 +109,7 @@
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
+static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buffer, in number of #data_element
 
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
@@ -206,7 +207,7 @@ circular_buffer_p circular_buffer_init(
   ){
 //C_EnD
   if(p == NULL) return NULL;
-  if(nwords < 128) return NULL;   // area is too small
+  if(nwords < MIN_CIRC_BUFFER_SIZE) return NULL;   // area is too small
   p->m.version = FIOL_VERSION;
   p->m.first = 0;
   p->m.in    = 0;
@@ -303,7 +304,7 @@ circular_buffer_p circular_buffer_create(
   circular_buffer_p t;
   size_t sz = nwords * sizeof(data_element);
 
-  if(sz < 128) return NULL;
+  if(sz < MIN_CIRC_BUFFER_SIZE) return NULL;
   t = (circular_buffer_p ) malloc(sz);
   return circular_buffer_init(t, nwords) ;
 }
@@ -331,7 +332,7 @@ circular_buffer_p circular_buffer_from_pointer(
   circular_buffer_p t;
   size_t sz = nwords * sizeof(data_element);
 
-  if(sz < 128) return NULL;
+  if(sz < MIN_CIRC_BUFFER_SIZE) return NULL;
   t = (circular_buffer_p ) p;
   return circular_buffer_init(t, nwords) ;
 }

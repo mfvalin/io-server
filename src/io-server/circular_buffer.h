@@ -66,6 +66,7 @@
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
+static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buffer, in number of #data_element
 
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
