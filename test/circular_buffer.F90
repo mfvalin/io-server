@@ -15,6 +15,13 @@
 ! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! Boston, MA 02111-1307, USA.
 program test_circular_buffer
+  implicit none
+
+  call shared_mem_test()
+
+end program test_circular_buffer
+
+subroutine shared_mem_test()
 
   use ISO_C_BINDING
   use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
@@ -27,14 +34,14 @@ program test_circular_buffer
   include 'mpif.h'
 
 
-  type(circular_buffer) :: a, b, c, d, e, f
-  integer :: shmid, n, status, n1, n2
-  type(C_PTR) :: p, q, r, s, t, x
-  integer, dimension(256), target :: local, local2, cbuf
+  type(circular_buffer) :: a, b
+  type(C_PTR) :: p, q
+  integer, dimension(256), target :: local, local2
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, sendbase, mybase, mysize, tosize
   integer, dimension(:), pointer :: cb
 
-  integer :: myrank, nprocs, ierr, win, disp_unit, sendto, getfrom, i, errors, navail, navail2
+  integer :: n
+  integer :: myrank, nprocs, ierr, win, disp_unit, sendto, getfrom, i, errors
 
   myrank = 0
   nprocs = 1
@@ -42,6 +49,7 @@ program test_circular_buffer
   call MPI_Init(ierr)
   call MPI_Comm_size(MPI_COMM_WORLD, nprocs, ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, myrank, ierr)
+
   print *, 'This is PE', myrank + 1, ' of', nprocs
 
   winsize = 1024*1024
@@ -65,7 +73,7 @@ program test_circular_buffer
   p = a%create(p, 128)                !  create my circular buffer
   q = b%create(q)                     !  point to target's circular buffer
   call C_F_POINTER(p, cb, [128])      !  array cb points to my circular buffer
-  print 2,'CB :',cb(1:15)             ! initial state of circular buffer
+  print 2,'CB   :',cb(1:15)             ! initial state of circular buffer
 2 format(A,20I8)
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
@@ -106,4 +114,4 @@ program test_circular_buffer
   call MPI_Finalize(ierr)
 
 
-end program test_circular_buffer
+end subroutine shared_mem_test
