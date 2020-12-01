@@ -22,8 +22,8 @@ program test_memory_arena
   integer, parameter :: NSYM=256
   integer, parameter :: DBLK=20
 
-  include 'memory_arena.inc'
-  include 'circular_buffer.inc'
+  include 'io-server/memory_arena.inc'
+  include 'io-server/circular_buffer.inc'
   include 'mpif.h'
 
   interface
@@ -87,11 +87,11 @@ program test_memory_arena
       write(0,*) trim(myblock)//' found, size =',bsz
       write(myblock,100)'FROM-',id-1
       p = memory_block_find_wait(shmaddr, bsz, flags, trim(myblock), 10000)
-      bsza = circular_buffer_space_available(p)
+      bsza = circular_buffer_get_available_space(p)
       write(0,*) trim(myblock)//' found, available space =',bsza,' of',bsz
       write(myblock,100)'INTO-',id-1
       p = memory_block_find_wait(shmaddr, bsz, flags, trim(myblock), 10000)
-      bsza = circular_buffer_space_available(p)
+      bsza = circular_buffer_get_available_space(p)
       write(0,*) trim(myblock)//' found, available space =',bsza,' of',bsz
     enddo
   endif
@@ -103,7 +103,7 @@ program test_memory_arena
       do i=1,64
         message(i) = i + ishft(id-1,24)
       enddo
-      bsza = circular_buffer_space_available(p)
+      bsza = circular_buffer_get_available_space(p)
       bsz = circular_buffer_atomic_put(p, message, 64)
       write(0,*) trim(myblock)//' available space after =',bsz,' before =',bsza
     enddo
@@ -113,7 +113,7 @@ program test_memory_arena
     do i=1,128
      message(i) = i + ishft(rank,24)
     enddo
-    bsza = circular_buffer_space_available(p)
+    bsza = circular_buffer_get_available_space(p)
     bsz = circular_buffer_atomic_put(p, message, 128)
     write(0,*) trim(myblock)//' available space after =',bsz,' before = ',bsza
   endif
@@ -166,7 +166,7 @@ program test_memory_arena
      write(myblock,100)'FROM-',id-1
      p = memory_block_find(shmaddr, bsz, flags, trim(myblock))
      if(bsz < 1) write(0,*) trim(myblock),' ERROR'
-     bsza = circular_buffer_data_available(p)
+     bsza = circular_buffer_get_available_data(p)
      message = 0
      errors = 0
      bsz = circular_buffer_atomic_get(p, message, 128)
@@ -178,7 +178,7 @@ program test_memory_arena
   else                           ! other PEs check their INTO- buffer
     write(myblock,100)'INTO-',rank
     p = memory_block_find(shmaddr, bsz, flags, trim(myblock))
-    bsza = circular_buffer_data_available(p)
+    bsza = circular_buffer_get_available_data(p)
     message = 0
     bsz = circular_buffer_atomic_get(p, message, 64)
     errors = 0
