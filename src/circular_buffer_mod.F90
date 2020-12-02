@@ -23,14 +23,14 @@ module circular_buffer_module
   type, public :: circular_buffer
     !> \private
     private
-    type(C_PTR) :: p                    !< pointer to storage used by circular buffer
+    type(C_PTR) :: p = C_NULL_PTR       !< pointer to storage used by circular buffer
+    logical :: is_shared = .false.
+    logical :: is_owner  = .false.
   contains
 
     procedure :: is_valid !< check if the circular buffer is properly created
     procedure :: print_header !< Print the buffer header (to help debugging)
 
-    !> \return pointer to created circular buffer
-    procedure :: init                   !< initialize a circular buffer
     !> \return pointer to created circular buffer
     procedure :: create_local           !< create a circular buffer in local memory
     !> \return pointer to created circular buffer
@@ -69,6 +69,8 @@ module circular_buffer_module
     procedure :: atomic_get             !< wait until enough data is available then extract data
     !> \return number of free slots available after this operation, -1 if error
     procedure :: atomic_put             !< wait until enough free slots are available then insert data
+
+    procedure :: delete
   end type circular_buffer
 contains
 
@@ -85,18 +87,6 @@ contains
     call circular_buffer_print_header(cb % p)
   end subroutine print_header
 
-  !> \brief initialize a circular buffer
-  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
-  !> p = cb\%init(nwords)
-  function init(cb, nwords) result(p)
-    implicit none
-    class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
-    integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the circular buffer
-    type(C_PTR) :: p                                        !< pointer to created circular buffer 
-    cb%p = circular_buffer_init(cb%p, nwords)
-    p = cb%p
-  end function init 
-
   !> \brief create a circular buffer in local memory
   !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
   !> p = cb\%create_local(nwords)
@@ -107,6 +97,8 @@ contains
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the circular buffer
     type(C_PTR) :: p                                        !< pointer to created circular buffer 
     cb%p = circular_buffer_create(nwords)
+    cb%is_owner = .true.
+    cb%is_shared = .false.
     p = cb%p
   end function create_local
 
@@ -121,6 +113,8 @@ contains
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the circular buffer
     type(C_PTR) :: p                                        !< pointer to created circular buffer 
     cb%p = circular_buffer_create_shared(shmid, nwords)
+    cb%is_owner = .false.
+    cb%is_shared = .true.
     p = cb%p
   end function create_shared
 
@@ -135,6 +129,8 @@ contains
     integer(C_INT), intent(IN), value :: nwords             !< size in 32 bit elements of the circular buffer
     type(C_PTR) :: p                                        !< pointer to created circular buffer 
     cb%p = circular_buffer_from_pointer(ptr, nwords)
+    cb%is_owner = .false.
+    cb%is_shared = .false.
     p = cb%p
   end function create_from_pointer
 
@@ -148,6 +144,8 @@ contains
     type(C_PTR), intent(IN), value :: ptr                   !< pointer to user supplied memory
     type(C_PTR) :: p                                        !< pointer to created circular buffer 
     cb%p = ptr
+    cb%is_owner = .false.
+    cb%is_shared = .false.
     p = cb%p
   end function create_from_other
   
@@ -287,143 +285,17 @@ contains
     n = circular_buffer_atomic_put(cb%p, src, nsrc)
   end function atomic_put
 
+  function delete(cb) result(status)
+    implicit none
+    class(circular_buffer), intent(INOUT) :: cb
+    logical :: status
+
+    status = .true.
+    if (cb%is_owner) then
+      call free(cb%p)
+    else if (cb%is_shared) then
+      status = circular_buffer_detach_shared(cb%p)
+    end if
+  end function delete
+
 end module circular_buffer_module
-
-#ifndef DOXYGEN_SHOULD_SKIP_THIS
-
-#if defined(SELF_TEST)
-
-#define NPTEST 125
-program demo
-  use circular_buffer_module
-  implicit none
-  include 'mpif.h'
-
-  type(circular_buffer) :: a, b, c, d, e, f
-  integer :: shmid, n, status, n1, n2
-  type(C_PTR) :: p, q, r, s, t, x
-  integer, dimension(256), target :: local, local2, cbuf
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, sendbase, mybase, mysize, tosize
-  integer, dimension(:), pointer :: cb
-
-  integer :: myrank, nprocs, ierr, win, disp_unit, sendto, getfrom, i, errors, navail, navail2
-
-  myrank = 0
-  nprocs = 1
-  ! MPI multiprocess test
-#if ! defined(SINGLE)
-  call mpi_init(ierr)
-  call mpi_comm_size(MPI_COMM_WORLD, nprocs, ierr)
-  call mpi_comm_rank(MPI_COMM_WORLD, myrank, ierr)
-  print *,'this is PE', myrank+1, ' of', nprocs
-
-  winsize = 1024*1024
-  disp_unit = 4
-  call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
-  sendto = mod(myrank+1, nprocs)           ! next in the "ring"
-  getfrom = mod(nprocs+myrank-1, nprocs)   ! previous in the "ring"
-  call MPI_Win_shared_query(win, myrank, mysize, disp_unit, mybase,   ierr)  ! get my base address
-  call MPI_Win_shared_query(win, sendto, tosize, disp_unit, sendbase, ierr)  ! get my victim's base address
-  print *,'win =',win,' to, from', sendto, getfrom
-  print 1, 'my base =', mybase, ' target base =',sendbase,' delta =',abs(sendbase-mybase)
-1 format(3(A,2X,Z16.16))
-
-  do i = 1, size(local)
-    local(i) = myrank*1000 + 1000 + i
-  enddo
-  local2 = 0
-
-  p = transfer(mybase,   C_NULL_PTR)  !  pointer to my circular buffer
-  q = transfer(sendbase, C_NULL_PTR)  !  pointer to my target's circular buffer
-  p = a%create(p, 128)                !  create my circular buffer
-  q = b%create(q)                     !  point to target's circular buffer
-  call C_F_POINTER(p, cb, [128])      !  array cb points to my circular buffer
-  print 2,'CB :',cb(1:15)             ! initial state of circular buffer
-2 format(A,20I8)
-
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  n = b%atomic_put(local, 5)             ! inject data into target's circular buffer
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  n = a%atomic_get(local2, 4)            ! get from my own buffer
-  print 2,'CB-0 :',cb(1:15)
-  print 2,'Got-0:',local2(1:10)
-  n = a%atomic_get(local2(5), 1)         ! get from my own buffer (remainder of what was put)
-  print 2,'CB-1 :',cb(1:15)
-  print 2,'Got-1:',local2(1:10)
-  call MPI_Barrier(MPI_COMM_WORLD, ierr) ! we want no interference from further down
-
-  do i = 1, NPTEST, 5                    ! ring test with wraparound , make sure NPTEST > size of circular buffer
-    if(myrank == 0) then
-      n = b%atomic_put(local(i) , 5)     ! send to next in ring
-      n = a%atomic_get(local2(i), 5)     ! then get from previous in ring
-    else
-      n = a%atomic_get(local(i) , 5)     ! get from previous in ring
-      n = b%atomic_put(local(i) , 5)     ! pass to next in ring
-    endif
-    call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  enddo
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
-
-  print 2,'RING :',cb(1:15)
-  if(myrank == 0) then  ! check that we got back what we sent
-    errors = 0
-    do i = 1, NPTEST
-      if(local(i) .ne. local2(i)) errors = errors + 1
-    enddo
-    print 2,'RING errors :',errors
-    if(errors > 0)print 3,local2(1:NPTEST)
-3   format(25I5)
-  endif
-
-  if(myrank == -1) then ! never true, what follows is only a syntax check for OO implementation
-    p = b%create(128000)
-    p = b%init(128000)
-    s = c%create_shared(shmid, 128000)
-    q = d%create(128000)                  ! generic call
-    r = d%create(shmid, 128000)           ! generic call
-    t = d%create(C_LOC(local), 128000)    ! generic call
-    status = c%detach_shared()
-    status = b%space_available()
-    n = b%space_available()
-    n = b%space()
-    n = b%wait_space_available(256)
-    n = b%space()                    ! generic call
-    n = b%space(256)                 ! generic call
-    n = b%data_available()
-    n = b%wait_data_available(256)
-    n = b%data()                     ! generic call
-    n = b%data(256)                  ! generic call
-    x = b%buffer_start()
-    x = b%data_in()
-    x = b%data_out()
-    x = b%advance_in(n1, n2)
-    x = b%advance_out(n1, n2)
-    n = b%atomic_get(local(100), 18)
-    n = b%atomic_put(local(20), 45)
-  endif
-
-9 continue
-  call MPI_Win_free(win, ierr)
-  call mpi_finalize(ierr)
-#else
-  ! single thread test
-  do i = 1, size(local)
-    local(i) = myrank*1000 + 1000 + i
-  enddo
-  local2 = 0
-  p = a%create(C_LOC(cbuf), 128)
-  call C_F_POINTER(p, cb, [128])
-  print 2,'CB :',cb(1:5)
-2 format(A,20I8)
-  do i = 1, NPTEST, 5
-    n = a%atomic_put(local(i), 5)
-    navail = a%data_available()
-    print 2,'after put',i,navail,cb(1:5)
-    n = a%atomic_get(local2(i), 5)
-    navail = a%data_available()
-    print 2,'after get',i,navail,cb(1:5),local2(i:i+4)
-  enddo
-#endif
-end program demo
-#endif
-#endif
