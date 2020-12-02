@@ -21,97 +21,176 @@ program test_circular_buffer
 
 end program test_circular_buffer
 
+
 subroutine shared_mem_test()
 
   use ISO_C_BINDING
   use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
   implicit none
 
-  integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
-  integer, parameter :: NUM_DATA_ELEMENTS = 10
-  integer, parameter :: NPTEST = 125
-
   include 'mpif.h'
 
+  interface
+  subroutine init_array(array, rank)
+    use circular_buffer_module, only: DATA_ELEMENT
+    implicit none
+    integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+    integer, intent(in) :: rank
+  end subroutine init_array
+  end interface
 
-  type(circular_buffer) :: a, b
-  type(C_PTR) :: p, q
-  integer, dimension(256), target :: local, local2
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, sendbase, mybase, mysize, tosize
-  integer, dimension(:), pointer :: cb
+  integer, parameter :: NUM_BUFFER_ELEMENTS = 128
+  integer, parameter :: NUM_DATA_ELEMENTS = 10
+  integer, parameter :: NPTEST = 200
+  integer, parameter :: STEP_SIZE = 5
 
-  integer :: n
-  integer :: myrank, nprocs, ierr, win, disp_unit, sendto, getfrom, i, errors
+  integer(MPI_ADDRESS_KIND), parameter :: WINDOW_SIZE = 1024 * 1024
 
-  myrank = 0
-  nprocs = 1
-  ! MPI multiprocess test
+
+  type(circular_buffer) :: buffer_a, buffer_b
+  type(C_PTR)           :: buffer_ptr_a, buffer_ptr_b
+  type(C_PTR)           :: shmem_ptr_a, shmem_ptr_b
+  integer(DATA_ELEMENT) :: dummy_element
+
+  integer(DATA_ELEMENT), dimension(NPTEST) :: local_data, received_data, source_data
+
+  integer(KIND=MPI_ADDRESS_KIND) :: base_mem_ptr, target_mem_ptr, target_size
+
+  integer :: my_rank, num_procs
+  integer :: ierr, i, n, errors, tmp_errors
+  integer :: window, disp_unit, target_disp_unit
+  integer :: target_proc, source_proc
+
+  errors = 0
+
+  ! Initialize MPI
   call MPI_Init(ierr)
-  call MPI_Comm_size(MPI_COMM_WORLD, nprocs, ierr)
-  call MPI_Comm_rank(MPI_COMM_WORLD, myrank, ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, num_procs, ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, my_rank, ierr)
 
-  print *, 'This is PE', myrank + 1, ' of', nprocs
+  if (num_procs < 2) then
+    print *, 'This test needs at least 2 processes'
+    errors = 1
+    goto 999
+  end if
 
-  winsize = 1024*1024
-  disp_unit = 4
-  call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
-  sendto = mod(myrank+1, nprocs)           ! next in the "ring"
-  getfrom = mod(nprocs+myrank-1, nprocs)   ! previous in the "ring"
-  call MPI_Win_shared_query(win, myrank, mysize, disp_unit, mybase,   ierr)  ! get my base address
-  call MPI_Win_shared_query(win, sendto, tosize, disp_unit, sendbase, ierr)  ! get my victim's base address
-  print *,'win =',win,' to, from', sendto, getfrom
-  print 1, 'my base =', mybase, ' target base =',sendbase,' delta =',abs(sendbase-mybase)
-1 format(3(A,2X,Z16.16))
+  target_proc = mod(my_rank + 1, num_procs)             ! next in the "ring"
+  source_proc = mod(my_rank + num_procs - 1, num_procs) ! previous in the "ring"
 
-  do i = 1, size(local)
-    local(i) = myrank*1000 + 1000 + i
-  enddo
-  local2 = 0
+!  print *, 'This is PE', my_rank + 1, ' of', num_procs
 
-  p = transfer(mybase,   C_NULL_PTR)  !  pointer to my circular buffer
-  q = transfer(sendbase, C_NULL_PTR)  !  pointer to my target's circular buffer
-  p = a%create(p, 128)                !  create my circular buffer
-  q = b%create(q)                     !  point to target's circular buffer
-  call C_F_POINTER(p, cb, [128])      !  array cb points to my circular buffer
-  print 2,'CB   :',cb(1:15)             ! initial state of circular buffer
-2 format(A,20I8)
+  ! Allocate MPI window in shared memory
+  disp_unit = C_SIZEOF(dummy_element)
+  call MPI_Win_allocate_shared(WINDOW_SIZE, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, base_mem_ptr, window, ierr)
+  call MPI_Win_shared_query(window, target_proc, target_size, target_disp_unit, target_mem_ptr, ierr)  ! get my victim's base address
 
+  ! Initialize local data
+  call init_array(local_data, my_rank)
+  call init_array(source_data, source_proc)
+  received_data(:) = -1
+
+  shmem_ptr_a  = transfer(base_mem_ptr, C_NULL_PTR)   ! pointer to my circular buffer
+  shmem_ptr_b  = transfer(target_mem_ptr, C_NULL_PTR) ! pointer to my target's circular buffer
+  buffer_ptr_a = buffer_a % create(shmem_ptr_a, NUM_BUFFER_ELEMENTS)  ! create my circular buffer
+  buffer_ptr_b = buffer_b % create(shmem_ptr_b)       ! point to target's circular buffer
+
+  !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  n = b%atomic_put(local, 5)             ! inject data into target's circular buffer
+  !--------------------------------------
+
+  if ((buffer_a % data() .ne. 0) .or. (buffer_b % data() .ne. 0)) then
+    print *, 'GOT ERROR 0'
+    errors = errors + 1
+  end if
+
+  if (buffer_a % space() .ne. buffer_b % space()) then
+    print *, 'GOT ERROR: buffer spaces are ', buffer_a % space(), buffer_b % space()
+    errors = errors + 1
+  end if
+
+  !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  n = a%atomic_get(local2, 4)            ! get from my own buffer
-  print 2,'CB-0 :',cb(1:15)
-  print 2,'Got-0:',local2(1:10)
-  n = a%atomic_get(local2(5), 1)         ! get from my own buffer (remainder of what was put)
-  print 2,'CB-1 :',cb(1:15)
-  print 2,'Got-1:',local2(1:10)
+  !--------------------------------------
+
+  n = buffer_b % atomic_put(local_data, STEP_SIZE) ! inject data into target's circular buffer
+
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  n = buffer_a % atomic_get(received_data, STEP_SIZE - 1) ! get from my own buffer (put there by source_proc)
+
+  if (.not. all(received_data(1:STEP_SIZE - 2) == source_data(1:STEP_SIZE - 2))) then
+    print *, 'GOT ERROR, data put directly in buffer by neighbor process (first call)'
+    errors = errors + 1
+  end if
+
+  n = buffer_a % atomic_get(received_data(STEP_SIZE), 1)  ! get from my own buffer (remainder of what was put)
+
+  if (.not. all(received_data(1:STEP_SIZE - 2) == source_data(1:STEP_SIZE - 2))) then
+    print *, 'GOT ERROR, data put directly in buffer by neighbor process (second call)'
+    errors = errors + 1
+  end if
+
+  !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr) ! we want no interference from further down
+  !--------------------------------------
 
-  do i = 1, NPTEST, 5                    ! ring test with wraparound , make sure NPTEST > size of circular buffer
-    if(myrank == 0) then
-      n = b%atomic_put(local(i) , 5)     ! send to next in ring
-      n = a%atomic_get(local2(i), 5)     ! then get from previous in ring
+  do i = 1, NPTEST, STEP_SIZE  ! ring test with wraparound , make sure NPTEST > size of circular buffer
+    if(my_rank == 0) then
+      n = buffer_b % atomic_put(local_data(i) , STEP_SIZE) ! send to next in ring
+      n = buffer_a % atomic_get(received_data(i), STEP_SIZE) ! then get from previous in ring
+
+      if (.not. all(local_data(i:i + STEP_SIZE - 1) == received_data(i:i + STEP_SIZE - 1))) then
+        print *, 'GOT ERROR in ring data'
+        errors = errors + 1
+      end if
+
     else
-      n = a%atomic_get(local(i) , 5)     ! get from previous in ring
-      n = b%atomic_put(local(i) , 5)     ! pass to next in ring
+      n = buffer_a % atomic_get(received_data(i) , STEP_SIZE) ! get from previous in ring
+      n = buffer_b % atomic_put(received_data(i) , STEP_SIZE) ! pass to next in ring
     endif
-    call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  enddo
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
-  print 2,'RING :',cb(1:15)
-  if(myrank == 0) then  ! check that we got back what we sent
-    errors = 0
-    do i = 1, NPTEST
-      if(local(i) .ne. local2(i)) errors = errors + 1
-    enddo
-    print 2,'RING errors :',errors
-    if(errors > 0)print 3,local2(1:NPTEST)
-3   format(25I5)
+  enddo
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  if ((buffer_a % data() .ne. 0) .or. (buffer_b % data() .ne. 0)) then
+    print *, 'GOT ERROR, there is some data left after the entire ring transmission is over'
+    errors = errors + 1
+  end if
+
+  tmp_errors = errors
+  call MPI_Reduce(tmp_errors, errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
+
+  if(my_rank == 0) then  ! check that we got back what we sent
+    if(errors > 0) then
+      print *, 'RING ERRORS: ', errors
+      print 3,received_data(1:NPTEST)
+    else
+      print *, 'Shared memory circular buffer test has succeeded'
+    end if
+3   format(25I6)
   endif
 
-  call MPI_Win_free(win, ierr)
+999 continue
+
+  call MPI_Win_free(window, ierr)
   call MPI_Finalize(ierr)
 
 
 end subroutine shared_mem_test
+
+subroutine init_array(array, rank)
+  use circular_buffer_module, only: DATA_ELEMENT
+  implicit none
+
+  integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+  integer, intent(in) :: rank
+
+  integer :: i
+  do i = 1, size(array)
+    array(i) = (rank + 1) * 10000 + i
+  end do
+end subroutine init_array
