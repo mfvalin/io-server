@@ -71,6 +71,19 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
   nanosleep(&ts, NULL);
 }
 
+//F_StArT
+//  subroutine free_c_ptr(ptr) BIND(C, name = 'free_c_ptr')
+//    import :: C_PTR
+//    implicit none
+//    type(C_PTR), intent(INOUT) :: ptr
+//  end subroutine free_c_ptr
+//F_EnD
+void free_c_ptr(void** ptr)
+{
+    free(*ptr);
+    *ptr = NULL;
+}
+
 
 //F_StArT
 //  end interface

@@ -48,9 +48,9 @@ subroutine shared_mem_test()
 
 
   type(circular_buffer) :: buffer_a, buffer_b
-  type(C_PTR)           :: buffer_ptr_a, buffer_ptr_b
   type(C_PTR)           :: shmem_ptr_a, shmem_ptr_b
   integer(DATA_ELEMENT) :: dummy_element
+  logical               :: success
 
   integer(DATA_ELEMENT), dimension(NPTEST) :: local_data, received_data, source_data
 
@@ -91,20 +91,25 @@ subroutine shared_mem_test()
 
   shmem_ptr_a  = transfer(base_mem_ptr, C_NULL_PTR)   ! pointer to my circular buffer
   shmem_ptr_b  = transfer(target_mem_ptr, C_NULL_PTR) ! pointer to my target's circular buffer
-  buffer_ptr_a = buffer_a % create(shmem_ptr_a, NUM_BUFFER_ELEMENTS)  ! create my circular buffer
-  buffer_ptr_b = buffer_b % create(shmem_ptr_b)       ! point to target's circular buffer
+  success = buffer_a % create(shmem_ptr_a, NUM_BUFFER_ELEMENTS)  ! create my circular buffer
+  success = buffer_b % create(shmem_ptr_b) .and. success         ! point to target's circular buffer
 
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if ((buffer_a % data() .ne. 0) .or. (buffer_b % data() .ne. 0)) then
+  if (.not. success) then
+    print *, 'Buffer initialisation failed ', buffer_a % is_valid(), buffer_b % is_valid()
+    errors = errors + 1
+  end if
+
+  if ((buffer_a % get_available_data() .ne. 0) .or. (buffer_b % get_available_data() .ne. 0)) then
     print *, 'GOT ERROR 0'
     errors = errors + 1
   end if
 
-  if (buffer_a % space() .ne. buffer_b % space()) then
-    print *, 'GOT ERROR: buffer spaces are ', buffer_a % space(), buffer_b % space()
+  if (buffer_a % get_available_space() .ne. buffer_b % get_available_space()) then
+    print *, 'GOT ERROR: buffer spaces are ', buffer_a % get_available_space(), buffer_b % get_available_space()
     errors = errors + 1
   end if
 
@@ -156,7 +161,7 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if ((buffer_a % data() .ne. 0) .or. (buffer_b % data() .ne. 0)) then
+  if ((buffer_a % get_available_data() .ne. 0) .or. (buffer_b % get_available_data() .ne. 0)) then
     print *, 'GOT ERROR, there is some data left after the entire ring transmission is over'
     errors = errors + 1
   end if
@@ -175,6 +180,9 @@ subroutine shared_mem_test()
   endif
 
 999 continue
+
+  success = buffer_a % delete()
+  success = buffer_b % delete()
 
   call MPI_Win_free(window, ierr)
   call MPI_Finalize(ierr)

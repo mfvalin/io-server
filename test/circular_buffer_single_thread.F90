@@ -36,7 +36,7 @@ subroutine basic_test()
 
   type(circular_buffer) :: circ_buffer
   integer(DATA_ELEMENT), dimension(NUM_ELEM) :: local, local_out
-  type(C_PTR) :: dummy
+  logical :: success
   integer :: i, num_elem_in, num_elem_free
   integer :: num_error
   integer :: buffer_limit
@@ -47,35 +47,35 @@ subroutine basic_test()
   enddo
 
   local_out(:) = -1
-  dummy = circ_buffer % create(BUFFER_SIZE)
+  success = circ_buffer % create(BUFFER_SIZE)
 
-  if (.not. circ_buffer % is_valid()) then
+  if (.not. success) then
     num_error = num_error + 1
     print *, 'AAAAHHHHHH Could not create buffer'
     return
   end if
 
-  buffer_limit = circ_buffer % space()
+  buffer_limit = circ_buffer % get_available_space()
 
 !  call circ_buffer % print_header()
 
   do i = 1, NUM_ELEM, STEP_SIZE
     num_elem_free = circ_buffer % atomic_put(local(i), STEP_SIZE)
-    num_elem_in = circ_buffer % data()
+    num_elem_in = circ_buffer % get_available_data()
 
     if (num_elem_in .ne. STEP_SIZE) then
       num_error = num_error + 1
 !      print *, 'Wrong number of elements in buffer after adding data'
     end if
 
-    num_elem_free = circ_buffer % space()
+    num_elem_free = circ_buffer % get_available_space()
     if (num_elem_free .ne. buffer_limit - STEP_SIZE) then
       num_error = num_error + 1
 !      print *, 'Wrong space available in buffer after adding data', num_elem_free, buffer_limit - STEP_SIZE
     end if
 
     num_elem_in = circ_buffer % atomic_get(local_out(i), STEP_SIZE)
-    num_elem_free = circ_buffer % space()
+    num_elem_free = circ_buffer % get_available_space()
 
     if (num_elem_in .ne. 0) then
       num_error = num_error + 1
