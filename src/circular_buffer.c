@@ -212,7 +212,12 @@ circular_buffer_p circular_buffer_init(
   p->m.first = 0;
   p->m.in    = 0;
   p->m.out   = 0;
-  p->m.limit = nwords - ( sizeof(fiol_management) / sizeof(data_element) );
+
+  // Header size in number of elements
+  const data_index header_size = sizeof(fiol_management) / sizeof(data_element) +
+          (sizeof(fiol_management) % sizeof(data_element) > 0);
+
+  p->m.limit = nwords - header_size;
 
   return p;
 }
@@ -628,29 +633,17 @@ data_element *circular_buffer_advance_out(
 //! @return number of data tokens available after this operation, -1 if error
 int32_t circular_buffer_atomic_get(
   circular_buffer_p p,                       //!< [in]  pointer to a circular buffer
-  data_element *dst,                           //!< [out] destination array for data extraction
+  data_element *dst,                         //!< [out] destination array for data extraction
   int n                                      //!< [in]  number of #data_element data items to extract
   ){
 //C_EnD
-  int32_t volatile *inp = &(p->m.in);
-  int32_t volatile *outp = &(p->m.out);
-  data_element *buf = p->data;
-  int32_t in, out, limit, navail, ni;
-  useconds_t delay = 10;   // 10 microseconds
+  circular_buffer_wait_data_available(p, n);
 
-  if(p == NULL || dst == NULL) return -1;
-  if(p->m.version != FIOL_VERSION || n < 0) return -1;
-  // wait until enough data is available
-  limit = p->m.limit;
-  in = *inp;
-  out = *outp;
-  navail = available_data(in,out,limit);
-  while(navail <n){
-    usleep(delay);
-    in = *inp;
-    out = *outp;
-    navail = available_data(in,out,limit);
-  }
+  const data_index in    = p->m.in;
+  data_index       out   = p->m.out;
+  const data_index limit = p->m.limit;
+  data_element *buf = p->data;
+  int ni;
 
   if(out < in){         // 1 segment
     copy_elements(dst, buf+out, n);
@@ -665,11 +658,12 @@ int32_t circular_buffer_atomic_get(
     copy_elements(dst, buf+out, n);
     out += n;
   }
+
   memory_fence();  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+  data_index volatile *outp = &(p->m.out);
   *outp = out;
-  in = *inp;
-//   out = *outp;
-  return available_data(in,out,limit);
+
+  return circular_buffer_get_available_data(p);
 }
 
 //F_StArT
@@ -760,25 +754,13 @@ int32_t circular_buffer_atomic_put(
   int n                                    //!< [in]  number of #data_element data items to insert
   ){
 //C_EnD
-  int32_t volatile *inp = &(p->m.in);
-  int32_t volatile *outp = &(p->m.out);
-  data_element *buf = p->data;
-  int32_t in, out, limit, navail, ni;
-  useconds_t delay = 10;    // 10 microseconds
+  circular_buffer_wait_space_available(p, n);
 
-  if(p == NULL || src == NULL) return -1;
-  if(p->m.version != FIOL_VERSION || n < 0) return -1;
-  // wait until there is enough room to insert data
-  limit = p->m.limit;
-  in = *inp;
-  out = *outp;
-  navail = available_space(in,out,limit);
-  while(navail <n){
-    usleep(delay);
-    in = *inp;
-    out = *outp;
-    navail = available_space(in,out,limit);
-  }
+  data_element *buf = p->data;
+  data_index in = p->m.in;
+  const data_index out = p->m.out;
+  const data_index limit = p->m.limit;
+  int ni;
 
   if(in < out){         // 1 segment
     copy_elements(buf+in, src, n);
@@ -793,11 +775,12 @@ int32_t circular_buffer_atomic_put(
     copy_elements(buf+in, src, n);
     in += n;
   }
+
   write_fence(); // make sure everything is in memory before adjusting the "in" pointer
+  data_index volatile *inp = &(p->m.in);
   *inp = in;
-//   in = *inp;
-  out = *outp;
-  return available_space(in,out,limit);
+
+  return circular_buffer_get_available_space(p);
 }
 //F_StArT
 //   !> wait until nsrc free slots are available then insert from src array<br>

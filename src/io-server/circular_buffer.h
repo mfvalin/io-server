@@ -227,7 +227,7 @@ data_element *circular_buffer_advance_out(
 //! @return number of data tokens available after this operation, -1 if error
 int32_t circular_buffer_atomic_get(
   circular_buffer_p p,                       //!< [in]  pointer to a circular buffer
-  data_element *dst,                           //!< [out] destination array for data extraction
+  data_element *dst,                         //!< [out] destination array for data extraction
   int n                                      //!< [in]  number of #data_element data items to extract
   );
 //! get n data tokens at position "out + offset",
