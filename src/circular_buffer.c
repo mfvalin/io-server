@@ -409,7 +409,7 @@ int32_t circular_buffer_wait_space_available(
 
   data_index num_available = circular_buffer_get_available_space(p);
   while (num_available < n)
-      circular_buffer_get_available_space(p);
+      num_available = circular_buffer_get_available_space(p);
 
   return num_available;
 }

@@ -42,6 +42,7 @@ include(gen_test_target.cmake)
 # WHAT TO COMPILE
 
 gen_test_target(NAME circ_buffer               INPUT_FILES circular_buffer.F90)
+gen_test_target(NAME circ_buffer_fill          INPUT_FILES circular_buffer_fill.c)
 gen_test_target(NAME circ_buffer_single_thread INPUT_FILES circular_buffer_single_thread.F90)
 gen_test_target(NAME distributed_circ_buffer   INPUT_FILES distributed_circular_buffer.F90)
 gen_test_target(NAME shmem_heap                INPUT_FILES shmen_heap.F90)

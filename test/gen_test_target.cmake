@@ -15,7 +15,7 @@ function(gen_test_target)
       message(FATAL_ERROR "Your test needs a NAME")
    endif()
 
-   list(LENGTH GEN_TEST_TARGET_FILES NUMBER_OF_PARAM_IN_ARRAY)
+   list(LENGTH GEN_TEST_TARGET_INPUT_FILES NUMBER_OF_PARAM_IN_ARRAY)
 
    set(TARGET_NAME ${PROJECT_NAME}_${GEN_TEST_TARGET_NAME})
    add_executable(${TARGET_NAME} ${GEN_TEST_TARGET_INPUT_FILES})
