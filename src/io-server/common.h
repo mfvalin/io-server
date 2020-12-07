@@ -7,20 +7,20 @@
 
 //! Memory store fence
 static inline void write_fence() {
-  __asm__ volatile("" : : : "memory");
-  _mm_sfence();
+  __asm__ volatile("sfence" : : : "memory");
+//   _mm_sfence();
 }
 
 //! Memory load fence
 static inline void read_fence() {
-  __asm__ volatile("" : : : "memory");
-  _mm_lfence();
+  __asm__ volatile("lfence" : : : "memory");
+//   _mm_lfence();
 }
 
 //! memory load+store fence
 static inline void memory_fence() {
-  __asm__ volatile("" : : : "memory");
-  _mm_mfence();
+  __asm__ volatile("mfence" : : : "memory");
+//   _mm_mfence();
 }
 //! Type of individual elements stored in a container
 typedef int32_t data_element;
