@@ -1,3 +1,6 @@
+#ifndef IO_SERVER_memory_arena_GEN_H
+#define IO_SERVER_memory_arena_GEN_H
+
 /**
  \file
  \brief memory arena management package (C and Fortran)
@@ -267,3 +270,5 @@ void *memory_arena_from_master(
 void *memory_arena_from_master_id(
   int shmid                    //!< [in]  master arena segment id (from master_arena_create_shared)
   );
+
+#endif // IO_SERVER_memory_arena_GEN_H

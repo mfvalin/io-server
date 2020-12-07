@@ -1,3 +1,6 @@
+#ifndef IO_SERVER_common_GEN_H
+#define IO_SERVER_common_GEN_H
+
 
 #include <immintrin.h>
 #include <stdint.h>
@@ -26,3 +29,5 @@ typedef int32_t data_index;
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );
+
+#endif // IO_SERVER_common_GEN_H

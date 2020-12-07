@@ -1,3 +1,6 @@
+#ifndef IO_SERVER_circular_buffer_GEN_H
+#define IO_SERVER_circular_buffer_GEN_H
+
 /**
  \file
  \brief circular buffer package (C and Fortran)
@@ -262,3 +265,5 @@ int32_t circular_buffer_insert(
   int offset,                             //!< [in]  offset from the "in" position
   int update                              //!< [in]  if nonzero, update the "in" pointer
   );
+
+#endif // IO_SERVER_circular_buffer_GEN_H
