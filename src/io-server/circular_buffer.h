@@ -75,11 +75,11 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct{
-  data_element version;     //!< version marker
-  data_index first; //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index in;    //!< start inserting data at data[in]
-  data_index out;   //!< start extracting data at data[out]
-  data_index limit; //!< size of data buffer (last available index + 1)
+  data_element version; //!< version marker
+  data_index first;     //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_index in;        //!< start inserting data at data[in]
+  data_index out;       //!< start extracting data at data[out]
+  data_index limit;     //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -88,7 +88,7 @@ typedef fiol_management *fiol_management_p;
 //! skeleton for circular buffer
 typedef struct{
   fiol_management m;   //!< management structure
-  data_element data[];   //!< data buffer (contains at most limit -1 useful data elements)
+  data_element data[]; //!< data buffer (contains at most limit -1 useful data elements)
 } circular_buffer;
 
 //! pointer to circular buffer
@@ -121,7 +121,7 @@ static inline data_index available_data(
 static inline void copy_elements(
     data_element*       dst, //!< [out] Where to copy the elements
     const data_element* src, //!< [in]  The elements to copy
-    int               n    //!< [in] How many we want to copy
+    int                 n    //!< [in] How many we want to copy
 ) {
   memcpy(dst, src, sizeof(data_element) * (size_t)n);
 }

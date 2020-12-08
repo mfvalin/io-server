@@ -15,7 +15,7 @@ static inline uint64_t get_current_time_us() {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
 
-  // Wraps around every year or so. Not sure why you would need microsecond precision for that long
+  // Wraps around every year or so. Not sure why you would need microsecond precision for longer
   const uint64_t now_us = ((uint64_t)now.tv_sec % (1 << 25)) * 1000000 + (uint64_t)now.tv_nsec / 1000;
 
   return now_us;
@@ -30,7 +30,7 @@ void io_timer_stop(io_timer_t* timer) {
 }
 
 double io_time_ms(const io_timer_t* timer) {
-  // If we only count microseconds in a year, this conversion to double does not lose any precision
+  // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
   return timer->total_time / 1000.0;
 }
 
