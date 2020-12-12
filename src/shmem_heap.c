@@ -19,9 +19,9 @@
 
 /**
  \file
- \brief quick and dirty heap management (C and Fortran)
+ \brief quick and dirty "process shared memory" heap management (C and Fortran)
 
- code extracted from file memory_arena.c
+ some has been code extracted from file memory_arena.c
  \verbatim
 
   ShmemHeap : A quick and dirty heap management package
@@ -199,7 +199,6 @@ size_t ShmemHeapBlockSize(
   heap_element *h = (heap_element *) heap ;
   heap_element *b = (heap_element *) addr ;
   heap_element sz ;
-  heap_element *limit ;
   size_t bsz ;
 
   if(h == NULL){                           // no heap address specified
@@ -346,7 +345,7 @@ int32_t ShmemHeapCheck(
 }
 
 //! allocate space on a Server Heap
-//! @return address of block
+//! @return address of block, NULL in case of failure to allocate
 void *ShmemHeapAllocBlock(
   void *addr,                      //!< [in]  address of Server Heap
   size_t bsz,                      //!< [in]  size in bytes of block to allocate
@@ -359,13 +358,13 @@ void *ShmemHeapAllocBlock(
   sz = h[0] ;
   limit = sz - 1 ;
 // printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
-  bsz = (bsz + sizeof(heap_element) -1) / sizeof(heap_element) ;  // round size UP
+  bsz = (bsz + sizeof(heap_element) -1) / sizeof(heap_element) ;  // round size UP (size in heap elements)
   t = NULL ;
   if(h[limit] > 1  || h[limit] < -1) return NULL  ;  // not a Server Heap or corrupted information
   if(safe){                                          // lock heap
     while(! __sync_bool_compare_and_swap(h + limit, 0, -1) ) ;  // wait for 0, then set to -1 to indicate lock
   }
-  bsz += 4 ; // add head + tail elements
+  bsz += 4 ;                                         // add head + tail elements
   for(cur = 1 ; cur < limit ; cur += sz){            // scan block list to find/make a large enough free block
     sz = (h[cur] < 0) ? -h[cur] : h[cur] ;           // abs(h[cur])
     if(h[cur] < 0) continue ;                        // block is not free
@@ -381,7 +380,7 @@ void *ShmemHeapAllocBlock(
     }
     if(bsz <= sz){                                   // block large enough to satisfy request
       t = h + cur + 2 ;                              // point to element following size marker
-      if(sz - bsz > 64) { //  split block if worth it (more than 64 extra elements)
+      if(sz - bsz > 64) {             //  split block if worth it (more than 64 extra elements)
         h[cur]       =  -bsz ;        // head count (lower block)
         h[cur+1]     =  HEAD ;        // low  marker
         h[cur+bsz-2] =  TAIL ;        // tail marker
@@ -400,6 +399,59 @@ void *ShmemHeapAllocBlock(
     h[limit] = 0 ;
   }
   return t ;
+}
+
+//! set block metadata, type, kind, rank, dimensions
+//! @return 0 if O.K., nonzero if error
+int32_t ShmemHeapSetBlockMeta(
+  void *addr,                      //!< [in]  address of block
+  int32_t tkr,                     //!< [in]  kind(1/2/4/8)*256+type(1=int/2=float)*16+rank(1/2/3/4/5)
+  size_t asz,                      //!< [in]  size of array
+  int *dims                        //!< [in]  dimensions of array (Fortran style)
+  ){
+  heap_element *b = (heap_element *) addr ;     // block address
+  heap_element sz;
+  int32_t rank, i ;
+  int32_t ldims[5] ;
+
+  if( ShmemHeapValidBlock(b) != 0 ) return 1 ;  // is block valid ?
+  b = b - 2 ;
+  sz = b[1] ;
+  rank = tkr & 0xF ;     // type = (tkr >> 4) & 0xF  , kind = (tkr >> 8) & 0xF
+  for(i=0 ; i<5 ; i++) ldims[i] = (i < rank) ? dims[i] : 1 ;              // assign 1 to unused dimensions
+  for(i=0 ; i<5 ; i++) ldims[i] = (ldims[i] > 0xFFFF) ? 0 : ldims[i] ;    // set dimensions > 65535 to 0
+  b[sz - 2 ] = asz & 0x7FFFFFFF ;             // array size (product of dimensions), max = 2G
+  b[sz - 3 ] = (ldims[3] & 0xFFFF) | ((ldims[4] & 0xFFFF) << 16) ; // dimensions 4 and 5
+  b[sz - 4 ] = (ldims[1] & 0xFFFF) | ((ldims[2] & 0xFFFF) << 16) ; // dimensions 2 and 3
+  b[sz - 5 ] = (tkr & 0xFFFF) | ((ldims[0] & 0xFFFF) >> 16)  ;     // dimension 1 + TKR
+  return 0 ;
+}
+
+//! get block metadata, type, kind, rank, dimensions
+//! @return 0 if O.K., nonzero if error
+int32_t ShmemHeapGetBlockMeta(
+  void *addr,                      //!< [in]  address of block
+  int32_t *tkr,                    //!< [out] type, kind, rank of array
+  size_t *asz,                     //!< [out] size of array
+  int *dims                        //!< [out] dimensions of array (Fortran style)
+  ){
+  heap_element *b = (heap_element *) addr ;     // block address
+  heap_element sz;
+  int32_t rank, i ;
+
+  if( ShmemHeapValidBlock(b) != 0 ) return 1 ;  // is block valid ?
+  b = b - 2 ;
+  sz = b[1] ;
+  *asz = b[sz - 2] ;
+  *tkr = b[sz - 5] & 0xFFFF ;
+  rank = b[sz - 5] & 0xF ;
+  dims[0] = (b[sz - 5] >> 16) & 0xFFFF ;
+  dims[1] =  b[sz - 4]        & 0xFFFF ;
+  dims[2] = (b[sz - 4] >> 16) & 0xFFFF ;
+  dims[3] =  b[sz - 3]        & 0xFFFF ;
+  dims[4] = (b[sz - 3] >> 16) & 0xFFFF ;
+  for(i=rank ; i<5 ; i++) dims[i] = 0 ;   // set unused dimensions to 0
+  return 0 ;
 }
 
 //! allocate space on a Server Heap

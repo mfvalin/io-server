@@ -2,6 +2,20 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
+  !> \brief data block metadata
+  type, public :: block_meta
+    integer(C_INT), dimension(5) :: d   !< array dimensions
+    integer(C_INT) :: tkr               !< array type, kind, rank
+  contains
+    !> \return array type code (1=integer, 2=real)
+    procedure :: t
+    !> \return array kind (1/2/4/8 bytes)
+    procedure :: k
+    !> \return array rank (1/2/3/4/5)
+    procedure :: r
+    !> \return array dimensions
+    procedure :: dim
+  end type
   !> \brief heap user defined type
   type, public :: heap
     !> \private
@@ -190,6 +204,35 @@ module shmem_heap
 
 !> \endcond
   contains
+
+  !> \brief get array type from block metadata
+  function t(b) result(i)
+    implicit none
+    class(block_meta), intent(IN) :: b                 !< block object
+    integer(C_INT) :: i                                !< array type
+    i = and(ishft(b%tkr,-4), 15)
+  end function t
+  !> \brief get array kind from block metadata
+  function k(b) result(i)
+    implicit none
+    class(block_meta), intent(IN) :: b                 !< block object
+    integer(C_INT) :: i                                !< array kind (1/2/4/8 bytes)
+    i = and(ishft(b%tkr,-8), 15)
+  end function k
+  !> \brief get array rank from block metadata
+  function r(b) result(i)
+    implicit none
+    class(block_meta), intent(IN) :: b                 !< block object
+    integer(C_INT) :: i                                !< array rank
+    i = and(b%tkr, 15)
+  end function r
+  !> \brief get array dimensions from block metadata
+  subroutine dim(b, dims)
+    implicit none
+    class(block_meta), intent(IN) :: b                 !< block object
+    integer(C_INT), dimension(5) :: dims               !< array dimensions
+    dims = b%d
+  end subroutine dim
 
   include 'io-server/f_alloc.inc'
 

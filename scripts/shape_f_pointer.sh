@@ -1,5 +1,6 @@
 #!/bin/bash
 MALLOC=ShmemHeapAllocBlock
+METADATA=ShmemHeapSetBlockMeta
 # MALLOC=LocalAllocBlock
 # same calling sequence as shared memory heap allocator, but calls malloc
 cat <<EOT
@@ -49,12 +50,28 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   $TYPE($KIND) :: pref
+  type(block_meta) :: bm
+  type(C_PTR) :: cptr
+  integer(C_SIZE_T) :: asz
+  integer :: tkr
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',${D}, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    call C_F_POINTER(${MALLOC}(h%p, PRODUCT(di)*C_SIZEOF(pref), 0), p, [di])
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    cptr = ${MALLOC}(h%p, asz, 0)   ! allocate block
+!    asz = PRODUCT(di)               ! block size
+    tkr = 256*${L}+16*${RI}+${D}
+    bm%tkr = tkr
+    bm%d = 1
+    bm%d(1:${D}) = di(1:${D})
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+2   format(3(A,i3),A,5I8)
+!    call ${METADATA}(cptr, tkr, asz, di)
+    call C_F_POINTER(cptr, p, [di])
   endif
 end subroutine ${RI}${L}_${D}D
 
