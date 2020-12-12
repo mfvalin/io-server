@@ -93,7 +93,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     do i = 1 , 2 + myrank * 2
 !       blocks(i) = h%alloc((1100+i*10+myrank)*C_SIZEOF(he), 0)     ! try to allocate block
 !       call sm_allocate(h, demo, [1100+i*10+myrank])
-      call h%allocate(demo, [1100+i*10+myrank,1,1])    ! 3D integer array
+      call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5])    ! 3D integer array
       blocks(i) = C_LOC(demo(1,1,1))
 
       if( .not. C_ASSOCIATED(blocks(i)) ) then

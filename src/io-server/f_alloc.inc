@@ -36,7 +36,7 @@ subroutine I1_5D(h, p, di) ! integer*1 5D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -69,7 +69,7 @@ subroutine I1_4D(h, p, di) ! integer*1 4D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -102,7 +102,7 @@ subroutine I1_3D(h, p, di) ! integer*1 3D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -135,7 +135,7 @@ subroutine I1_2D(h, p, di) ! integer*1 2D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -168,7 +168,7 @@ subroutine I1_1D(h, p, di) ! integer*1 1D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -201,7 +201,7 @@ subroutine I2_5D(h, p, di) ! integer*2 5D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -234,7 +234,7 @@ subroutine I2_4D(h, p, di) ! integer*2 4D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -267,7 +267,7 @@ subroutine I2_3D(h, p, di) ! integer*2 3D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -300,7 +300,7 @@ subroutine I2_2D(h, p, di) ! integer*2 2D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -333,7 +333,7 @@ subroutine I2_1D(h, p, di) ! integer*2 1D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -366,7 +366,7 @@ subroutine I4_5D(h, p, di) ! integer*4 5D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -399,7 +399,7 @@ subroutine I4_4D(h, p, di) ! integer*4 4D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -432,7 +432,7 @@ subroutine I4_3D(h, p, di) ! integer*4 3D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -465,7 +465,7 @@ subroutine I4_2D(h, p, di) ! integer*4 2D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -498,7 +498,7 @@ subroutine I4_1D(h, p, di) ! integer*4 1D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -531,7 +531,7 @@ subroutine I8_5D(h, p, di) ! integer*8 5D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -564,7 +564,7 @@ subroutine I8_4D(h, p, di) ! integer*8 4D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -597,7 +597,7 @@ subroutine I8_3D(h, p, di) ! integer*8 3D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -630,7 +630,7 @@ subroutine I8_2D(h, p, di) ! integer*8 2D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -663,7 +663,7 @@ subroutine I8_1D(h, p, di) ! integer*8 1D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -696,7 +696,7 @@ subroutine R4_5D(h, p, di) ! real*4 5D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -729,7 +729,7 @@ subroutine R4_4D(h, p, di) ! real*4 4D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -762,7 +762,7 @@ subroutine R4_3D(h, p, di) ! real*4 3D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -795,7 +795,7 @@ subroutine R4_2D(h, p, di) ! real*4 2D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -828,7 +828,7 @@ subroutine R4_1D(h, p, di) ! real*4 1D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -861,7 +861,7 @@ subroutine R8_5D(h, p, di) ! real*8 5D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -894,7 +894,7 @@ subroutine R8_4D(h, p, di) ! real*8 4D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -927,7 +927,7 @@ subroutine R8_3D(h, p, di) ! real*8 3D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -960,7 +960,7 @@ subroutine R8_2D(h, p, di) ! real*8 2D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
@@ -993,7 +993,7 @@ subroutine R8_1D(h, p, di) ! real*8 1D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])

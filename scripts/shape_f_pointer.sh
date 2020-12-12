@@ -68,7 +68,7 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
     bm%tkr = tkr
     bm%d = 1
     bm%d(1:${D}) = di(1:${D})
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%d
+    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
 2   format(3(A,i3),A,5I8)
 !    call ${METADATA}(cptr, tkr, asz, di)
     call C_F_POINTER(cptr, p, [di])
