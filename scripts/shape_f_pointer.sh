@@ -61,7 +61,7 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',${D}, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ${MALLOC}(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*${L}+16*${RI}+${D}

@@ -29,7 +29,7 @@ subroutine I1_5D(h, p, di) ! integer*1 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*1+16*I+5
@@ -62,7 +62,7 @@ subroutine I1_4D(h, p, di) ! integer*1 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*1+16*I+4
@@ -95,7 +95,7 @@ subroutine I1_3D(h, p, di) ! integer*1 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*1+16*I+3
@@ -128,7 +128,7 @@ subroutine I1_2D(h, p, di) ! integer*1 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*1+16*I+2
@@ -161,7 +161,7 @@ subroutine I1_1D(h, p, di) ! integer*1 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*1+16*I+1
@@ -194,7 +194,7 @@ subroutine I2_5D(h, p, di) ! integer*2 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*2+16*I+5
@@ -227,7 +227,7 @@ subroutine I2_4D(h, p, di) ! integer*2 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*2+16*I+4
@@ -260,7 +260,7 @@ subroutine I2_3D(h, p, di) ! integer*2 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*2+16*I+3
@@ -293,7 +293,7 @@ subroutine I2_2D(h, p, di) ! integer*2 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*2+16*I+2
@@ -326,7 +326,7 @@ subroutine I2_1D(h, p, di) ! integer*2 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*2+16*I+1
@@ -359,7 +359,7 @@ subroutine I4_5D(h, p, di) ! integer*4 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*I+5
@@ -392,7 +392,7 @@ subroutine I4_4D(h, p, di) ! integer*4 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*I+4
@@ -425,7 +425,7 @@ subroutine I4_3D(h, p, di) ! integer*4 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*I+3
@@ -458,7 +458,7 @@ subroutine I4_2D(h, p, di) ! integer*4 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*I+2
@@ -491,7 +491,7 @@ subroutine I4_1D(h, p, di) ! integer*4 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*I+1
@@ -524,7 +524,7 @@ subroutine I8_5D(h, p, di) ! integer*8 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*I+5
@@ -557,7 +557,7 @@ subroutine I8_4D(h, p, di) ! integer*8 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*I+4
@@ -590,7 +590,7 @@ subroutine I8_3D(h, p, di) ! integer*8 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*I+3
@@ -623,7 +623,7 @@ subroutine I8_2D(h, p, di) ! integer*8 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*I+2
@@ -656,7 +656,7 @@ subroutine I8_1D(h, p, di) ! integer*8 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*I+1
@@ -689,7 +689,7 @@ subroutine R4_5D(h, p, di) ! real*4 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*R+5
@@ -722,7 +722,7 @@ subroutine R4_4D(h, p, di) ! real*4 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*R+4
@@ -755,7 +755,7 @@ subroutine R4_3D(h, p, di) ! real*4 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*R+3
@@ -788,7 +788,7 @@ subroutine R4_2D(h, p, di) ! real*4 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*R+2
@@ -821,7 +821,7 @@ subroutine R4_1D(h, p, di) ! real*4 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*4+16*R+1
@@ -854,7 +854,7 @@ subroutine R8_5D(h, p, di) ! real*8 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*R+5
@@ -887,7 +887,7 @@ subroutine R8_4D(h, p, di) ! real*8 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*R+4
@@ -920,7 +920,7 @@ subroutine R8_3D(h, p, di) ! real*8 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*R+3
@@ -953,7 +953,7 @@ subroutine R8_2D(h, p, di) ! real*8 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*R+2
@@ -986,7 +986,7 @@ subroutine R8_1D(h, p, di) ! real*8 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(block_meta)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm)/8
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*8+16*R+1
