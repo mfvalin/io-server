@@ -32,7 +32,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
   integer :: ierr, win, disp_unit, i, j, nheaps, status
   integer, dimension(:), allocatable :: disp_units
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase, mysize
+  integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase
   integer(KIND=MPI_ADDRESS_KIND), dimension(:), allocatable :: bases, sizes
   type, bind(C) :: mem_layout             ! shared memory layout description
     integer(C_INT) :: nindexes            ! size of index table
@@ -169,7 +169,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   call MPI_Win_free(win, ierr)
 
   return
-1 format(2(A,Z16.16))
+! 1 format(2(A,Z16.16))
 2 format(4(I8,A))
 3 format(4(A,I8))
 5 format(A,I3,A,Z16.16,2(A,I8))

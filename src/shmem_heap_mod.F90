@@ -2,10 +2,16 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
-  !> \brief data block metadata
-  type, public :: block_meta
+  !> \brief array description
+  type, bind(C) :: array_descriptor
+    private
     integer(C_INT), dimension(5) :: d   !< array dimensions
     integer(C_INT) :: tkr               !< array type, kind, rank
+  end type
+  !> \brief data block metadata
+  type, public :: block_meta
+    private
+    type(array_descriptor) :: a         !< array descriptor
   contains
     !> \return array type code (1=integer, 2=real)
     procedure :: t
@@ -102,11 +108,11 @@ module shmem_heap
   end interface
   
   interface
-    function malloc(sz) result(p) BIND(C,name='malloc')
+    function c_malloc(sz) result(p) BIND(C,name='malloc')
       import :: C_PTR, C_SIZE_T
       integer(C_SIZE_T), value :: sz
       type(C_PTR) :: p
-    end function malloc
+    end function c_malloc
 
     function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
       import :: C_PTR, C_SIZE_T
@@ -210,28 +216,28 @@ module shmem_heap
     implicit none
     class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array type
-    n = and(ishft(this%tkr,-4), 15)
+    n = and(ishft(this%a%tkr,-4), 15)
   end function t
   !> \brief get array kind from block metadata
   function k(this) result(n)
     implicit none
     class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array kind (1/2/4/8 bytes)
-    n = and(ishft(this%tkr,-8), 15)
+    n = and(ishft(this%a%tkr,-8), 15)
   end function k
   !> \brief get array rank from block metadata
   function r(this) result(n)
     implicit none
     class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array rank
-    n = and(this%tkr, 15)
+    n = and(this%a%tkr, 15)
   end function r
   !> \brief get array dimensions from block metadata
   function dims(this) result(d)
     implicit none
     class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT), dimension(5) :: d               !< array dimensions
-    d = this%d
+    d = this%a%d
   end function dims
 
   include 'io-server/f_alloc.inc'
