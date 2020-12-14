@@ -34,6 +34,7 @@ static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(i
  */
 typedef struct {
   int             target_rank; //!< With which process this instance should communicate for data transfers
+  MPI_Aint        target_base; //!< Base address of the window data on the target process
   circular_buffer buf;         //!< The buffer contained in this instance
 } circular_buffer_instance;
 
@@ -60,6 +61,7 @@ typedef struct {
   MPI_Comm   communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win    window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
   MPI_Win    window_mem_dummy; //!< MPI window used only to allocate and free shared memory
+  MPI_Aint   root_base;        //!< Address on the "root" process into the window
   int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
@@ -178,8 +180,8 @@ static void retrieve_window_offset_from_remote(distributed_circular_buffer_p buf
   // We communicate through the root process (rank == num_producers), because we don't yet know the rank of our target
   MPI_Win_lock(MPI_LOCK_SHARED, buffer->num_producers, MPI_MODE_NOCHECK, buffer->window);
   MPI_Get(
-      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, buffer->num_producers, num_bytes, 1, CB_MPI_ELEMENT_TYPE,
-      buffer->window);
+      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, buffer->num_producers, MPI_Aint_add(buffer->root_base, num_bytes),
+      1, CB_MPI_ELEMENT_TYPE, buffer->window);
   MPI_Win_unlock(buffer->num_producers, buffer->window);
 
   printf("Retrieved offset %d (rank %d)\n", buffer->window_offset, buffer->rank);
@@ -192,17 +194,24 @@ static inline void update_local_header_from_remote(
   printf("Updating local header (rank %d) through process %d\n", buffer->rank, buffer->local_header.target_rank);
 
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
-  const int target_rank =
-      buffer->local_header.target_rank > 0 ? buffer->local_header.target_rank : buffer->num_producers;
+  int      target_rank = buffer->local_header.target_rank;
+  MPI_Aint target_base = buffer->local_header.target_base;
+
+  if (target_rank < 0) {
+    target_rank = buffer->num_producers;
+    target_base = buffer->root_base;
+  }
 
   const int num_elem = sizeof(circular_buffer_instance) / sizeof(data_element);
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
   MPI_Get(
-      &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, buffer->window_offset, num_elem,
-      CB_MPI_ELEMENT_TYPE, buffer->window);
+      &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank,
+      MPI_Aint_add(target_base, buffer->window_offset), num_elem, CB_MPI_ELEMENT_TYPE, buffer->window);
   MPI_Win_unlock(target_rank, buffer->window);
 
-  printf("Updated local header (rank %d) through process %d\n", buffer->rank, buffer->local_header.target_rank);
+  printf(
+      "Updated local header (rank %d) through process %d, with new base address %ld\n", buffer->rank,
+      buffer->local_header.target_rank, buffer->local_header.target_base);
 }
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
@@ -298,7 +307,7 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
   MPI_Comm_rank(buffer->communicator, &buffer->rank);
 
   // Make sure everyone has the same number of elements
-  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INTEGER, num_producers, buffer->communicator);
+  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INTEGER, buffer->num_producers, buffer->communicator);
 
   const data_index offset_header_size = compute_offset_header_size(buffer);
 
@@ -310,6 +319,13 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
       win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data,
       &buffer->window_mem_dummy);
   MPI_Win_create_dynamic(MPI_INFO_NULL, buffer->communicator, &buffer->window);
+
+  if (is_root(buffer)) {
+    MPI_Get_address(buffer->raw_data, &buffer->root_base);
+    printf("Root base = %ld\n", buffer->root_base);
+  }
+
+  MPI_Bcast(&buffer->root_base, 1, MPI_LONG, buffer->num_producers, buffer->communicator);
 
   if (is_root(buffer)) {
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
@@ -356,12 +372,22 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
     printf("Raw data before %ld\n", (long)buffer->raw_data);
     MPI_Win_shared_query(buffer->window_mem_dummy, num_producers, &size, &disp_unit, &buffer->raw_data);
     MPI_Win_attach(buffer->window, buffer->raw_data, win_total_size);
-    printf("Raw data after %ld\n", (long)buffer->raw_data);
+    MPI_Get_address(buffer->raw_data, &buffer->root_base);
+    printf("Raw data after %ld, with base = %ld\n", (long)buffer->raw_data, buffer->root_base);
+  }
+
+  // --------------------------------
+  MPI_Barrier(buffer->communicator);
+  // --------------------------------
+
+  if (is_consumer(buffer)) {
+    for (int i = 0; i < buffer->num_producers; ++i) {
+      circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
+      if (buffer_instance->target_rank == buffer->rank)
+        buffer_instance->target_base = buffer->root_base;
+    }
 
     distributed_circular_buffer_print(buffer);
-  }
-  else {
-    MPI_Win_attach(buffer->window, buffer, 0);
   }
 
   // --------------------------------
@@ -372,7 +398,9 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
     update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
 
-    printf("Rank %d: target rank is now %d\n", buffer->rank, buffer->local_header.target_rank);
+    printf(
+        "Rank %d: target rank is now %d. Target address = %ld. Window offset = %d\n", buffer->rank,
+        buffer->local_header.target_rank, buffer->local_header.target_base, buffer->window_offset);
   }
 
   return buffer;
@@ -434,11 +462,9 @@ void distributed_circular_buffer_delete(distributed_circular_buffer_p buffer //!
 ) {
   if (is_consumer(buffer))
     MPI_Win_detach(buffer->window, buffer->raw_data);
-  else
-    MPI_Win_detach(buffer->window, buffer);
 
   MPI_Win_free(&buffer->window);
-  //  MPI_Win_free(&buffer->window_mem_dummy);
+  MPI_Win_free(&buffer->window_mem_dummy);
   free(buffer);
 }
 
