@@ -2,16 +2,16 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
-  !> \brief array description
-  type, bind(C) :: array_descriptor
+  !> \brief C compatible data block metadata
+  type, bind(C) :: block_meta_c
     private
     integer(C_INT), dimension(5) :: d   !< array dimensions
     integer(C_INT) :: tkr               !< array type, kind, rank
   end type
-  !> \brief data block metadata
-  type, public :: block_meta
+  !> \brief Fortran 2008 data block metadata (using the C layout)
+  type, public :: block_meta_f08
     private
-    type(array_descriptor) :: a         !< array descriptor
+    type(block_meta_c) :: a         !< array descriptor
   contains
     !> \return array type code (1=integer, 2=real)
     procedure :: t
@@ -214,28 +214,28 @@ module shmem_heap
   !> \brief get array type from block metadata
   function t(this) result(n)
     implicit none
-    class(block_meta), intent(IN) :: this              !< block object
+    class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array type
     n = and(ishft(this%a%tkr,-4), 15)
   end function t
   !> \brief get array kind from block metadata
   function k(this) result(n)
     implicit none
-    class(block_meta), intent(IN) :: this              !< block object
+    class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array kind (1/2/4/8 bytes)
     n = and(ishft(this%a%tkr,-8), 15)
   end function k
   !> \brief get array rank from block metadata
   function r(this) result(n)
     implicit none
-    class(block_meta), intent(IN) :: this              !< block object
+    class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array rank
     n = and(this%a%tkr, 15)
   end function r
   !> \brief get array dimensions from block metadata
   function dims(this) result(d)
     implicit none
-    class(block_meta), intent(IN) :: this              !< block object
+    class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT), dimension(5) :: d               !< array dimensions
     d = this%a%d
   end function dims

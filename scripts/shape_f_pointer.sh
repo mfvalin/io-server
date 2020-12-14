@@ -50,7 +50,8 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   $TYPE($KIND) :: pref
-  type(block_meta) :: bm
+  type(block_meta_f08) :: bm
+  type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
   integer :: tkr
@@ -61,7 +62,7 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',${D}, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + storage_size(bm%a)/8
+    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)
     cptr = ${MALLOC}(h%p, asz, 0)   ! allocate block
 !    asz = PRODUCT(di)               ! block size
     tkr = 256*${L}+16*${RI}+${D}
