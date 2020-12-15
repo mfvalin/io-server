@@ -18,11 +18,12 @@ subroutine I1_5D(h, p, di) ! integer*1 5D array allocator
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -30,17 +31,23 @@ subroutine I1_5D(h, p, di) ! integer*1 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*1+16*I+5
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*1+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I1_5D
 
@@ -52,11 +59,12 @@ subroutine I1_4D(h, p, di) ! integer*1 4D array allocator
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -64,17 +72,23 @@ subroutine I1_4D(h, p, di) ! integer*1 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*1+16*I+4
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*1+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I1_4D
 
@@ -86,11 +100,12 @@ subroutine I1_3D(h, p, di) ! integer*1 3D array allocator
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -98,17 +113,23 @@ subroutine I1_3D(h, p, di) ! integer*1 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*1+16*I+3
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*1+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I1_3D
 
@@ -120,11 +141,12 @@ subroutine I1_2D(h, p, di) ! integer*1 2D array allocator
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -132,17 +154,23 @@ subroutine I1_2D(h, p, di) ! integer*1 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*1+16*I+2
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*1+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I1_2D
 
@@ -154,11 +182,12 @@ subroutine I1_1D(h, p, di) ! integer*1 1D array allocator
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -166,17 +195,23 @@ subroutine I1_1D(h, p, di) ! integer*1 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*1+16*I+1
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*1+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I1_1D
 
@@ -188,11 +223,12 @@ subroutine I2_5D(h, p, di) ! integer*2 5D array allocator
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -200,17 +236,23 @@ subroutine I2_5D(h, p, di) ! integer*2 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*2+16*I+5
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*2+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I2_5D
 
@@ -222,11 +264,12 @@ subroutine I2_4D(h, p, di) ! integer*2 4D array allocator
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -234,17 +277,23 @@ subroutine I2_4D(h, p, di) ! integer*2 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*2+16*I+4
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*2+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I2_4D
 
@@ -256,11 +305,12 @@ subroutine I2_3D(h, p, di) ! integer*2 3D array allocator
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -268,17 +318,23 @@ subroutine I2_3D(h, p, di) ! integer*2 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*2+16*I+3
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*2+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I2_3D
 
@@ -290,11 +346,12 @@ subroutine I2_2D(h, p, di) ! integer*2 2D array allocator
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -302,17 +359,23 @@ subroutine I2_2D(h, p, di) ! integer*2 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*2+16*I+2
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*2+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I2_2D
 
@@ -324,11 +387,12 @@ subroutine I2_1D(h, p, di) ! integer*2 1D array allocator
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -336,17 +400,23 @@ subroutine I2_1D(h, p, di) ! integer*2 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*2+16*I+1
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*2+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I2_1D
 
@@ -358,11 +428,12 @@ subroutine I4_5D(h, p, di) ! integer*4 5D array allocator
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -370,17 +441,23 @@ subroutine I4_5D(h, p, di) ! integer*4 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*I+5
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I4_5D
 
@@ -392,11 +469,12 @@ subroutine I4_4D(h, p, di) ! integer*4 4D array allocator
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -404,17 +482,23 @@ subroutine I4_4D(h, p, di) ! integer*4 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*I+4
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I4_4D
 
@@ -426,11 +510,12 @@ subroutine I4_3D(h, p, di) ! integer*4 3D array allocator
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -438,17 +523,23 @@ subroutine I4_3D(h, p, di) ! integer*4 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*I+3
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I4_3D
 
@@ -460,11 +551,12 @@ subroutine I4_2D(h, p, di) ! integer*4 2D array allocator
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -472,17 +564,23 @@ subroutine I4_2D(h, p, di) ! integer*4 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*I+2
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I4_2D
 
@@ -494,11 +592,12 @@ subroutine I4_1D(h, p, di) ! integer*4 1D array allocator
   integer(C_INT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -506,17 +605,23 @@ subroutine I4_1D(h, p, di) ! integer*4 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*I+1
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I4_1D
 
@@ -528,11 +633,12 @@ subroutine I8_5D(h, p, di) ! integer*8 5D array allocator
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -540,17 +646,23 @@ subroutine I8_5D(h, p, di) ! integer*8 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*I+5
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I8_5D
 
@@ -562,11 +674,12 @@ subroutine I8_4D(h, p, di) ! integer*8 4D array allocator
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -574,17 +687,23 @@ subroutine I8_4D(h, p, di) ! integer*8 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*I+4
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I8_4D
 
@@ -596,11 +715,12 @@ subroutine I8_3D(h, p, di) ! integer*8 3D array allocator
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -608,17 +728,23 @@ subroutine I8_3D(h, p, di) ! integer*8 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*I+3
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I8_3D
 
@@ -630,11 +756,12 @@ subroutine I8_2D(h, p, di) ! integer*8 2D array allocator
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -642,17 +769,23 @@ subroutine I8_2D(h, p, di) ! integer*8 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*I+2
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I8_2D
 
@@ -664,11 +797,12 @@ subroutine I8_1D(h, p, di) ! integer*8 1D array allocator
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -676,17 +810,23 @@ subroutine I8_1D(h, p, di) ! integer*8 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*I+1
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine I8_1D
 
@@ -698,11 +838,12 @@ subroutine R4_5D(h, p, di) ! real*4 5D array allocator
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -710,17 +851,23 @@ subroutine R4_5D(h, p, di) ! real*4 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*R+5
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*R+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R4_5D
 
@@ -732,11 +879,12 @@ subroutine R4_4D(h, p, di) ! real*4 4D array allocator
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -744,17 +892,23 @@ subroutine R4_4D(h, p, di) ! real*4 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*R+4
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*R+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R4_4D
 
@@ -766,11 +920,12 @@ subroutine R4_3D(h, p, di) ! real*4 3D array allocator
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -778,17 +933,23 @@ subroutine R4_3D(h, p, di) ! real*4 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*R+3
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*R+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R4_3D
 
@@ -800,11 +961,12 @@ subroutine R4_2D(h, p, di) ! real*4 2D array allocator
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -812,17 +974,23 @@ subroutine R4_2D(h, p, di) ! real*4 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*R+2
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*R+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R4_2D
 
@@ -834,11 +1002,12 @@ subroutine R4_1D(h, p, di) ! real*4 1D array allocator
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -846,17 +1015,23 @@ subroutine R4_1D(h, p, di) ! real*4 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*4+16*R+1
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*4+16*R+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R4_1D
 
@@ -868,11 +1043,12 @@ subroutine R8_5D(h, p, di) ! real*8 5D array allocator
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -880,17 +1056,23 @@ subroutine R8_5D(h, p, di) ! real*8 5D array allocator
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',5, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*R+5
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:5) = di(1:5)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*R+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R8_5D
 
@@ -902,11 +1084,12 @@ subroutine R8_4D(h, p, di) ! real*8 4D array allocator
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -914,17 +1097,23 @@ subroutine R8_4D(h, p, di) ! real*8 4D array allocator
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',4, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*R+4
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:4) = di(1:4)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*R+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R8_4D
 
@@ -936,11 +1125,12 @@ subroutine R8_3D(h, p, di) ! real*8 3D array allocator
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -948,17 +1138,23 @@ subroutine R8_3D(h, p, di) ! real*8 3D array allocator
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',3, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*R+3
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:3) = di(1:3)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*R+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R8_3D
 
@@ -970,11 +1166,12 @@ subroutine R8_2D(h, p, di) ! real*8 2D array allocator
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -982,17 +1179,23 @@ subroutine R8_2D(h, p, di) ! real*8 2D array allocator
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',2, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*R+2
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:2) = di(1:2)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*R+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R8_2D
 
@@ -1004,11 +1207,12 @@ subroutine R8_1D(h, p, di) ! real*8 1D array allocator
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -1016,17 +1220,23 @@ subroutine R8_1D(h, p, di) ! real*8 1D array allocator
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',1, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)   ! storage_size(bm%a)/8
-    cptr = ShmemHeapAllocBlock(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*8+16*R+1
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:1) = di(1:1)
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ShmemHeapSetBlockMeta(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*8+16*R+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
+    status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine R8_1D
 

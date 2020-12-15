@@ -30,7 +30,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer, intent(IN) :: myrank, nprocs
 
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
-  integer :: ierr, win, disp_unit, i, j, nheaps, status
+  integer :: ierr, win, disp_unit, i, j, nheaps, status, array_rank
   integer, dimension(:), allocatable :: disp_units
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase
   integer(KIND=MPI_ADDRESS_KIND), dimension(:), allocatable :: bases, sizes
@@ -50,6 +50,8 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(C_INT), dimension(:,:,:), pointer :: demo
+  type(block_meta_f08) :: my_meta
+  integer, dimension(5) :: ad
 
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
@@ -101,6 +103,10 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         exit
       endif
       print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
+      status = my_meta%meta(blocks(i))
+      array_rank = my_meta%r()
+      ad = my_meta%dims()
+      print 6,'array dimensions =',ad(1:array_rank)
       ixtab(i) = h%offset(blocks(i))
     enddo
     print 6,'ixtab =', ixtab(1:10)

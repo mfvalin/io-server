@@ -401,56 +401,60 @@ void *ShmemHeapAllocBlock(
   return t ;
 }
 
-//! set block metadata, type, kind, rank, dimensions
+typedef  struct {
+    int d[5];
+    int tkr ;
+  } meta_c;
+
+//! set block metadata
 //! @return 0 if O.K., nonzero if error
 int32_t ShmemHeapSetBlockMeta(
   void *addr,                      //!< [in]  address of block
-  int32_t tkr,                     //!< [in]  kind(1/2/4/8)*256+type(1=int/2=float)*16+rank(1/2/3/4/5)
-  size_t asz,                      //!< [in]  size of array
-  int *dims                        //!< [in]  dimensions of array (Fortran style)
+  unsigned char *meta,             //!< [in]  address of metadata
+  int msz                          //!< [in]  size of metadata (bytes)
   ){
   heap_element *b = (heap_element *) addr ;     // block address
-  heap_element sz;
-  int32_t rank, i ;
-  int32_t ldims[5] ;
+  heap_element sz ;
+  int32_t i ;
+  unsigned char *p ;
+// meta_c *m;
 
+  if(addr == NULL || msz <= 0) return 1 ;
   if( ShmemHeapValidBlock(b) != 0 ) return 1 ;  // is block valid ?
-  b = b - 2 ;
-  sz = b[1] ;
-  rank = tkr & 0xF ;     // type = (tkr >> 4) & 0xF  , kind = (tkr >> 8) & 0xF
-  for(i=0 ; i<5 ; i++) ldims[i] = (i < rank) ? dims[i] : 1 ;              // assign 1 to unused dimensions
-  for(i=0 ; i<5 ; i++) ldims[i] = (ldims[i] > 0xFFFF) ? 0 : ldims[i] ;    // set dimensions > 65535 to 0
-  b[sz - 2 ] = asz & 0x7FFFFFFF ;             // array size (product of dimensions), max = 2G
-  b[sz - 3 ] = (ldims[3] & 0xFFFF) | ((ldims[4] & 0xFFFF) << 16) ; // dimensions 4 and 5
-  b[sz - 4 ] = (ldims[1] & 0xFFFF) | ((ldims[2] & 0xFFFF) << 16) ; // dimensions 2 and 3
-  b[sz - 5 ] = (tkr & 0xFFFF) | ((ldims[0] & 0xFFFF) >> 16)  ;     // dimension 1 + TKR
+  b = b - 2 ;                                   // start of block
+  sz = -b[0] ;                                  // size of block
+  if(sz < 0) return 1 ;                         // block is free
+  b = b + sz - 2 ;                              // address of tail marker ;
+  p = (unsigned char *) b ;                     // cast to byte pointer
+// printf("b = %p, p = %p msz = %d, sz = %d\n",b,p,msz,sz);
+  p = p - msz ;                                 // start of metadata in block (top of data in block - msz)
+// m = (meta_c *) meta;
+// printf("dim = %d %d %d %d %d, tkr = %x\n",m->d[0],m->d[1],m->d[2],m->d[3],m->d[4],m->tkr);
+  for(i = 0 ; i < msz ; i++) p[i] = meta[i] ;   // copy meta at end of block
   return 0 ;
 }
 
-//! get block metadata, type, kind, rank, dimensions
+//! get block metadata
 //! @return 0 if O.K., nonzero if error
 int32_t ShmemHeapGetBlockMeta(
   void *addr,                      //!< [in]  address of block
-  int32_t *tkr,                    //!< [out] type, kind, rank of array
-  size_t *asz,                     //!< [out] size of array
-  int *dims                        //!< [out] dimensions of array (Fortran style)
+  unsigned char *meta,             //!< [in]  address of metadata (user array to receive metadata)
+  int msz                          //!< [in]  size of metadata (bytes)
   ){
   heap_element *b = (heap_element *) addr ;     // block address
-  heap_element sz;
-  int32_t rank, i ;
+  heap_element sz ;
+  int32_t i ;
+  unsigned char *p ;
 
+  if(addr == NULL || msz <= 0) return 1 ;
   if( ShmemHeapValidBlock(b) != 0 ) return 1 ;  // is block valid ?
-  b = b - 2 ;
-  sz = b[1] ;
-  *asz = b[sz - 2] ;
-  *tkr = b[sz - 5] & 0xFFFF ;
-  rank = b[sz - 5] & 0xF ;
-  dims[0] = (b[sz - 5] >> 16) & 0xFFFF ;
-  dims[1] =  b[sz - 4]        & 0xFFFF ;
-  dims[2] = (b[sz - 4] >> 16) & 0xFFFF ;
-  dims[3] =  b[sz - 3]        & 0xFFFF ;
-  dims[4] = (b[sz - 3] >> 16) & 0xFFFF ;
-  for(i=rank ; i<5 ; i++) dims[i] = 0 ;   // set unused dimensions to 0
+  b = b - 2 ;                                   // start of block
+  sz = -b[0] ;                                  // size of block
+  if(sz < 0) return 1 ;                         // block is free
+  b = b + sz - 2 ;                              // address of tail marker ;
+  p = (unsigned char *) b ;                     // cast to byte pointer
+  p = p - msz ;                                 // start of metadata in block (top of data in block - msz)
+  for(i = 0 ; i < msz ; i++) meta[i] = p[i] ;   // copy metadata from end of data block into user array
   return 0 ;
 }
 

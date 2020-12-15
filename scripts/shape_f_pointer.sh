@@ -50,11 +50,12 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
   $TYPE($KIND) :: pref
-  type(block_meta_f08) :: bm
+  type(block_meta_f08) :: bmi
+  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
-  integer :: tkr
+  integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
@@ -62,17 +63,23 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
     print *,'bad rank request, expecting',${D}, ', got',size(di)
   else                              ! NO, allocate array (size is in BYTES)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + C_SIZEOF(bmc)
-    cptr = ${MALLOC}(h%p, asz, 0)   ! allocate block
-!    asz = PRODUCT(di)               ! block size
-    tkr = 256*${L}+16*${RI}+${D}
-    bm%a%tkr = tkr
-    bm%a%d = 1
-    bm%a%d(1:${D}) = di(1:${D})
-    print 2,'type ',bm%t(),' kind',bm%k(),' rank',bm%r(),' dims',bm%dims()
-2   format(3(A,i3),A,5I8)
-!    call ${METADATA}(cptr, tkr, asz, di)
-    call C_F_POINTER(cptr, p, [di])
+    bsz = C_SIZEOF(bmc)
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
+    cptr = ${MALLOC}(h%p, asz, 0)            ! allocate block
+    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+    tkr = 256*${L}+16*${RI}+${D}    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr = tkr                 ! build C interoperable metadata
+    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d(1:${D}) = di(1:${D})    ! set relevant dimensions to correct value
+    status = ${METADATA}(cptr, bmi%a, bsz)  ! insert metadata into data block
+! start of diagnostic code
+    print 2,'type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' bmc',bsz
+2   format(3(A,i3),A,5I8,A,i8)
+    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
+    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
+    print 2,'type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
+! end of diagnostic code
   endif
 end subroutine ${RI}${L}_${D}D
 

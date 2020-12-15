@@ -21,6 +21,8 @@ module shmem_heap
     procedure :: r
     !> \return array dimensions
     procedure :: dims
+    !> \return status, 0 if O.K. non zero otherwise
+    procedure :: meta
   end type
   !> \brief heap user defined type
   type, public :: heap
@@ -206,39 +208,100 @@ module shmem_heap
       type(C_PTR) :: p
     end function ShmemHeapPtr
 
+    function ShmemHeapSetBlockMeta(block, metadata, msz) result(status) bind(C,name='ShmemHeapSetBlockMeta')
+      import :: C_PTR, C_INT, block_meta_c
+      implicit none
+      type(C_PTR), intent(IN), value    :: block
+      type(block_meta_c), intent(IN)    :: metadata
+      integer(C_INT), intent(IN), value :: msz
+      integer(C_INT) :: status
+    end function ShmemHeapSetBlockMeta
+
+    function ShmemHeapGetBlockMeta(block, metadata, msz) result(status) bind(C,name='ShmemHeapGetBlockMeta')
+      import :: C_PTR, C_INT, block_meta_c
+      implicit none
+      type(C_PTR), intent(IN), value    :: block
+      type(block_meta_c), intent(OUT)    :: metadata
+      integer(C_INT), intent(IN), value :: msz
+      integer(C_INT) :: status
+    end function ShmemHeapGetBlockMeta
+
   end interface
 
 !> \endcond
   contains
 
-  !> \brief get array type from block metadata
+  !> \brief get array type from Fortran block metadata
+  function meta(this, block) result(status)
+    implicit none
+    class(block_meta_f08), intent(OUT) :: this         !< block object
+    type(C_PTR), intent(IN), value :: block            !< address of block
+    integer(C_INT) :: status                           !< 0 if O.K., nonzero if error
+    integer :: msz
+    type(block_meta_c) :: t
+    msz = C_SIZEOF(t)
+    status = ShmemHeapGetBlockMeta(block, this%a, msz)
+  end function meta
+
+  !> \brief get array type from Fortran block metadata
   function t(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array type
     n = and(ishft(this%a%tkr,-4), 15)
   end function t
-  !> \brief get array kind from block metadata
+  !> \brief get array type from C block metadata (C callable version)
+  function BlockMeta_t(this) result(n) BIND(C,name='BlockMeta_t')
+    implicit none
+    type(block_meta_c), intent(IN) :: this              !< block object
+    integer(C_INT) :: n                                !< array type
+    n = and(ishft(this%tkr,-4), 15)
+  end function BlockMeta_t
+
+  !> \brief get array kind from Fortran block metadata
   function k(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array kind (1/2/4/8 bytes)
     n = and(ishft(this%a%tkr,-8), 15)
   end function k
-  !> \brief get array rank from block metadata
+  !> \brief get array kind from C block metadata (C callable version)
+  function BlockMeta_k(this) result(n) BIND(C,name='BlockMeta_k')
+    implicit none
+    type(block_meta_c), intent(IN) :: this              !< block object
+    integer(C_INT) :: n                                !< array kind (1/2/4/8 bytes)
+    n = and(ishft(this%tkr,-8), 15)
+  end function BlockMeta_k
+
+  !> \brief get array rank from Fortran block metadata
   function r(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array rank
     n = and(this%a%tkr, 15)
   end function r
-  !> \brief get array dimensions from block metadata
+  !> \brief get array rank from C block metadata (C callable version)
+  function BlockMeta_r(this) result(n) BIND(C,name='BlockMeta_r')
+    implicit none
+    type(block_meta_c), intent(IN) :: this              !< block object
+    integer(C_INT) :: n                                !< array rank
+    n = and(this%tkr, 15)
+  end function BlockMeta_r
+
+  !> \brief get array dimensions from Fortran block metadata
   function dims(this) result(d)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT), dimension(5) :: d               !< array dimensions
     d = this%a%d
   end function dims
+  !> \brief get array dimensions from C block metadata (C callable version)
+  subroutine BlockMeta_dims(this, dims) BIND(C,name='BlockMeta_dims')
+    implicit none
+    type(block_meta_c), intent(IN) :: this              !< block object
+    integer(C_INT), intent(OUT), dimension(5) :: dims   !< array dimensions
+    dims = this%d
+  end subroutine BlockMeta_dims
 
   include 'io-server/f_alloc.inc'
 
