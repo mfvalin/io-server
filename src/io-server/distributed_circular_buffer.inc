@@ -3,14 +3,12 @@ include 'io-server/circular_buffer.inc'
 interface
 
 
-function distributed_circular_buffer_create(f_communicator, rank, comm_size, num_producers, num_elements) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
+function distributed_circular_buffer_create(f_communicator, num_producers, num_elements) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
 import :: C_PTR, C_INT
 implicit none
 integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
-integer(C_INT), intent(IN), value :: rank           !< Rank of the calling process
-integer(C_INT), intent(IN), value :: comm_size      !< Number of processes in the communicator
 integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
-integer(C_INT), intent(IN), value :: num_elements   !< Number of 32-bit elements in the circular buffer
+integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
 type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
 end function distributed_circular_buffer_create
 
@@ -27,6 +25,23 @@ import :: C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: buffer !< Buffer to delete
 end subroutine distributed_circular_buffer_delete
+
+
+function distributed_circular_buffer_get_latest_num_elements(buffer) result(num_elements) BIND(C, name = 'distributed_circular_buffer_get_latest_num_elements')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: num_elements
+end function distributed_circular_buffer_get_latest_num_elements
+
+
+function distributed_circular_buffer_get_num_elements(buffer, buffer_id) result(num_elements) BIND(C, name = 'distributed_circular_buffer_get_num_elements')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value    :: buffer
+integer(C_INT), intent(in), value :: buffer_id
+integer(C_INT) :: num_elements
+end function distributed_circular_buffer_get_num_elements
 
 
 function distributed_circular_buffer_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_put')

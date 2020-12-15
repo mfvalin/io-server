@@ -41,16 +41,63 @@ program test_distributed_circular_buffer
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
+  if (comm_size < 4) then
+    print *, 'Need at least 4 processes for this test!'
+    goto 777
+  end if
 
   num_producers = comm_size - NUM_CONSUMERS;
   consumer_id = rank - num_producers
 
-  success = circ_buffer % create(MPI_COMM_WORLD, rank, comm_size, num_producers, NUM_BUFFER_ELEMENTS)
+  success = circ_buffer % create(MPI_COMM_WORLD, num_producers, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
     goto 777
   end if
+
+  print *, 'Successfully created the buffer!'
+
+  if (rank < num_producers) then
+
+    in_data(:) = -1
+    out_data(:) = -2
+
+    do i = 1, NUM_DATA_ELEMENTS
+      in_data(i) = rank * 1000 + i
+    end do
+
+    available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
+
+    !---------------------------------------
+    call MPI_Barrier(MPI_COMM_WORLD, error)
+    !---------------------------------------
+    print *, 'Just put stuff: buffer, num_data', rank, circ_buffer % get_num_elements()
+
+  else
+
+    !---------------------------------------
+    call MPI_Barrier(MPI_COMM_WORLD, error)
+    !---------------------------------------
+
+    available = circ_buffer % get_num_elements(0)
+    if (available <= 0) then
+      print *, 'There is nothing in buffer 0!!!!!!!!', rank
+      goto 777
+    end if
+
+    available = circ_buffer % get_num_elements(1)
+    if (available <= 0) then
+      print *, 'There is nothing in buffer 1!!!!!!!!', rank
+      goto 777
+    end if
+
+  end if
+
+
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
 
   if (rank < num_producers) then
 

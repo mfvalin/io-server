@@ -33,6 +33,10 @@ module distributed_circular_buffer_module
     procedure :: print    !< distributed_circular_buffer_module::print
     procedure :: put      !< distributed_circular_buffer_module::put
     procedure :: get      !< distributed_circular_buffer_module::get
+    GENERIC :: get_num_elements => get_num_elements_local, get_num_elements_latest
+    procedure :: get_num_elements_local
+    procedure :: get_num_elements_latest
+!    procedure :: get_num_spaces
   end type distributed_circular_buffer
 
 contains
@@ -47,12 +51,10 @@ contains
   end function is_valid
 
   !> Create and initialize a distributed circular buffer. See distributed_circular_buffer_create
-  function create(this, communicator, rank, comm_size, num_producers, num_words) result(is_valid)
+  function create(this, communicator, num_producers, num_words) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT), intent(in)                        :: communicator
-    integer(C_INT), intent(in)                        :: rank
-    integer(C_INT), intent(in)                        :: comm_size
     integer(C_INT), intent(in)                        :: num_producers
     integer(C_INT), intent(in)                        :: num_words
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
@@ -61,7 +63,7 @@ contains
       call this % delete()
     end if
 
-    this % c_buffer = distributed_circular_buffer_create(communicator, rank, comm_size, num_producers, num_words)
+    this % c_buffer = distributed_circular_buffer_create(communicator, num_producers, num_words)
     is_valid = this % is_valid()
   end function create
 
@@ -108,5 +110,21 @@ contains
     num_data_available = distributed_circular_buffer_get(this % c_buffer, buffer_id, dest_data, num_elements)
   end function get
 
+  function get_num_elements_local(this, buffer_id) result(num_elements)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT), intent(in)                        :: buffer_id
+    integer(C_INT) :: num_elements
+
+    num_elements = distributed_circular_buffer_get_num_elements(this % c_buffer, buffer_id)
+  end function get_num_elements_local
+
+  function get_num_elements_latest(this) result(num_elements)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: num_elements
+
+    num_elements = distributed_circular_buffer_get_latest_num_elements(this % c_buffer)
+  end function get_num_elements_latest
 
 end module distributed_circular_buffer_module
