@@ -12,6 +12,152 @@
 }
 
 {
+   <OpenMPI_supp>
+   Memcheck:Addr1
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr2
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr4
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr8
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr16
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr1
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
+   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr4
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
+   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr8
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
+   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr16
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
+   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr1
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_unlock
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr4
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_unlock
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr8
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_unlock
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:User
+   ...
+   fun:mca_pml_ob1_start
+   ...
+   fun:PMPI_Win_unlock
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr2
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
+   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
+   <OpenMPI_supp_barrier>
+   Memcheck:User
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
+   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
     <OpenMPI_leak>
     Memcheck:Leak
     match-leak-kinds: all
@@ -75,6 +221,15 @@
     ...
     fun:ompi_mpi_finalize
     fun:mpi_finalize
+}
+
+{
+   <OpenMPI_leak>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:PMPI_Get
 }
 
 

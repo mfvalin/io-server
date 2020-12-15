@@ -1,3 +1,4 @@
+// This file has been generated from memory_arena.c
 #ifndef IO_SERVER_memory_arena_GEN_H
 #define IO_SERVER_memory_arena_GEN_H
 

@@ -59,7 +59,7 @@ contains
   subroutine print_header(cb)
     implicit none
     class(circular_buffer), intent(INOUT) :: cb
-    call circular_buffer_print_header(cb % p)
+    call CB_print_header(cb % p)
   end subroutine print_header
 
   !> \brief create a circular buffer in local memory
@@ -71,7 +71,7 @@ contains
     class(circular_buffer), intent(INOUT) :: cb     !< circular_buffer
     integer(C_INT), intent(IN), value     :: nwords !< size in 32 bit elements of the circular buffer
     logical :: success                              !< Whether the operation was successful
-    cb%p = circular_buffer_create(nwords)
+    cb%p = CB_create(nwords)
     cb%is_owner = .true.
     cb%is_shared = .false.
     success = cb % is_valid()
@@ -87,7 +87,7 @@ contains
     integer(C_INT), intent(OUT)           :: shmid  !< identifier of shared memory area (see man shmget)
     integer(C_INT), intent(IN), value     :: nwords !< size in 32 bit elements of the circular buffer
     logical :: success
-    cb%p = circular_buffer_create_shared(shmid, nwords)
+    cb%p = CB_create_shared(shmid, nwords)
     cb%is_owner = .false.
     cb%is_shared = .true.
     success = cb%is_valid()
@@ -103,7 +103,7 @@ contains
     type(C_PTR), intent(IN), value        :: ptr    !< pointer to user supplied memory
     integer(C_INT), intent(IN), value     :: nwords !< size in 32 bit elements of the circular buffer
     logical :: success                              !< Whether the operation was successful
-    cb%p = circular_buffer_from_pointer(ptr, nwords)
+    cb%p = CB_from_pointer(ptr, nwords)
     cb%is_owner = .false.
     cb%is_shared = .false.
     success = cb%is_valid()
@@ -132,7 +132,7 @@ contains
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT) :: n                                     !< number of empty slots available, -1 if error
-    n = circular_buffer_get_available_space(cb%p)
+    n = CB_get_available_space(cb%p)
   end function get_available_space
 
   !> \brief get current number of data tokens available
@@ -143,7 +143,7 @@ contains
     implicit none
     class(circular_buffer), intent(INOUT) :: cb             !< circular_buffer
     integer(C_INT) :: n                                     !< number of data tokens available, -1 if error
-    n = circular_buffer_get_available_data(cb%p)
+    n = CB_get_available_data(cb%p)
   end function get_available_data
 
   !> \brief wait until ndst tokens are available then extract them into dst
@@ -155,7 +155,7 @@ contains
     integer(C_INT), intent(IN), value                :: ndst  !< number of tokens to extract
     integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
-    n = circular_buffer_atomic_get(cb%p, dst, ndst)
+    n = CB_atomic_get(cb%p, dst, ndst)
   end function atomic_get
 
   !> \brief wait until nsrc free slots are available then insert from src array
@@ -167,7 +167,7 @@ contains
     integer(C_INT), intent(IN), value               :: nsrc  !< number of tokens to insert from src
     integer(DATA_ELEMENT), dimension(*), intent(IN) :: src   !< source array for data insertion
     integer(C_INT) :: n                                    !< number of free slots available after this operation, -1 if error
-    n = circular_buffer_atomic_put(cb%p, src, nsrc)
+    n = CB_atomic_put(cb%p, src, nsrc)
   end function atomic_put
 
   function delete(cb) result(status)
@@ -179,7 +179,7 @@ contains
     if (cb%is_owner) then
       call free_c_ptr(cb%p)
     else if (cb%is_shared) then
-      status = circular_buffer_detach_shared(cb%p) .ge. 0
+      status = CB_detach_shared(cb%p) .ge. 0
     end if
     cb % p = C_NULL_PTR
   end function delete

@@ -1,3 +1,4 @@
+// This file has been generated from circular_buffer.c
 #ifndef IO_SERVER_circular_buffer_GEN_H
 #define IO_SERVER_circular_buffer_GEN_H
 
@@ -5,7 +6,6 @@
  \file
  \brief circular buffer package (C and Fortran)
 
- code extracted from circular_buffer.c
  \verbatim
            circular buffer data layout
 
@@ -128,13 +128,13 @@ static inline void copy_elements(
 
 #endif
 //! Print buffer header (to help debugging)
-void circular_buffer_print_header(
+void CB_print_header(
     circular_buffer_p b   //!< [in] Pointer to the buffer to print
 );
 //! initialize a circular buffer
-//! <br> = circular_buffer_init(p, nwords)
+//! <br> = CB_init(p, nwords)
 //! @return pointer to buffer upon success, NULL upon error
-circular_buffer_p circular_buffer_init(
+circular_buffer_p CB_init(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
   );
@@ -142,93 +142,93 @@ circular_buffer_p circular_buffer_init(
 //! nwords in in 32 bit units<br>
 //! shmid will be set to the shared memory id of the "shared memory segment upon success, -1 otherwise
 //! (see man shmget)
-//! <br> = circular_buffer_create_shared(&shmid, nwords)
+//! <br> = CB_create_shared(&shmid, nwords)
 //! @return pointer to buffer upon success, NULL upon error
-circular_buffer_p circular_buffer_create_shared(
+circular_buffer_p CB_create_shared(
   int32_t *shmid,                          //!< [out] identifier of shared memory area (see man shmget) (-1 upon error)
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
   );
 //! detach "shared memory segment" used by circular buffer
-//! <br> = circular_buffer_detach_shared
+//! <br> = CB_detach_shared
 //! @return 0 upon success, nonzero upon error
-int32_t circular_buffer_detach_shared(
+int32_t CB_detach_shared(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   );
 //! create and initialize a circular buffer of size nwords in process memory
-//! <br> = circular_buffer_create(nwords)
+//! <br> = CB_create(nwords)
 //! @return address of the circular buffer upon success, NULL otherwise
-circular_buffer_p circular_buffer_create(
+circular_buffer_p CB_create(
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
   );
 //! create and initialize a circular buffer, using supplied space
-//! <br> = circular_buffer_from_pointer(p, nwords)
+//! <br> = CB_from_pointer(p, nwords)
 //! @return address of the circular buffer upon success, NULL otherwise
-circular_buffer_p circular_buffer_from_pointer(
+circular_buffer_p CB_from_pointer(
   void *p,                                 //!< [in]  pointer to user supplied memory space
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
   );
 //! Compute how much space (in number of #data_element) is available in a given circular buffer
 //! @return How many elements can still be added
-data_index circular_buffer_get_available_space(
+data_index CB_get_available_space(
     const circular_buffer_p buffer //!< [in] The buffer we want to query
 );
 //! Compute how much data (in number of #data_element) is stored in a given circular buffer
 //! @return How many elements are stored in the buffer
-data_index circular_buffer_get_available_data(
+data_index CB_get_available_data(
     const circular_buffer_p buffer //!< [in] The buffer we want to query
 );
 //! wait until at least na empty slots are available for inserting data
-//! <br> = circular_buffer_wait_space_available(p, n)
+//! <br> = CB_wait_space_available(p, n)
 //! @return actual number of empty slots available, -1 on error
-int32_t circular_buffer_wait_space_available(
+int32_t CB_wait_space_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int n                                    //!< [in]  needed number of available slots (#data_element)
   );
 //! wait until at least n data tokens are available for extracting data
-//! <br> = circular_buffer_wait_data_available(p, n)
+//! <br> = CB_wait_data_available(p, n)
 //! @return actual number of data tokens available, -1 if error
-int32_t circular_buffer_wait_data_available(
+int32_t CB_wait_data_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int n                                    //!< [in]  needed number of available  #data_element tokens
   );
 //! get the address of the first position in the circular data buffer
-//! <br> = circular_buffer_start(p)
+//! <br> = CB_start(p)
 //! @return pointer to beginning of circular buffer
-data_element *circular_buffer_start(
+data_element *CB_start(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   );
 //! get the address of the  insertion point in the circular data buffer (data snoop)
-//! <br> = circular_buffer_data_in(p)
+//! <br> = CB_data_in(p)
 //! @return address of the  insertion point in the circular data buffer
-data_element *circular_buffer_data_in(
+data_element *CB_data_in(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   );
 //! get the address of the extraction point in the circular data buffer (data snoop)
-//! <br> = circular_buffer_data_out(p)
+//! <br> = CB_data_out(p)
 //! @return address of the  insertion point in the circular data buffer
-data_element *circular_buffer_data_out(
+data_element *CB_data_out(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
   );
 //! get pointer to the in position, assume that the caller knows the start of data buffer
-//! <br> = circular_buffer_advance_in(p, &n1, &n2)
+//! <br> = CB_advance_in(p, &n1, &n2)
 //! @return A pointer to the insertion position
-data_element *circular_buffer_advance_in(
+data_element *CB_advance_in(
   circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
   int32_t *n1,                            //!< [out] number of #data_element tokens available at the "in" position, -1 upon error
   int32_t *n2                             //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
   );
 //! return a pointer to the "out" position, assume that the caller knows the start of data buffer
-//! <br> = circular_buffer_advance_out(p, &n1, &n2)
+//! <br> = CB_advance_out(p, &n1, &n2)
 //! @return pointer to the "out" position, upon error, NULL is returned
-data_element *circular_buffer_advance_out(
+data_element *CB_advance_out(
   circular_buffer_p p,                   //!< [in]  pointer to a circular buffer
   int32_t *n1,                           //!< [out] number of #data_element tokens available at the "out" position, -1 upon error
   int32_t *n2                            //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
   );
 //! wait until n tokens are available then extract them into dst
-//! <br> = circular_buffer_atomic_get(p, dst, n)
+//! <br> = CB_atomic_get(p, dst, n)
 //! @return number of data tokens available after this operation, -1 if error
-int32_t circular_buffer_atomic_get(
+int32_t CB_atomic_get(
   circular_buffer_p p,                       //!< [in]  pointer to a circular buffer
   data_element *dst,                         //!< [out] destination array for data extraction
   int n                                      //!< [in]  number of #data_element data items to extract
@@ -236,9 +236,9 @@ int32_t circular_buffer_atomic_get(
 //! get n data tokens at position "out + offset",
 //! wait until n tokens are available at that position,
 //! DO NOT UPDATE "out" unless update flag is non zero
-//! <br> = circular_buffer_extract(p, dst, n, offset, update)
+//! <br> = CB_extract(p, dst, n, offset, update)
 //! @return number of data tokens available after this operation, -1 upon error
-int32_t circular_buffer_extract(
+int32_t CB_extract(
   circular_buffer_p p,                      //!< [in]  pointer to a circular buffer
   data_element *dst,                          //!< [out] destination array for data extraction
   int n,                                    //!< [in]  number of #data_element data items to extract
@@ -246,9 +246,9 @@ int32_t circular_buffer_extract(
   int update                                //!< [in]  if nonzero, update the "out" pointer
   );
 //! wait until nsrc free slots are available then insert from src array
-//! <br> = circular_buffer_atomic_put(p, src, n)
+//! <br> = CB_atomic_put(p, src, n)
 //! @return number of free slots available after this operation, -1 upon error
-int32_t circular_buffer_atomic_put(
+int32_t CB_atomic_put(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   data_element *src,                         //!< [in]  source array for data insertion
   int n                                    //!< [in]  number of #data_element data items to insert
@@ -256,9 +256,9 @@ int32_t circular_buffer_atomic_put(
 //! insert n tokens from the src array at position "in + offset",
 //! wait until n free slots are available,
 //! DO NOT UPDATE the "in" pointer unless update flag is non zero
-//! <br> = circular_buffer_insert(p, src, n, offset, update)
+//! <br> = CB_insert(p, src, n, offset, update)
 //! @return number of free slots available after this operation, -1 upon error
-int32_t circular_buffer_insert(
+int32_t CB_insert(
   circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
   data_element *src,                        //!< [in]  source array for data insertion
   int n,                                  //!< [in]  number of #data_element data items to insert
