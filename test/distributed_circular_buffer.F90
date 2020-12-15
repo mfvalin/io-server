@@ -57,8 +57,6 @@ program test_distributed_circular_buffer
   end if
 
   print *, 'Successfully created the buffer!'
-  goto 999
-
 
   if (rank < num_producers) then
 
@@ -146,8 +144,6 @@ program test_distributed_circular_buffer
 !  call buffer_write_test(circ_buffer)
 
   call circ_buffer % print()
-999 CONTINUE
-
   call circ_buffer % delete()
 
 777 CONTINUE

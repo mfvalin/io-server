@@ -12,6 +12,56 @@
 }
 
 {
+   <OpenMPI_supp>
+   Memcheck:Addr1
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr2
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr4
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr8
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr16
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_osc_pt2pt_free
+   fun:ompi_win_free
+}
+
+{
    <OpenMPI_supp_dynamic_window>
    Memcheck:Addr1
    ...
@@ -171,6 +221,15 @@
     ...
     fun:ompi_mpi_finalize
     fun:mpi_finalize
+}
+
+{
+   <OpenMPI_leak>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:PMPI_Get
 }
 
 
