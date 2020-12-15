@@ -1,3 +1,4 @@
+! This file has been generated from memory_arena.c
 
 !> \file
 !> \brief memory arena management package (C and Fortran)

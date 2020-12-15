@@ -39,7 +39,7 @@ void fill_test(int argc, char** argv) {
   MPI_Barrier(MPI_COMM_WORLD);
   //---------------------------
 
-  circular_buffer_p  local_buffer = circular_buffer_from_pointer(base_mem_ptr, NUM_BUFFER_ELEMENTS);
+  circular_buffer_p  local_buffer = CB_from_pointer(base_mem_ptr, NUM_BUFFER_ELEMENTS);
   circular_buffer_p* all_buffers  = NULL;
   const int          success      = (local_buffer != NULL);
   if (my_rank == 0) {
@@ -58,11 +58,11 @@ void fill_test(int argc, char** argv) {
   if (!success)
     num_errors++;
 
-  const int max_num_elements = circular_buffer_get_available_space(local_buffer);
+  const int max_num_elements = CB_get_available_space(local_buffer);
   init_array(local_data, NPTEST, my_rank);
 
   if (my_rank != 0) {
-    const int num_free = circular_buffer_atomic_put(local_buffer, local_data, max_num_elements);
+    const int num_free = CB_atomic_put(local_buffer, local_data, max_num_elements);
     if (num_free != 0)
       num_errors++;
   }
@@ -82,11 +82,11 @@ void fill_test(int argc, char** argv) {
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
         sleep_us(READ_DELAY_US);
-        circular_buffer_atomic_get(all_buffers[i], received_data, NUM_BUFFER_ELEMENTS / 2);
+        CB_atomic_get(all_buffers[i], received_data, NUM_BUFFER_ELEMENTS / 2);
       }
     }
     else {
-      circular_buffer_atomic_put(local_buffer, local_data + NUM_BUFFER_ELEMENTS, 1);
+      CB_atomic_put(local_buffer, local_data + NUM_BUFFER_ELEMENTS, 1);
       io_timer_stop(&put_time);
 
       const double t = io_time_ms(&put_time);
@@ -111,7 +111,7 @@ void fill_test(int argc, char** argv) {
 
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
-        circular_buffer_atomic_get(all_buffers[i], received_data, max_num_elements - NUM_BUFFER_ELEMENTS / 2 + 2);
+        CB_atomic_get(all_buffers[i], received_data, max_num_elements - NUM_BUFFER_ELEMENTS / 2 + 2);
         io_timer_stop(&read_time);
         io_timer_start(&read_time);
         const double t = io_time_ms(&read_time);
@@ -123,7 +123,7 @@ void fill_test(int argc, char** argv) {
     }
     else {
       sleep_us(WRITE_DELAY_US * my_rank);
-      circular_buffer_atomic_put(local_buffer, local_data, 1);
+      CB_atomic_put(local_buffer, local_data, 1);
     }
   }
 
@@ -132,7 +132,7 @@ void fill_test(int argc, char** argv) {
   //---------------------------
 
   if (my_rank != 0) {
-    if (circular_buffer_get_available_data(local_buffer) != 0)
+    if (CB_get_available_data(local_buffer) != 0)
       num_errors++;
   }
 

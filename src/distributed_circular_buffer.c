@@ -233,7 +233,7 @@ static inline data_index get_available_space_from_remote(
     const distributed_circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
   update_local_header_from_remote(buffer);
-  return circular_buffer_get_available_space(&buffer->local_header.buf);
+  return CB_get_available_space(&buffer->local_header.buf);
 }
 
 //! @brief Stop and wait until there is enough space in this circular buffer instance.
@@ -242,7 +242,7 @@ static inline data_index get_available_space_from_remote(
 //! process and check, until there is enough space.
 //! @return The number of available elements according to the latest copy of the header. If there was not enough
 //! initially, that copy is updated.
-static data_index distributed_circular_buffer_wait_space_available(
+static data_index DCB_wait_space_available(
     distributed_circular_buffer_p buffer,       //!< [in] Pointer to the distributed buffer we're waiting for
     const int                     num_requested //!< [in] Needed number of available #data_element slots
 ) {
@@ -254,7 +254,7 @@ static data_index distributed_circular_buffer_wait_space_available(
     return -1;
 
   // First check locally
-  data_index num_available = circular_buffer_get_available_space(instance);
+  data_index num_available = CB_get_available_space(instance);
   if (num_available >= num_requested)
     return num_available;
 
@@ -268,7 +268,7 @@ static data_index distributed_circular_buffer_wait_space_available(
 //! Stop and wait until there is enough data in this circular buffer instance
 //!
 //! @return The number of data elements in the buffer, if everything goes smoothly, -1 otherwise.
-static data_index distributed_circular_buffer_wait_data_available(
+static data_index DCB_wait_data_available(
     const distributed_circular_buffer_p buffer, //!< [in] Buffer we are querying
     const int buffer_id,    //!< [in] Which specific circular buffer we want to query (there are multiple ones)
     const int num_requested //!< [in] Number of elements we want to read
@@ -282,7 +282,7 @@ static data_index distributed_circular_buffer_wait_data_available(
 
   // Only check locally, waiting a bit between each check
   data_index num_available = 0;
-  while ((void)(num_available = circular_buffer_get_available_data(instance)), num_available < num_requested) {
+  while ((void)(num_available = CB_get_available_data(instance)), num_available < num_requested) {
     sleep_us(DATA_CHECK_WAIT_TIME_US);
   }
 
@@ -293,7 +293,7 @@ static data_index distributed_circular_buffer_wait_data_available(
 
 //! @{ \name Distributed circular buffer public interface
 
-void distributed_circular_buffer_print(distributed_circular_buffer_p);
+void DCB_print(distributed_circular_buffer_p);
 
 //! @brief Create a set of distributed circular buffers on a set of processes.
 //!
@@ -304,7 +304,7 @@ void distributed_circular_buffer_print(distributed_circular_buffer_p);
 //! circular buffer, as well as an offset that points to the location of their data within the shared window.
 //!
 //! @return A pointer to a newly-allocated distributed circular buffer struct that contains all the relevant info
-distributed_circular_buffer_p distributed_circular_buffer_create(
+distributed_circular_buffer_p DCB_create(
     MPI_Comm      communicator,  //!< [in] Communicator on which the distributed buffer is shared
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
@@ -352,7 +352,7 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
       circular_buffer_p          buffer_address  = &buffer_instance->buf;
 
-      circular_buffer_init(buffer_address, num_elem_in_circ_buffer);
+      CB_init(buffer_address, num_elem_in_circ_buffer);
       buffer_instance->target_rank = buffer->rank + i % num_consumers; // Assign a target consumer for the buffer
     }
   }
@@ -378,59 +378,59 @@ distributed_circular_buffer_p distributed_circular_buffer_create(
 }
 
 //F_StArT
-//  function distributed_circular_buffer_create(f_communicator, num_producers, num_elements) result(p) BIND(C, name = 'distributed_circular_buffer_create_f')
+//  function DCB_create(f_communicator, num_producers, num_elements) result(p) BIND(C, name = 'DCB_create_f')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
 //    integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
 //    integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
 //    type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
-//   end function distributed_circular_buffer_create
+//   end function DCB_create
 //F_EnD
 //! Wrapper function to call from Fortran code, with a Fortran MPI communicator
-distributed_circular_buffer_p distributed_circular_buffer_create_f(
+distributed_circular_buffer_p DCB_create_f(
     int32_t f_communicator, //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
     int32_t num_producers,  //!< [in] Number or producers (circular buffer instances)
     int32_t num_elements    //!< [in] Number of #data_element tokens in the buffer
 ) {
-  return distributed_circular_buffer_create(MPI_Comm_f2c(f_communicator), num_producers, num_elements);
+  return DCB_create(MPI_Comm_f2c(f_communicator), num_producers, num_elements);
 }
 
 //F_StArT
-//  subroutine distributed_circular_buffer_print(buffer) BIND(C, name = 'distributed_circular_buffer_print')
+//  subroutine DCB_print(buffer) BIND(C, name = 'DCB_print')
 //    import :: C_PTR
 //    implicit none
 //    type(C_PTR), INTENT(IN), value :: buffer   !< Buffer for which to print data
-//  end subroutine distributed_circular_buffer_print
+//  end subroutine DCB_print
 //F_EnD
 //! Print some debug info
-void distributed_circular_buffer_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which to print data
+void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which to print data
 ) {
   printf(
       "Printing distributed circ buf, rank: %d, num producers %d, buf sizes %d\n", buffer->rank, buffer->num_producers,
       buffer->num_element_per_instance);
   if (is_producer(buffer)) {
     printf(
-        "Num elems: %ld (rank %d)\n", (int64_t)circular_buffer_get_available_data(&buffer->local_header.buf),
+        "Num elems: %ld (rank %d)\n", (int64_t)CB_get_available_data(&buffer->local_header.buf),
         buffer->rank);
   }
   else if (is_root(buffer)) {
     for (int i = 0; i < buffer->num_producers; i++) {
       const circular_buffer_p b = get_circular_buffer(buffer, i);
-      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)circular_buffer_get_available_data(b));
+      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)CB_get_available_data(b));
     }
   }
 }
 
 //F_StArT
-//  subroutine distributed_circular_buffer_delete(buffer) BIND(C, name = 'distributed_circular_buffer_delete')
+//  subroutine DCB_delete(buffer) BIND(C, name = 'DCB_delete')
 //    import :: C_PTR
 //    implicit none
 //    type(C_PTR), intent(IN), value :: buffer !< Buffer to delete
-//  end subroutine distributed_circular_buffer_delete
+//  end subroutine DCB_delete
 //F_EnD
 //! Release all data used by the given distributed circular buffer
-void distributed_circular_buffer_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to delete
+void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to delete
 ) {
   MPI_Win_free(&buffer->window);
   MPI_Win_free(&buffer->window_mem_dummy);
@@ -438,57 +438,57 @@ void distributed_circular_buffer_delete(distributed_circular_buffer_p buffer //!
 }
 
 //F_StArT
-//  function distributed_circular_buffer_get_latest_num_elements(buffer) result(num_elements) BIND(C, name = 'distributed_circular_buffer_get_latest_num_elements')
+//  function DCB_get_latest_num_elements(buffer) result(num_elements) BIND(C, name = 'DCB_get_latest_num_elements')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
 //    integer(C_INT) :: num_elements
-//  end function distributed_circular_buffer_get_latest_num_elements
+//  end function DCB_get_latest_num_elements
 //F_EnD
 //! Check how many elements are stored in the buffer, after updating from the remote.
 //! _Can only be called from a producer process._
 //! @return The (updated) number of elements in the buffer, or -1 if called from a consumer process
-int32_t distributed_circular_buffer_get_latest_num_elements(distributed_circular_buffer_p buffer //!< [in]
+int32_t DCB_get_latest_num_elements(distributed_circular_buffer_p buffer //!< [in]
 ) {
   if (is_producer(buffer)) {
     update_local_header_from_remote(buffer);
-    return (int32_t)circular_buffer_get_available_data(&buffer->local_header.buf);
+    return (int32_t)CB_get_available_data(&buffer->local_header.buf);
   }
 
   return -1;
 }
 
 //F_StArT
-//  function distributed_circular_buffer_get_num_elements(buffer, buffer_id) result(num_elements) BIND(C, name = 'distributed_circular_buffer_get_num_elements')
+//  function DCB_get_num_elements(buffer, buffer_id) result(num_elements) BIND(C, name = 'DCB_get_num_elements')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value    :: buffer
 //    integer(C_INT), intent(in), value :: buffer_id
 //    integer(C_INT) :: num_elements
-//  end function distributed_circular_buffer_get_num_elements
+//  end function DCB_get_num_elements
 //F_EnD
 //! Check how many elements are stored in the specified buffer.
 //! _Can only be called from a consumer process._
 //! @return The number of elements in the specified buffer, or -1 if called from a producer process
-int32_t distributed_circular_buffer_get_num_elements(
+int32_t DCB_get_num_elements(
     distributed_circular_buffer_p buffer,   //!< [in]
     const int                     buffer_id //!< [in]
 ) {
   if (is_consumer(buffer))
-    return (int32_t)circular_buffer_get_available_data(get_circular_buffer(buffer, buffer_id));
+    return (int32_t)CB_get_available_data(get_circular_buffer(buffer, buffer_id));
 
   return -1;
 }
 
 //F_StArT
-//  function distributed_circular_buffer_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_put')
+//  function DCB_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'DCB_put')
 //    import :: C_PTR, C_INT, DATA_ELEMENT
 //    implicit none
 //    type(C_PTR), intent(in), value           :: buffer
 //    integer(DATA_ELEMENT), dimension(*), intent(in) :: src_data
 //    integer(C_INT), intent(in), value        :: num_elements
 //    integer(C_INT) :: num_available
-//  end function distributed_circular_buffer_put
+//  end function DCB_put
 //F_EnD
 //! @brief Insert data into the given buffer, once there is enough space (will wait if there isn't enough initially)
 //!
@@ -498,12 +498,12 @@ int32_t distributed_circular_buffer_get_num_elements(
 //! the insertion pointer on the root node (otherwise it might try to read data that has not yet arrived).
 //!
 //! @return How many elements can still fit after the insertion, if everything went smoothly, -1 otherwise
-data_index distributed_circular_buffer_put(
+data_index DCB_put(
     distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
     data_element* const           src_data,    //!< Pointer to the data we want to insert
     const int                     num_elements //!< How many 4-byte elements we want to insert
 ) {
-  if (distributed_circular_buffer_wait_space_available(buffer, num_elements) < 0)
+  if (DCB_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
   const int target_rank = buffer->local_header.target_rank;
@@ -552,11 +552,11 @@ data_index distributed_circular_buffer_put(
 
   MPI_Win_unlock(target_rank, buffer->window);
 
-  return circular_buffer_get_available_space(&buffer->local_header.buf);
+  return CB_get_available_space(&buffer->local_header.buf);
 }
 
 //F_StArT
-//  function distributed_circular_buffer_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'distributed_circular_buffer_get')
+//  function DCB_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'DCB_get')
 //    import :: C_PTR, C_INT, DATA_ELEMENT
 //    implicit none
 //    type(C_PTR), intent(in), value              :: buffer
@@ -564,15 +564,15 @@ data_index distributed_circular_buffer_put(
 //    integer(DATA_ELEMENT), dimension(*), intent(inout) :: dest_data
 //    integer(C_INT), intent(in), value           :: num_elements
 //    integer(C_INT) :: num_available
-//  end function distributed_circular_buffer_get
+//  end function DCB_get
 //F_EnD
-int distributed_circular_buffer_get(
+int DCB_get(
     distributed_circular_buffer_p buffer,      //!<
     const int                     buffer_id,   //!<
     int32_t*                      dest_data,   //!<
     const int                     num_elements //!<
 ) {
-  if (distributed_circular_buffer_wait_data_available(buffer, buffer_id, num_elements) < 0)
+  if (DCB_wait_data_available(buffer, buffer_id, num_elements) < 0)
     return -1;
 
   circular_buffer_p queue = get_circular_buffer(buffer, buffer_id);
@@ -610,7 +610,7 @@ int distributed_circular_buffer_get(
 
   queue->m.out = out_index; // Update actual extraction pointer
 
-  return circular_buffer_get_available_data(queue);
+  return CB_get_available_data(queue);
 }
 
 //! @}

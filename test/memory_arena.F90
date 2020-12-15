@@ -76,10 +76,10 @@ program test_memory_arena
     nareas = update_local_table(masteraddr)
     write(myblock,100)'FROM-',rank
     p = memory_block_create(shmaddr, 8*1024, trim(myblock))        ! outbound circular buffer
-    cio_from = circular_buffer_from_pointer(p, 8*1024)
+    cio_from = CB_from_pointer(p, 8*1024)
     write(myblock,100)'INTO-',rank
     p = memory_block_create(shmaddr, 16*1024, trim(myblock))       ! inbound circular buffer
-    cio_into = circular_buffer_from_pointer(p, 16*1024)
+    cio_into = CB_from_pointer(p, 16*1024)
   else
     do id = 2, isiz                                                ! wait for block creation by other PEs
       write(myblock,100)'BLOCK',id-1
@@ -87,11 +87,11 @@ program test_memory_arena
       write(0,*) trim(myblock)//' found, size =',bsz
       write(myblock,100)'FROM-',id-1
       p = memory_block_find_wait(shmaddr, bsz, flags, trim(myblock), 10000)
-      bsza = circular_buffer_get_available_space(p)
+      bsza = CB_get_available_space(p)
       write(0,*) trim(myblock)//' found, available space =',bsza,' of',bsz
       write(myblock,100)'INTO-',id-1
       p = memory_block_find_wait(shmaddr, bsz, flags, trim(myblock), 10000)
-      bsza = circular_buffer_get_available_space(p)
+      bsza = CB_get_available_space(p)
       write(0,*) trim(myblock)//' found, available space =',bsza,' of',bsz
     enddo
   endif
@@ -103,8 +103,8 @@ program test_memory_arena
       do i=1,64
         message(i) = i + ishft(id-1,24)
       enddo
-      bsza = circular_buffer_get_available_space(p)
-      bsz = circular_buffer_atomic_put(p, message, 64)
+      bsza = CB_get_available_space(p)
+      bsz = CB_atomic_put(p, message, 64)
       write(0,*) trim(myblock)//' available space after =',bsz,' before =',bsza
     enddo
   else                  ! send traffic to my outbound buffer
@@ -113,8 +113,8 @@ program test_memory_arena
     do i=1,128
      message(i) = i + ishft(rank,24)
     enddo
-    bsza = circular_buffer_get_available_space(p)
-    bsz = circular_buffer_atomic_put(p, message, 128)
+    bsza = CB_get_available_space(p)
+    bsz = CB_atomic_put(p, message, 128)
     write(0,*) trim(myblock)//' available space after =',bsz,' before = ',bsza
   endif
 
@@ -166,10 +166,10 @@ program test_memory_arena
      write(myblock,100)'FROM-',id-1
      p = memory_block_find(shmaddr, bsz, flags, trim(myblock))
      if(bsz < 1) write(0,*) trim(myblock),' ERROR'
-     bsza = circular_buffer_get_available_data(p)
+     bsza = CB_get_available_data(p)
      message = 0
      errors = 0
-     bsz = circular_buffer_atomic_get(p, message, 128)
+     bsz = CB_atomic_get(p, message, 128)
      do i = 1,128
       if(message(i) .ne. (i + ishft(id-1,24)) ) errors = errors + 1
      enddo
@@ -178,9 +178,9 @@ program test_memory_arena
   else                           ! other PEs check their INTO- buffer
     write(myblock,100)'INTO-',rank
     p = memory_block_find(shmaddr, bsz, flags, trim(myblock))
-    bsza = circular_buffer_get_available_data(p)
+    bsza = CB_get_available_data(p)
     message = 0
-    bsz = circular_buffer_atomic_get(p, message, 64)
+    bsz = CB_atomic_get(p, message, 64)
     errors = 0
     do i=1,64
      if(message(i) .ne. (i + ishft(rank,24)) ) errors = errors + 1

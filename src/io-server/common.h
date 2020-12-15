@@ -1,3 +1,4 @@
+// This file has been generated from common.c
 #ifndef IO_SERVER_common_GEN_H
 #define IO_SERVER_common_GEN_H
 
