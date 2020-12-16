@@ -48,7 +48,8 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  cd
+  ls ~oldeman/!< dimensions of array p (size(di) must be the same as rank of p)
   $TYPE($KIND) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -66,7 +67,7 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ${MALLOC}(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*${L}+16*${RI}+${D}    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata

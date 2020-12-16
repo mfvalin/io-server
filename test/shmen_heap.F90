@@ -98,12 +98,12 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     lastblock = 0                                     ! no block successfully allocated
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
       call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5])    ! allocate a 3D integer array demo
-      blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array
 
-      if( .not. C_ASSOCIATED(blocks(i)) ) then        ! failure expected at some point for high rank PEs
+      if( .not. ASSOCIATED(demo) ) then               ! failure expected at some point for high rank PEs
         print *,'allocation failed for block',i
         exit                                          ! exit loop as all subsequent allocations would fail (heap full)
       endif
+      blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array
       print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
       status = my_meta%meta(blocks(i))                ! get metadata for allocated array
       array_rank = my_meta%r()                        ! get rank of array
