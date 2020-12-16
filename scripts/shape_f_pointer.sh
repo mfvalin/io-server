@@ -1,4 +1,10 @@
 #!/bin/bash
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+sed -e 's/^\(.*\)$/! &/' < ${SCRIPT_DIR}/common_header.txt
+echo
+
 MALLOC=ShmemHeapAllocBlock
 METADATA=ShmemHeapSetBlockMeta
 # MALLOC=LocalAllocBlock
