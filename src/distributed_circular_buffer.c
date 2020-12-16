@@ -297,6 +297,7 @@ static data_index DCB_wait_data_available(
 
 //! @{ \name Distributed circular buffer public interface
 
+void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p);
 
 //! @brief Create a set of distributed circular buffers on a set of processes.
@@ -335,6 +336,8 @@ distributed_circular_buffer_p DCB_create(
       shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data,
       &buffer->window_mem_dummy);
 
+  int init_result = 1;
+
   if (is_root(buffer)) {
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of #data_element.
@@ -356,7 +359,7 @@ distributed_circular_buffer_p DCB_create(
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
       circular_buffer_p          buffer_address  = &buffer_instance->buf;
 
-      CB_init(buffer_address, num_elem_in_circ_buffer);
+      init_result = init_result && (CB_init(buffer_address, num_elem_in_circ_buffer) != NULL);
       buffer_instance->target_rank = buffer->rank + i % num_consumers; // Assign a target consumer for the buffer
     }
   }
@@ -372,6 +375,13 @@ distributed_circular_buffer_p DCB_create(
   const MPI_Aint final_win_size = is_producer(buffer) ? 0 : win_total_size; // Size used for actual window creation
   MPI_Win_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
+
+  MPI_Bcast(&init_result, 1, MPI_INTEGER, buffer->num_producers, buffer->communicator);
+
+  if (!init_result) {
+      DCB_delete(buffer);
+      return NULL;
+  }
 
   if (is_producer(buffer)) {
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
