@@ -2,10 +2,12 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
+  !> \brief maximum number of allowed dimensions
+  integer, parameter :: MAX_ARRAY_RANK = 5
   !> \brief C compatible data block metadata
   type, bind(C) :: block_meta_c
     private
-    integer(C_INT), dimension(5) :: d   !< array dimensions
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d   !< array dimensions
     integer(C_INT) :: tkr               !< array type, kind, rank
   end type
   !> \brief Fortran 2008 data block metadata (using the C layout)
@@ -17,7 +19,7 @@ module shmem_heap
     procedure :: t
     !> \return array kind (1/2/4/8 bytes)
     procedure :: k
-    !> \return array rank (1/2/3/4/5)
+    !> \return array rank (1/2/3/../MAX_ARRAY_RANK)
     procedure :: r
     !> \return array dimensions
     procedure :: dims
@@ -83,7 +85,7 @@ module shmem_heap
                               R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
                               R8_5D, R8_4D, R8_3D, R8_2D, R8_1D 
 !> \endcond
-    !> \return     a fortran pointer to 1 - 5 dimensional integer and real arrays (see f_alloc.inc)
+    !> \return     a fortran pointer to 1 - MAX_ARRAY_RANK dimensional integer and real arrays (see f_alloc.inc)
     GENERIC   :: allocate =>  &
                               I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
@@ -292,14 +294,14 @@ module shmem_heap
   function dims(this) result(d)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
-    integer(C_INT), dimension(5) :: d               !< array dimensions
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d         !< array dimensions
     d = this%a%d
   end function dims
   !> \brief get array dimensions from C block metadata (C callable version)
   subroutine BlockMeta_dims(this, dims) BIND(C,name='BlockMeta_dims')
     implicit none
     type(block_meta_c), intent(IN) :: this              !< block object
-    integer(C_INT), intent(OUT), dimension(5) :: dims   !< array dimensions
+    integer(C_INT), intent(OUT), dimension(MAX_ARRAY_RANK) :: dims   !< array dimensions
     dims = this%d
   end subroutine BlockMeta_dims
 

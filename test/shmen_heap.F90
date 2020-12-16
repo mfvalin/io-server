@@ -24,13 +24,13 @@ program test_shmen_heap
 end program
 
 subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE traffic
-  use shmem_heap
+  use shmem_heap                          ! heap and block management functions
   implicit none
   include 'mpif.h'
   integer, intent(IN) :: myrank, nprocs
 
-  integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
-  integer :: ierr, win, disp_unit, i, j, nheaps, status, array_rank
+  integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF
+  integer :: ierr, win, disp_unit, i, j, nheaps, status, array_rank, lastblock
   integer, dimension(:), allocatable :: disp_units
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase
   integer(KIND=MPI_ADDRESS_KIND), dimension(:), allocatable :: bases, sizes
@@ -43,29 +43,31 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   type(mem_layout), dimension(:), allocatable :: memories
   integer(C_INT), dimension(:), pointer :: ixtab   ! index table (integer array)
   integer(C_INT), dimension(:), pointer :: ram     ! shared memory (addressable as an integer array)
-  type(heap)  :: h
-  type(heap), dimension(:), allocatable :: heaps
-  type(C_PTR) :: p
+  type(heap)  :: h                        ! a managed heap
+  type(heap), dimension(:), allocatable :: heaps   ! the heaps for "model" PEs
+  type(C_PTR) :: p                        ! scratch variable
   integer(C_INT)    :: free_blocks, used_blocks
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
-  integer(C_INT), dimension(:,:,:), pointer :: demo
-  type(block_meta_f08) :: my_meta
-  integer, dimension(5) :: ad
+  integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
+  type(block_meta_f08) :: my_meta         ! metadata for allocated block (Fortran style with bound procedures)
+  integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
 
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
-    print 3,'too few processes for relay test, need at least 5, got',nprocs
+    print 3,'too few processes for relay test, a minimum of 5 is required, got',nprocs
     return
   endif
+! ================================= allocate shared memory =================================
   if(myrank == 0 .or. myrank == nprocs-1) then
-    winsize = 0                                ! relay PE
+    winsize = 0                                     ! relay PE, no space needed in local window
     print 3, 'relay PE, rank =',myrank
   else
-    winsize = 4*1024*1024 + 1024*myrank                     ! "model" PE
+    winsize = 4*1024*1024 + 1024*myrank             ! "model" PE, allocate space for PE heap
     print 3, 'model PE, rank =',myrank
   endif
-  disp_unit = C_SIZEOF(he)                          ! size of a heap element
+
+  disp_unit = C_SIZEOF(he)                          ! displacement unit in window = size of a heap element
   call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
   allocate(bases(0:nprocs-1))
   allocate(sizes(0:nprocs-1))
@@ -73,14 +75,14 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   do i = 0, nprocs-1
     call MPI_Win_shared_query(win, i, sizes(i), disp_units(i), bases(i),   ierr)  ! get base addresses of partners
   enddo
-  mybase = bases(myrank)  ! get my own base address
+  mybase = bases(myrank)  ! my own base address
   print 5,'PE ',myrank,', my base address = ',bases(myrank)
-  
-  if(myrank == 0 .or. myrank == nprocs-1) then  ! relay PE
+! ================================= setup of the "model" PE heaps =================================
+  if(myrank == 0 .or. myrank == nprocs-1) then  ! relay PE (first rank and last rank)
     do i = 0, nprocs-1
       print 5,'PE ',i,', base address = ',bases(i),' size =',sizes(i),' disp_unit =',disp_units(i)
     enddo
-  else                                          ! "model" PE, create heaps
+  else                                          ! "model" PE, create and populate heaps
     p = transfer(mybase, C_NULL_PTR)                  ! make large integer from Win_shared_query into a C pointer
     call c_f_pointer(p, ram,[winsize/4])              ! Fortran array ram points to shared memory segment
     ram(1)          = MAXINDEXES + myrank             ! post index table size
@@ -90,65 +92,66 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     call c_f_pointer(memory%pindex, ixtab, [memory%nindexes]) ! variable index now points to index table
     ixtab = -1                                        ! invalidate indexes
     p = memory%pheap                                  ! p points to the local heap
-    p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he))   ! create heap, 8 K + 128*rank elements
-    blocks = C_NULL_PTR
-    do i = 1 , 2 + myrank * 2
-!       blocks(i) = h%alloc((1100+i*10+myrank)*C_SIZEOF(he), 0)     ! try to allocate block
-!       call sm_allocate(h, demo, [1100+i*10+myrank])
-      call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5])    ! 3D integer array
-      blocks(i) = C_LOC(demo(1,1,1))
+    p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he))   ! create heap h, 8 K + 8*rank elements
+    !  ================================= allocate arrays from heaps =================================
+    blocks = C_NULL_PTR                               ! fill pointer table with NULLs
+    lastblock = 0                                     ! no block successfully allocated
+    do i = 1 , 2 + myrank * 2                         ! array allocation loop
+      call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5])    ! allocate a 3D integer array demo
+      blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array
 
-      if( .not. C_ASSOCIATED(blocks(i)) ) then
+      if( .not. C_ASSOCIATED(blocks(i)) ) then        ! failure expected at some point for high rank PEs
         print *,'allocation failed for block',i
-        exit
+        exit                                          ! exit loop as all subsequent allocations would fail (heap full)
       endif
       print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
-      status = my_meta%meta(blocks(i))                 ! get metadata for block
-      array_rank = my_meta%r()                         ! get rank of array
-      ad = my_meta%dims()                              ! get all 5 potential dimensions
-      print 6,'array dimensions fromn metadata=',ad(1:array_rank)
-      ixtab(i) = h%offset(blocks(i))
+      status = my_meta%meta(blocks(i))                ! get metadata for allocated array
+      array_rank = my_meta%r()                        ! get rank of array
+      ad = my_meta%dims()                             ! get all MAX_ARRAY_RANK potential dimensions
+      print 6,'array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
+      ixtab(i) = h%offset(blocks(i))                  ! offset of blocks in heap
+      lastblock = i
     enddo
-    print 6,'ixtab =', ixtab(1:10)
+    print 6,'ixtab =', ixtab(1:lastblock)             ! print used portion of index table
   endif
 
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait for heap creation to be complete
-
-  if(myrank == 0 .or. myrank == nprocs-1) then                                ! relay PE, scan for heaps
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait for heap creation and population to complete
+! ================================= sanity check of the "model" PE heaps by "realy" PEs =================================
+  if(myrank == 0 .or. myrank == nprocs-1) then             ! relay PE, scan heaps
     allocate(memories(1:nprocs-2))
     allocate(heaps(1:nprocs-2))
-    do i = 1, nprocs-2                                ! scan "model" PEs
-      p = transfer(bases(i), C_NULL_PTR)
+    do i = 1, nprocs-2                                     ! scan "model" PEs
+      p = transfer(bases(i), C_NULL_PTR)                   ! get base memory address for PE of rank i
       call c_f_pointer(p, ram,[sizes(i)/C_SIZEOF(he)])     ! ram points to shared memory segment of a "model" PE
-      memories(i)%nindexes = ram(1)
-      memories(i)%pindex   = C_LOC(ram(2))
-      call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])
-      memories(i)%pheap    = C_LOC(ram(memories(i)%nindexes+2))
-      nheaps = heaps(i)%register(memories(i)%pheap)
+      memories(i)%nindexes = ram(1)                        ! size of index table for PE of rank i
+      memories(i)%pindex   = C_LOC(ram(2))                 ! address of index table for PE of rank i
+      call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])    ! Fortran array for index table
+      memories(i)%pheap    = C_LOC(ram(memories(i)%nindexes+2))              ! heap base address for PE of rank i
+      nheaps = heaps(i)%register(memories(i)%pheap)        ! register heap for PE of rank i
       print 3,'nheaps =',nheaps,', nindexes =',memories(i)%nindexes
-      print 6,'ixtab =', ixtab(1:10)
-      status = heaps(i)%check(free_blocks, free_space, used_blocks, used_space)
+      print 6,'ixtab =', ixtab(1:10)                       ! print index table for PE of rank i
+      status = heaps(i)%check(free_blocks, free_space, used_blocks, used_space)   ! heap sanity check for PE of rank i
       print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
              ,free_space,' free bytes,',used_space,' bytes in use'
     enddo
   endif
 
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait until all check operations are completed
-
-  if(myrank == 0) then                                ! PE 0 will free some blocks
-    do i = 1, nprocs-2
-      call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait until all sanity check operations are completed
+! ================================= free some blocks from the "model" PE heaps =================================
+  if(myrank == 0) then                                ! PE 0 will now free some blocks
+    do i = 1, nprocs-2                                ! loop over "model" PEs
+      call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])   ! ixtab is Fortan array containing index table
       do j = 2, memories(i)%nindexes, 2
-        if(ixtab(j) == -1) exit
-        status = heaps(i)%freebyoffset(ixtab(j))
+        if(ixtab(j) == -1) exit                       ! no more valid blocks
+        status = heaps(i)%freebyoffset(ixtab(j))      ! free operation using index (offset) in heap
         print 3,'freeing heap',i,', block',j,', status =',status,   &
                 ', offset =',heaps(i)%offset(heaps(i)%address(ixtab(j)))
       enddo
     enddo
   endif
 
-  if(myrank == nprocs-1) then                         ! PE nprocs-1 will free some blocks
-    do i = 1, nprocs-2
+  if(myrank == nprocs-1) then                         ! PE nprocs-1 will also free some blocks
+    do i = 1, nprocs-2                                ! loop over "model" PEs
       call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])
       do j = 3, memories(i)%nindexes, 2
         if(ixtab(j) == -1) exit
@@ -160,9 +163,9 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait until all free operations are completed
-
+! ================================= sanity check of the "model" PE heaps =================================
   if(myrank == 0 .or. myrank == nprocs-1) then        ! relay PE
-  else                                                ! "model" PE
+  else                                                ! "model" PE, check what is left on heap
     status = h%check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
             ,free_space,' free bytes,',used_space,' bytes in use'
