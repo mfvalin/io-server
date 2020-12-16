@@ -71,9 +71,9 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   allocate(sizes(0:nprocs-1))
   allocate(disp_units(0:nprocs-1))
   do i = 0, nprocs-1
-    call MPI_Win_shared_query(win, i, sizes(i), disp_units(i), bases(i),   ierr)  ! get base address of partners
+    call MPI_Win_shared_query(win, i, sizes(i), disp_units(i), bases(i),   ierr)  ! get base addresses of partners
   enddo
-  mybase = bases(myrank)  ! get my base address
+  mybase = bases(myrank)  ! get my own base address
   print 5,'PE ',myrank,', my base address = ',bases(myrank)
   
   if(myrank == 0 .or. myrank == nprocs-1) then  ! relay PE
@@ -81,8 +81,8 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       print 5,'PE ',i,', base address = ',bases(i),' size =',sizes(i),' disp_unit =',disp_units(i)
     enddo
   else                                          ! "model" PE, create heaps
-    p = transfer(mybase, C_NULL_PTR)
-    call c_f_pointer(p, ram,[winsize/4])              ! ram points to shared memory segment
+    p = transfer(mybase, C_NULL_PTR)                  ! make large integer from Win_shared_query into a C pointer
+    call c_f_pointer(p, ram,[winsize/4])              ! Fortran array ram points to shared memory segment
     ram(1)          = MAXINDEXES + myrank             ! post index table size
     memory%nindexes = ram(1)                          ! get size of index table
     memory%pindex   = C_LOC(ram(2))                   ! pointer to local index table
@@ -90,7 +90,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     call c_f_pointer(memory%pindex, ixtab, [memory%nindexes]) ! variable index now points to index table
     ixtab = -1                                        ! invalidate indexes
     p = memory%pheap                                  ! p points to the local heap
-    p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he)) ! create heap, 8 K + 128*rank elements
+    p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he))   ! create heap, 8 K + 128*rank elements
     blocks = C_NULL_PTR
     do i = 1 , 2 + myrank * 2
 !       blocks(i) = h%alloc((1100+i*10+myrank)*C_SIZEOF(he), 0)     ! try to allocate block
@@ -103,10 +103,10 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         exit
       endif
       print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
-      status = my_meta%meta(blocks(i))
-      array_rank = my_meta%r()
-      ad = my_meta%dims()
-      print 6,'array dimensions =',ad(1:array_rank)
+      status = my_meta%meta(blocks(i))                 ! get metadata for block
+      array_rank = my_meta%r()                         ! get rank of array
+      ad = my_meta%dims()                              ! get all 5 potential dimensions
+      print 6,'array dimensions fromn metadata=',ad(1:array_rank)
       ixtab(i) = h%offset(blocks(i))
     enddo
     print 6,'ixtab =', ixtab(1:10)
