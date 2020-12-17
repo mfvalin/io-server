@@ -16,7 +16,7 @@ subroutine I1_5D(h, p, di) ! integer*1 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -34,7 +34,7 @@ subroutine I1_5D(h, p, di) ! integer*1 5D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*1+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -57,7 +57,7 @@ subroutine I1_4D(h, p, di) ! integer*1 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -75,7 +75,7 @@ subroutine I1_4D(h, p, di) ! integer*1 4D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*1+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -98,7 +98,7 @@ subroutine I1_3D(h, p, di) ! integer*1 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -116,7 +116,7 @@ subroutine I1_3D(h, p, di) ! integer*1 3D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*1+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -139,7 +139,7 @@ subroutine I1_2D(h, p, di) ! integer*1 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -157,7 +157,7 @@ subroutine I1_2D(h, p, di) ! integer*1 2D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*1+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -180,7 +180,7 @@ subroutine I1_1D(h, p, di) ! integer*1 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT8_T) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -198,7 +198,7 @@ subroutine I1_1D(h, p, di) ! integer*1 1D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*1+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -221,7 +221,7 @@ subroutine I2_5D(h, p, di) ! integer*2 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -239,7 +239,7 @@ subroutine I2_5D(h, p, di) ! integer*2 5D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*2+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -262,7 +262,7 @@ subroutine I2_4D(h, p, di) ! integer*2 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -280,7 +280,7 @@ subroutine I2_4D(h, p, di) ! integer*2 4D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*2+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -303,7 +303,7 @@ subroutine I2_3D(h, p, di) ! integer*2 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -321,7 +321,7 @@ subroutine I2_3D(h, p, di) ! integer*2 3D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*2+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -344,7 +344,7 @@ subroutine I2_2D(h, p, di) ! integer*2 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -362,7 +362,7 @@ subroutine I2_2D(h, p, di) ! integer*2 2D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*2+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -385,7 +385,7 @@ subroutine I2_1D(h, p, di) ! integer*2 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_SHORT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -403,7 +403,7 @@ subroutine I2_1D(h, p, di) ! integer*2 1D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*2+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -426,7 +426,7 @@ subroutine I4_5D(h, p, di) ! integer*4 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -444,7 +444,7 @@ subroutine I4_5D(h, p, di) ! integer*4 5D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -467,7 +467,7 @@ subroutine I4_4D(h, p, di) ! integer*4 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -485,7 +485,7 @@ subroutine I4_4D(h, p, di) ! integer*4 4D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -508,7 +508,7 @@ subroutine I4_3D(h, p, di) ! integer*4 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -526,7 +526,7 @@ subroutine I4_3D(h, p, di) ! integer*4 3D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -549,7 +549,7 @@ subroutine I4_2D(h, p, di) ! integer*4 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -567,7 +567,7 @@ subroutine I4_2D(h, p, di) ! integer*4 2D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -590,7 +590,7 @@ subroutine I4_1D(h, p, di) ! integer*4 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_INT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -608,7 +608,7 @@ subroutine I4_1D(h, p, di) ! integer*4 1D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -631,7 +631,7 @@ subroutine I8_5D(h, p, di) ! integer*8 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -649,7 +649,7 @@ subroutine I8_5D(h, p, di) ! integer*8 5D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*I+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -672,7 +672,7 @@ subroutine I8_4D(h, p, di) ! integer*8 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -690,7 +690,7 @@ subroutine I8_4D(h, p, di) ! integer*8 4D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*I+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -713,7 +713,7 @@ subroutine I8_3D(h, p, di) ! integer*8 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -731,7 +731,7 @@ subroutine I8_3D(h, p, di) ! integer*8 3D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*I+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -754,7 +754,7 @@ subroutine I8_2D(h, p, di) ! integer*8 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -772,7 +772,7 @@ subroutine I8_2D(h, p, di) ! integer*8 2D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*I+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -795,7 +795,7 @@ subroutine I8_1D(h, p, di) ! integer*8 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   integer(C_LONG_LONG) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -813,7 +813,7 @@ subroutine I8_1D(h, p, di) ! integer*8 1D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*I+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -836,7 +836,7 @@ subroutine R4_5D(h, p, di) ! real*4 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -854,7 +854,7 @@ subroutine R4_5D(h, p, di) ! real*4 5D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*R+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -877,7 +877,7 @@ subroutine R4_4D(h, p, di) ! real*4 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -895,7 +895,7 @@ subroutine R4_4D(h, p, di) ! real*4 4D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*R+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -918,7 +918,7 @@ subroutine R4_3D(h, p, di) ! real*4 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -936,7 +936,7 @@ subroutine R4_3D(h, p, di) ! real*4 3D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*R+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -959,7 +959,7 @@ subroutine R4_2D(h, p, di) ! real*4 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -977,7 +977,7 @@ subroutine R4_2D(h, p, di) ! real*4 2D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*R+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -1000,7 +1000,7 @@ subroutine R4_1D(h, p, di) ! real*4 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_FLOAT) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -1018,7 +1018,7 @@ subroutine R4_1D(h, p, di) ! real*4 1D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*4+16*R+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -1041,7 +1041,7 @@ subroutine R8_5D(h, p, di) ! real*8 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -1059,7 +1059,7 @@ subroutine R8_5D(h, p, di) ! real*8 5D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*R+5    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -1082,7 +1082,7 @@ subroutine R8_4D(h, p, di) ! real*8 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -1100,7 +1100,7 @@ subroutine R8_4D(h, p, di) ! real*8 4D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*R+4    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -1123,7 +1123,7 @@ subroutine R8_3D(h, p, di) ! real*8 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -1141,7 +1141,7 @@ subroutine R8_3D(h, p, di) ! real*8 3D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*R+3    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -1164,7 +1164,7 @@ subroutine R8_2D(h, p, di) ! real*8 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -1182,7 +1182,7 @@ subroutine R8_2D(h, p, di) ! real*8 2D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*R+2    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
@@ -1205,7 +1205,7 @@ subroutine R8_1D(h, p, di) ! real*8 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di   !< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   real(C_DOUBLE) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo
@@ -1223,7 +1223,7 @@ subroutine R8_1D(h, p, di) ! real*8 1D array allocator
     bsz = C_SIZEOF(bmc)
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
     cptr = ShmemHeapAllocBlock(h%p, asz, 0)            ! allocate block
-    if(.not. C_ASSOCIATED(cptr) ) return  ! allocation failed
+    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
     call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
     tkr = 256*8+16*R+1    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata

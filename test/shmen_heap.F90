@@ -99,11 +99,11 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
       call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5])    ! allocate a 3D integer array demo
 
-      if( .not. ASSOCIATED(demo) ) then               ! failure expected at some point for high rank PEs
-        print *,'allocation failed for block',i
+      if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
+        print *,'allocation failed for block',i       ! failure expected at some point for high rank PEs
         exit                                          ! exit loop as all subsequent allocations would fail (heap full)
       endif
-      blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array
+      blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
       print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
       status = my_meta%meta(blocks(i))                ! get metadata for allocated array
       array_rank = my_meta%r()                        ! get rank of array
@@ -172,6 +172,8 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
+
+  call ShmemHeapDumpInfo()
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
 

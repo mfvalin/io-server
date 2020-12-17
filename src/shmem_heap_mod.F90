@@ -228,6 +228,9 @@ module shmem_heap
       integer(C_INT) :: status
     end function ShmemHeapGetBlockMeta
 
+    subroutine ShmemHeapDumpInfo() bind(C,name='ShmemHeapDumpInfo')
+    end subroutine ShmemHeapDumpInfo
+
   end interface
 
 !> \endcond

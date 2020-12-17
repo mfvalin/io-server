@@ -48,8 +48,7 @@ subroutine ${RI}${L}_${D}D(h, p, di) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
-  integer, dimension(:), intent(IN) :: di  cd
-  ls ~oldeman/!< dimensions of array p (size(di) must be the same as rank of p)
+  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   $TYPE($KIND) :: pref
   type(block_meta_f08) :: bmi
   type(block_meta_f08) :: bmo

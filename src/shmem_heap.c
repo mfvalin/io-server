@@ -86,25 +86,64 @@ typedef data_element heap_element ;     // remain consistent with io-server pack
 //!> number of registered heaps
 static int32_t nheaps = 0 ;
 
-//!> table containing heap bounds
-static heap_element *heaps[MAX_HEAPS][2] ;
+// static heap_element *heaps[MAX_HEAPS][2] ;
+
+//!> heap metadata
+typedef struct{
+  heap_element *bot ;     //!< bottom of heap (lowest address)
+  heap_element *top ;     //!< top of heap (highest address)
+  heap_element *max ;     //!< high water of heap (highest allocated address)
+  uint64_t      nblk ;    //!< number of block allocations
+  uint64_t      nbyt ;    //!< number of bytes allocated
+} heap_item ;
+//!> table containing heap information
+static heap_item heap_table[MAX_HEAPS] ;
+
+void ShmemHeapDumpInfo(
+     ){
+  int i ;
+  for(i = 0 ; i < MAX_HEAPS ; i++) {
+    if( heap_table[i].bot != NULL) {
+      printf("heap %2d, bot = %p, top = %p, max = %Ld, blocks = %Ld, bytes = %Ld\n",
+             i, heap_table[i].bot, heap_table[i].top, heap_table[i].max - heap_table[i].bot, heap_table[i].nblk, heap_table[i].nbyt) ;
+    }
+  }
+}
 
 //! is this a known heap ?
-//! @return size if a known heap, 0 otherwise
-heap_element ShmemHeapSize(
-  void *addr                    //!< [in]  address possibly in a known heap
+//! @return index in heap table if a known heap, -1 otherwise
+int32_t ShmemHeapIndex(
+  void *addr                          //!< [in]  address possibly of a known heap
   ){
   heap_element *b = (heap_element *) addr ;
   int i;
 
-  if(addr == NULL) return -1 ;  // obviously not a heap
+  if(addr == NULL) return -1 ;        // obviously not a heap
 
   for(i=0 ; i<nheaps ; i++){
-    if( b == heaps[i][0] ){     // does the heap base address match ?
-      return b[0] ;             // size of heap
+    if( b == heap_table[i].bot ){     // does the heap base address match ?
+      return i ;                      // index in heap table
     }
   }
-  return -1 ;                   // not a known heap
+  return -1 ;                         // not a known heap
+}
+
+//! is this a known heap ?
+//! @return size if a known heap, -1 otherwise
+heap_element ShmemHeapSize(
+  void *addr                    //!< [in]  address possibly of a known heap
+  ){
+  heap_element *b = (heap_element *) addr ;
+  int i;
+
+  if(addr == NULL) return -1 ;        // obviously not a heap
+
+  for(i=0 ; i<nheaps ; i++){
+    if( b == heap_table[i].bot ){     // does the heap base address match ?
+      return b[0] ;                   // size of heap
+    }
+  }
+  return -1 ;                         // not a known heap
 }
 
 //! which known heap does this address belong to ?
@@ -116,8 +155,8 @@ heap_element *ShmemHeapContains(
   int i;
 
   for(i=0 ; i<nheaps ; i++){
-    if( (b >= heaps[i][0] ) && (b < heaps[i][1]) ){ // address is within heap boundaries
-      return heaps[i][0] ;                          // base address of heap this address belongs to
+    if( (b >= heap_table[i].bot ) && (b < heap_table[i].top) ){ // address is within heap boundaries
+      return heap_table[i].bot ;                          // base address of heap this address belongs to
     }
   }
   return NULL ;    // not within a known heap
@@ -242,19 +281,23 @@ int32_t ShmemHeapRegister(
 
   if(nheaps == 0){                    // first time around, initialize heaps
     for(i=0 ; i<MAX_HEAPS ; i++) {
-      heaps[i][0] = NULL ;
-      heaps[i][1] = NULL ;
+      heap_table[i].bot = NULL ;
+      heap_table[i].top = NULL ;
+      heap_table[i].max = NULL ;
+      heap_table[i].nblk = 0 ;
+      heap_table[i].nbyt = 0 ;
     }
   }
 
-  for(i=0 ; i<MAX_HEAPS ; i++) if(heaps[i][0] == NULL) {
+  for(i=0 ; i<MAX_HEAPS ; i++) if(heap_table[i].bot == NULL) {
     target = i ;                  // unused entry found in table ?
     break;
   }
   if(target == -1) return -1 ;    // table is full, sorry !
 
-  heaps[target][0] = h ;          // base of heap
-  heaps[target][1] = h + h[0] ;   // 1 element beyond top of heap
+  heap_table[target].bot = h ;          // base of heap
+  heap_table[target].max = h ;          // base of heap
+  heap_table[target].top = h + h[0] ;   // 1 element beyond top of heap
   if(target >= nheaps)nheaps++ ;  // bump heaps counter if not recycling an entry
   return nheaps ;                 // number of registered heaps
 }
@@ -354,6 +397,12 @@ void *ShmemHeapAllocBlock(
   heap_element *h = (heap_element *) addr ;
   heap_element sz, limit, cur, next ;
   heap_element *t ;
+  int32_t index ;
+
+  index = ShmemHeapIndex(addr) ;
+  if(index == -1) return NULL ;
+  heap_table[index].nblk += 1 ;
+  heap_table[index].nbyt += bsz ;
 
   sz = h[0] ;
   limit = sz - 1 ;
@@ -385,6 +434,7 @@ void *ShmemHeapAllocBlock(
         h[cur+1]     =  HEAD ;        // low  marker
         h[cur+bsz-2] =  TAIL ;        // tail marker
         h[cur+bsz-1] =   bsz ;        // tail count (lower block)
+        if( (t + bsz) > heap_table[index].max ) heap_table[index].max = (t + bsz) ;
         h[cur+bsz]      = sz - bsz ;  // head count (upper block)
         h[cur+bsz+1]    = HEAD ;      // low  marker
         h[cur + sz - 2] = TAIL ;      // tail marker
@@ -419,7 +469,7 @@ int32_t ShmemHeapSetBlockMeta(
   unsigned char *p ;
 // meta_c *m;
 
-  if(addr == NULL || msz <= 0) return 1 ;
+  if(addr == NULL || msz <= 0 || meta == NULL) return 1 ;
   if( ShmemHeapValidBlock(b) != 0 ) return 1 ;  // is block valid ?
   b = b - 2 ;                                   // start of block
   sz = -b[0] ;                                  // size of block
@@ -438,7 +488,7 @@ int32_t ShmemHeapSetBlockMeta(
 //! @return 0 if O.K., nonzero if error
 int32_t ShmemHeapGetBlockMeta(
   void *addr,                      //!< [in]  address of block
-  unsigned char *meta,             //!< [in]  address of metadata (user array to receive metadata)
+  unsigned char *meta,             //!< [out]  address of metadata (user array to receive metadata)
   int msz                          //!< [in]  size of metadata (bytes)
   ){
   heap_element *b = (heap_element *) addr ;     // block address
@@ -446,7 +496,7 @@ int32_t ShmemHeapGetBlockMeta(
   int32_t i ;
   unsigned char *p ;
 
-  if(addr == NULL || msz <= 0) return 1 ;
+  if(addr == NULL || msz <= 0 || meta == NULL) return 1 ;
   if( ShmemHeapValidBlock(b) != 0 ) return 1 ;  // is block valid ?
   b = b - 2 ;                                   // start of block
   sz = -b[0] ;                                  // size of block
