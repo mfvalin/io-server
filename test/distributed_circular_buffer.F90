@@ -25,21 +25,41 @@ program test_distributed_circular_buffer
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
 
-  integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
-  integer, parameter :: NUM_DATA_ELEMENTS = 10
+  integer, parameter :: NUM_BUFFER_ELEMENTS = 200
+  integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
+  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 300
+  integer, parameter :: STEP_SIZE = 5
   integer, parameter :: NUM_CONSUMERS = 2
 
   include 'mpif.h'
   include 'io-server/common.inc'
 
+  interface
+  subroutine init_array(array, rank)
+    use circular_buffer_module, only: DATA_ELEMENT
+    implicit none
+    integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+    integer, intent(in) :: rank
+  end subroutine init_array
+  end interface
+
   integer :: error, i
   integer :: rank, comm_size
   integer :: available
   logical :: success
+  integer :: num_errors, tmp_errors
 
   type(distributed_circular_buffer)                   :: circ_buffer
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: in_data_small, out_data_small, expected_data_small
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: in_data_large, out_data_large, expected_data_large
   integer :: num_producers, consumer_id
+
+  integer :: first_prod, num_prod_local, last_prod
+  integer :: i_prod
+
+  ! Initialization
+
+  num_errors = 0
 
   call MPI_init(error)
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
@@ -47,111 +67,141 @@ program test_distributed_circular_buffer
 
   if (comm_size < 4) then
     print *, 'Need at least 4 processes for this test!'
+    num_errors = num_errors + 1
     goto 777
   end if
 
+  call init_array(in_data_small, rank)
+  call init_array(in_data_large, rank)
+  out_data_small(:) = -1
+  out_data_large(:) = -1
+
   num_producers = comm_size - NUM_CONSUMERS;
   consumer_id = rank - num_producers
+
+  num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
+  first_prod = consumer_id * num_prod_local
+  last_prod = min(first_prod + num_prod_local, num_producers) - 1
+
+  ! Beginning of test
 
   success = circ_buffer % create(MPI_COMM_WORLD, num_producers, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
+    num_errors = num_errors + 1
     goto 777
   end if
 
-  print *, 'Successfully created the buffer!'
-
   if (rank < num_producers) then
 
-    in_data(:) = -1
-    out_data(:) = -2
+!    print *, 'Putting ', in_data_small
+    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
 
-    do i = 1, NUM_DATA_ELEMENTS
-      in_data(i) = rank * 1000 + i
-    end do
-
-    available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
-
+    if (available < 0) then
+      num_errors = num_errors + 1
+      print *, 'Unable to insert stuff in the buffer!!!!!'
+    end if
     !---------------------------------------
     call MPI_Barrier(MPI_COMM_WORLD, error)
     !---------------------------------------
-    print *, 'Just put stuff: buffer, num_data', rank, circ_buffer % get_num_elements()
-
   else
-
     !---------------------------------------
     call MPI_Barrier(MPI_COMM_WORLD, error)
     !---------------------------------------
-
     available = circ_buffer % get_num_elements(0)
-    if (available <= 0) then
-      print *, 'There is nothing in buffer 0!!!!!!!!', rank
+    if (available .ne. NUM_DATA_ELEMENTS_SMALL) then
+      num_errors = num_errors + 1
+      print *, 'Wrong number of elements in buffer 0!!!!!!!!', rank
       goto 777
     end if
 
     available = circ_buffer % get_num_elements(1)
-    if (available <= 0) then
-      print *, 'There is nothing in buffer 1!!!!!!!!', rank
+    if (available .ne. NUM_DATA_ELEMENTS_SMALL) then
+      num_errors = num_errors + 1
+      print *, 'Wrong number of elements in buffer 1!!!!!!!!', rank
       goto 777
     end if
 
   end if
 
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+  if (rank >= num_producers) then
+    do i_prod = first_prod, last_prod
+      call init_array(expected_data_small, i_prod)
+
+      available = circ_buffer % get(i_prod, out_data_small, NUM_DATA_ELEMENTS_SMALL)
+!      print *, 'Got ', out_data_small
+
+      if (available .ne. 0) then
+        num_errors = num_errors + 1
+      end if
+      if (.not. all(out_data_small == expected_data_small)) then
+        num_errors = num_errors + 1
+      end if
+!      print *, 'Read producer ', i_prod
+    end do
+  end if
+
+  goto 999
 
   !---------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, error)
   !---------------------------------------
 
   if (rank < num_producers) then
-
-    call sleep_us(200)
-
-    in_data(:) = -1
-    out_data(:) = -2
-
-    do i = 1, NUM_DATA_ELEMENTS
-      in_data(i) = rank * 1000 + i
+    do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+      print *, rank, 'Putting elements ', in_data_large(i:i + STEP_SIZE - 1)
+      available = circ_buffer % put(in_data_large(i:i + STEP_SIZE - 1), STEP_SIZE)
     end do
-
-    available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
-
-    if (available < 0) then
-      print *, 'Unable to insert stuff in the buffer!!!!!'
-    else
-      print *, 'There is now that many slots available in the buffer: ', available
-    end if
-
   else
-!    call sleep_us(20000)
-    block
-      integer :: first_prod, num_prod_local, last_prod
-      integer :: i_prod
-
-      num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
-      first_prod = consumer_id * num_prod_local
-      last_prod = min(first_prod + num_prod_local, num_producers) - 1
-
-!      print *, 'Reading buffers from ', first_prod, last_prod
-      do i_prod = first_prod, last_prod
-        print *, 'Reading from producer ', i_prod
-        available = circ_buffer % get(i_prod, out_data, NUM_DATA_ELEMENTS)
-        print *, 'Read from producer: ', out_data
-        print *, 'It now has: ', available
+    do i_prod = first_prod, last_prod
+      call init_array(expected_data_large, i_prod)
+      do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+        print *, rank, 'Getting elements ', expected_data_large(i : i + STEP_SIZE - 1), ' from ', i_prod
+        available = circ_buffer % get(i_prod, out_data_large(i : i + STEP_SIZE - 1), STEP_SIZE)
       end do
-
-    end block
-
+    end do
   end if
 
+  !---------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, error)
-!  call buffer_write_test(circ_buffer)
+  !---------------------------------------
 
-  call circ_buffer % print()
+999 CONTINUE
+
+!  call circ_buffer % print()
   call circ_buffer % delete()
 
 777 CONTINUE
 
+  tmp_errors = num_errors
+  call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, error)
+
+  if(rank == 0) then  ! check that we got back what we sent
+    if(num_errors > 0) then
+      print *, 'ERRORS IN DISTRIBUTED BUFFER TEST ', num_errors
+    else
+      print *, 'Distributed circular buffer test has succeeded'
+    end if
+  endif
+
   call MPI_finalize(error)
 
 end program test_distributed_circular_buffer
+
+subroutine init_array(array, rank)
+  use circular_buffer_module, only: DATA_ELEMENT
+  implicit none
+
+  integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+  integer, intent(in) :: rank
+
+  integer :: i
+  do i = 1, size(array)
+    array(i) = (rank + 1) * 10000 + i
+  end do
+end subroutine init_array
