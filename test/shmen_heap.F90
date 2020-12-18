@@ -73,6 +73,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
   type(block_meta_f08) :: my_meta         ! metadata for allocated block (Fortran style with bound procedures)
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
+  integer(C_LONG_LONG) :: sz64, max64, nblk64, nbyt64  ! to get heap stats
 
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
@@ -198,6 +199,13 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
 
+  do i = 0, 8
+    status = ShmemHeapGetInfo(i, sz64, max64, nblk64, nbyt64)
+    if(status == 0) print 8,"heap stats",i, sz64, max64, nblk64, nbyt64
+  enddo
+
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
+
   call MPI_Win_free(win, ierr)
 
   return
@@ -207,6 +215,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 5 format(A,I3,A,Z16.16,2(A,I8))
 6 format(A,10I6)
 7 format(A,I3,A,I8,A,10I6)
+8 format(A,i3,4I10)
 end subroutine relay_test
 
 subroutine base_test(nprocs, myrank)

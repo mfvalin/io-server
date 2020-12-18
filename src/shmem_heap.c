@@ -38,11 +38,11 @@
 
   Server Heap layout
 
-  +------+---------------+    +---------------+     +---------------+------+
-  |  NT  |    block 0    | ...|    block i    | ... |    block N    | 0/1  |
-  +------+---------------+    +---------------+     +---------------+------+
+  +------+---------------+    +---------------+     +---------------+------+-----------------+
+  |  NT  |    block 0    | ...|    block i    | ... |    block N    | 0/1  | heap statistics |
+  +------+---------------+    +---------------+     +---------------+------+-----------------+
 
-  NT  :  total number of elements in entire Heap including NT itself
+  NT  :  total number of elements in entire Heap including NT itself (but EXCLUDING statistics)
 
   Server Heap block i layout
 
@@ -95,28 +95,60 @@ typedef data_element heap_element ;     // remain consistent with io-server pack
 //!> number of registered heaps
 static int32_t nheaps = 0 ;
 
-// static heap_element *heaps[MAX_HEAPS][2] ;
-
-//!> heap metadata
+//!> heap statistics
 typedef struct{
-  heap_element *bot ;     //!< bottom of heap (lowest address)
-  heap_element *top ;     //!< top of heap (highest address)
-  heap_element *max ;     //!< high water of heap (highest allocated address)
+  uint64_t      max ;     //!< high water of heap (highest allocation point)
   uint64_t      nblk ;    //!< number of block allocations
   uint64_t      nbyt ;    //!< number of bytes allocated
+} heap_stats ;
+
+//!> heap information
+typedef struct{
+  heap_element *bot ;     //!< bottom of heap (lowest address)
+  heap_element *top ;     //!< top of heap (highest address + 1)
+  heap_stats   *inf ;     //!< pointer to heap statistics
 } heap_item ;
-//!> table containing heap information
+
+//!> table containing registered heap information
 static heap_item heap_table[MAX_HEAPS] ;
 
 void ShmemHeapDumpInfo(
      ){
   int i ;
+  printf("======== local heap table contents ========\n");
   for(i = 0 ; i < MAX_HEAPS ; i++) {
     if( heap_table[i].bot != NULL) {
-      printf("heap %2d, bot = %p, top = %p, max = %Ld, blocks = %Ld, bytes = %Ld\n",
-             i, heap_table[i].bot, heap_table[i].top, heap_table[i].max - heap_table[i].bot, heap_table[i].nblk, heap_table[i].nbyt) ;
+      printf("heap %2d, (%p : %p), high point: %Ld bytes, allocated %Ld blocks (%Ld bytes)\n",
+             i, heap_table[i].bot, heap_table[i].top , 
+             (heap_table[i].inf)->max * sizeof(heap_element) , 
+             (heap_table[i].inf)->nblk, (heap_table[i].inf)->nbyt) ;
     }
   }
+  printf("===========================================\n");
+}
+
+int ShmemHeapGetInfo(
+  int index,
+  int64_t *size,
+  int64_t *max,
+  int64_t *nblk,
+  int64_t *nbyt
+     ){
+  int i ;
+
+  *size = 0;
+  *max  = 0;
+  *nblk = 0;
+  *nbyt = 0;
+  if( index < 0 | index >= MAX_HEAPS) return -1 ;  // bad index
+  if(heap_table[index].bot == NULL)   return -1 ;  // not registered
+
+  *size = (heap_table[index].top - heap_table[index].bot) * sizeof(heap_element) ;
+  *max  = sizeof(heap_element) ;
+  *max  *= (heap_table[index].inf)->max ;
+  *nblk = (heap_table[index].inf)->nblk ;
+  *nbyt = (heap_table[index].inf)->nbyt ;
+  return 0 ;
 }
 
 //! is this a known heap ?
@@ -292,9 +324,7 @@ int32_t ShmemHeapRegister(
     for(i=0 ; i<MAX_HEAPS ; i++) {
       heap_table[i].bot = NULL ;
       heap_table[i].top = NULL ;
-      heap_table[i].max = NULL ;
-      heap_table[i].nblk = 0 ;
-      heap_table[i].nbyt = 0 ;
+      heap_table[i].inf = NULL ;
     }
   }
 
@@ -305,8 +335,8 @@ int32_t ShmemHeapRegister(
   if(target == -1) return -1 ;    // table is full, sorry !
 
   heap_table[target].bot = h ;          // base of heap
-  heap_table[target].max = h ;          // base of heap
   heap_table[target].top = h + h[0] ;   // 1 element beyond top of heap
+  heap_table[target].inf = (heap_stats *) heap_table[target].top ;
   if(target >= nheaps)nheaps++ ;  // bump heaps counter if not recycling an entry
   return nheaps ;                 // number of registered heaps
 }
@@ -318,17 +348,26 @@ void *ShmemHeapInit(
   size_t sz                      //!< [in]  size in bytes of space pointed to by addr
   ){
   heap_element *h = (heap_element *) addr ;
-  heap_element heap_sz = sz / sizeof(heap_element) ;
+  heap_element heap_sz ;
+  heap_stats *stats ;
 
   if(h == NULL) h = (heap_element *) malloc(sz) ;
   if(h == NULL) return NULL ;
 
+  sz = sz - sizeof(heap_stats) ;          // subtract size of stas area
+  heap_sz = sz / sizeof(heap_element) ;   // convert to heap element units
   h[0] = heap_sz ;              // size of heap
   h[1] = heap_sz -2 ;           // size of first block (head)
   h[2] = HEAD ;
   h[heap_sz - 3] = TAIL ;
   h[heap_sz - 2] = heap_sz-2 ;  // size of first block (tail)
   h[heap_sz - 1] = 0 ;          // last block (not locked)
+
+  stats = (heap_stats *) (h + heap_sz) ;
+  stats->max  = 0 ;             // high water mark
+  stats->nblk = 0 ;             // allocated blocks
+  stats->nbyt = 0 ;             // bytes allocated
+  
 
   ShmemHeapRegister(h) ;        // register Heap for block validation purpose
   return h ;                    // O.K. return address of Heap
@@ -407,11 +446,10 @@ void *ShmemHeapAllocBlock(
   heap_element sz, limit, cur, next ;
   heap_element *t ;
   int32_t index ;
+  size_t nbyt = bsz ;
 
   index = ShmemHeapIndex(addr) ;
   if(index == -1) return NULL ;
-  heap_table[index].nblk += 1 ;
-  heap_table[index].nbyt += bsz ;
 
   sz = h[0] ;
   limit = sz - 1 ;
@@ -439,11 +477,13 @@ void *ShmemHeapAllocBlock(
     if(bsz <= sz){                                   // block large enough to satisfy request
       t = h + cur + 2 ;                              // point to element following size marker
       if(sz - bsz > 64) {             //  split block if worth it (more than 64 extra elements)
+        (heap_table[index].inf)->nblk += 1 ;
+        (heap_table[index].inf)->nbyt += nbyt ;
         h[cur]       =  -bsz ;        // head count (lower block)
         h[cur+1]     =  HEAD ;        // low  marker
         h[cur+bsz-2] =  TAIL ;        // tail marker
         h[cur+bsz-1] =   bsz ;        // tail count (lower block)
-        if( (t + bsz) > heap_table[index].max ) heap_table[index].max = (t + bsz) ;
+        if( (cur + bsz) > (heap_table[index].inf)->max ) (heap_table[index].inf)->max = (cur + bsz) ;
         h[cur+bsz]      = sz - bsz ;  // head count (upper block)
         h[cur+bsz+1]    = HEAD ;      // low  marker
         h[cur + sz - 2] = TAIL ;      // tail marker

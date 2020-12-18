@@ -249,6 +249,17 @@ module shmem_heap
       integer(C_INT) :: status
     end function ShmemHeapGetBlockMeta
 
+    function ShmemHeapGetInfo(ix, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeapGetInfo')
+      import :: C_INT, C_LONG_LONG
+      implicit none
+      integer(C_INT), intent(IN), value :: ix
+      integer(C_LONG_LONG), intent(OUT) :: sz
+      integer(C_LONG_LONG), intent(OUT) :: max
+      integer(C_LONG_LONG), intent(OUT) :: nblk
+      integer(C_LONG_LONG), intent(OUT) :: nbyt
+      integer(C_INT) :: status
+    end function ShmemHeapGetInfo
+
     subroutine ShmemHeapDumpInfo() bind(C,name='ShmemHeapDumpInfo')
     end subroutine ShmemHeapDumpInfo
 
