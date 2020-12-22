@@ -68,7 +68,15 @@
    fun:ompi_osc_pt2pt_process_receive
    ...
    fun:ompi_request_default_wait
-   fun:ompi_coll_base_barrier_intra_two_procs
+}
+
+{
+   <OpenMPI_supp_dynamic_window>
+   Memcheck:Addr2
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:ompi_request_default_wait
 }
 
 {
@@ -78,7 +86,6 @@
    fun:ompi_osc_pt2pt_process_receive
    ...
    fun:ompi_request_default_wait
-   fun:ompi_coll_base_barrier_intra_two_procs
 }
 
 {
@@ -88,7 +95,6 @@
    fun:ompi_osc_pt2pt_process_receive
    ...
    fun:ompi_request_default_wait
-   fun:ompi_coll_base_barrier_intra_two_procs
 }
 
 {
@@ -98,7 +104,6 @@
    fun:ompi_osc_pt2pt_process_receive
    ...
    fun:ompi_request_default_wait
-   fun:ompi_coll_base_barrier_intra_two_procs
 }
 
 {

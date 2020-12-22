@@ -25,6 +25,13 @@ include 'io-server/circular_buffer.inc'
 interface
 
 
+subroutine DCB_sync_window(buffer) BIND(C, name = 'DCB_sync_window')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+end subroutine DCB_sync_window
+
+
 function DCB_create(f_communicator, num_producers, num_elements) result(p) BIND(C, name = 'DCB_create_f')
 import :: C_PTR, C_INT
 implicit none
@@ -85,6 +92,15 @@ integer(DATA_ELEMENT), dimension(*), intent(inout) :: dest_data
 integer(C_INT), intent(in), value           :: num_elements
 integer(C_INT) :: num_available
 end function DCB_get
+
+
+function DCB_check_integrity(buffer, verbose) result(result) BIND(C, name = 'DCB_check_integrity')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value    :: buffer
+integer(C_INT), intent(in), value :: verbose
+integer(C_INT)                    :: result
+end function DCB_check_integrity
 
 
 end interface

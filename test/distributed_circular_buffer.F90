@@ -27,7 +27,7 @@ program test_distributed_circular_buffer
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 200
   integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
-  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 300
+  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 5
   integer, parameter :: STEP_SIZE = 5
   integer, parameter :: NUM_CONSUMERS = 2
 
@@ -93,35 +93,68 @@ program test_distributed_circular_buffer
     goto 777
   end if
 
+
+  if (.not. circ_buffer % check_integrity(.true.)) then
+    print *, 'Something wrong with the newly-created buffer!!!'
+    num_errors = num_errors + 1
+    goto 777
+  end if
+
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+  if (rank >= num_producers) then
+    do i = 0, num_producers - 1
+      available = circ_buffer % get_num_elements(i)
+      print *, rank, i, 'Num elem = ', available
+    end do
+  end if
+
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+  if (rank == 0) available = circ_buffer % put(in_data_small, 0)
+
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+  if (rank == 2) available = circ_buffer % get_num_elements(0)
+
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+  goto 999
+
   if (rank < num_producers) then
 
 !    print *, 'Putting ', in_data_small
-    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
+!    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
+    available = circ_buffer % put(in_data_small, 0)
 
     if (available < 0) then
       num_errors = num_errors + 1
       print *, 'Unable to insert stuff in the buffer!!!!!'
     end if
-    !---------------------------------------
-    call MPI_Barrier(MPI_COMM_WORLD, error)
-    !---------------------------------------
-  else
-    !---------------------------------------
-    call MPI_Barrier(MPI_COMM_WORLD, error)
-    !---------------------------------------
-    available = circ_buffer % get_num_elements(0)
-    if (available .ne. NUM_DATA_ELEMENTS_SMALL) then
-      num_errors = num_errors + 1
-      print *, 'Wrong number of elements in buffer 0!!!!!!!!', rank
-      goto 777
-    end if
+  end if
 
-    available = circ_buffer % get_num_elements(1)
-    if (available .ne. NUM_DATA_ELEMENTS_SMALL) then
-      num_errors = num_errors + 1
-      print *, 'Wrong number of elements in buffer 1!!!!!!!!', rank
-      goto 777
-    end if
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+
+  if (rank >= num_producers) then
+    do i = 0, num_producers - 1
+      available = circ_buffer % get_num_elements(i)
+      if (available .ne. NUM_DATA_ELEMENTS_SMALL) then
+        num_errors = num_errors + 1
+        print *, 'Wrong number of elements in buffer !!!!!!!!', rank, i
+  !      goto 777
+      end if
+    end do
 
   end if
 
@@ -146,23 +179,55 @@ program test_distributed_circular_buffer
     end do
   end if
 
-  goto 999
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, error)
+  !---------------------------------------
+
+  if (rank < num_producers) then
+    available = circ_buffer % get_num_elements()
+    if (available .ne. 0) then
+      num_errors = num_errors + 1
+    end if
+  end if
+
 
   !---------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, error)
   !---------------------------------------
 
   if (rank < num_producers) then
+!    call sleep_us(1000 * rank)
+    call circ_buffer % print()
     do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
       print *, rank, 'Putting elements ', in_data_large(i:i + STEP_SIZE - 1)
+      available = circ_buffer % get_num_elements()
+      print *, rank, 'Elements before: ', available
       available = circ_buffer % put(in_data_large(i:i + STEP_SIZE - 1), STEP_SIZE)
+      print *, rank, 'Done putting elements'
     end do
+
+    !---------------------------------------
+!    call MPI_Barrier(MPI_COMM_WORLD, error)
+    !---------------------------------------
+
   else
+    !---------------------------------------
+!    call MPI_Barrier(MPI_COMM_WORLD, error)
+    !---------------------------------------
+
+!    call sleep_us(100000)
+    call circ_buffer % print()
     do i_prod = first_prod, last_prod
       call init_array(expected_data_large, i_prod)
       do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
         print *, rank, 'Getting elements ', expected_data_large(i : i + STEP_SIZE - 1), ' from ', i_prod
         available = circ_buffer % get(i_prod, out_data_large(i : i + STEP_SIZE - 1), STEP_SIZE)
+
+        if (.not. all(out_data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
+          num_errors = num_errors + 1
+        end if
+
+!        print *, rank, 'Done getting elements'
       end do
     end do
   end if

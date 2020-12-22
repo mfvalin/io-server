@@ -24,29 +24,33 @@
 #include <stdio.h>
 #include <time.h>
 
+//C_StArT
 #include <mpi.h>
 
 #include "io-server/circular_buffer.h"
+//C_EnD
 
 static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INTEGER
                                                 : sizeof(data_element) == sizeof(int64_t) ? MPI_LONG_LONG_INT
                                                                                           : MPI_DATATYPE_NULL;
 
+//C_StArT
+/**
+ * @brief Needs to be aligned to size of #data_element
+ */
+typedef struct {
+  uint64_t num_transfers;
+  uint64_t num_elem;
+  double   total_wait_time_ms;
+} DCB_stats;
+
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
  * distributed circular buffers.
  *
- * Please don't change the order of data members.
+ * Please don't change the order of data members (unless you know what the consequences are).
  */
 typedef struct {
-  uint64_t num_puts;
-  uint64_t num_elems_in;
-  double   total_put_wait_time_ms;
-
-  uint64_t num_gets;
-  uint64_t num_elems_out;
-  double   total_get_wait_time_ms;
-
   int             target_rank; //!< With which process this instance should communicate for data transfers
   circular_buffer buf;         //!< The buffer contained in this instance
 } circular_buffer_instance;
@@ -84,6 +88,10 @@ typedef struct {
   //! Will have some metadata at the beginning
   data_element* raw_data;
 
+  DCB_stats  producer_stats;
+  MPI_Win    consumer_stats_window;
+  DCB_stats* consumer_stats;
+
   //! Header of the circular buffer instance (only valid for producers)
   //! This is the local copy and will be synchronized with the remote one, located in the shared memory region of the
   //! consumer processes
@@ -92,6 +100,7 @@ typedef struct {
 } distributed_circular_buffer;
 
 typedef distributed_circular_buffer* distributed_circular_buffer_p;
+//C_EnD
 
 /**
  * @brief Small header located at the beginning of the shared memory region on consumer processes. Stores the offset
@@ -108,9 +117,9 @@ typedef struct {
 typedef offset_header* offset_header_p;
 
 //! How long to wait between checks for free space in a buffer (microseconds)
-static const int SPACE_CHECK_WAIT_TIME_US = 100000;
+static const int SPACE_CHECK_WAIT_TIME_US = 100;
 //! How long to wait between checks for data in a buffer (microseconds)
-static const int DATA_CHECK_WAIT_TIME_US = 100000;
+static const int DATA_CHECK_WAIT_TIME_US = 100;
 
 //F_StArT
 //  include 'io-server/circular_buffer.inc'
@@ -194,6 +203,10 @@ static inline MPI_Aint insertion_index_displacement(const distributed_circular_b
   return displacement;
 }
 
+static inline MPI_Aint remote_header_displacement(const distributed_circular_buffer_p buffer) {
+  return buffer->window_offset;
+}
+
 //! @}
 
 //! @{ @name Helper functions
@@ -247,29 +260,21 @@ static void retrieve_window_offset_from_remote(
 static inline void update_local_header_from_remote(
     distributed_circular_buffer_p buffer //!< [in] Buffer set from which we want to update a single instance
 ) {
+  printf("rank %d UPDATING local from remote\n", buffer->rank);
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
   const int target_rank =
       buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : buffer->num_producers;
-
+  printf("rank %d Target rank = %d, window = %ld\n", buffer->rank, target_rank, (long)buffer->window);
   const int num_elem = instance_header_size();
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
+  printf("rank %d LOCKED window\n", buffer->rank);
   MPI_Get(
-      &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, buffer->window_offset, num_elem,
+      &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, remote_header_displacement(buffer), num_elem,
       CB_MPI_ELEMENT_TYPE, buffer->window);
+  printf("rank %d GOT DATA\n", buffer->rank);
+  printf("rank %d Target rank = %d, window = %ld\n", buffer->rank, target_rank, (long)buffer->window);
   MPI_Win_unlock(target_rank, buffer->window);
-}
-
-static inline void send_local_header_to_remote(distributed_circular_buffer_p buffer) {
-  const int target_rank =
-      buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : buffer->num_producers;
-
-  const int num_elem = 3 * 8 / sizeof(data_element);
-
-  MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
-  MPI_Put(
-      &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, buffer->window_offset, num_elem,
-      CB_MPI_ELEMENT_TYPE, buffer->window);
-  MPI_Win_unlock(target_rank, buffer->window);
+  printf("rank %d DONE UPDATING local from remote\n", buffer->rank);
 }
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
@@ -313,8 +318,9 @@ static data_index DCB_wait_space_available(
     sleep_us(SPACE_CHECK_WAIT_TIME_US);
   }
 
-  buffer->local_header.total_put_wait_time_ms += num_waits * SPACE_CHECK_WAIT_TIME_US / 1000.0;
+  buffer->producer_stats.total_wait_time_ms += num_waits * SPACE_CHECK_WAIT_TIME_US / 1000.0;
 
+  printf("rank %d DONE WAITING\n", buffer->rank);
   return num_available;
 }
 
@@ -336,52 +342,73 @@ static data_index DCB_wait_data_available(
 
   // Only check locally, waiting a bit between each check
   data_index num_available = 0;
+  int        num_waits     = 0;
   while ((void)(num_available = CB_get_available_data(instance)), num_available < num_requested) {
+    num_waits++;
     sleep_us(DATA_CHECK_WAIT_TIME_US);
   }
 
+  buffer->consumer_stats[buffer_id].total_wait_time_ms += num_waits * DATA_CHECK_WAIT_TIME_US / 1000.0;
+
+  printf("rank %d DONE WAITING for %d\n", buffer->rank, buffer_id);
   return num_available;
 }
 
 static circular_buffer_p init_circular_buffer_instance(circular_buffer_instance_p instance, const int num_elem) {
-  instance->num_puts      = 0;
-  instance->num_gets      = 0;
-  instance->num_elems_in  = 0;
-  instance->num_elems_out = 0;
-
-  instance->total_put_wait_time_ms = 0.0;
-  instance->total_get_wait_time_ms = 0.0;
-
   instance->target_rank = -1;
 
   return CB_init(&instance->buf, num_elem);
 }
 
-static void print_instance_stats(circular_buffer_instance_p instance, const int id, const int with_header) {
-  const int num_puts = instance->num_puts;
-  const int num_gets = instance->num_gets;
+static void DCB_init_stats(DCB_stats* stats) {
+  stats->num_transfers      = 0;
+  stats->num_elem           = 0;
+  stats->total_wait_time_ms = 0.0;
+}
 
-  const double avg_in     = num_puts > 0 ? (double)instance->num_elems_in / num_puts : 0.0;
-  const double avg_out    = num_gets > 0 ? (double)instance->num_elems_out / num_gets : 0.0;
-  const double avg_wait_w = num_puts > 0 ? (double)instance->total_put_wait_time_ms / num_puts : 0.0;
-  const double avg_wait_r = num_gets > 0 ? (double)instance->total_get_wait_time_ms / num_gets : 0.0;
+static void print_instance_stats(
+    const DCB_stats* producer_stats, //!<
+    const DCB_stats* consumer_stats,
+    const int        id,
+    const int        with_header //!<
+) {
+  const uint64_t num_puts = producer_stats->num_transfers;
+  const uint64_t num_gets = consumer_stats->num_transfers;
+
+  const double avg_in     = num_puts > 0 ? (double)producer_stats->num_elem / num_puts : 0.0;
+  const double avg_out    = num_gets > 0 ? (double)consumer_stats->num_elem / num_gets : 0.0;
+  const double avg_wait_w = num_puts > 0 ? (double)producer_stats->total_wait_time_ms / num_puts : 0.0;
+  const double avg_wait_r = num_gets > 0 ? (double)consumer_stats->total_wait_time_ms / num_gets : 0.0;
 
   if (with_header) {
     printf("rank: #elem put (avg/call) -- #elem got (avg/call) -- write wait (avg/call) --  read wait (avg/call)\n");
   }
 
   printf(
-      " %03d:  %8ld (%8.1f) --  %8ld (%8.1f) -- %7.3f ms (%8.5f) -- %7.3f ms (%8.5f)\n", id, instance->num_elems_in,
-      avg_in, instance->num_elems_out, avg_out, instance->total_put_wait_time_ms, avg_wait_w,
-      instance->total_get_wait_time_ms, avg_wait_r);
+      " %03d:  %8ld (%8.1f) --  %8ld (%8.1f) -- %7.3f ms (%8.5f) -- %7.3f ms (%8.5f)\n", id, producer_stats->num_elem,
+      avg_in, consumer_stats->num_elem, avg_out, producer_stats->total_wait_time_ms, avg_wait_w,
+      consumer_stats->total_wait_time_ms, avg_wait_r);
 }
 
 //! @}
 
 //! @{ \name Distributed circular buffer public interface
 
+//C_StArT
 void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p);
+//C_EnD
+
+//F_StArT
+//  subroutine DCB_sync_window(buffer) BIND(C, name = 'DCB_sync_window')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+//   end subroutine DCB_sync_window
+//F_EnD
+void DCB_sync_window(distributed_circular_buffer_p buffer) {
+  MPI_Win_sync(buffer->window);
+}
 
 //! @brief Create a set of distributed circular buffers on a set of processes.
 //!
@@ -392,11 +419,13 @@ void DCB_print(distributed_circular_buffer_p);
 //! circular buffer, as well as an offset that points to the location of their data within the shared window.
 //!
 //! @return A pointer to a newly-allocated distributed circular buffer struct that contains all the relevant info
+//C_StArT
 distributed_circular_buffer_p DCB_create(
     MPI_Comm      communicator,  //!< [in] Communicator on which the distributed buffer is shared
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
 ) {
+  //C_EnD
   printf("CREATING BUFFER\n");
 
   distributed_circular_buffer_p buffer = (distributed_circular_buffer*)malloc(sizeof(distributed_circular_buffer));
@@ -422,6 +451,13 @@ distributed_circular_buffer_p DCB_create(
   MPI_Win_allocate_shared(
       shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data,
       &buffer->window_mem_dummy);
+
+  printf("rank %d - Raw data ptr: %ld\n", buffer->rank, (long)buffer->raw_data);
+
+  const MPI_Aint consumer_stats_size = is_root(buffer) ? buffer->num_producers * sizeof(DCB_stats) : 0;
+  MPI_Win_allocate_shared(
+      consumer_stats_size, 1, MPI_INFO_NULL, buffer->communicator, &buffer->consumer_stats,
+      &buffer->consumer_stats_window);
 
   int init_result = 1;
 
@@ -451,6 +487,8 @@ distributed_circular_buffer_p DCB_create(
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
       init_result = init_result && (init_circular_buffer_instance(buffer_instance, num_elem_in_circ_buffer) != NULL);
       buffer_instance->target_rank = buffer->rank + i % num_consumers; // Assign a target consumer for the buffer
+
+      DCB_init_stats(&buffer->consumer_stats[i]);
     }
   }
   else if (is_consumer(buffer)) {
@@ -458,7 +496,15 @@ distributed_circular_buffer_p DCB_create(
     // in order to create the window with it
     MPI_Aint size;
     int      disp_unit;
-    MPI_Win_shared_query(buffer->window_mem_dummy, num_producers, &size, &disp_unit, &buffer->raw_data);
+    printf("buffer->raw_data (before): %ld\n", (long)buffer->raw_data);
+    MPI_Win_shared_query(buffer->window_mem_dummy, buffer->num_producers, &size, &disp_unit, &buffer->raw_data);
+    printf("buffer->raw_data (after): %ld\n", (long)buffer->raw_data);
+    MPI_Win_shared_query(
+        buffer->consumer_stats_window, buffer->num_producers, &size, &disp_unit, &buffer->consumer_stats);
+
+    int* dummy = NULL;
+    MPI_Win_shared_query(buffer->window_mem_dummy, buffer->num_producers, &size, &disp_unit, &dummy);
+    printf("dummy = %ld\n", (long)dummy);
   }
 
   // Create the actual window that will be used for data transmission
@@ -474,11 +520,23 @@ distributed_circular_buffer_p DCB_create(
   }
 
   if (is_producer(buffer)) {
+    DCB_init_stats(&buffer->producer_stats);
+
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
     update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
 
     DCB_print(buffer);
   }
+
+  //  if (is_consumer(buffer))
+  //  {
+  //      for (int i = 0; i < buffer->num_producers; ++i)
+  //      {
+  //          CB_print_header(get_circular_buffer(buffer, i));
+  //      }
+
+  //      return NULL;
+  //  }
 
   return buffer;
 }
@@ -518,9 +576,12 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
   if (is_producer(buffer)) {
     printf(
         "Num elems: %ld, num spaces: %ld (rank %d, might be outdated)\n"
-        "Target rank: %ld\n",
+        "Target rank: %ld\n"
+        "version: %d, first %d, in %d, out %d, limit %d\n",
         (int64_t)CB_get_available_data(&buffer->local_header.buf),
-        (int64_t)CB_get_available_space(&buffer->local_header.buf), buffer->rank, buffer->local_header.target_rank);
+        (int64_t)CB_get_available_space(&buffer->local_header.buf), buffer->rank,
+        (int64_t)buffer->local_header.target_rank, buffer->local_header.buf.m.version, buffer->local_header.buf.m.first,
+        buffer->local_header.buf.m.in, buffer->local_header.buf.m.out, buffer->local_header.buf.m.limit);
   }
   else if (is_root(buffer)) {
     for (int i = 0; i < buffer->num_producers; ++i) {
@@ -540,20 +601,24 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
 //! Release all data used by the given distributed circular buffer
 void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to delete
 ) {
-  if (is_producer(buffer)) {
-    send_local_header_to_remote(buffer);
-  }
+  //  if (is_producer(buffer)) {
+  //    MPI_Send(
+  //        &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, buffer->num_producers, buffer->rank,
+  //        buffer->communicator);
+  //  }
 
-  MPI_Barrier(buffer->communicator);
-
-  if (is_root(buffer)) {
-    for (int i = 0; i < buffer->num_producers; ++i) {
-      print_instance_stats(get_circular_buffer_instance(buffer, i), i, i == 0);
-    }
-  }
+  //  if (is_root(buffer)) {
+  //    for (int i = 0; i < buffer->num_producers; ++i) {
+  //      DCB_stats  producer_stats;
+  //      MPI_Status status;
+  //      MPI_Recv(&producer_stats, sizeof(DCB_stats), MPI_BYTE, i, i, buffer->communicator, &status);
+  //      print_instance_stats(&producer_stats, &buffer->consumer_stats[i], i, i == 0);
+  //    }
+  //  }
 
   MPI_Win_free(&buffer->window);
   MPI_Win_free(&buffer->window_mem_dummy);
+  MPI_Win_free(&buffer->consumer_stats_window);
   free(buffer);
 }
 
@@ -590,10 +655,12 @@ int32_t DCB_get_latest_num_elements(distributed_circular_buffer_p buffer //!< [i
 //! Check how many elements are stored in the specified buffer.
 //! _Can only be called from a consumer process._
 //! @return The number of elements in the specified buffer, or -1 if called from a producer process
+//C_StArT
 int32_t DCB_get_num_elements(
     distributed_circular_buffer_p buffer,   //!< [in]
     const int                     buffer_id //!< [in]
 ) {
+  //C_EnD
   if (is_consumer(buffer))
     return (int32_t)CB_get_available_data(get_circular_buffer(buffer, buffer_id));
 
@@ -618,16 +685,27 @@ int32_t DCB_get_num_elements(
 //! the insertion pointer on the root node (otherwise it might try to read data that has not yet arrived).
 //!
 //! @return How many elements can still fit after the insertion, if everything went smoothly, -1 otherwise
+//C_StArT
 data_index DCB_put(
     distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
     data_element* const           src_data,    //!< Pointer to the data we want to insert
     const int                     num_elements //!< How many 4-byte elements we want to insert
 ) {
+  //C_EnD
   printf("rank %d PUT\n", buffer->rank);
   if (DCB_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
   const int target_rank = buffer->local_header.target_rank;
+
+  if (num_elements <= 0) {
+    MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
+    MPI_Accumulate(
+        &buffer->local_header.buf.m.in, 1, CB_MPI_ELEMENT_TYPE, target_rank, insertion_index_displacement(buffer), 1,
+        CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
+    MPI_Win_unlock(target_rank, buffer->window);
+    return 0;
+  }
 
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
 
@@ -656,6 +734,7 @@ data_index DCB_put(
 
     // Second segment (if there is one)
     const int num_elem_segment_2 = num_elements - num_elem_segment_1;
+    printf("Num elem seg 1: %d, seg 2: %d, total: %d\n", num_elem_segment_1, num_elem_segment_2, num_elements);
     MPI_Accumulate(
         src_data + num_elem_segment_1, num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank,
         buffer_element_displacement(buffer, in_index), num_elem_segment_2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE,
@@ -673,8 +752,8 @@ data_index DCB_put(
 
   MPI_Win_unlock(target_rank, buffer->window);
 
-  buffer->local_header.num_elems_in += num_elements;
-  buffer->local_header.num_puts++;
+  buffer->producer_stats.num_elem += num_elements;
+  buffer->producer_stats.num_transfers++;
 
   return CB_get_available_space(&buffer->local_header.buf);
 }
@@ -732,14 +811,44 @@ int DCB_get(
     out_index += num_elements_2;
   }
 
-  instance->num_elems_out += num_elements;
-  instance->num_gets++;
+  buffer->consumer_stats[buffer_id].num_elem += num_elements;
+  buffer->consumer_stats[buffer_id].num_transfers++;
 
   memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
   instance->buf.m.out = out_index; // Update actual extraction pointer
 
   return CB_get_available_data(queue);
+}
+
+//F_StArT
+//  function DCB_check_integrity(buffer, verbose) result(result) BIND(C, name = 'DCB_check_integrity')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value    :: buffer
+//    integer(C_INT), intent(in), value :: verbose
+//    integer(C_INT)                    :: result
+//  end function DCB_check_integrity
+//F_EnD
+int DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose) {
+  if (buffer == NULL)
+    return -1;
+
+  if (is_producer(buffer)) {
+    const int               total_num_elem = buffer->num_element_per_instance;
+    const circular_buffer_p circ_buf       = &buffer->local_header.buf;
+
+    if (total_num_elem != circ_buf->m.limit) {
+      if (verbose) {
+        printf(
+            "(rank %d) Limit seems to be wrong! It's %d, but it should be %d\n", buffer->rank, circ_buf->m.limit,
+            total_num_elem);
+      }
+      return -1;
+    }
+  }
+
+  return 0;
 }
 
 //! @}

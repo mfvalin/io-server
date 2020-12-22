@@ -42,6 +42,8 @@ module distributed_circular_buffer_module
     GENERIC :: get_num_elements => get_num_elements_local, get_num_elements_latest
     procedure :: get_num_elements_local
     procedure :: get_num_elements_latest
+    procedure :: check_integrity
+    procedure :: sync_window
 !    procedure :: get_num_spaces
   end type distributed_circular_buffer
 
@@ -132,5 +134,31 @@ contains
 
     num_elements = DCB_get_latest_num_elements(this % c_buffer)
   end function get_num_elements_latest
+
+  function check_integrity(this, verbose) result(is_ok)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    logical, intent(in) :: verbose
+    logical :: is_ok !< True if the pointer is valid and the metadata is consistent
+
+    integer(C_INT) :: c_verbose = 0
+
+    if (verbose) c_verbose = 1
+
+    is_ok = .false.
+
+    if (this % is_valid()) then
+      if (DCB_check_integrity(this % c_buffer, c_verbose) == 0) then
+        is_ok = .true.
+      end if
+    end if
+
+  end function check_integrity
+
+  subroutine sync_window(this)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    call DCB_sync_window(this % c_buffer)
+  end subroutine sync_window
 
 end module distributed_circular_buffer_module
