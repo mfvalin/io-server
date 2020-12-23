@@ -187,6 +187,11 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait until all free operations are completed
 ! ================================= sanity check of the "model" PE heaps =================================
   if(myrank == 0 .or. myrank == nprocs-1) then        ! relay PE
+    do i = 1, nprocs-2                                ! heap statistics
+      status = heaps(i)%GetInfo(sz64, max64, nblk64, nbyt64)
+      if(status == 0) print 8,"heap from PE",i, sz64, max64, nblk64, nbyt64
+    enddo
+    print *,""
   else                                                ! "model" PE, check what is left on heap
     status = h%check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
@@ -195,14 +200,18 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
 
-  call ShmemHeapDumpInfo()
+  call ShmemHeapDumpInfo()                            ! dump info for all known heaps
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
 
-  do i = 0, 8
-    status = ShmemHeapGetInfo(i, sz64, max64, nblk64, nbyt64)
-    if(status == 0) print 8,"heap stats",i, sz64, max64, nblk64, nbyt64
-  enddo
+  if(myrank > 0 .and. myrank < nprocs-1) then         ! "model" PE
+    do i = 0, 8
+      status = ShmemHeapGetInfo(i, sz64, max64, nblk64, nbyt64)
+      if(status == 0) print 8,"heap stats(1)",i, sz64, max64, nblk64, nbyt64
+      status = h%GetInfoReg(i, sz64, max64, nblk64, nbyt64)
+      if(status == 0) print 8,"heap stats(2)",i, sz64, max64, nblk64, nbyt64
+    enddo
+  endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
 

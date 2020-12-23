@@ -24,14 +24,32 @@
 #ifndef IO_SERVER_shmem_heap_GEN_H
 #define IO_SERVER_shmem_heap_GEN_H
 
+/**
+ \file
+ io-server/shmem_heap.h include file is needed to use shared memory heap functions<br>
+ (extracted from file memory_arena.c)
+*/
 #include <io-server/common.h>
 
-//!> heap element (see data_element in common.h)<br>
-//! if data_element is int32_t, "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
-typedef data_element heap_element ;     // remain consistent with io-server package
+// remain consistent with io-server package
+
+// heap element (see data_element in common.h)<br>
+// if data_element is int32_t, "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
+// heap element is identical to data_element
+// typedef data_element heap_element
+
+//!> heap element (same as data_element)
+typedef data_element heap_element ;
+// #define heap_element data_element
 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 64
+
+//!> HEAD marker below block
+#define HEAD 0xCAFEFADE
+
+//!> TAIL marker above block
+#define TAIL 0xBEBEFADA
 
 //!> heap statistics
 typedef struct{
@@ -47,19 +65,23 @@ typedef struct{
   heap_stats   *inf ;     //!< pointer to heap statistics
 } heap_item ;
 
-//!> metadata description for Fortran up to 5D arrays
+//!> metadata description for Fortran (up to 5D arrays)
 typedef  struct {
-    int d[5];
-    int tkr ;
+    int d[5];             //!< the 5 allowed dimensions     (private information, DO NOT USE)
+    int tkr ;             //!< type, kind, rank information (private information, DO NOT USE)
   } meta_c;
+//! print heap statistics
+//! @return none
 void ShmemHeapDumpInfo(
      );
+//! get heap statistics
+//! @return none
 int ShmemHeapGetInfo(
-  int index,
-  int64_t *size,
-  int64_t *max,
-  int64_t *nblk,
-  int64_t *nbyt
+  int index,          //!< [in]  heap index in registered heap table
+  int64_t *size,      //!< [out] size of heap (bytes)
+  int64_t *max,       //!< [out] high water mark in heap  (highest allocation point) (bytes)
+  int64_t *nblk,      //!< [out] number of blocks that have been allocated
+  int64_t *nbyt       //!< [out] total number of bytes used by allocated blocks
      );
 //! is this a known heap ?
 //! @return index in heap table if a known heap, -1 otherwise

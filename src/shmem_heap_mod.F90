@@ -96,6 +96,15 @@ module shmem_heap
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
 
+    !> \return                           index in table, -1 if unknown heap
+    procedure :: GetIndex                !< get heap index in registered table
+
+    !> \return                           0 if O.K., nonzero if error
+    procedure :: GetInfo                 !< get heap statistics using heap address
+
+    !> \return                           0 if O.K., nonzero if error
+    procedure, NOPASS :: GetInfoReg      !< get heap statistics using index in registered teable
+
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
     !> \return                           a fortran pointer
     procedure   ::            &  !< specific procedures needed for generic type associated allocate
@@ -249,6 +258,13 @@ module shmem_heap
       integer(C_INT) :: status
     end function ShmemHeapGetBlockMeta
 
+    function ShmemHeapIndex(heap) result(ix) bind(C,name='ShmemHeapIndex')
+      import :: C_INT, C_PTR
+      implicit none
+      type(C_PTR), intent(IN), value :: heap
+      integer(C_INT) :: ix
+    end function ShmemHeapIndex
+
     function ShmemHeapGetInfo(ix, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeapGetInfo')
       import :: C_INT, C_LONG_LONG
       implicit none
@@ -267,6 +283,42 @@ module shmem_heap
 
 !> \endcond
   contains
+
+  !> get heap index in registered table
+  function GetIndex(h) result(ix)
+    implicit none
+    class(heap), intent(IN) :: h                         !< heap object
+    integer(C_INT) :: ix                                 !< index in registered heap table
+    ix = ShmemHeapIndex(h%p)
+  end function GetIndex
+
+  !> get heap statistics
+  function GetInfoReg(ix, sz, max, nblk, nbyt) result(status)
+    implicit none
+    integer(C_INT), intent(IN), value :: ix                 !< index into registered heap table
+    integer(C_LONG_LONG), intent(OUT) :: sz                 !< size of heap (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: max                !< high water mark in heap  (highest allocation point) (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: nblk               !< number of blocks that have been allocated
+    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< total number of bytes used by allocated blocks
+    integer(C_INT) :: status                                !< 0 if O.K., nonzero if error
+    status = ShmemHeapGetInfo(ix, sz, max, nblk, nbyt)
+  end function GetInfoReg
+
+  !> get heap statistics
+  function GetInfo(h, sz, max, nblk, nbyt) result(status)
+    implicit none
+    class(heap), intent(INOUT) :: h                         !< heap object
+    integer(C_LONG_LONG), intent(OUT) :: sz                 !< size of heap (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: max                !< high water mark in heap  (highest allocation point) (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: nblk               !< number of blocks that have been allocated
+    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< total number of bytes used by allocated blocks
+    integer(C_INT) :: status                                !< 0 if O.K., nonzero if error
+    integer(C_INT) :: ix
+    status = -1
+    ix = ShmemHeapIndex(h%p)
+    if(ix < 0) return
+    status = ShmemHeapGetInfo(ix, sz, max, nblk, nbyt)
+  end function GetInfo
 
   !> \brief get array type from Fortran block metadata
   function meta(this, block) result(status)
