@@ -237,6 +237,15 @@
    fun:PMPI_Get
 }
 
+{
+   <OpenMPI_leak>
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   ...
+   fun:PMPI_Accumulate
+}
+
 
 
 

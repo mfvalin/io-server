@@ -127,13 +127,11 @@ program test_distributed_circular_buffer
   call MPI_Barrier(MPI_COMM_WORLD, error)
   !---------------------------------------
 
-  goto 999
-
   if (rank < num_producers) then
 
 !    print *, 'Putting ', in_data_small
 !    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
-    available = circ_buffer % put(in_data_small, 0)
+    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
 
     if (available < 0) then
       num_errors = num_errors + 1
@@ -178,6 +176,8 @@ program test_distributed_circular_buffer
 !      print *, 'Read producer ', i_prod
     end do
   end if
+
+!  goto 999
 
   !---------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, error)
