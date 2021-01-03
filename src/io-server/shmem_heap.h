@@ -75,7 +75,7 @@ typedef  struct {
 void ShmemHeapDumpInfo(
      );
 //! get heap statistics
-//! @return none
+//! @return 0 if O.K., nonzero if error
 int ShmemHeapGetInfo(
   int index,          //!< [in]  heap index in registered heap table
   int64_t *size,      //!< [out] size of heap (bytes)

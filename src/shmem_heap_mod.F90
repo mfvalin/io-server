@@ -26,7 +26,7 @@ module shmem_heap
   !> \brief maximum number of allowed dimensions
   integer, parameter :: MAX_ARRAY_RANK = 5
   !> \brief C compatible data block metadata
-  type, bind(C) :: block_meta_c
+  type, public, bind(C) :: block_meta_c
     private
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d   !< array dimensions
     integer(C_INT) :: tkr               !< array type, kind, rank
@@ -35,6 +35,7 @@ module shmem_heap
   type, public :: block_meta_f08
     private
     type(block_meta_c) :: a         !< array descriptor
+    type(C_PTR) :: p                !< array address
   contains
     !> \return array type code (1=integer, 2=real)
     procedure :: t

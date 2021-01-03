@@ -71,7 +71,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
-  type(block_meta_f08) :: my_meta         ! metadata for allocated block (Fortran style with bound procedures)
+  type(block_meta_f08) :: my_meta, blk_meta            ! metadata for allocated block (Fortran style with bound procedures)
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
   integer(C_LONG_LONG) :: sz64, max64, nblk64, nbyt64  ! to get heap stats
 
@@ -119,8 +119,8 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     blocks = C_NULL_PTR                               ! fill pointer table with NULLs
     lastblock = 0                                     ! no block successfully allocated
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
-      call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5])    ! allocate a 3D integer array demo
-
+      call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5], blk_meta)    ! allocate a 3D integer array demo + get metadata
+      print 6,'block dimensions, type, kind, rank =',blk_meta%dims(), blk_meta%t(), blk_meta%k(), blk_meta%r()
       if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
         print *,'allocation failed for block',i       ! failure expected at some point for high rank PEs
         exit                                          ! exit loop as all subsequent allocations would fail (heap full)
@@ -251,6 +251,7 @@ subroutine base_test(nprocs, myrank)
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
   logical, parameter :: bugged = .false.
   integer(C_INT), dimension(:), pointer :: demo
+  type(block_meta_f08) :: blk_meta
 
   print 3,'==================== BASIC TEST ===================='
   winsize = 1024*1024
@@ -281,7 +282,7 @@ subroutine base_test(nprocs, myrank)
     p = h%create(p, 1024*8*C_SIZEOF(he))            ! create heap, 32 KBytes
     do i = 1, 10
 !       blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
-      call sm_allocate(h, demo, [1022+i])
+      call sm_allocate(h, demo, [1022+i], blk_meta)
       blocks(i) = C_LOC(demo(1))
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
