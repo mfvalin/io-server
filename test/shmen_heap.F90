@@ -71,7 +71,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
-  type(block_meta_f08) :: my_meta, blk_meta            ! metadata for allocated block (Fortran style with bound procedures)
+  type(block_meta_f08) :: blk_meta                     ! metadata for allocated block (Fortran style with bound procedures)
   type(block_meta_f08), dimension(128) :: metas
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
   integer(C_LONG_LONG) :: sz64, max64, nblk64, nbyt64  ! to get heap stats
@@ -129,7 +129,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
       call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5], blk_meta)    ! allocate a 3D integer array demo + get metadata
       metas(i) = blk_meta
-      if(.not. (metas(i) == blk_meta)) print 6,'FAIL: failed equality check'
+      if((.not. (metas(i) == blk_meta)) .or. (metas(i) .ne. blk_meta)) print 6,'FAIL: failed equality check'
       print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta%k(), blk_meta%r(), metas(i)%dims()
       if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
         print 6,'WARN: allocation failed for block',i       ! failure expected at some point for high rank PEs
@@ -137,9 +137,10 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       endif
       blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
       print 7,'INFO: block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
-      status = my_meta%meta(blocks(i))                ! get metadata for allocated array
-      array_rank = my_meta%r()                        ! get rank of array
-      ad = my_meta%dims()                             ! get all MAX_ARRAY_RANK potential dimensions
+      call blk_meta%reset()                           ! nullify blk_meta
+      status = blk_meta%meta(blocks(i))               ! get metadata for allocated array
+      array_rank = blk_meta%r()                       ! get rank of array
+      ad = blk_meta%dims()                            ! get all MAX_ARRAY_RANK potential dimensions
       print 6,'INFO: array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
       ixtab(i) = h%offset(blocks(i))                  ! offset of blocks in heap
       lastblock = i

@@ -55,13 +55,19 @@ module shmem_heap
     !> \return status, 0 if O.K. non zero otherwise
     procedure :: meta
     !> \return                              none
-    procedure :: assign_meta                !< assignment operator
+    procedure :: reset                      !< nullify operator
     !> \return                              none
-    GENERIC :: ASSIGNMENT(=) => assign_meta !< assignment operator
+    procedure :: assign                     !< assignment operator
+    !> \return                              none
+    GENERIC :: ASSIGNMENT(=) => assign      !< assignment operator
     !> \return                              .true. if equal, .false. if not equal
-    procedure :: equal_meta                 !< equality operator
+    procedure :: equal                      !< equality operator
     !> \return                              .true. if equal, .false. if not equal
-    GENERIC :: operator(==) => equal_meta   !< equality operator
+    GENERIC :: operator(==) => equal        !< equality operator
+    !> \return                              .false. if equal, .true. if not equal
+    procedure :: unequal_meta                !< non equality operator
+    !> \return                              .false. if equal, .true. if not equal
+    GENERIC :: operator(/=) => unequal_meta !< non equality operator
   end type block_meta_f08
 
   !> \brief heap user defined type
@@ -434,18 +440,27 @@ module shmem_heap
     dims = this%d
   end subroutine BlockMeta_dims
 
+  !> \brief nullify operator for type block_meta_f08
+  subroutine reset(this)
+    implicit none
+    class(block_meta_f08), intent(INOUT) :: this              !< metadata object
+    this%p     = C_NULL_PTR
+    this%a%tkr = 0
+    this%a%d   = 0
+  end subroutine reset
+
   !> \brief assignment operator for type block_meta_f08
-  subroutine assign_meta(this, other)
+  subroutine assign(this, other)
     implicit none
     class(block_meta_f08), intent(INOUT) :: this              !< metadata object
     type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
     this%p     = other%p
     this%a%tkr = other%a%tkr
     this%a%d   = other%a%d
-  end subroutine assign_meta
+  end subroutine assign
 
   !> \brief equality operator for type block_meta_f08
-  function equal_meta(this, other) result(isequal)
+  function equal(this, other) result(isequal)
     implicit none
     class(block_meta_f08), intent(IN)    :: this              !< metadata object
     type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
@@ -456,7 +471,21 @@ module shmem_heap
     do i = 1, size(this%a%d)
       isequal = isequal .and. (this%a%d(i)   == other%a%d(i))
     enddo
-  end function equal_meta
+  end function equal
+
+  !> \brief non equality operator for type block_meta_f08
+  function unequal_meta(this, other) result(isequal)
+    implicit none
+    class(block_meta_f08), intent(IN)    :: this              !< metadata object
+    type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
+    logical :: isequal                                        !< true if equal
+    integer :: i
+    isequal = .not. C_ASSOCIATED(this%p, other%p)
+    isequal = isequal .and. (this%a%tkr /= other%a%tkr)
+    do i = 1, size(this%a%d)
+      isequal = isequal .and. (this%a%d(i)   /= other%a%d(i))
+    enddo
+  end function unequal_meta
 
   include 'io-server/f_alloc.inc'
 
