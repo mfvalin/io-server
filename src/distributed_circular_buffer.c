@@ -286,23 +286,15 @@ static void retrieve_window_offset_from_remote(
 static inline void update_local_header_from_remote(
     distributed_circular_buffer_p buffer //!< [in] Buffer set from which we want to update a single instance
 ) {
-  //  printf("rank %d UPDATING local from remote\n", buffer->rank);
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
   const int target_rank =
       buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : get_root_id(buffer);
-  //  printf("rank %d Target rank = %d, window = %ld\n", buffer->rank, target_rank, (long)buffer->window);
   const int num_elem = instance_header_size();
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
-  //  printf("rank %d LOCKED window\n", buffer->rank);
   MPI_Get(
       &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, remote_header_displacement(buffer), num_elem,
       CB_MPI_ELEMENT_TYPE, buffer->window);
-  //  printf("rank %d GOT DATA\n", buffer->rank);
-  //  printf("rank %d Target rank = %d, window = %ld\n", buffer->rank, target_rank, (long)buffer->window);
-  //  MPI_Win_flush(target_rank, buffer->window);
-  //  MPI_Win_sync(buffer->window);
   MPI_Win_unlock(target_rank, buffer->window);
-  //  printf("rank %d DONE UPDATING local from remote\n", buffer->rank);
 }
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance and compute how much
@@ -312,7 +304,6 @@ static inline data_index get_available_space_from_remote(
     const distributed_circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
   update_local_header_from_remote(buffer);
-  //  printf("Rank %d, available space = %d\n", buffer->rank, CB_get_available_space(&buffer->local_header.buf));
   return CB_get_available_space(&buffer->local_header.buf);
 }
 
@@ -452,8 +443,6 @@ distributed_circular_buffer_p DCB_create(
     )
 //C_EnD
 {
-  printf("CREATING BUFFER\n");
-
   distributed_circular_buffer_p buffer = (distributed_circular_buffer*)malloc(sizeof(distributed_circular_buffer));
 
   buffer->communicator             = communicator;
@@ -504,14 +493,6 @@ distributed_circular_buffer_p DCB_create(
   if (is_root(buffer)) {
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of #data_element.
-
-    printf("num elem per instance: %d\n", num_elements);
-    printf("offset header size: %d\n", offset_header_size(buffer->num_producers));
-    printf(
-        "instance header size: %d (naive %ld)\n", instance_header_size(),
-        sizeof(circular_buffer_instance) / sizeof(data_element));
-    printf("circ buffer header size: %d\n", circular_buffer_header_size());
-    printf("win total size: %ld\n", win_total_size);
 
     init_offset_header(get_offset_header(buffer), buffer->num_producers, buffer->num_element_per_instance);
 
@@ -689,9 +670,6 @@ int32_t DCB_get_num_elements(
 {
   if (is_consumer(buffer))
     return (int32_t)CB_get_available_data(get_circular_buffer(buffer, buffer_id));
-
-  //  printf("ERROR Calling DCB_get_num_elements() from a producer! (rank %d)\n", buffer->rank);
-
   return -1;
 }
 
@@ -759,7 +737,6 @@ data_index DCB_put(
     )
 //C_EnD
 {
-  //  printf("rank %d PUT\n", buffer->rank);
   if (DCB_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
@@ -801,7 +778,6 @@ data_index DCB_put(
 
     // Second segment (if there is one)
     const int num_elem_segment_2 = num_elements - num_elem_segment_1;
-    //    printf("Num elem seg 1: %d, seg 2: %d, total: %d\n", num_elem_segment_1, num_elem_segment_2, num_elements);
     MPI_Accumulate(
         src_data + num_elem_segment_1, num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank,
         buffer_element_displacement(buffer, in_index), num_elem_segment_2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE,
@@ -842,7 +818,6 @@ int DCB_get(
     int32_t*                      dest_data,   //!<
     const int                     num_elements //!<
 ) {
-  //  printf("rank %d GET\n", buffer->rank);
   if (DCB_wait_data_available(buffer, buffer_id, num_elements) < 0)
     return -1;
 
