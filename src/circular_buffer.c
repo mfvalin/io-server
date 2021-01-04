@@ -94,22 +94,21 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <sys/ipc.h>
-#include <sys/types.h>
 #include <sys/shm.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 //F_StArT
 //  include 'io-server/common.inc'
 //  interface
 //F_EnD
 
-
 //C_StArT
 #include "io-server/common.h"
 
-#if ! defined(FIOL_VERSION)
+#if !defined(FIOL_VERSION)
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
@@ -118,26 +117,25 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
-typedef struct{
+typedef struct {
   data_element version; //!< version marker
-  data_index first;     //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index in;        //!< start inserting data at data[in]
-  data_index out;       //!< start extracting data at data[out]
-  data_index limit;     //!< size of data buffer (last available index + 1)
+  data_index   first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_index   in;      //!< start inserting data at data[in]
+  data_index   out;     //!< start extracting data at data[out]
+  data_index   limit;   //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
-typedef fiol_management *fiol_management_p;
+typedef fiol_management* fiol_management_p;
 
 //! skeleton for circular buffer
-typedef struct{
-  fiol_management m;   //!< management structure
-  data_element data[]; //!< data buffer (contains at most limit -1 useful data elements)
+typedef struct {
+  fiol_management m;      //!< management structure
+  data_element    data[]; //!< data buffer (contains at most limit -1 useful data elements)
 } circular_buffer;
 
 //! pointer to circular buffer
-typedef circular_buffer *circular_buffer_p;
-
+typedef circular_buffer* circular_buffer_p;
 
 //! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
@@ -187,13 +185,13 @@ static const int SPACE_READ_WAIT_TIME_US = 10;
 //F_EnD
 //C_StArT
 //! Print buffer header (to help debugging)
-void CB_print_header(
-    circular_buffer_p b   //!< [in] Pointer to the buffer to print
-)
+void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to print
+                     )
 //C_EnD
 {
-  printf("version %ld, first %ld, in %ld, out %ld, limit %ld\n",
-         (long)b->m.version, (long)b->m.first, (long)b->m.in, (long)b->m.out, (long)b->m.limit);
+  printf(
+      "version %ld, first %ld, in %ld, out %ld, limit %ld\n", (long)b->m.version, (long)b->m.first, (long)b->m.in,
+      (long)b->m.out, (long)b->m.limit);
 }
 
 //F_StArT
@@ -212,21 +210,23 @@ void CB_print_header(
 //! <br> = CB_init(p, nwords)
 //! @return pointer to buffer upon success, NULL upon error
 circular_buffer_p CB_init(
-  circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  )
+    circular_buffer_p p,     //!< [in]  pointer to a circular buffer
+    int32_t           nwords //!< [in]  size in number of elements of the circular buffer (#data_element)
+    )
 //C_EnD
 {
-  if(p == NULL) return NULL;
-  if(nwords < MIN_CIRC_BUFFER_SIZE) return NULL;   // area is too small
+  if (p == NULL)
+    return NULL;
+  if (nwords < MIN_CIRC_BUFFER_SIZE)
+    return NULL; // area is too small
   p->m.version = FIOL_VERSION;
-  p->m.first = 0;
-  p->m.in    = 0;
-  p->m.out   = 0;
+  p->m.first   = 0;
+  p->m.in      = 0;
+  p->m.out     = 0;
 
   // Header size in number of elements
-  const data_index header_size = sizeof(fiol_management) / sizeof(data_element) +
-          (sizeof(fiol_management) % sizeof(data_element) > 0);
+  const data_index header_size =
+      sizeof(fiol_management) / sizeof(data_element) + (sizeof(fiol_management) % sizeof(data_element) > 0);
 
   p->m.limit = nwords - header_size;
 
@@ -255,27 +255,31 @@ circular_buffer_p CB_init(
 //! <br> = CB_create_shared(&shmid, nwords)
 //! @return pointer to buffer upon success, NULL upon error
 circular_buffer_p CB_create_shared(
-  int32_t *shmid,                          //!< [out] identifier of shared memory area (see man shmget) (-1 upon error)
-  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  )
+    int32_t* shmid, //!< [out] identifier of shared memory area (see man shmget) (-1 upon error)
+    int32_t  nwords //!< [in]  size in number of elements of the circular buffer (#data_element)
+    )
 //C_EnD
 {
-  void *t;
-  size_t sz = nwords * sizeof(data_element);
-  int id;
+  void*           t;
+  size_t          sz = nwords * sizeof(data_element);
+  int             id;
   struct shmid_ds ds;
-  int status;
+  int             status;
 
   *shmid = -1;
-  if(sz < 64*1024) return NULL;
-  id = shmget(IPC_PRIVATE, sz, IPC_CREAT);   // create shared memory segment
-  if(id == -1) return NULL;                  // error occurred
-  t = shmat(id, NULL, 0);                    // attach shared memory segment
-  if( t == (void *) -1) return NULL;         // error occurred
-  status = shmctl(id, IPC_RMID, &ds);        // mark segment for deletion (ONLY SAFE ON LINUX)
-  if(status != 0) return NULL;               // this should not fail
+  if (sz < 64 * 1024)
+    return NULL;
+  id = shmget(IPC_PRIVATE, sz, IPC_CREAT); // create shared memory segment
+  if (id == -1)
+    return NULL;          // error occurred
+  t = shmat(id, NULL, 0); // attach shared memory segment
+  if (t == (void*)-1)
+    return NULL;                      // error occurred
+  status = shmctl(id, IPC_RMID, &ds); // mark segment for deletion (ONLY SAFE ON LINUX)
+  if (status != 0)
+    return NULL; // this should not fail
   *shmid = id;
-  return CB_init((circular_buffer_p)t, nwords) ;
+  return CB_init((circular_buffer_p)t, nwords);
 }
 
 //F_StArT
@@ -292,13 +296,13 @@ circular_buffer_p CB_create_shared(
 //! detach "shared memory segment" used by circular buffer
 //! <br> = CB_detach_shared
 //! @return 0 upon success, nonzero upon error
-int32_t CB_detach_shared(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  )
+int32_t CB_detach_shared(circular_buffer_p p //!< [in]  pointer to a circular buffer
+                         )
 //C_EnD
 {
-  if(p == NULL) return -1;
-  return shmdt(p) ;   // detach from "shared memory segment" creeated by CB_create_shared
+  if (p == NULL)
+    return -1;
+  return shmdt(p); // detach from "shared memory segment" creeated by CB_create_shared
 }
 
 //F_StArT
@@ -315,17 +319,17 @@ int32_t CB_detach_shared(
 //! create and initialize a circular buffer of size nwords in process memory
 //! <br> = CB_create(nwords)
 //! @return address of the circular buffer upon success, NULL otherwise
-circular_buffer_p CB_create(
-  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  )
+circular_buffer_p CB_create(int32_t nwords //!< [in]  size in number of elements of the circular buffer (#data_element)
+                            )
 //C_EnD
 {
   circular_buffer_p t;
-  size_t sz = nwords * sizeof(data_element);
+  size_t            sz = nwords * sizeof(data_element);
 
-  if(sz < MIN_CIRC_BUFFER_SIZE) return NULL;
-  t = (circular_buffer_p ) malloc(sz);
-  return CB_init(t, nwords) ;
+  if (sz < MIN_CIRC_BUFFER_SIZE)
+    return NULL;
+  t = (circular_buffer_p)malloc(sz);
+  return CB_init(t, nwords);
 }
 
 //F_StArT
@@ -344,17 +348,18 @@ circular_buffer_p CB_create(
 //! <br> = CB_from_pointer(p, nwords)
 //! @return address of the circular buffer upon success, NULL otherwise
 circular_buffer_p CB_from_pointer(
-  void *p,                                 //!< [in]  pointer to user supplied memory space
-  int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  )
+    void*   p,     //!< [in]  pointer to user supplied memory space
+    int32_t nwords //!< [in]  size in number of elements of the circular buffer (#data_element)
+    )
 //C_EnD
 {
   circular_buffer_p t;
-  size_t sz = nwords * sizeof(data_element);
+  size_t            sz = nwords * sizeof(data_element);
 
-  if(sz < MIN_CIRC_BUFFER_SIZE) return NULL;
-  t = (circular_buffer_p ) p;
-  return CB_init(t, nwords) ;
+  if (sz < MIN_CIRC_BUFFER_SIZE)
+    return NULL;
+  t = (circular_buffer_p)p;
+  return CB_init(t, nwords);
 }
 
 //F_StArT
@@ -368,9 +373,8 @@ circular_buffer_p CB_from_pointer(
 //C_StArT
 //! Compute how much space (in number of #data_element) is available in a given circular buffer
 //! @return How many elements can still be added
-data_index CB_get_available_space(
-    const circular_buffer_p buffer //!< [in] The buffer we want to query
-)
+data_index CB_get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
+                                  )
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
@@ -390,9 +394,8 @@ data_index CB_get_available_space(
 //C_StArT
 //! Compute how much data (in number of #data_element) is stored in a given circular buffer
 //! @return How many elements are stored in the buffer
-data_index CB_get_available_data(
-    const circular_buffer_p buffer //!< [in] The buffer we want to query
-)
+data_index CB_get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
+                                 )
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
@@ -417,19 +420,20 @@ data_index CB_get_available_data(
 //! <br> = CB_wait_space_available(p, n)
 //! @return actual number of empty slots available, -1 on error
 int32_t CB_wait_space_available(
-  circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  int n                                    //!< [in]  needed number of available slots (#data_element)
-  )
+    circular_buffer_p p, //!< [in]  pointer to a circular buffer
+    int               n  //!< [in]  needed number of available slots (#data_element)
+    )
 //C_EnD
 {
-  if(p == NULL) return -1;
-  if(n < 0 || p->m.version != FIOL_VERSION) return -1;
+  if (p == NULL)
+    return -1;
+  if (n < 0 || p->m.version != FIOL_VERSION)
+    return -1;
 
   data_index num_available = CB_get_available_space(p);
-  while (num_available < n)
-  {
-      sleep_us(SPACE_READ_WAIT_TIME_US);
-      num_available = CB_get_available_space(p);
+  while (num_available < n) {
+    sleep_us(SPACE_READ_WAIT_TIME_US);
+    num_available = CB_get_available_space(p);
   }
 
   return num_available;
@@ -451,19 +455,20 @@ int32_t CB_wait_space_available(
 //! <br> = CB_wait_data_available(p, n)
 //! @return actual number of data tokens available, -1 if error
 int32_t CB_wait_data_available(
-  circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  int n                                    //!< [in]  needed number of available  #data_element tokens
-  )
+    circular_buffer_p p, //!< [in]  pointer to a circular buffer
+    int               n  //!< [in]  needed number of available  #data_element tokens
+    )
 //C_EnD
 {
-  if(p == NULL) return -1;
-  if(p->m.version != FIOL_VERSION || n < 0) return -1;
+  if (p == NULL)
+    return -1;
+  if (p->m.version != FIOL_VERSION || n < 0)
+    return -1;
 
   data_index num_available = CB_get_available_data(p);
-  while (num_available < n)
-  {
-      sleep_us(DATA_READ_WAIT_TIME_US);
-      num_available = CB_get_available_data(p);
+  while (num_available < n) {
+    sleep_us(DATA_READ_WAIT_TIME_US);
+    num_available = CB_get_available_data(p);
   }
 
   return num_available;
@@ -484,14 +489,15 @@ int32_t CB_wait_data_available(
 //! get the address of the first position in the circular data buffer
 //! <br> = CB_start(p)
 //! @return pointer to beginning of circular buffer
-data_element *CB_start(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  )
+data_element* CB_start(circular_buffer_p p //!< [in]  pointer to a circular buffer
+                       )
 //C_EnD
 {
-  if(p == NULL) return NULL;
-  if(p->m.version != FIOL_VERSION) return NULL;
-  return p->data;  // start of data buffer
+  if (p == NULL)
+    return NULL;
+  if (p->m.version != FIOL_VERSION)
+    return NULL;
+  return p->data; // start of data buffer
 }
 
 //F_StArT
@@ -508,14 +514,15 @@ data_element *CB_start(
 //! get the address of the  insertion point in the circular data buffer (data snoop)
 //! <br> = CB_data_in(p)
 //! @return address of the  insertion point in the circular data buffer
-data_element *CB_data_in(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  )
+data_element* CB_data_in(circular_buffer_p p //!< [in]  pointer to a circular buffer
+                         )
 //C_EnD
 {
-  if(p == NULL) return NULL;
-  if(p->m.version != FIOL_VERSION) return NULL;
-  return  p->data+p->m.in;
+  if (p == NULL)
+    return NULL;
+  if (p->m.version != FIOL_VERSION)
+    return NULL;
+  return p->data + p->m.in;
 }
 
 //F_StArT
@@ -532,14 +539,15 @@ data_element *CB_data_in(
 //! get the address of the extraction point in the circular data buffer (data snoop)
 //! <br> = CB_data_out(p)
 //! @return address of the  insertion point in the circular data buffer
-data_element *CB_data_out(
-  circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  )
+data_element* CB_data_out(circular_buffer_p p //!< [in]  pointer to a circular buffer
+                          )
 //C_EnD
 {
-  if(p == NULL) return NULL;
-  if(p->m.version != FIOL_VERSION) return NULL;
-  return  p->data+p->m.out;
+  if (p == NULL)
+    return NULL;
+  if (p->m.version != FIOL_VERSION)
+    return NULL;
+  return p->data + p->m.out;
 }
 
 //F_StArT
@@ -558,42 +566,45 @@ data_element *CB_data_out(
 //! get pointer to the in position, assume that the caller knows the start of data buffer
 //! <br> = CB_advance_in(p, &n1, &n2)
 //! @return A pointer to the insertion position
-data_element *CB_advance_in(
-  circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
-  int32_t *n1,                            //!< [out] number of #data_element tokens available at the "in" position, -1 upon error
-  int32_t *n2                             //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
-  )
+data_element* CB_advance_in(
+    circular_buffer_p p,  //!< [in]  pointer to a circular buffer
+    int32_t*          n1, //!< [out] number of #data_element tokens available at the "in" position, -1 upon error
+    int32_t*          n2 //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
+    )
 //C_EnD
 {
-  int32_t *inp = &(p->m.in);
-  int32_t *outp = &(p->m.out);
-  int32_t in, out, limit;
+  int32_t* inp  = &(p->m.in);
+  int32_t* outp = &(p->m.out);
+  int32_t  in, out, limit;
 
   *n1 = -1;
   *n2 = -1;
-  if(p == NULL) return NULL;
-  if(p->m.version != FIOL_VERSION) return NULL;
+  if (p == NULL)
+    return NULL;
+  if (p->m.version != FIOL_VERSION)
+    return NULL;
   limit = p->m.limit;
-  in = *inp;
-  out = *outp;
-  if(in == out){
-    if(in == 0){
-      *n1 = limit - 1;      // "in" -> "limit -2"  (in to end -1)
-      *n2 = 0;              // nothing available at beginning of buffer
-    }else{
-      *n1 = limit - in;     // "in" -> "limit -1"  (in to end)
-      *n2 = out - 1;        // "first" -> "out -1"
+  in    = *inp;
+  out   = *outp;
+  if (in == out) {
+    if (in == 0) {
+      *n1 = limit - 1; // "in" -> "limit -2"  (in to end -1)
+      *n2 = 0;         // nothing available at beginning of buffer
+    }
+    else {
+      *n1 = limit - in; // "in" -> "limit -1"  (in to end)
+      *n2 = out - 1;    // "first" -> "out -1"
     }
   }
-  else if(in < out){
-    *n1 = out - in - 1;     // available at "in"
-    *n2 = 0;                // nothing available at beginning of buffer
+  else if (in < out) {
+    *n1 = out - in - 1; // available at "in"
+    *n2 = 0;            // nothing available at beginning of buffer
   }
-  else if(in > out){
-    *n1 = limit - in - 1;   // "in" -> "limit -1"
-    *n2 = out;              // available at beginning of buffer (technically out - first)
+  else if (in > out) {
+    *n1 = limit - in - 1; // "in" -> "limit -1"
+    *n2 = out;            // available at beginning of buffer (technically out - first)
   }
-  return p->data+in;
+  return p->data + in;
 }
 
 //F_StArT
@@ -612,37 +623,39 @@ data_element *CB_advance_in(
 //! return a pointer to the "out" position, assume that the caller knows the start of data buffer
 //! <br> = CB_advance_out(p, &n1, &n2)
 //! @return pointer to the "out" position, upon error, NULL is returned
-data_element *CB_advance_out(
-  circular_buffer_p p,                   //!< [in]  pointer to a circular buffer
-  int32_t *n1,                           //!< [out] number of #data_element tokens available at the "out" position, -1 upon error
-  int32_t *n2                            //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
-  )
+data_element* CB_advance_out(
+    circular_buffer_p p,  //!< [in]  pointer to a circular buffer
+    int32_t*          n1, //!< [out] number of #data_element tokens available at the "out" position, -1 upon error
+    int32_t*          n2 //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
+    )
 //C_EnD
 {
-  int  *inp = &(p->m.in);
-  int  *outp = &(p->m.out);
-  int in, out, limit;
+  int* inp  = &(p->m.in);
+  int* outp = &(p->m.out);
+  int  in, out, limit;
 
   *n1 = -1;
   *n2 = -1;
-  if(p == NULL) return NULL;
-  if(p->m.version != FIOL_VERSION) return NULL;
+  if (p == NULL)
+    return NULL;
+  if (p->m.version != FIOL_VERSION)
+    return NULL;
   limit = p->m.limit;
-  in = *inp;
-  out = *outp;
-  if(in == out){
-    *n1 = 0;            // nothing at "out"
-    *n2 = 0;            // nothing at beginning of buffer
+  in    = *inp;
+  out   = *outp;
+  if (in == out) {
+    *n1 = 0; // nothing at "out"
+    *n2 = 0; // nothing at beginning of buffer
   }
-  else if(in < out){
-    *n1 = limit - out;  // available at "out"
-    *n2 = in;           // available at beginning of buffer (technically in - first)
+  else if (in < out) {
+    *n1 = limit - out; // available at "out"
+    *n2 = in;          // available at beginning of buffer (technically in - first)
   }
-  else if(in > out){
-    *n1 = in - out;     // "out" -> "in - 1"
-    *n2 = 0;            // nothing at beginning of buffer
+  else if (in > out) {
+    *n1 = in - out; // "out" -> "in - 1"
+    *n2 = 0;        // nothing at beginning of buffer
   }
-  return p->data+out;
+  return p->data + out;
 }
 
 //F_StArT
@@ -662,10 +675,10 @@ data_element *CB_advance_out(
 //! <br> = CB_atomic_get(p, dst, n)
 //! @return number of data tokens available after this operation, -1 if error
 int32_t CB_atomic_get(
-  circular_buffer_p p,                       //!< [in]  pointer to a circular buffer
-  data_element *dst,                         //!< [out] destination array for data extraction
-  int n                                      //!< [in]  number of #data_element data items to extract
-  )
+    circular_buffer_p p,   //!< [in]  pointer to a circular buffer
+    data_element*     dst, //!< [out] destination array for data extraction
+    int               n    //!< [in]  number of #data_element data items to extract
+    )
 //C_EnD
 {
   CB_wait_data_available(p, n);
@@ -673,26 +686,28 @@ int32_t CB_atomic_get(
   const data_index in    = p->m.in;
   data_index       out   = p->m.out;
   const data_index limit = p->m.limit;
-  data_element *buf = p->data;
-  int ni;
+  data_element*    buf   = p->data;
+  int              ni;
 
-  if(out < in){         // 1 segment
-    copy_elements(dst, buf+out, n);
+  if (out < in) { // 1 segment
+    copy_elements(dst, buf + out, n);
     out += n;
-  }else{                // 1 or 2 segments
-    ni = n > (limit-out) ? (limit-out) : n;
-    copy_elements(dst, buf+out, ni);
+  }
+  else { // 1 or 2 segments
+    ni = n > (limit - out) ? (limit - out) : n;
+    copy_elements(dst, buf + out, ni);
     n -= ni;
     out += ni;
     dst += ni;
-    if(out >= limit) out = 0;
-    copy_elements(dst, buf+out, n);
+    if (out >= limit)
+      out = 0;
+    copy_elements(dst, buf + out, n);
     out += n;
   }
 
-  memory_fence();  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
-  data_index volatile *outp = &(p->m.out);
-  *outp = out;
+  memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+  data_index volatile* outp = &(p->m.out);
+  *outp                     = out;
 
   return CB_get_available_data(p);
 }
@@ -719,49 +734,58 @@ int32_t CB_atomic_get(
 //! <br> = CB_extract(p, dst, n, offset, update)
 //! @return number of data tokens available after this operation, -1 upon error
 int32_t CB_extract(
-  circular_buffer_p p,                      //!< [in]  pointer to a circular buffer
-  data_element *dst,                          //!< [out] destination array for data extraction
-  int n,                                    //!< [in]  number of #data_element data items to extract
-  int offset,                               //!< [in]  offset from the "out" position
-  int update                                //!< [in]  if nonzero, update the "out" pointer
-  )
+    circular_buffer_p p,      //!< [in]  pointer to a circular buffer
+    data_element*     dst,    //!< [out] destination array for data extraction
+    int               n,      //!< [in]  number of #data_element data items to extract
+    int               offset, //!< [in]  offset from the "out" position
+    int               update  //!< [in]  if nonzero, update the "out" pointer
+    )
 //C_EnD
 {
-  int32_t volatile *inp = &(p->m.in);
-  int32_t volatile *outp = &(p->m.out);
-  data_element *buf = p->data;
-  int32_t in, out, limit, navail, ni;
+  int32_t volatile* inp  = &(p->m.in);
+  int32_t volatile* outp = &(p->m.out);
+  data_element*     buf  = p->data;
+  int32_t           in, out, limit, navail, ni;
 
-  if(p == NULL || dst == NULL) return -1;
-  if(p->m.version != FIOL_VERSION || n < 0) return -1;
+  if (p == NULL || dst == NULL)
+    return -1;
+  if (p->m.version != FIOL_VERSION || n < 0)
+    return -1;
   // wait until enough data is available
-  limit = p->m.limit;  // first is assumed to be 0
-  navail = 0; in = 0 ;
-  out = *outp;
-  while(navail < (n + offset)){  // we need n tokens after position "out + offset" (modulo limit)
-    in = *inp;
-    navail = available_data(in,out,limit);
+  limit  = p->m.limit; // first is assumed to be 0
+  navail = 0;
+  in     = 0;
+  out    = *outp;
+  while (navail < (n + offset)) { // we need n tokens after position "out + offset" (modulo limit)
+    in     = *inp;
+    navail = available_data(in, out, limit);
   }
 
-  out = out + offset ;  // acccount for offset
-  if(out >= limit) out = out - limit;
+  out = out + offset; // acccount for offset
+  if (out >= limit)
+    out = out - limit;
 
-  if(out < in){         // 1 segment
-    copy_elements(dst, buf+out, n);
+  if (out < in) { // 1 segment
+    copy_elements(dst, buf + out, n);
     out += n;
-  }else{                // 1 or 2 segments
-    ni = n > (limit-out) ? (limit-out) : n;
-    copy_elements(dst, buf+out, ni);
+  }
+  else { // 1 or 2 segments
+    ni = n > (limit - out) ? (limit - out) : n;
+    copy_elements(dst, buf + out, ni);
     n -= ni;
     out += ni;
     dst += ni;
-    if(out >= limit) out = 0;
-    copy_elements(dst, buf+out, n);
+    if (out >= limit)
+      out = 0;
+    copy_elements(dst, buf + out, n);
     out += n;
   }
-  if(update) { memory_fence(); *outp = out; }  // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+  if (update) {
+    memory_fence();
+    *outp = out;
+  } // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
   in = *inp;
-  return available_data(in,out,limit);
+  return available_data(in, out, limit);
 }
 
 //F_StArT
@@ -781,37 +805,39 @@ int32_t CB_extract(
 //! <br> = CB_atomic_put(p, src, n)
 //! @return number of free slots available after this operation, -1 upon error
 int32_t CB_atomic_put(
-  circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
-  data_element *src,                         //!< [in]  source array for data insertion
-  int n                                    //!< [in]  number of #data_element data items to insert
-  )
+    circular_buffer_p p,   //!< [in]  pointer to a circular buffer
+    data_element*     src, //!< [in]  source array for data insertion
+    int               n    //!< [in]  number of #data_element data items to insert
+    )
 //C_EnD
 {
   CB_wait_space_available(p, n);
 
-  data_element *buf = p->data;
-  data_index in = p->m.in;
-  const data_index out = p->m.out;
+  data_element*    buf   = p->data;
+  data_index       in    = p->m.in;
+  const data_index out   = p->m.out;
   const data_index limit = p->m.limit;
-  int ni;
+  int              ni;
 
-  if(in < out){         // 1 segment
-    copy_elements(buf+in, src, n);
+  if (in < out) { // 1 segment
+    copy_elements(buf + in, src, n);
     in += n;
-  }else{                // 1 or 2 segments
-    ni = n > (limit-in) ? (limit-in) : n;
-    copy_elements(buf+in, src, ni);
+  }
+  else { // 1 or 2 segments
+    ni = n > (limit - in) ? (limit - in) : n;
+    copy_elements(buf + in, src, ni);
     n -= ni;
     in += ni;
     src += ni;
-    if(in >= limit) in = 0;
-    copy_elements(buf+in, src, n);
+    if (in >= limit)
+      in = 0;
+    copy_elements(buf + in, src, n);
     in += n;
   }
 
   write_fence(); // make sure everything is in memory before adjusting the "in" pointer
-  data_index volatile *inp = &(p->m.in);
-  *inp = in;
+  data_index volatile* inp = &(p->m.in);
+  *inp                     = in;
 
   return CB_get_available_space(p);
 }
@@ -837,52 +863,59 @@ int32_t CB_atomic_put(
 //! <br> = CB_insert(p, src, n, offset, update)
 //! @return number of free slots available after this operation, -1 upon error
 int32_t CB_insert(
-  circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
-  data_element *src,                        //!< [in]  source array for data insertion
-  int n,                                  //!< [in]  number of #data_element data items to insert
-  int offset,                             //!< [in]  offset from the "in" position
-  int update                              //!< [in]  if nonzero, update the "in" pointer
-  )
+    circular_buffer_p p,      //!< [in]  pointer to a circular buffer
+    data_element*     src,    //!< [in]  source array for data insertion
+    int               n,      //!< [in]  number of #data_element data items to insert
+    int               offset, //!< [in]  offset from the "in" position
+    int               update  //!< [in]  if nonzero, update the "in" pointer
+    )
 //C_EnD
 {
-  int32_t volatile *inp = &(p->m.in);
-  int32_t volatile *outp = &(p->m.out);
-  data_element *buf = p->data;
-  int32_t in, out, limit, navail, ni;
+  int32_t volatile* inp  = &(p->m.in);
+  int32_t volatile* outp = &(p->m.out);
+  data_element*     buf  = p->data;
+  int32_t           in, out, limit, navail, ni;
 
-  if(p == NULL || src == NULL) return -1;
-  if(p->m.version != FIOL_VERSION || n < 0) return -1;
+  if (p == NULL || src == NULL)
+    return -1;
+  if (p->m.version != FIOL_VERSION || n < 0)
+    return -1;
   // wait until there is enough room to insert data
-  limit = p->m.limit;
-  navail = 0; in = 0 ; out = 0;
-  in = *inp;
-  while(navail < (n + offset)){  // we need to insert n tokens after position "in + offset" (modulo limit)
-    out = *outp;
-    navail = available_space(in,out,limit);
+  limit  = p->m.limit;
+  navail = 0;
+  in     = 0;
+  out    = 0;
+  in     = *inp;
+  while (navail < (n + offset)) { // we need to insert n tokens after position "in + offset" (modulo limit)
+    out    = *outp;
+    navail = available_space(in, out, limit);
   }
 
-  in = in + offset ;    // acccount for offset
-  if(in >= limit) in = in - limit;
+  in = in + offset; // acccount for offset
+  if (in >= limit)
+    in = in - limit;
 
-  if(in < out){         // 1 segment
-    copy_elements(buf+in, src, n);
+  if (in < out) { // 1 segment
+    copy_elements(buf + in, src, n);
     in += n;
-  }else{                // 1 or 2 segments
-    ni = n > (limit-in) ? (limit-in) : n;
-    copy_elements(buf+in, src, ni);
+  }
+  else { // 1 or 2 segments
+    ni = n > (limit - in) ? (limit - in) : n;
+    copy_elements(buf + in, src, ni);
     n -= ni;
     in += ni;
     src += ni;
-    if(in >= limit) in = 0;
-    copy_elements(buf+in, src, n);
+    if (in >= limit)
+      in = 0;
+    copy_elements(buf + in, src, n);
     in += n;
   }
-  if(update) {
+  if (update) {
     write_fence(); // make sure everything is in memory before adjusting the "in" pointer
     *inp = in;
   }
   out = *outp;
-  return available_space(in,out,limit);
+  return available_space(in, out, limit);
 }
 
 //F_StArT
