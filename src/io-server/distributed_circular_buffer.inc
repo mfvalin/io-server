@@ -32,11 +32,12 @@ type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_sync_window
 
 
-function DCB_create(f_communicator, num_producers, num_elements) result(p) BIND(C, name = 'DCB_create_f')
+function DCB_create(f_communicator, num_producers, num_channels, num_elements) result(p) BIND(C, name = 'DCB_create_f')
 import :: C_PTR, C_INT
 implicit none
 integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
 integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
+integer(C_INT), intent(IN), value :: num_channels   !< Number of receivers (PEs used for communication only)
 integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
 type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
 end function DCB_create
@@ -71,6 +72,30 @@ type(C_PTR), intent(in), value    :: buffer
 integer(C_INT), intent(in), value :: buffer_id
 integer(C_INT) :: num_elements
 end function DCB_get_num_elements
+
+
+function DCB_get_producer_id(buffer) result(producer_id) BIND(C, name = 'DCB_get_producer_id')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: producer_id
+end function DCB_get_producer_id
+
+
+function DCB_get_receiver_id(buffer) result(receiver_id) BIND(C, name = 'DCB_get_receiver_id')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: receiver_id
+end function DCB_get_receiver_id
+
+
+function DCB_get_consumer_id(buffer) result(consumer_id) BIND(C, name = 'DCB_get_consumer_id')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: consumer_id
+end function DCB_get_consumer_id
 
 
 function DCB_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'DCB_put')

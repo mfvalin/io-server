@@ -44,6 +44,9 @@ module distributed_circular_buffer_module
     procedure :: get_num_elements_latest
     procedure :: check_integrity
     procedure :: sync_window
+    procedure :: get_producer_id
+    procedure :: get_receiver_id
+    procedure :: get_consumer_id
 !    procedure :: get_num_spaces
   end type distributed_circular_buffer
 
@@ -59,11 +62,12 @@ contains
   end function is_valid
 
   !> Create and initialize a distributed circular buffer. See DCB_create
-  function create(this, communicator, num_producers, num_words) result(is_valid)
+  function create(this, communicator, num_producers, num_channels, num_words) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT), intent(in)                        :: communicator
     integer(C_INT), intent(in)                        :: num_producers
+    integer(C_INT), intent(in)                        :: num_channels
     integer(C_INT), intent(in)                        :: num_words
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
 
@@ -71,7 +75,7 @@ contains
       call this % delete()
     end if
 
-    this % c_buffer = DCB_create(communicator, num_producers, num_words)
+    this % c_buffer = DCB_create(communicator, num_producers, num_channels, num_words)
     is_valid = this % is_valid()
   end function create
 
@@ -160,5 +164,26 @@ contains
     class(distributed_circular_buffer), intent(inout) :: this
     call DCB_sync_window(this % c_buffer)
   end subroutine sync_window
+
+  function get_producer_id(this) result(producer_id)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: producer_id
+    producer_id = DCB_get_producer_id(this % c_buffer)
+  end function get_producer_id
+
+  function get_receiver_id(this) result(receiver_id)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: receiver_id
+    receiver_id = DCB_get_receiver_id(this % c_buffer)
+  end function get_receiver_id
+
+  function get_consumer_id(this) result(consumer_id)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: consumer_id
+    consumer_id = DCB_get_consumer_id(this % c_buffer)
+  end function get_consumer_id
 
 end module distributed_circular_buffer_module

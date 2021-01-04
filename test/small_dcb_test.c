@@ -15,7 +15,7 @@ int main(
 
   distributed_circular_buffer_p buffer;
 
-  buffer = DCB_create(MPI_COMM_WORLD, NUM_PRODUCERS, 200);
+  buffer = DCB_create(MPI_COMM_WORLD, NUM_PRODUCERS, 1, 200);
 
   int data[10];
   for (int i = 0; i < 10; ++i)

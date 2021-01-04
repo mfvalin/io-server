@@ -40,7 +40,7 @@ subroutine run_test()
 
   integer :: global_rank, num_procs
   integer :: node_comm, io_comm
-  integer :: node_id, num_worker_nodes
+  integer :: node_id, num_worker_nodes, num_channels
   logical :: is_io, is_relay, is_worker
   integer :: ierr
 
@@ -56,12 +56,12 @@ subroutine run_test()
     goto 999
   end if
 
-  call init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_worker_nodes, is_io, is_relay, is_worker)
+  call init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_worker_nodes, num_channels, is_io, is_relay, is_worker)
 
   if (is_io) then
-    call run_io_server(node_comm, io_comm, num_worker_nodes, num_errors)
+    call run_io_server(node_comm, io_comm, num_worker_nodes, num_channels, num_errors)
   else if (is_relay) then
-    call run_relay_process(node_comm, io_comm, num_worker_nodes, num_errors)
+    call run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels, num_errors)
   else if (is_worker) then
     call run_worker_process()
   else
@@ -86,7 +86,7 @@ subroutine run_test()
 
 end subroutine run_test
 
-subroutine init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_worker_nodes, is_io, is_relay, is_worker)
+subroutine init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_worker_nodes, num_channels, is_io, is_relay, is_worker)
   implicit none
   include 'mpif.h'
 
@@ -95,7 +95,7 @@ subroutine init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_w
   integer, intent(out) :: node_comm
   integer, intent(out) :: io_comm
   integer, intent(out) :: node_id
-  integer, intent(out) :: num_worker_nodes
+  integer, intent(out) :: num_worker_nodes, num_channels
   logical, intent(out) :: is_io, is_relay, is_worker
 
   integer :: num_worker_procs = 0
@@ -107,8 +107,11 @@ subroutine init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_w
   is_worker = .false.
 
   num_worker_nodes = -1
+  num_channels = -1
 
   if (num_procs >= 6 .and. num_procs <= 8) then
+    print *, 'GOTTA CHECK THAT'
+    return
     ! 2 Relays, 2 IO, the rest are workers
     num_worker_nodes = 2
     num_total_nodes = 3
@@ -151,7 +154,7 @@ subroutine init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_w
 end subroutine init_comms
 
 
-subroutine run_io_server(node_comm, io_comm, num_worker_nodes, num_errors)
+subroutine run_io_server(node_comm, io_comm, num_worker_nodes, num_channels, num_errors)
 
   use distributed_circular_buffer_module, only: distributed_circular_buffer
   use parameters
@@ -159,7 +162,7 @@ subroutine run_io_server(node_comm, io_comm, num_worker_nodes, num_errors)
   implicit none
 
   integer, intent(in)    :: node_comm, io_comm
-  integer, intent(in)    :: num_worker_nodes
+  integer, intent(in)    :: num_worker_nodes, num_channels
   integer, intent(inout) :: num_errors
 
   integer :: io_rank, num_io_procs
@@ -171,19 +174,19 @@ subroutine run_io_server(node_comm, io_comm, num_worker_nodes, num_errors)
   call MPI_Comm_rank(io_comm, io_rank, ierr)
   call MPI_Comm_size(io_comm, num_io_procs, ierr)
 
-  success = io_buffer % create(io_comm, num_worker_nodes, NUM_IO_BUFFER_ELEMENTS)
+  success = io_buffer % create(io_comm, num_worker_nodes, num_channels, NUM_IO_BUFFER_ELEMENTS)
   call io_buffer % delete()
 
 end subroutine run_io_server
 
-subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_errors)
+subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels, num_errors)
 
   use distributed_circular_buffer_module, only: distributed_circular_buffer
 
   implicit none
 
   integer, intent(in)    :: node_comm, io_comm
-  integer, intent(in)    :: num_worker_nodes
+  integer, intent(in)    :: num_worker_nodes, num_channels
   integer, intent(inout) :: num_errors
 
   integer :: io_rank, num_io_procs
@@ -195,7 +198,7 @@ subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_errors)
   call MPI_Comm_rank(io_comm, io_rank, ierr)
   call MPI_Comm_size(io_comm, num_io_procs, ierr)
 
-  success = io_buffer % create(io_comm, num_worker_nodes, 0)
+  success = io_buffer % create(io_comm, num_worker_nodes, num_channels, 0)
   call io_buffer % delete()
 
 end subroutine run_relay_process
