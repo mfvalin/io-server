@@ -62,6 +62,113 @@
 }
 
 {
+   <OpenMPI_supp>
+   Memcheck:User
+   ...
+   fun:mca_pml_ob1_*
+   ...
+   fun:ompi_osc_pt2pt_*
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr2
+   ...
+   fun:mca_pml_ob1_*
+   ...
+   fun:ompi_osc_pt2pt_*
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr4
+   ...
+   fun:mca_pml_ob1_*
+   ...
+   fun:ompi_osc_pt2pt_*
+}
+
+{
+   <OpenMPI_supp>
+   Memcheck:Addr8
+   ...
+   fun:mca_pml_ob1_*
+   ...
+   fun:ompi_osc_pt2pt_*
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:Addr8
+   ...
+   fun:opal_convertor_pack
+   ...
+   fun:ompi_osc_pt2pt_accumulate
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:User
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_*
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:Addr1
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_*
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:Addr2
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_*
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:Addr4
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_*
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:Addr8
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_*
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:Addr8
+   ...
+   fun:opal_convertor_pack
+   ...
+   fun:ompi_osc_pt2pt_get_accumulate
+}
+
+{
+   <OpenMPI_window>
+   Memcheck:User
+   ...
+   obj:/*libopen-pal*
+   fun:PMPI_*
+}
+
+{
    <OpenMPI_supp_dynamic_window>
    Memcheck:Addr1
    ...
