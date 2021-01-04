@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  * 
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  * 
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 // This file has been generated from common.c
 #ifndef IO_SERVER_common_GEN_H
@@ -31,19 +31,19 @@
 //! Memory store fence
 static inline void write_fence() {
   __asm__ volatile("sfence" : : : "memory");
-//   _mm_sfence();
+  //   _mm_sfence();
 }
 
 //! Memory load fence
 static inline void read_fence() {
   __asm__ volatile("lfence" : : : "memory");
-//   _mm_lfence();
+  //   _mm_lfence();
 }
 
 //! memory load+store fence
 static inline void memory_fence() {
   __asm__ volatile("mfence" : : : "memory");
-//   _mm_mfence();
+  //   _mm_mfence();
 }
 //! Type of individual elements stored in a container
 typedef int32_t data_element;

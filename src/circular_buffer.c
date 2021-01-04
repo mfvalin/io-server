@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  *
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 
 // tell doxygen to ignore this file
@@ -189,8 +189,9 @@ static const int SPACE_READ_WAIT_TIME_US = 10;
 //! Print buffer header (to help debugging)
 void CB_print_header(
     circular_buffer_p b   //!< [in] Pointer to the buffer to print
-){
+)
 //C_EnD
+{
   printf("version %ld, first %ld, in %ld, out %ld, limit %ld\n",
          (long)b->m.version, (long)b->m.first, (long)b->m.in, (long)b->m.out, (long)b->m.limit);
 }
@@ -213,8 +214,9 @@ void CB_print_header(
 circular_buffer_p CB_init(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return NULL;
   if(nwords < MIN_CIRC_BUFFER_SIZE) return NULL;   // area is too small
   p->m.version = FIOL_VERSION;
@@ -255,8 +257,9 @@ circular_buffer_p CB_init(
 circular_buffer_p CB_create_shared(
   int32_t *shmid,                          //!< [out] identifier of shared memory area (see man shmget) (-1 upon error)
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  ){
+  )
 //C_EnD
+{
   void *t;
   size_t sz = nwords * sizeof(data_element);
   int id;
@@ -291,8 +294,9 @@ circular_buffer_p CB_create_shared(
 //! @return 0 upon success, nonzero upon error
 int32_t CB_detach_shared(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return -1;
   return shmdt(p) ;   // detach from "shared memory segment" creeated by CB_create_shared
 }
@@ -313,8 +317,9 @@ int32_t CB_detach_shared(
 //! @return address of the circular buffer upon success, NULL otherwise
 circular_buffer_p CB_create(
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  ){
+  )
 //C_EnD
+{
   circular_buffer_p t;
   size_t sz = nwords * sizeof(data_element);
 
@@ -341,8 +346,9 @@ circular_buffer_p CB_create(
 circular_buffer_p CB_from_pointer(
   void *p,                                 //!< [in]  pointer to user supplied memory space
   int32_t nwords                           //!< [in]  size in number of elements of the circular buffer (#data_element)
-  ){
+  )
 //C_EnD
+{
   circular_buffer_p t;
   size_t sz = nwords * sizeof(data_element);
 
@@ -364,8 +370,9 @@ circular_buffer_p CB_from_pointer(
 //! @return How many elements can still be added
 data_index CB_get_available_space(
     const circular_buffer_p buffer //!< [in] The buffer we want to query
-){
+)
 //C_EnD
+{
   // Make sure that the values are really read by accessing them through a volatile pointer
   volatile data_index* in  = &buffer->m.in;
   volatile data_index* out = &buffer->m.out;
@@ -385,8 +392,9 @@ data_index CB_get_available_space(
 //! @return How many elements are stored in the buffer
 data_index CB_get_available_data(
     const circular_buffer_p buffer //!< [in] The buffer we want to query
-){
+)
 //C_EnD
+{
   // Make sure that the values are really read by accessing them through a volatile pointer
   volatile data_index* in  = &buffer->m.in;
   volatile data_index* out = &buffer->m.out;
@@ -411,8 +419,9 @@ data_index CB_get_available_data(
 int32_t CB_wait_space_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int n                                    //!< [in]  needed number of available slots (#data_element)
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return -1;
   if(n < 0 || p->m.version != FIOL_VERSION) return -1;
 
@@ -444,8 +453,9 @@ int32_t CB_wait_space_available(
 int32_t CB_wait_data_available(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   int n                                    //!< [in]  needed number of available  #data_element tokens
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return -1;
   if(p->m.version != FIOL_VERSION || n < 0) return -1;
 
@@ -476,8 +486,9 @@ int32_t CB_wait_data_available(
 //! @return pointer to beginning of circular buffer
 data_element *CB_start(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
   return p->data;  // start of data buffer
@@ -499,8 +510,9 @@ data_element *CB_start(
 //! @return address of the  insertion point in the circular data buffer
 data_element *CB_data_in(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.in;
@@ -522,8 +534,9 @@ data_element *CB_data_in(
 //! @return address of the  insertion point in the circular data buffer
 data_element *CB_data_out(
   circular_buffer_p p                    //!< [in]  pointer to a circular buffer
-  ){
+  )
 //C_EnD
+{
   if(p == NULL) return NULL;
   if(p->m.version != FIOL_VERSION) return NULL;
   return  p->data+p->m.out;
@@ -549,8 +562,9 @@ data_element *CB_advance_in(
   circular_buffer_p p,                    //!< [in]  pointer to a circular buffer
   int32_t *n1,                            //!< [out] number of #data_element tokens available at the "in" position, -1 upon error
   int32_t *n2                             //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
-  ){
+  )
 //C_EnD
+{
   int32_t *inp = &(p->m.in);
   int32_t *outp = &(p->m.out);
   int32_t in, out, limit;
@@ -602,8 +616,9 @@ data_element *CB_advance_out(
   circular_buffer_p p,                   //!< [in]  pointer to a circular buffer
   int32_t *n1,                           //!< [out] number of #data_element tokens available at the "out" position, -1 upon error
   int32_t *n2                            //!< [out] number of #data_element tokens available at the "start" of the buffer, -1 upon error
-  ){
+  )
 //C_EnD
+{
   int  *inp = &(p->m.in);
   int  *outp = &(p->m.out);
   int in, out, limit;
@@ -650,8 +665,9 @@ int32_t CB_atomic_get(
   circular_buffer_p p,                       //!< [in]  pointer to a circular buffer
   data_element *dst,                         //!< [out] destination array for data extraction
   int n                                      //!< [in]  number of #data_element data items to extract
-  ){
+  )
 //C_EnD
+{
   CB_wait_data_available(p, n);
 
   const data_index in    = p->m.in;
@@ -708,8 +724,9 @@ int32_t CB_extract(
   int n,                                    //!< [in]  number of #data_element data items to extract
   int offset,                               //!< [in]  offset from the "out" position
   int update                                //!< [in]  if nonzero, update the "out" pointer
-  ){
+  )
 //C_EnD
+{
   int32_t volatile *inp = &(p->m.in);
   int32_t volatile *outp = &(p->m.out);
   data_element *buf = p->data;
@@ -767,8 +784,9 @@ int32_t CB_atomic_put(
   circular_buffer_p p,                     //!< [in]  pointer to a circular buffer
   data_element *src,                         //!< [in]  source array for data insertion
   int n                                    //!< [in]  number of #data_element data items to insert
-  ){
+  )
 //C_EnD
+{
   CB_wait_space_available(p, n);
 
   data_element *buf = p->data;
@@ -824,8 +842,9 @@ int32_t CB_insert(
   int n,                                  //!< [in]  number of #data_element data items to insert
   int offset,                             //!< [in]  offset from the "in" position
   int update                              //!< [in]  if nonzero, update the "in" pointer
-  ){
+  )
 //C_EnD
+{
   int32_t volatile *inp = &(p->m.in);
   int32_t volatile *outp = &(p->m.out);
   data_element *buf = p->data;

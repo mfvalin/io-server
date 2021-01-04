@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  *
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 
 //C_StArT
@@ -29,19 +29,19 @@
 //! Memory store fence
 static inline void write_fence() {
   __asm__ volatile("sfence" : : : "memory");
-//   _mm_sfence();
+  //   _mm_sfence();
 }
 
 //! Memory load fence
 static inline void read_fence() {
   __asm__ volatile("lfence" : : : "memory");
-//   _mm_lfence();
+  //   _mm_lfence();
 }
 
 //! memory load+store fence
 static inline void memory_fence() {
   __asm__ volatile("mfence" : : : "memory");
-//   _mm_mfence();
+  //   _mm_mfence();
 }
 //C_EnD
 
@@ -67,8 +67,9 @@ typedef int32_t data_index;
 //C_StArT
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
-){
+              )
 //C_EnD
+{
   struct timespec ts;
   ts.tv_sec  = num_us / 1000000;
   ts.tv_nsec = num_us % 1000000 * 1000;
@@ -82,12 +83,10 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 //    type(C_PTR), intent(INOUT) :: ptr
 //  end subroutine free_c_ptr
 //F_EnD
-void free_c_ptr(void** ptr)
-{
-    free(*ptr);
-    *ptr = NULL;
+void free_c_ptr(void** ptr) {
+  free(*ptr);
+  *ptr = NULL;
 }
-
 
 //F_StArT
 //  end interface

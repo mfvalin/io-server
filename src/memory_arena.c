@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  *
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 
 // tell doxygen to ignore this file
@@ -237,8 +237,9 @@ static local_arena LA;           // local information about master arena
 //! @return -1 upon error, value > 0 otherwise
 int32_t memory_arena_set_id(
   uint32_t id                      //!< [in] owner's id (usually MPI rank) 
-  ){
+  )
 //C_EnD
+{
   if(id < 0) return -1;
   me = id + 1;
   return me;
@@ -247,7 +248,8 @@ int32_t memory_arena_set_id(
 // translate char string (max 8 characters) into a 64 bit unsigned token
 // translation will stop at first null or space character
 // character string is CASE SENSITIVE (ASCII 128)
-static inline uint64_t block_name(unsigned char *name){
+static inline uint64_t block_name(unsigned char *name //!< [in] string to be translated
+                                  ){
   int i;
   uint64_t name64 = 0;
 
@@ -272,8 +274,9 @@ static inline uint64_t block_name(unsigned char *name){
 //! @return none
 void memory_arena_print_status(
   void *mem                                  //!< [in] pointer to memory arena (see  memory_arena_init)
-  ){
+  )
 //C_EnD
+{
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -340,8 +343,9 @@ uint32_t memory_arena_init(
   void *mem,                   //!< [in] pointer to memory arena (see  memory_arena_init)
   uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
   uint32_t size                //!< [in] size of memory area in 32 bit units
-  ){
+  )
 //C_EnD
+{
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
   uint32_t size64 = size >> 1;  // round size down to 64 bit element size
@@ -386,8 +390,9 @@ fprintf(stderr,"ma init %p, owner = %d\n", ma, ma->owner);
 //! @return number of arenas detected
 uint32_t update_local_table(
   void *mem                     //!< [in] pointer to master memory arena
-  ){
+  )
 //C_EnD
+{
   master_arena *MA = (master_arena *) mem;
   memory_arena *ma = (memory_arena *) &(MA->ma);
   int i;
@@ -447,8 +452,9 @@ uint32_t master_arena_init(
   void *mem,                     //!< [in] pointer to master memory arena
   uint32_t nsym,                 //!< [in] size of symbol table to allocate (max number of blocks expected)
   uint32_t size                  //!< [in] size of memory area for master arena in 32 bit units
-  ){
+  )
 //C_EnD
+{
   master_arena *MA = (master_arena *) mem;
   memory_arena *ma = (memory_arena *) &(MA->ma);
   int i, status;
@@ -508,8 +514,9 @@ void *memory_block_find(
   uint32_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
-  ){
+  )
 //C_EnD
+{
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -555,8 +562,9 @@ void *memory_block_find_wait(
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   int timeout                     //!< [in]  timeout in milliseconds, -1 means practically forever
-  ){
+  )
 //C_EnD
+{
   void *p = NULL;
   useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
 
@@ -586,8 +594,9 @@ void *memory_block_find_wait(
 void *memory_block_mark_init(
   void *mem,                       //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
   unsigned char *name              //!< [in]  name of block to find (characters beyond the 8th will be ignored)
-  ){
+  )
 //C_EnD
+{
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -625,8 +634,9 @@ void *memory_block_create(
   void *mem,                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
   uint32_t size,                    //!< [in]  desired size of block in 32 bit units
   unsigned char *name               //!< [in]  name of block to find (characters beyond the 8th will be ignored)
-  ){
+  )
 //C_EnD
+{
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
@@ -694,8 +704,9 @@ void *memory_block_create(
 void *memory_allocate_shared(
   int *shmid,                 //!< [out] shared memory id of segment (set by memory_allocate_shared) (see shmget)
   uint32_t size               //!< [in]  size of segment in 32 bit units
-  ){    
+  )
 //C_EnD
+{
   int id = -1;
   void *shmaddr = NULL;
   size_t shmsz = size * sizeof(uint32_t);  // 32 bit units to bytes
@@ -733,8 +744,9 @@ void *memory_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
   uint32_t size                //!< [in]  size of segment in 32 bit units
-  ){
+  )
 //C_EnD
+{
   void *shmaddr = memory_allocate_shared(shmid, size);    // request shared memory block
   int err;
 
@@ -765,8 +777,9 @@ void *master_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
   uint32_t size                //!< [in]  size of segment in 32 bit units
-  ){
+  )
 //C_EnD
+{
   void *shmaddr = memory_allocate_shared(shmid, size);    // request shared memory block
   int err;
   master_arena *MA;
@@ -800,8 +813,9 @@ printf("MA = %p, id = %d\n",MA, MA->arena_id);
 //! @return local memory addres of shared memory segment
 void *memory_address_from_id(
   int shmid                  //!< [in] shared memory id of segment (see shmget)
-  ){
+  )
 //C_EnD
+{
   return shmat(shmid, NULL, 0);
 }
 
@@ -820,8 +834,9 @@ void *memory_address_from_id(
 //! @return local memory addres of memory arena of master arena
 void *memory_arena_from_master(
   void *mem                        //!< [in]  pointer to the 'master memory arena'
-  ){
+  )
 //C_EnD
+{
   master_arena *MA = (master_arena *) mem;
   return &(MA->ma);
 }
@@ -841,8 +856,9 @@ void *memory_arena_from_master(
 //! @return local memory addres of memory arena of master arena
 void *memory_arena_from_master_id(
   int shmid                    //!< [in]  master arena segment id (from master_arena_create_shared)
-  ){
+  )
 //C_EnD
+{
   void *shmaddr = shmat(shmid, NULL, 0);
   master_arena *MA;
 

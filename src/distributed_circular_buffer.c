@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  *
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 
 #include <stdio.h>
@@ -458,8 +458,9 @@ distributed_circular_buffer_p DCB_create(
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
-) {
-  //C_EnD
+    )
+//C_EnD
+{
   printf("CREATING BUFFER\n");
 
   distributed_circular_buffer_p buffer = (distributed_circular_buffer*)malloc(sizeof(distributed_circular_buffer));
@@ -572,7 +573,7 @@ distributed_circular_buffer_p DCB_create(
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
     update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
 
-//    DCB_print(buffer);
+    //    DCB_print(buffer);
   }
 
   //  if (is_consumer(buffer))
@@ -709,8 +710,9 @@ int32_t DCB_get_latest_num_elements(distributed_circular_buffer_p buffer //!< [i
 int32_t DCB_get_num_elements(
     distributed_circular_buffer_p buffer,   //!< [in]
     const int                     buffer_id //!< [in]
-) {
-  //C_EnD
+    )
+//C_EnD
+{
   if (is_consumer(buffer))
     return (int32_t)CB_get_available_data(get_circular_buffer(buffer, buffer_id));
 
@@ -780,8 +782,9 @@ data_index DCB_put(
     distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
     data_element* const           src_data,    //!< Pointer to the data we want to insert
     const int                     num_elements //!< How many 4-byte elements we want to insert
-) {
-  //C_EnD
+    )
+//C_EnD
+{
   //  printf("rank %d PUT\n", buffer->rank);
   if (DCB_wait_space_available(buffer, num_elements) < 0)
     return -1;

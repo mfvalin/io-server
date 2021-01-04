@@ -1,6 +1,6 @@
 
 !!  functions for C and FORTRAN programming
-!  Copyright (C) 2020  Recherche en Prevision Numerique
+!  Copyright (C) 2021  Recherche en Prevision Numerique
 ! 
 !  This software is free software; you can redistribute it and/or
 !  modify it under the terms of the GNU Lesser General Public
