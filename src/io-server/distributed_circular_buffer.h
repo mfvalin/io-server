@@ -93,9 +93,9 @@ typedef struct {
   //! Will have some metadata at the beginning
   data_element* raw_data;
 
-  //  DCB_stats  producer_stats;
-  //  MPI_Win    consumer_stats_window;
-  //  DCB_stats* consumer_stats;
+  DCB_stats  producer_stats;
+  MPI_Win    consumer_stats_window;
+  DCB_stats* consumer_stats;
 
   //! Header of the circular buffer instance (only valid for producers)
   //! This is the local copy and will be synchronized with the remote one, located in the shared memory region of the

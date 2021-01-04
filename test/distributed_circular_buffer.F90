@@ -92,7 +92,7 @@ program test_distributed_circular_buffer
   receiver_id = circ_buffer % get_receiver_id()
   producer_id = circ_buffer % get_producer_id()
 
-  print *, 'rank, prod, receive, consume ', rank, producer_id, receiver_id, consumer_id
+!  print *, 'rank, prod, receive, consume ', rank, producer_id, receiver_id, consumer_id
 
   num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
   first_prod = consumer_id * num_prod_local
@@ -210,7 +210,7 @@ program test_distributed_circular_buffer
 !    call MPI_Barrier(MPI_COMM_WORLD, error)
     !---------------------------------------
 
-!    call sleep_us(100000 * rank)
+!    call sleep_us(1000 * rank)
 !    call sleep_us(100000)
 !    call circ_buffer % print()
     do i_prod = first_prod, last_prod
