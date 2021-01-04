@@ -83,6 +83,15 @@ int ShmemHeapGetInfo(
   int64_t *nblk,      //!< [out] number of blocks that have been allocated
   int64_t *nbyt       //!< [out] total number of bytes used by allocated blocks
      );
+//! get address of the default heap
+//! @return default heap address (NULL if none)
+void * ShmemHeapGetDefault(
+  );
+//! set this heap as the default heap
+//! @return index in heap table if a known heap, -1 otherwise
+int32_t ShmemHeapSetDefault(
+  void *addr                          //!< [in]  address possibly of a known heap
+  );
 //! is this a known heap ?
 //! @return index in heap table if a known heap, -1 otherwise
 int32_t ShmemHeapIndex(

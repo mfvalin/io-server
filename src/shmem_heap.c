@@ -47,6 +47,7 @@
   +------+---------------+    +---------------+     +---------------+------+-----------------+
   |  NT  |    block 0    | ...|    block i    | ... |    block N    | 0/1  | heap statistics |
   +------+---------------+    +---------------+     +---------------+------+-----------------+
+  <------------------------------------ NT elements ----------------------->
 
   NT  :  total number of elements in entire Heap including NT itself (but EXCLUDING statistics)
 
@@ -71,15 +72,15 @@
 
   Server Heap contents at creation
 
-  +------+------+------+----------------------------------+------+------+------+
-  |  NT  |  NH0 | HEAD |   NH0 - 4 elements (free space)  | TAIL |  NH0 |   0  |
-  +------+------+-----------------------------------------+------+------+------+
+  +------+------+------+----------------------------------+------+------+------+-----------------+
+  |  NT  |  NH0 | HEAD |   NH0 - 4 elements (free space)  | TAIL |  NH0 |   0  | heap statistics |
+  +------+------+-----------------------------------------+------+------+------+-----------------+
          <------------------------- NH0 elements ----------------------->
   <-------------------------------- NT elementss ------------------------------>
   NT  :  total number of elements in entire Heap
   NH0 :  NT - 2 (initial block with NT -2 elements)
 
-  elements are expected to be 32 bit elements in this implementation
+  elements are expected to be 32 bit elements in this implementation (see io-server/common.h)
 
  \endverbatim
 */
@@ -143,6 +144,9 @@ static int32_t nheaps = 0 ;
 //!> table containing registered heap information
 static heap_item heap_table[MAX_HEAPS] ;
 
+//!> default heap (used by some functions if heap address is NULL)
+static void *default_heap = NULL ;
+
 //  C_StArT
 //! print heap statistics
 //! @return none
@@ -153,7 +157,7 @@ void ShmemHeapDumpInfo(
   printf("======== local heap table contents ========\n");
   for(i = 0 ; i < MAX_HEAPS ; i++) {
     if( heap_table[i].bot != NULL) {
-      printf("heap %2d, (%p : %p), high point: %Ld bytes, allocated %Ld blocks (%Ld bytes)\n",
+      printf("heap %2d, (%p : %p), high point: %ld bytes, allocated %ld blocks (%ld bytes)\n",
              i, heap_table[i].bot, heap_table[i].top , 
              (heap_table[i].inf)->max * sizeof(heap_element) , 
              (heap_table[i].inf)->nblk, (heap_table[i].inf)->nbyt) ;
@@ -173,13 +177,12 @@ int ShmemHeapGetInfo(
   int64_t *nbyt       //!< [out] total number of bytes used by allocated blocks
      ){
 //  C_EnD
-  int i ;
 
   *size = 0;
   *max  = 0;
   *nblk = 0;
   *nbyt = 0;
-  if( index < 0 | index >= MAX_HEAPS) return -1 ;  // bad index
+  if( (index < 0) || (index >= MAX_HEAPS)) return -1 ;  // bad index
   if(heap_table[index].bot == NULL)   return -1 ;  // not registered
 
   *size = (heap_table[index].top - heap_table[index].bot) * sizeof(heap_element) ;
@@ -188,6 +191,36 @@ int ShmemHeapGetInfo(
   *nblk = (heap_table[index].inf)->nblk ;
   *nbyt = (heap_table[index].inf)->nbyt ;
   return 0 ;
+}
+
+//  C_StArT
+//! get address of the default heap
+//! @return default heap address (NULL if none)
+void * ShmemHeapGetDefault(
+  ){
+//  C_EnD
+  return (default_heap) ;
+}
+
+//  C_StArT
+//! set this heap as the default heap
+//! @return index in heap table if a known heap, -1 otherwise
+int32_t ShmemHeapSetDefault(
+  void *addr                          //!< [in]  address possibly of a known heap
+  ){
+//  C_EnD
+  heap_element *h = (heap_element *) addr ;
+  int i;
+
+  if(addr == NULL) return -1 ;        // obviously not a heap
+
+  for(i=0 ; i<nheaps ; i++){
+    if( h == heap_table[i].bot ){     // does the heap base address match ?
+      default_heap = addr ;           // set this heap as the default heap
+      return i ;                      // index in heap table
+    }
+  }
+  return -1 ;                         // not a known heap
 }
 
 //  C_StArT
@@ -200,6 +233,7 @@ int32_t ShmemHeapIndex(
   heap_element *b = (heap_element *) addr ;
   int i;
 
+  if(addr == NULL) addr = default_heap ;   // use default heap if address id NULL
   if(addr == NULL) return -1 ;        // obviously not a heap
 
   for(i=0 ; i<nheaps ; i++){
@@ -447,7 +481,7 @@ int32_t ShmemHeapCheck(
   size_t *used_space              //!< [out] used space in bytes
   ){
 //  C_EnD
-  heap_element *h = (heap_element *) addr ;
+  heap_element *h ;
   heap_element sz ;
   heap_element cur, limit ;
   int32_t free, used ;
@@ -457,7 +491,10 @@ int32_t ShmemHeapCheck(
   *free_space  = 0 ; used = 0 ;
   *used_blocks = 0 ; space_used = 0 ;
   *used_space  = 0 ; space_free = 0 ;
+
+  if(addr == NULL) addr = default_heap ;   // use default heap if address id NULL
   if(addr == NULL) return 1;
+  h = (heap_element *) addr ;
 
   sz    = h[0] ;
   limit = sz - 1 ;

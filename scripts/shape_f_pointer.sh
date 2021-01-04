@@ -57,7 +57,6 @@ subroutine ${RI}${L}_${D}D(h, p, di, bmi) ! ${TYPE}*${L} ${D}D array allocator
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref
-  type(block_meta_f08) :: bmo
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
   integer(C_SIZE_T) :: asz
@@ -81,13 +80,6 @@ subroutine ${RI}${L}_${D}D(h, p, di, bmi) ! ${TYPE}*${L} ${D}D array allocator
     bmi%a%d(1:${D}) = di(1:${D})    ! set relevant dimensions to correct value
     bmi%p = cptr
     status = ${METADATA}(cptr, bmi%a, bsz)  ! insert metadata into data block
-! start of diagnostic code
-    print 2,'BMI: type ',bmi%t(),' kind',bmi%k(),' rank',bmi%r(),' dims',bmi%dims(),' sizeof(bmc)',bsz
-2   format(3(A,I3),A,5I8,A,I5)
-    bmo%a = block_meta_c([-1,-1,-1,-1,-1], 0)         ! nullify metadata
-    status = ShmemHeapGetBlockMeta(cptr, bmo%a, bsz)  ! get metadata from data block
-    print 2,'BMO: type ',bmo%t(),' kind',bmo%k(),' rank',bmo%r(),' dims',bmo%dims()
-! end of diagnostic code
   endif
 end subroutine ${RI}${L}_${D}D
 

@@ -77,7 +77,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
-    print 3,'too few processes for relay test, a minimum of 5 is required, got',nprocs
+    print 3,'FAIL: too few processes for relay test, a minimum of 5 is required, got',nprocs
     return
   endif
 ! ================================= allocate shared memory =================================
@@ -89,6 +89,12 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     print 3, 'model PE, rank =',myrank
   endif
 
+  if( C_ASSOCIATED(h%ptr()) ) then                  ! check initialization clause in declaration
+    print *,"FAIL: uninitialized heap C pointer is not NULL"
+  else
+    print *,"PASS: uninitialized heap C pointer is NULL"
+  endif
+
   disp_unit = C_SIZEOF(he)                          ! displacement unit in window = size of a heap element
   call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
   allocate(bases(0:nprocs-1))
@@ -98,11 +104,11 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     call MPI_Win_shared_query(win, i, sizes(i), disp_units(i), bases(i),   ierr)  ! get base addresses of partners
   enddo
   mybase = bases(myrank)  ! my own base address
-  print 5,'PE ',myrank,', my base address = ',bases(myrank)
+  print 5,'INFO: PE ',myrank,', my base address = ',bases(myrank)
 ! ================================= setup of the "model" PE heaps =================================
   if(myrank == 0 .or. myrank == nprocs-1) then  ! relay PE (first rank and last rank)
     do i = 0, nprocs-1
-      print 5,'PE ',i,', base address = ',bases(i),' size =',sizes(i),' disp_unit =',disp_units(i)
+      print 5,'INFO: PE ',i,', base address = ',bases(i),' size =',sizes(i),' disp_unit =',disp_units(i)
     enddo
   else                                          ! "model" PE, create and populate heaps
     p = transfer(mybase, C_NULL_PTR)                  ! make large integer from Win_shared_query into a C pointer
@@ -115,26 +121,27 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     ixtab = -1                                        ! invalidate indexes
     p = memory%pheap                                  ! p points to the local heap
     p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he))   ! create heap h, 8 K + 8*rank elements
-    !  ================================= allocate arrays from heaps =================================
+    if( C_ASSOCIATED(h%ptr()) ) print *,"PASS: heap is successfully initialized, C pointer is not NULL"
+    !  ================================= allocate arrays in the heaps =================================
     blocks = C_NULL_PTR                               ! fill pointer table with NULLs
     lastblock = 0                                     ! no block successfully allocated
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
       call h%allocate(demo, [(700+i*100+myrank*10)/10,2,5], blk_meta)    ! allocate a 3D integer array demo + get metadata
-      print 6,'block dimensions, type, kind, rank =',blk_meta%dims(), blk_meta%t(), blk_meta%k(), blk_meta%r()
+      print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta%k(), blk_meta%r(), blk_meta%dims()
       if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
-        print *,'allocation failed for block',i       ! failure expected at some point for high rank PEs
+        print 6,'WARN: allocation failed for block',i       ! failure expected at some point for high rank PEs
         exit                                          ! exit loop as all subsequent allocations would fail (heap full)
       endif
       blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
-      print 7,'block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
+      print 7,'INFO: block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
       status = my_meta%meta(blocks(i))                ! get metadata for allocated array
       array_rank = my_meta%r()                        ! get rank of array
       ad = my_meta%dims()                             ! get all MAX_ARRAY_RANK potential dimensions
-      print 6,'array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
+      print 6,'INFO: array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
       ixtab(i) = h%offset(blocks(i))                  ! offset of blocks in heap
       lastblock = i
     enddo
-    print 6,'ixtab =', ixtab(1:lastblock)             ! print used portion of index table
+    print 6,'INFO: ixtab =', ixtab(1:lastblock)             ! print used portion of index table
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait for heap creation and population to complete
@@ -150,8 +157,8 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])    ! Fortran array for index table
       memories(i)%pheap    = C_LOC(ram(memories(i)%nindexes+2))              ! heap base address for PE of rank i
       nheaps = heaps(i)%register(memories(i)%pheap)        ! register heap for PE of rank i
-      print 3,'nheaps =',nheaps,', nindexes =',memories(i)%nindexes
-      print 6,'ixtab =', ixtab(1:10)                       ! print index table for PE of rank i
+      print 3,'INFO: nheaps =',nheaps,', nindexes =',memories(i)%nindexes
+      print 6,'INFO: ixtab =', ixtab(1:10)                       ! print index table for PE of rank i
       status = heaps(i)%check(free_blocks, free_space, used_blocks, used_space)   ! heap sanity check for PE of rank i
       print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
              ,free_space,' free bytes,',used_space,' bytes in use'
@@ -166,7 +173,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       do j = 2, memories(i)%nindexes, 2
         if(ixtab(j) == -1) exit                       ! no more valid blocks
         status = heaps(i)%freebyoffset(ixtab(j))      ! free operation using index (offset) in heap
-        print 3,'freeing heap',i,', block',j,', status =',status,   &
+        print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
                 ', offset =',heaps(i)%offset(heaps(i)%address(ixtab(j)))
       enddo
     enddo
@@ -178,7 +185,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       do j = 3, memories(i)%nindexes, 2
         if(ixtab(j) == -1) exit
         status = heaps(i)%freebyoffset(ixtab(j))
-        print 3,'freeing heap',i,', block',j,', status =',status,   &
+        print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
                 ', offset =',heaps(i)%offset(heaps(i)%address(ixtab(j)))
       enddo
     enddo
@@ -189,7 +196,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   if(myrank == 0 .or. myrank == nprocs-1) then        ! relay PE
     do i = 1, nprocs-2                                ! heap statistics
       status = heaps(i)%GetInfo(sz64, max64, nblk64, nbyt64)
-      if(status == 0) print 8,"heap from PE",i, sz64, max64, nblk64, nbyt64
+      if(status == 0) print 8,"INFO: heap from PE",i, sz64, max64, nblk64, nbyt64
     enddo
     print *,""
   else                                                ! "model" PE, check what is left on heap
@@ -207,9 +214,9 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   if(myrank > 0 .and. myrank < nprocs-1) then         ! "model" PE
     do i = 0, 8
       status = ShmemHeapGetInfo(i, sz64, max64, nblk64, nbyt64)
-      if(status == 0) print 8,"heap stats(1)",i, sz64, max64, nblk64, nbyt64
+      if(status == 0) print 8,"INFO: heap stats(1)",i, sz64, max64, nblk64, nbyt64
       status = h%GetInfoReg(i, sz64, max64, nblk64, nbyt64)
-      if(status == 0) print 8,"heap stats(2)",i, sz64, max64, nblk64, nbyt64
+      if(status == 0) print 8,"INFO: heap stats(2)",i, sz64, max64, nblk64, nbyt64
     enddo
   endif
 
