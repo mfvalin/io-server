@@ -33,12 +33,12 @@
 
 !! ===============================  integer*1 5D  ===============================
 !> \brief integer*1 5D array allocator
-subroutine I1_5D(h, p, di, bmi) ! integer*1 5D array allocator
+function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -64,16 +64,16 @@ subroutine I1_5D(h, p, di, bmi) ! integer*1 5D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I1_5D
+end function I1_5D
 
 !! ===============================  integer*1 4D  ===============================
 !> \brief integer*1 4D array allocator
-subroutine I1_4D(h, p, di, bmi) ! integer*1 4D array allocator
+function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -99,16 +99,16 @@ subroutine I1_4D(h, p, di, bmi) ! integer*1 4D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I1_4D
+end function I1_4D
 
 !! ===============================  integer*1 3D  ===============================
 !> \brief integer*1 3D array allocator
-subroutine I1_3D(h, p, di, bmi) ! integer*1 3D array allocator
+function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -134,16 +134,16 @@ subroutine I1_3D(h, p, di, bmi) ! integer*1 3D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I1_3D
+end function I1_3D
 
 !! ===============================  integer*1 2D  ===============================
 !> \brief integer*1 2D array allocator
-subroutine I1_2D(h, p, di, bmi) ! integer*1 2D array allocator
+function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -169,16 +169,16 @@ subroutine I1_2D(h, p, di, bmi) ! integer*1 2D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I1_2D
+end function I1_2D
 
 !! ===============================  integer*1 1D  ===============================
 !> \brief integer*1 1D array allocator
-subroutine I1_1D(h, p, di, bmi) ! integer*1 1D array allocator
+function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -204,16 +204,16 @@ subroutine I1_1D(h, p, di, bmi) ! integer*1 1D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I1_1D
+end function I1_1D
 
 !! ===============================  integer*2 5D  ===============================
 !> \brief integer*2 5D array allocator
-subroutine I2_5D(h, p, di, bmi) ! integer*2 5D array allocator
+function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -239,16 +239,16 @@ subroutine I2_5D(h, p, di, bmi) ! integer*2 5D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I2_5D
+end function I2_5D
 
 !! ===============================  integer*2 4D  ===============================
 !> \brief integer*2 4D array allocator
-subroutine I2_4D(h, p, di, bmi) ! integer*2 4D array allocator
+function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -274,16 +274,16 @@ subroutine I2_4D(h, p, di, bmi) ! integer*2 4D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I2_4D
+end function I2_4D
 
 !! ===============================  integer*2 3D  ===============================
 !> \brief integer*2 3D array allocator
-subroutine I2_3D(h, p, di, bmi) ! integer*2 3D array allocator
+function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -309,16 +309,16 @@ subroutine I2_3D(h, p, di, bmi) ! integer*2 3D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I2_3D
+end function I2_3D
 
 !! ===============================  integer*2 2D  ===============================
 !> \brief integer*2 2D array allocator
-subroutine I2_2D(h, p, di, bmi) ! integer*2 2D array allocator
+function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -344,16 +344,16 @@ subroutine I2_2D(h, p, di, bmi) ! integer*2 2D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I2_2D
+end function I2_2D
 
 !! ===============================  integer*2 1D  ===============================
 !> \brief integer*2 1D array allocator
-subroutine I2_1D(h, p, di, bmi) ! integer*2 1D array allocator
+function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -379,16 +379,16 @@ subroutine I2_1D(h, p, di, bmi) ! integer*2 1D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I2_1D
+end function I2_1D
 
 !! ===============================  integer*4 5D  ===============================
 !> \brief integer*4 5D array allocator
-subroutine I4_5D(h, p, di, bmi) ! integer*4 5D array allocator
+function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -414,16 +414,16 @@ subroutine I4_5D(h, p, di, bmi) ! integer*4 5D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I4_5D
+end function I4_5D
 
 !! ===============================  integer*4 4D  ===============================
 !> \brief integer*4 4D array allocator
-subroutine I4_4D(h, p, di, bmi) ! integer*4 4D array allocator
+function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -449,16 +449,16 @@ subroutine I4_4D(h, p, di, bmi) ! integer*4 4D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I4_4D
+end function I4_4D
 
 !! ===============================  integer*4 3D  ===============================
 !> \brief integer*4 3D array allocator
-subroutine I4_3D(h, p, di, bmi) ! integer*4 3D array allocator
+function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -484,16 +484,16 @@ subroutine I4_3D(h, p, di, bmi) ! integer*4 3D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I4_3D
+end function I4_3D
 
 !! ===============================  integer*4 2D  ===============================
 !> \brief integer*4 2D array allocator
-subroutine I4_2D(h, p, di, bmi) ! integer*4 2D array allocator
+function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -519,16 +519,16 @@ subroutine I4_2D(h, p, di, bmi) ! integer*4 2D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I4_2D
+end function I4_2D
 
 !! ===============================  integer*4 1D  ===============================
 !> \brief integer*4 1D array allocator
-subroutine I4_1D(h, p, di, bmi) ! integer*4 1D array allocator
+function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -554,16 +554,16 @@ subroutine I4_1D(h, p, di, bmi) ! integer*4 1D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I4_1D
+end function I4_1D
 
 !! ===============================  integer*8 5D  ===============================
 !> \brief integer*8 5D array allocator
-subroutine I8_5D(h, p, di, bmi) ! integer*8 5D array allocator
+function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -589,16 +589,16 @@ subroutine I8_5D(h, p, di, bmi) ! integer*8 5D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I8_5D
+end function I8_5D
 
 !! ===============================  integer*8 4D  ===============================
 !> \brief integer*8 4D array allocator
-subroutine I8_4D(h, p, di, bmi) ! integer*8 4D array allocator
+function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -624,16 +624,16 @@ subroutine I8_4D(h, p, di, bmi) ! integer*8 4D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I8_4D
+end function I8_4D
 
 !! ===============================  integer*8 3D  ===============================
 !> \brief integer*8 3D array allocator
-subroutine I8_3D(h, p, di, bmi) ! integer*8 3D array allocator
+function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -659,16 +659,16 @@ subroutine I8_3D(h, p, di, bmi) ! integer*8 3D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I8_3D
+end function I8_3D
 
 !! ===============================  integer*8 2D  ===============================
 !> \brief integer*8 2D array allocator
-subroutine I8_2D(h, p, di, bmi) ! integer*8 2D array allocator
+function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -694,16 +694,16 @@ subroutine I8_2D(h, p, di, bmi) ! integer*8 2D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I8_2D
+end function I8_2D
 
 !! ===============================  integer*8 1D  ===============================
 !> \brief integer*8 1D array allocator
-subroutine I8_1D(h, p, di, bmi) ! integer*8 1D array allocator
+function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -729,16 +729,16 @@ subroutine I8_1D(h, p, di, bmi) ! integer*8 1D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine I8_1D
+end function I8_1D
 
 !! ===============================  real*4 5D  ===============================
 !> \brief real*4 5D array allocator
-subroutine R4_5D(h, p, di, bmi) ! real*4 5D array allocator
+function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -764,16 +764,16 @@ subroutine R4_5D(h, p, di, bmi) ! real*4 5D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R4_5D
+end function R4_5D
 
 !! ===============================  real*4 4D  ===============================
 !> \brief real*4 4D array allocator
-subroutine R4_4D(h, p, di, bmi) ! real*4 4D array allocator
+function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -799,16 +799,16 @@ subroutine R4_4D(h, p, di, bmi) ! real*4 4D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R4_4D
+end function R4_4D
 
 !! ===============================  real*4 3D  ===============================
 !> \brief real*4 3D array allocator
-subroutine R4_3D(h, p, di, bmi) ! real*4 3D array allocator
+function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -834,16 +834,16 @@ subroutine R4_3D(h, p, di, bmi) ! real*4 3D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R4_3D
+end function R4_3D
 
 !! ===============================  real*4 2D  ===============================
 !> \brief real*4 2D array allocator
-subroutine R4_2D(h, p, di, bmi) ! real*4 2D array allocator
+function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -869,16 +869,16 @@ subroutine R4_2D(h, p, di, bmi) ! real*4 2D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R4_2D
+end function R4_2D
 
 !! ===============================  real*4 1D  ===============================
 !> \brief real*4 1D array allocator
-subroutine R4_1D(h, p, di, bmi) ! real*4 1D array allocator
+function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -904,16 +904,16 @@ subroutine R4_1D(h, p, di, bmi) ! real*4 1D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R4_1D
+end function R4_1D
 
 !! ===============================  real*8 5D  ===============================
 !> \brief real*8 5D array allocator
-subroutine R8_5D(h, p, di, bmi) ! real*8 5D array allocator
+function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -939,16 +939,16 @@ subroutine R8_5D(h, p, di, bmi) ! real*8 5D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R8_5D
+end function R8_5D
 
 !! ===============================  real*8 4D  ===============================
 !> \brief real*8 4D array allocator
-subroutine R8_4D(h, p, di, bmi) ! real*8 4D array allocator
+function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -974,16 +974,16 @@ subroutine R8_4D(h, p, di, bmi) ! real*8 4D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R8_4D
+end function R8_4D
 
 !! ===============================  real*8 3D  ===============================
 !> \brief real*8 3D array allocator
-subroutine R8_3D(h, p, di, bmi) ! real*8 3D array allocator
+function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -1009,16 +1009,16 @@ subroutine R8_3D(h, p, di, bmi) ! real*8 3D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R8_3D
+end function R8_3D
 
 !! ===============================  real*8 2D  ===============================
 !> \brief real*8 2D array allocator
-subroutine R8_2D(h, p, di, bmi) ! real*8 2D array allocator
+function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -1044,16 +1044,16 @@ subroutine R8_2D(h, p, di, bmi) ! real*8 2D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R8_2D
+end function R8_2D
 
 !! ===============================  real*8 1D  ===============================
 !> \brief real*8 1D array allocator
-subroutine R8_1D(h, p, di, bmi) ! real*8 1D array allocator
+function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -1079,5 +1079,5 @@ subroutine R8_1D(h, p, di, bmi) ! real*8 1D array allocator
     bmi%p = cptr
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine R8_1D
+end function R8_1D
 

@@ -50,12 +50,12 @@ for RI in I R ; do
     cat <<EOT
 !! ===============================  ${TYPE}*${L} ${D}D  ===============================
 !> \brief ${TYPE}*${L} ${D}D array allocator
-subroutine ${RI}${L}_${D}D(h, p, di, bmi) ! ${TYPE}*${L} ${D}D array allocator
+function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
   class(heap), intent(INOUT) :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08), intent(OUT) :: bmi !< metadata for allocated block
+  type(block_meta_f08)              :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr
@@ -81,7 +81,7 @@ subroutine ${RI}${L}_${D}D(h, p, di, bmi) ! ${TYPE}*${L} ${D}D array allocator
     bmi%p = cptr
     status = ${METADATA}(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
-end subroutine ${RI}${L}_${D}D
+end function ${RI}${L}_${D}D
 
 EOT
     done
