@@ -16,8 +16,8 @@
 ! Boston, MA 02111-1307, USA.
 !
 ! Authors:
-!     M. Valin,   Recherche en Prevision Numerique, 2020
-!     V. Magnoux, Recherche en Prevision Numerique, 2020
+!     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+!     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 !> \file
 !> \brief shared memory heap Fortran module (object oriented)
@@ -29,14 +29,18 @@ module shmem_heap
   !> \brief C compatible data block metadata
   type, public, bind(C) :: block_meta_c
     private
+    !> \private
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d   !< array dimensions
+    !> \private
     integer(C_INT) :: tkr = 0                        !< array type, kind, rank
   end type block_meta_c
 
   !> \brief Fortran 2008 data block metadata (using the C layout)
   type, public :: block_meta_f08
     private
+    !> \private
     type(block_meta_c) :: a         !< array descriptor
+    !> \private
     type(C_PTR) :: p = C_NULL_PTR   !< array address
 
   contains
@@ -50,12 +54,20 @@ module shmem_heap
     procedure :: dims
     !> \return status, 0 if O.K. non zero otherwise
     procedure :: meta
+    !> \return                              none
+    procedure :: assign_meta                !< assignment operator
+    !> \return                              none
+    GENERIC :: ASSIGNMENT(=) => assign_meta !< assignment operator
+    !> \return                              .true. if equal, .false. if not equal
+    procedure :: equal_meta                 !< equality operator
+    !> \return                              .true. if equal, .false. if not equal
+    GENERIC :: operator(==) => equal_meta   !< equality operator
   end type block_meta_f08
 
   !> \brief heap user defined type
   type, public :: heap
-    !> \private
     private
+    !> \private
     type(C_PTR) :: p = C_NULL_PTR       !< address of storage used by heap
   contains
 
@@ -106,6 +118,9 @@ module shmem_heap
 
     !> \return                          0 if O.K., nonzero if error
     procedure, NOPASS :: free           !< free an allocated block by address in memory
+
+    !> \return                          0 if O.K., nonzero if error
+    procedure, NOPASS :: freebymeta     !< free an allocated block using its metadata
 
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
@@ -419,6 +434,30 @@ module shmem_heap
     dims = this%d
   end subroutine BlockMeta_dims
 
+  !> \brief assignment operator for type block_meta_f08
+  subroutine assign_meta(this, other)
+    implicit none
+    class(block_meta_f08), intent(INOUT) :: this              !< metadata object
+    type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
+    this%p     = other%p
+    this%a%tkr = other%a%tkr
+    this%a%d   = other%a%d
+  end subroutine assign_meta
+
+  !> \brief equality operator for type block_meta_f08
+  function equal_meta(this, other) result(isequal)
+    implicit none
+    class(block_meta_f08), intent(IN)    :: this              !< metadata object
+    type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
+    logical :: isequal                                        !< true if equal
+    integer :: i
+    isequal = C_ASSOCIATED(this%p, other%p)
+    isequal = isequal .and. (this%a%tkr == other%a%tkr)
+    do i = 1, size(this%a%d)
+      isequal = isequal .and. (this%a%d(i)   == other%a%d(i))
+    enddo
+  end function equal_meta
+
   include 'io-server/f_alloc.inc'
 
   !> \brief create, initialize, and register a heap
@@ -491,7 +530,7 @@ module shmem_heap
   
   !> \brief free block by offset in heap
   !> <br>example :<br>type(heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br> integer(C_INT) :: status<br>
-  !> status = h\%validblock(offset)
+  !> status = h\%freebyoffset(offset)
   function freebyoffset(h, offset) result(status)
     implicit none
     class(heap), intent(INOUT) :: h                   !< heap object
@@ -502,6 +541,19 @@ module shmem_heap
     addr   = ShmemHeapPtr(h%p, offset)
     status = ShmemHeapFreeBlock(addr)
   end function freebyoffset 
+  
+  !> \brief free block by metadata in heap
+  !> <br>example :<br>type(heap) :: h<br>type(block_meta_f08) :: meta08<br> integer(C_INT) :: status<br>
+  !> status = h\%freebymeta(meta08)
+  function freebymeta(meta08) result(status)
+    implicit none
+    type(block_meta_f08), intent(IN) :: meta08        !< metadata associated to memory block
+    integer(C_INT) :: status                          !< 0 if O.K., nonzero if error
+    type(C_PTR) :: addr
+
+    addr   = meta08%p
+    status = ShmemHeapFreeBlock(addr)
+  end function freebymeta 
   
   !> \brief register a heap, set address
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: nheaps<br>
