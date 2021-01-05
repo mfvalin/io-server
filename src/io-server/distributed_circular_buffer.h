@@ -87,7 +87,8 @@ typedef struct {
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
-  MPI_Win  window_mem_dummy; //!< MPI window used only to allocate and free shared memory
+  MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
+  MPI_Comm server_communicator; //!< Communicator that groups
 
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning

@@ -96,7 +96,8 @@ typedef struct {
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
-  MPI_Win  window_mem_dummy; //!< MPI window used only to allocate and free shared memory
+  MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
+  MPI_Comm server_communicator; //!< Communicator that groups
 
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
@@ -621,6 +622,18 @@ distributed_circular_buffer_p DCB_create(
     update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
   }
 
+  // Create a communicator for processes located on the server
+  if (is_consumer(buffer) || is_receiver(buffer)) {
+    MPI_Group main_group;
+    MPI_Group server_group;
+
+    MPI_Comm_group(buffer->communicator, &main_group);
+    int ranges[1][3] = {{0, buffer->num_producers - 1, 1}};
+    MPI_Group_range_excl(main_group, 1, ranges, &server_group);
+
+    MPI_Comm_create_group(buffer->communicator, server_group, 0, &buffer->server_communicator);
+  }
+
   return buffer;
 }
 
@@ -829,12 +842,14 @@ int32_t DCB_start_receiving(distributed_circular_buffer_p buffer) {
     MPI_Win_sync(buffer->window);
 
     switch (*signal) {
-    case RSIG_SERVER_BARRIER: // fallthrough
+    case RSIG_SERVER_BARRIER:
+      MPI_Barrier(buffer->server_communicator);
+      *signal = RSIG_NONE;
+      break;
     case RSIG_FULL_BARRIER:
       MPI_Barrier(buffer->communicator);
       *signal = RSIG_NONE;
       break;
-
     case RSIG_STOP: return 0;
     case RSIG_NONE: break;
     }
@@ -866,13 +881,14 @@ void DCB_full_barrier(distributed_circular_buffer_p buffer) {
 //    type(C_PTR), intent(in), value :: buffer
 // end subroutine DCB_server_barrier
 //F_EnD
-//!
+//! MPI barrier that only applies to processes located on the server. It must be called by every consumer. Calling it
+//! from a producer or a receiver has no effect.
 void DCB_server_barrier(distributed_circular_buffer_p buffer) {
   if (is_root(buffer))
     send_receiver_signal(buffer, RSIG_SERVER_BARRIER);
 
   if (is_consumer(buffer))
-    MPI_Barrier(buffer->communicator);
+    MPI_Barrier(buffer->server_communicator);
 }
 
 //F_StArT

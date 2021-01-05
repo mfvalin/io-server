@@ -141,6 +141,8 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
     end do
   end do
 
+  call buffer % server_barrier()
+
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
