@@ -127,7 +127,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     blocks = C_NULL_PTR                               ! fill pointer table with NULLs
     lastblock = 0                                     ! no block successfully allocated
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
-      blk_meta = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array demo + get metadata
+      blk_meta = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
       metas(i) = blk_meta
       if((.not. (metas(i) == blk_meta)) .or. (metas(i) .ne. blk_meta)) print 6,'FAIL: failed equality check'
       print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta%k(), blk_meta%r(), metas(i)%dims()
