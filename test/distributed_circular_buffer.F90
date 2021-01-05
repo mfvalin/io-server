@@ -19,11 +19,10 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020/2021
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
-program test_distributed_circular_buffer
-
-  use ISO_C_BINDING
-  use distributed_circular_buffer_module, only : distributed_circular_buffer
+module parameters
   implicit none
+  public
+
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 200
   integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
@@ -31,31 +30,243 @@ program test_distributed_circular_buffer
   integer, parameter :: STEP_SIZE = 5
   integer, parameter :: NUM_CONSUMERS = 2
 
+end module parameters
+
+
+function test_dcb_receiver(buffer) result(num_errors)
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  implicit none
+  class(distributed_circular_buffer), intent(inout) :: buffer
+  integer :: num_errors
+  integer :: return_value
+
+  return_value = buffer % start_receiving()
+
+  num_errors = 1
+  if (return_value == 0) num_errors = 0
+end function test_dcb_receiver
+
+
+function test_dcb_consumer(buffer, rank) result(num_errors)
+  use iso_c_binding
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use circular_buffer_module
+  use parameters
+  implicit none
+
+  interface
+    subroutine init_array(array, rank)
+      import :: DATA_ELEMENT
+      implicit none
+      integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+      integer, intent(in) :: rank
+    end subroutine init_array
+  end interface
+
+  class(distributed_circular_buffer), intent(inout) :: buffer
+  integer, intent(in) :: rank
+  integer :: num_errors
+
+  integer        :: i, i_prod
+  integer(C_INT) :: num_elements, num_producers, consumer_id
+  integer :: first_prod, num_prod_local, last_prod
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small, expected_data_small
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large, expected_data_large
+
+  num_errors = 0
+  num_producers = buffer % get_num_producers()
+  consumer_id = buffer % get_consumer_id()
+
+  num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
+  first_prod = consumer_id * num_prod_local
+  last_prod = min(first_prod + num_prod_local, num_producers) - 1
+
+  do i = 0, num_producers - 1
+    num_elements = buffer % get_num_elements(i)
+    if (num_elements .ne. 0) num_errors = num_errors + 1
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  do i = 0, num_producers - 1
+    num_elements = buffer % get_num_elements(i)
+    if (num_elements .ne. NUM_DATA_ELEMENTS_SMALL) then
+      num_errors = num_errors + 1
+      print *, 'Wrong number of elements in buffer !!!!!!!!', rank, i
+    end if
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  do i_prod = first_prod, last_prod
+    call init_array(expected_data_small, i_prod)
+
+    num_elements = buffer % get(i_prod, data_small, NUM_DATA_ELEMENTS_SMALL)
+
+    if (num_elements .ne. 0) then
+      num_errors = num_errors + 1
+    end if
+    if (.not. all(data_small == expected_data_small)) then
+      num_errors = num_errors + 1
+    end if
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  do i_prod = first_prod, last_prod
+    call init_array(expected_data_large, i_prod)
+    do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+
+      num_elements = buffer % get(i_prod, data_large(i : i + STEP_SIZE - 1), STEP_SIZE)
+
+      if (.not. all(data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
+        num_errors = num_errors + 1
+        print *, 'Did not get the right data!!!', data_large(i:i+STEP_SIZE - 1), expected_data_large(i : i + STEP_SIZE - 1)
+      end if
+
+    end do
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+end function test_dcb_consumer
+
+
+function test_dcb_producer(buffer, rank) result(num_errors)
+  use iso_c_binding
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use circular_buffer_module
+  use parameters
+  implicit none
+
+  interface
+    subroutine init_array(array, rank)
+      import :: DATA_ELEMENT
+      implicit none
+      integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+      integer, intent(in) :: rank
+    end subroutine init_array
+  end interface
+
+  class(distributed_circular_buffer), intent(inout) :: buffer
+  integer, intent(in) :: rank
+  integer :: num_errors
+
+  integer(C_INT) :: num_spaces
+  integer :: i
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large
+
+  num_errors = 0
+
+  call init_array(data_small, rank)
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  num_spaces = buffer % put(data_small, NUM_DATA_ELEMENTS_SMALL)
+
+  if (num_spaces < 0) then
+    num_errors = num_errors + 1
+    print *, 'Unable to insert stuff in the buffer!!!!!'
+  end if
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+    num_spaces = buffer % get_num_elements()
+    if (num_spaces .ne. 0) then
+      num_errors = num_errors + 1
+      print *, 'There should be nothing in the buffer!'
+    end if
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  call init_array(data_large, rank)
+  do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+    num_spaces = buffer % put(data_large(i:i + STEP_SIZE - 1), STEP_SIZE)
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+end function test_dcb_producer
+
+
+program test_distributed_circular_buffer
+  use ISO_C_BINDING
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use parameters
+  implicit none
+
   include 'mpif.h'
   include 'io-server/common.inc'
 
   interface
   subroutine init_array(array, rank)
-    use circular_buffer_module, only: DATA_ELEMENT
+    import :: DATA_ELEMENT
     implicit none
     integer(DATA_ELEMENT), dimension(:), intent(out) :: array
     integer, intent(in) :: rank
   end subroutine init_array
+  function test_dcb_receiver(buffer) result(num_errors)
+    use distributed_circular_buffer_module, only : distributed_circular_buffer
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: buffer
+    integer :: num_errors
+  end function test_dcb_receiver
+  function test_dcb_consumer(buffer, rank) result(num_errors)
+    use distributed_circular_buffer_module, only : distributed_circular_buffer
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: buffer
+  integer, intent(in) :: rank
+    integer :: num_errors
+  end function test_dcb_consumer
+  function test_dcb_producer(buffer, rank) result(num_errors)
+    use distributed_circular_buffer_module, only : distributed_circular_buffer
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: buffer
+    integer, intent(in) :: rank
+    integer :: num_errors
+  end function test_dcb_producer
   end interface
 
-  integer :: error, i
+  integer :: error
   integer :: rank, comm_size
-  integer :: available
   logical :: success
   integer :: num_errors, tmp_errors
 
-  type(distributed_circular_buffer)                   :: circ_buffer
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: in_data_small, out_data_small, expected_data_small
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: in_data_large, out_data_large, expected_data_large
+  type(distributed_circular_buffer) :: circ_buffer
   integer :: num_producers, consumer_id, receiver_id, producer_id
-
-  integer :: first_prod, num_prod_local, last_prod
-  integer :: i_prod
 
   ! Initialization
 
@@ -70,11 +281,6 @@ program test_distributed_circular_buffer
     num_errors = num_errors + 1
     goto 777
   end if
-
-  call init_array(in_data_small, rank)
-  call init_array(in_data_large, rank)
-  out_data_small(:) = -1
-  out_data_large(:) = -1
 
   num_producers = comm_size - 2*NUM_CONSUMERS;
 
@@ -94,10 +300,6 @@ program test_distributed_circular_buffer
 
 !  print *, 'rank, prod, receive, consume ', rank, producer_id, receiver_id, consumer_id
 
-  num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
-  first_prod = consumer_id * num_prod_local
-  last_prod = min(first_prod + num_prod_local, num_producers) - 1
-
 
   if (.not. circ_buffer % check_integrity(.true.)) then
     print *, 'Something wrong with the newly-created buffer!!!'
@@ -110,133 +312,15 @@ program test_distributed_circular_buffer
   !---------------------------------------
 
   if (consumer_id >= 0) then
-    do i = 0, num_producers - 1
-      available = circ_buffer % get_num_elements(i)
-!      print *, rank, i, 'Num elem = ', available
-    end do
+    num_errors =  test_dcb_consumer(circ_buffer, rank)
+  else if (producer_id >= 0) then
+    num_errors = test_dcb_producer(circ_buffer, rank)
+  else if (receiver_id >= 0) then
+    num_errors = test_dcb_receiver(circ_buffer)
+  else
+    num_errors = 1
   end if
 
-  !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-  !---------------------------------------
-
-  if (producer_id >= 0) then
-
-!    print *, 'Putting ', in_data_small
-!    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
-    available = circ_buffer % put(in_data_small, NUM_DATA_ELEMENTS_SMALL)
-
-    if (available < 0) then
-      num_errors = num_errors + 1
-      print *, 'Unable to insert stuff in the buffer!!!!!'
-    end if
-  end if
-
-  !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-  !---------------------------------------
-
-
-  if (consumer_id >= 0) then
-    do i = 0, num_producers - 1
-      available = circ_buffer % get_num_elements(i)
-      if (available .ne. NUM_DATA_ELEMENTS_SMALL) then
-        num_errors = num_errors + 1
-        print *, 'Wrong number of elements in buffer !!!!!!!!', rank, i
-  !      goto 777
-      end if
-    end do
-
-  end if
-
-  !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-  !---------------------------------------
-
-  if (consumer_id >= 0) then
-    do i_prod = first_prod, last_prod
-      call init_array(expected_data_small, i_prod)
-
-      available = circ_buffer % get(i_prod, out_data_small, NUM_DATA_ELEMENTS_SMALL)
-!      print *, 'Got ', out_data_small
-
-      if (available .ne. 0) then
-        num_errors = num_errors + 1
-      end if
-      if (.not. all(out_data_small == expected_data_small)) then
-        num_errors = num_errors + 1
-      end if
-!      print *, 'Read producer ', i_prod
-    end do
-  end if
-
-!  goto 999
-
-  !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-  !---------------------------------------
-
-  if (producer_id >= 0) then
-    available = circ_buffer % get_num_elements()
-    if (available .ne. 0) then
-      num_errors = num_errors + 1
-    end if
-  end if
-
-
-  !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-  !---------------------------------------
-
-  if (producer_id >= 0) then
-!    call sleep_us(1000 * rank)
-!    call circ_buffer % print()
-    do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
-!      print *, rank, 'Putting elements ', in_data_large(i:i + STEP_SIZE - 1)
-!      available = circ_buffer % get_num_elements()
-!      print *, rank, 'Elements before: ', available
-      available = circ_buffer % put(in_data_large(i:i + STEP_SIZE - 1), STEP_SIZE)
-!      print *, rank, 'Done putting elements'
-!      available = circ_buffer % get_num_elements()
-!      print *, rank, 'Elements after:  ', available
-    end do
-
-    !---------------------------------------
-!    call MPI_Barrier(MPI_COMM_WORLD, error)
-    !---------------------------------------
-
-  else if (consumer_id >= 0) then
-    !---------------------------------------
-!    call MPI_Barrier(MPI_COMM_WORLD, error)
-    !---------------------------------------
-
-!    call sleep_us(1000 * rank)
-!    call sleep_us(100000)
-!    call circ_buffer % print()
-    do i_prod = first_prod, last_prod
-      call init_array(expected_data_large, i_prod)
-      do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
-
-!        print *, rank, 'Getting elements ', expected_data_large(i : i + STEP_SIZE - 1), ' from ', i_prod
-!        available = circ_buffer % get_num_elements(i_prod)
-!        print *, 'Will read: ', available
-!        available = circ_buffer % get(i_prod, out_data_large(i : i + STEP_SIZE - 1), available)
-        available = circ_buffer % get(i_prod, out_data_large(i : i + STEP_SIZE - 1), STEP_SIZE)
-
-        if (.not. all(out_data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
-          num_errors = num_errors + 1
-        end if
-
-!        print *, rank, 'Done getting elements'
-      end do
-    end do
-  end if
-
-  !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-  !---------------------------------------
-
-999 CONTINUE
 
 !  call circ_buffer % print()
   call circ_buffer % delete()

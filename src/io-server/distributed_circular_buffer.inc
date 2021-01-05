@@ -98,6 +98,36 @@ integer(C_INT) :: consumer_id
 end function DCB_get_consumer_id
 
 
+function DCB_get_num_producers(buffer) result(num_producers) BIND(C, name = 'DCB_get_num_producers')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: num_producers
+end function DCB_get_num_producers
+
+
+function DCB_start_receiving(buffer) result(return_value) BIND(C, name = 'DCB_start_receiving')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: return_value
+end function DCB_start_receiving
+
+
+subroutine DCB_full_barrier(buffer) BIND(C, name = 'DCB_full_barrier')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+end subroutine DCB_full_barrier
+
+
+subroutine DCB_server_barrier(buffer) BIND(C, name = 'DCB_server_barrier')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+end subroutine DCB_server_barrier
+
+
 function DCB_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'DCB_put')
 import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none

@@ -42,12 +42,16 @@ module distributed_circular_buffer_module
     GENERIC :: get_num_elements => get_num_elements_local, get_num_elements_latest
     procedure :: get_num_elements_local
     procedure :: get_num_elements_latest
+!    procedure :: get_num_spaces
     procedure :: check_integrity
     procedure :: sync_window
     procedure :: get_producer_id
     procedure :: get_receiver_id
     procedure :: get_consumer_id
-!    procedure :: get_num_spaces
+    procedure :: get_num_producers
+    procedure :: start_receiving
+    procedure :: server_barrier
+    procedure :: full_barrier
   end type distributed_circular_buffer
 
 contains
@@ -185,5 +189,31 @@ contains
     integer(C_INT) :: consumer_id
     consumer_id = DCB_get_consumer_id(this % c_buffer)
   end function get_consumer_id
+
+  function get_num_producers(this) result(num_producers)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: num_producers
+    num_producers = DCB_get_num_producers(this % c_buffer)
+  end function get_num_producers
+
+  function start_receiving(this) result(return_value)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: return_value
+    return_value = DCB_start_receiving(this % c_buffer)
+  end function start_receiving
+
+  subroutine full_barrier(this)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    call DCB_full_barrier(this % c_buffer)
+  end subroutine full_barrier
+
+  subroutine server_barrier(this)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    call DCB_server_barrier(this % c_buffer)
+  end subroutine server_barrier
 
 end module distributed_circular_buffer_module

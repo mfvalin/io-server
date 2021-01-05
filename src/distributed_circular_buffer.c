@@ -21,6 +21,7 @@
  *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 
+#include <immintrin.h>
 #include <stdio.h>
 #include <time.h>
 
@@ -115,6 +116,16 @@ typedef struct {
 typedef distributed_circular_buffer* distributed_circular_buffer_p;
 //C_EnD
 
+enum receiver_signal
+{
+  RSIG_NONE = 0,
+  RSIG_SERVER_BARRIER,
+  RSIG_FULL_BARRIER,
+  RSIG_STOP,
+};
+
+typedef enum receiver_signal receiver_signal_t;
+
 /**
  * @brief Small header located at the beginning of the shared memory region on consumer processes. Stores the offset
  * of every instance within that shared memory region.
@@ -122,9 +133,11 @@ typedef distributed_circular_buffer* distributed_circular_buffer_p;
  * the size of an element to be addressable individually. So basically, just data_elements
  */
 typedef struct {
-  data_element num_offsets;      //!< How many offsets there are ( = number of producer processes)
-  data_element size;             //!< Size in number of #data_element
+  data_element num_offsets; //!< How many offsets there are ( = number of producer processes)
+  data_element size;        //!< Size in number of #data_element
+  data_element num_signals;
   data_element window_offsets[]; //!< The offsets.
+  // After the offsets, there are the signals, but we can't name them explicitly. We really need a better solution
 } offset_header;
 
 typedef offset_header* offset_header_p;
@@ -132,7 +145,7 @@ typedef offset_header* offset_header_p;
 //! How long to wait between checks for free space in a buffer (microseconds)
 static const int SPACE_CHECK_DELAY_US = 100;
 //! How long to wait between checks for data in a buffer (microseconds)
-static const int DATA_CHECK_DELAY_US = 100;
+static const int DATA_CHECK_DELAY_US = 20;
 
 static const int WINDOW_SYNC_DELAY_US = 10;
 
@@ -143,26 +156,40 @@ static const int WINDOW_SYNC_DELAY_US = 10;
 
 //! @{ @name Offset calculators
 
+//! Compute the number of #data_element taken by the given number of bytes (rounded up)
 static inline data_index num_elem_from_bytes(const size_t num_bytes) {
   return num_bytes / sizeof(data_element) + (num_bytes % sizeof(data_element) > 0);
 }
 
+//! Compute the number of #data_element taken by the circular_buffer_instance struct
 static inline data_index instance_header_size() {
   return num_elem_from_bytes(sizeof(circular_buffer_instance));
 }
 
+//! Compute the number of #data_element taken by the circular_buffer struct
 static inline data_index circular_buffer_header_size() {
   return num_elem_from_bytes(sizeof(circular_buffer));
 }
 
 //! Size of the offset header, in number of #data_element tokens
-static inline data_index offset_header_size(const int num_buffers) {
-  const size_t num_bytes = sizeof(offset_header) + (size_t)num_buffers * sizeof(data_element);
+static inline data_index offset_header_size(
+    const int num_buffers, //!< Number of circular buffers in the set
+    const int num_channels //!< Number of communication channels (PEs) used for MPI 1-sided calls
+) {
+  const size_t num_bytes = sizeof(offset_header) + (size_t)(num_buffers) * sizeof(data_element) +
+                           (size_t)num_channels * sizeof(receiver_signal_t);
   return num_elem_from_bytes(num_bytes);
 }
 
-static inline data_index total_window_num_elem(const int num_buffers, const int num_desired_elem_per_buffer) {
-  return num_buffers * (num_desired_elem_per_buffer + instance_header_size()) + offset_header_size(num_buffers);
+//! Compute the total size needed by the shared memory window to fit all circular buffers and metadata, in number of
+//! #data_element tokens
+static inline data_index total_window_num_elem(
+    const int num_buffers,                //!< How many circular buffers the set will hold
+    const int num_channels,               //!< How many communication channels with the IO server will be used
+    const int num_desired_elem_per_buffer //!< How many #data_element tokens we want to be able to store in each buffer
+) {
+  return num_buffers * (num_desired_elem_per_buffer + instance_header_size()) +
+         offset_header_size(num_buffers, num_channels);
 }
 
 //! Get a pointer to the offset_header of the given distributed_circular_buffer
@@ -172,19 +199,51 @@ static inline offset_header_p get_offset_header(
   return (offset_header_p)(buffer_set->raw_data);
 }
 
+//! Get a pointer to the signal location of the given receiver process (ID)
+static inline receiver_signal_t* get_receiver_signal_ptr(
+    distributed_circular_buffer_p buffer,     //!< [in] Buffer whose receiver signal we want
+    const int32_t                 receiver_id //!< [in] ID of the receiver we're looking for
+) {
+  return ((receiver_signal_t*)&get_offset_header(buffer)->window_offsets[buffer->num_producers]) + receiver_id;
+}
+
 //! Initialize the offset_header of the given distributed_circular_buffer. This computes the offset of every buffer
 //! instance within the set.
 static inline void init_offset_header(
-    offset_header_p header,                   //!<
-    const int       num_buffers,              //!<
-    const int       num_elements_per_instance //!<
+    offset_header_p header,                   //!< [in] Pointer to the header that needs to be initialized
+    const int       num_buffers,              //!< [in] How many circular buffer instances there are in the set
+    const int       num_channels,             //!< [in]
+    const int       num_elements_per_instance //!< [in] How many elements each instance takes
 ) {
   header->num_offsets = num_buffers;
-  header->size        = offset_header_size(num_buffers);
+  header->size        = offset_header_size(num_buffers, num_channels);
+  header->num_signals = num_channels;
 
-  for (int i = 0; i < header->num_offsets; i++) {
+  for (int i = 0; i < header->num_offsets; ++i) {
     header->window_offsets[i] = header->size + i * (num_elements_per_instance + instance_header_size());
   }
+
+  receiver_signal_t* signals = (receiver_signal_t*)(header->window_offsets + header->num_offsets);
+  for (int i = 0; i < num_channels; ++i) {
+    signals[i] = RSIG_NONE;
+  }
+}
+
+static inline void print_offset_header(offset_header_p header) {
+  printf(
+      "Num buffers %d, size %d bytes, num channels %d\n"
+      "Address %ld\n",
+      header->num_offsets, header->size, header->num_signals, (long)header);
+  printf("Offsets: ");
+  for (int i = 0; i < header->num_offsets; ++i) {
+    printf("%ld ", (long)header->window_offsets[i]);
+  }
+  printf("\nSignals: ");
+  receiver_signal_t* signals = (receiver_signal_t*)(header->window_offsets + header->num_offsets);
+  for (int i = 0; i < header->num_signals; ++i) {
+    printf("%ld ", (long)signals[i]);
+  }
+  printf("\n");
 }
 
 //! Compute the displacement in the shared memory window where the window offset for the specified rank (producer ID) is
@@ -218,6 +277,8 @@ static inline MPI_Aint insertion_index_displacement(const distributed_circular_b
   return displacement;
 }
 
+//! Get the displacement (in number of #data_element) in the shared memory window where the start of the buffer is
+//! located. Must be called from a producer process
 static inline MPI_Aint remote_header_displacement(const distributed_circular_buffer_p buffer) {
   return buffer->window_offset;
 }
@@ -369,12 +430,16 @@ static data_index DCB_wait_data_available(
   return num_available;
 }
 
-static circular_buffer_p init_circular_buffer_instance(circular_buffer_instance_p instance, const int num_elem) {
+//! Initialize the given circular buffer instance, including the circular_buffer it contains
+static circular_buffer_p init_circular_buffer_instance(
+    circular_buffer_instance_p instance, //!< Buffer instance we want to init
+    const int                  num_elem  //!< How many #data_element are taken by the circular buffer
+) {
   instance->target_rank = -1;
-
   return CB_init(&instance->buf, num_elem);
 }
 
+//! Initialize the DCB_stats struct to all 0
 static void DCB_init_stats(DCB_stats* stats) {
   stats->num_transfers      = 0;
   stats->num_elem           = 0;
@@ -403,6 +468,20 @@ static void print_instance_stats(
       " %03d:  %8ld (%8.1f) --  %8ld (%8.1f) -- %7.3f ms (%8.5f) -- %7.3f ms (%8.5f)\n", id, producer_stats->num_elem,
       avg_in, consumer_stats->num_elem, avg_out, producer_stats->total_wait_time_ms, avg_wait_w,
       consumer_stats->total_wait_time_ms, avg_wait_r);
+}
+
+//! Set the variable at a given address to a certain value, atomically, as soon as the old value is RSIG_NONE
+static inline void set_receiver_signal(receiver_signal_t* signal_ptr, const receiver_signal_t value) {
+  while (__sync_val_compare_and_swap(signal_ptr, RSIG_NONE, value) != 0)
+    ;
+}
+
+//! Set the signal of every receiver associated with a buffer set to the given value.
+//! Should only be called from a single process at a time, located on the IO server (so basically a consumer process,
+//! because the receivers are normally busy)
+static inline void send_receiver_signal(distributed_circular_buffer_p buffer, const receiver_signal_t value) {
+  for (int i = 0; i < buffer->num_channels; ++i)
+    set_receiver_signal(get_receiver_signal_ptr(buffer, i), value);
 }
 
 //! @}
@@ -475,7 +554,8 @@ distributed_circular_buffer_p DCB_create(
   // of shared memory. Only the root allocates shared memory; the other consumers will use that same memory.
 
   const MPI_Aint win_total_size =
-      total_window_num_elem(buffer->num_producers, buffer->num_element_per_instance) * sizeof(data_element);
+      total_window_num_elem(buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance) *
+      sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
   // Create the shared memory window (only for shared memory allocation)
@@ -483,6 +563,7 @@ distributed_circular_buffer_p DCB_create(
       shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data,
       &buffer->window_mem_dummy);
 
+  // This window is only used to allocated shared memory, so that everyone on the server can update stats
   const MPI_Aint consumer_stats_size = is_root(buffer) ? buffer->num_producers * sizeof(DCB_stats) : 0;
   MPI_Win_allocate_shared(
       consumer_stats_size, 1, MPI_INFO_NULL, buffer->communicator, &buffer->consumer_stats,
@@ -494,7 +575,8 @@ distributed_circular_buffer_p DCB_create(
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of #data_element.
 
-    init_offset_header(get_offset_header(buffer), buffer->num_producers, buffer->num_element_per_instance);
+    init_offset_header(
+        get_offset_header(buffer), buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance);
 
     // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
     const int num_elem_in_circ_buffer = buffer->num_element_per_instance + circular_buffer_header_size();
@@ -614,6 +696,8 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
   }
 
   if (is_root(buffer)) {
+    send_receiver_signal(buffer, RSIG_STOP);
+
     for (int i = 0; i < buffer->num_producers; ++i) {
       DCB_stats  producer_stats;
       MPI_Status status;
@@ -709,6 +793,79 @@ int32_t DCB_get_receiver_id(const distributed_circular_buffer_p buffer) {
 //F_EnD
 int32_t DCB_get_consumer_id(const distributed_circular_buffer_p buffer) {
   return buffer->consumer_id;
+}
+
+//F_StArT
+//  function DCB_get_num_producers(buffer) result(num_producers) BIND(C, name = 'DCB_get_num_producers')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+//    integer(C_INT) :: num_producers
+//  end function DCB_get_num_producers
+//F_EnD
+int32_t DCB_get_num_producers(const distributed_circular_buffer_p buffer) {
+  return buffer->num_producers;
+}
+
+//F_StArT
+// function DCB_start_receiving(buffer) result(return_value) BIND(C, name = 'DCB_start_receiving')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+//    integer(C_INT) :: return_value
+// end function DCB_start_receiving
+//F_EnD
+int32_t DCB_start_receiving(distributed_circular_buffer_p buffer) {
+  if (!is_receiver(buffer))
+    return -1;
+
+  volatile receiver_signal_t* signal = get_receiver_signal_ptr(buffer, buffer->receiver_id);
+
+  while (1) {
+    sleep_us(WINDOW_SYNC_DELAY_US);
+    MPI_Win_sync(buffer->window);
+
+    switch (*signal) {
+    case RSIG_SERVER_BARRIER: // fallthrough
+    case RSIG_FULL_BARRIER:
+      MPI_Barrier(buffer->communicator);
+      *signal = RSIG_NONE;
+      break;
+
+    case RSIG_STOP: return 0;
+    case RSIG_NONE: break;
+    }
+  }
+}
+
+//F_StArT
+// subroutine DCB_full_barrier(buffer) BIND(C, name = 'DCB_full_barrier')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+// end subroutine DCB_full_barrier
+//F_EnD
+void DCB_full_barrier(distributed_circular_buffer_p buffer) {
+  if (is_root(buffer))
+    send_receiver_signal(buffer, RSIG_FULL_BARRIER);
+
+  if (!is_receiver(buffer))
+    MPI_Barrier(buffer->communicator);
+}
+
+//F_StArT
+// subroutine DCB_server_barrier(buffer) BIND(C, name = 'DCB_server_barrier')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+// end subroutine DCB_server_barrier
+//F_EnD
+void DCB_server_barrier(distributed_circular_buffer_p buffer) {
+  if (is_root(buffer))
+    send_receiver_signal(buffer, RSIG_SERVER_BARRIER);
+
+  if (is_consumer(buffer))
+    MPI_Barrier(buffer->communicator);
 }
 
 //F_StArT
