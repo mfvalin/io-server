@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  * 
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  * 
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 // This file has been generated from memory_arena.c
 #ifndef IO_SERVER_memory_arena_GEN_H
@@ -189,13 +189,13 @@ typedef struct{
 //! @return -1 upon error, value > 0 otherwise
 int32_t memory_arena_set_id(
   uint32_t id                      //!< [in] owner's id (usually MPI rank) 
-  );
+);
 //! dump arena header and symbol table (description of contents of memory arena)<br>
 //! memory_arena_print_status(mem)
 //! @return none
 void memory_arena_print_status(
   void *mem                                  //!< [in] pointer to memory arena (see  memory_arena_init)
-  );
+);
 //! dump arena header and symbol table (description of contents of memory arena)<br>
 //! id = memory_arena_init(mem, nsym, size)
 //! @return id of current owner process (not necessarily me)
@@ -203,13 +203,13 @@ uint32_t memory_arena_init(
   void *mem,                   //!< [in] pointer to memory arena (see  memory_arena_init)
   uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
   uint32_t size                //!< [in] size of memory area in 32 bit units
-  );
+);
 //! update local arena control table from master arena<br>
 //! nareas = update_local_table(mem)
 //! @return number of arenas detected
 uint32_t update_local_table(
   void *mem                     //!< [in] pointer to master memory arena
-  );
+);
 //! initialize an already allocated 'master arena' (node shared memory usually)<br>
 //! id = master_arena_init(mem, nsym, size)
 //! @return id of current process
@@ -217,7 +217,7 @@ uint32_t master_arena_init(
   void *mem,                     //!< [in] pointer to master memory arena
   uint32_t nsym,                 //!< [in] size of symbol table to allocate (max number of blocks expected)
   uint32_t size                  //!< [in] size of memory area for master arena in 32 bit units
-  );
+);
 //! find memory block called 'name'<br>
 //! ptr = memory_block_find(mem, size, flags, name)
 //! @return local address of memory block (NULL if not found)
@@ -226,7 +226,7 @@ void *memory_block_find(
   uint32_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
-  );
+);
 //! same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 //! ptr = memory_block_find_wait(mem, size, flags, name, timeout)
 //! @return local address of memory block (NULL if not found)
@@ -236,14 +236,14 @@ void *memory_block_find_wait(
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   int timeout                     //!< [in]  timeout in milliseconds, -1 means practically forever
-  );
+);
 //! mark memory block 'name' as initialized<br>
 //! ptr = memory_block_mark_init(mem, name)
 //! @return block address if found, NULL otherwise
 void *memory_block_mark_init(
   void *mem,                       //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
   unsigned char *name              //!< [in]  name of block to find (characters beyond the 8th will be ignored)
-  );
+);
 //! create a named block in a managed 'memory arena'<br>
 //! ptr = memory_block_create(mem, size, name)
 //! @return local address of created block (NULL if error)
@@ -251,14 +251,14 @@ void *memory_block_create(
   void *mem,                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
   uint32_t size,                    //!< [in]  desired size of block in 32 bit units
   unsigned char *name               //!< [in]  name of block to find (characters beyond the 8th will be ignored)
-  );
+);
 //! allocate a shared memory segment<br>
 //! ptr = memory_allocate_shared(shmid, size)
 //! @return local address of memory block
 void *memory_allocate_shared(
   int *shmid,                 //!< [out] shared memory id of segment (set by memory_allocate_shared) (see shmget)
   uint32_t size               //!< [in]  size of segment in 32 bit units
-  );    
+);
 //! create a memory arena in shared memory<br>
 //! ptr = memory_arena_create_shared(shmid, nsym, size)
 //! @return  local address of memory arena
@@ -266,7 +266,7 @@ void *memory_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
   uint32_t size                //!< [in]  size of segment in 32 bit units
-  );
+);
 //! create master memory arena in shared memory<br>
 //! ptr = master_arena_create_shared(shmid, nsym, size)
 //! @return local address of master memory arena
@@ -274,24 +274,24 @@ void *master_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
   uint32_t size                //!< [in]  size of segment in 32 bit units
-  );
+);
 //! get memory address associated with shared memory segment id<br>
 //! ptr = memory_address_from_id(shmid)
 //! @return local memory addres of shared memory segment
 void *memory_address_from_id(
   int shmid                  //!< [in] shared memory id of segment (see shmget)
-  );
+);
 //! get memory arena address of master arena address<br>
 //! ptr = memory_arena_from_master(mem)
 //! @return local memory addres of memory arena of master arena
 void *memory_arena_from_master(
   void *mem                        //!< [in]  pointer to the 'master memory arena'
-  );
+);
 //! get memory address associated with shared memory segment id of master arena<br>
 //! ptr =  memory_arena_from_master_id(shmid)
 //! @return local memory addres of memory arena of master arena
 void *memory_arena_from_master_id(
   int shmid                    //!< [in]  master arena segment id (from master_arena_create_shared)
-  );
+);
 
 #endif // IO_SERVER_memory_arena_GEN_H

@@ -1,4 +1,4 @@
-! Copyright (C) 2020  Environnement Canada
+! Copyright (C) 2021  Environnement Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -16,8 +16,8 @@
 ! Boston, MA 02111-1307, USA.
 !
 ! Authors:
-!     M. Valin,   Recherche en Prevision Numerique, 2020
-!     V. Magnoux, Recherche en Prevision Numerique, 2020
+!     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+!     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 ! ====================================================
 !> \file
 !> \brief distributed circular buffer object Fortran module
@@ -43,6 +43,15 @@ module distributed_circular_buffer_module
     procedure :: get_num_elements_local
     procedure :: get_num_elements_latest
 !    procedure :: get_num_spaces
+    procedure :: check_integrity
+    procedure :: sync_window
+    procedure :: get_producer_id
+    procedure :: get_receiver_id
+    procedure :: get_consumer_id
+    procedure :: get_num_producers
+    procedure :: start_receiving
+    procedure :: server_barrier
+    procedure :: full_barrier
   end type distributed_circular_buffer
 
 contains
@@ -57,11 +66,12 @@ contains
   end function is_valid
 
   !> Create and initialize a distributed circular buffer. See DCB_create
-  function create(this, communicator, num_producers, num_words) result(is_valid)
+  function create(this, communicator, num_producers, num_channels, num_words) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT), intent(in)                        :: communicator
     integer(C_INT), intent(in)                        :: num_producers
+    integer(C_INT), intent(in)                        :: num_channels
     integer(C_INT), intent(in)                        :: num_words
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
 
@@ -69,7 +79,7 @@ contains
       call this % delete()
     end if
 
-    this % c_buffer = DCB_create(communicator, num_producers, num_words)
+    this % c_buffer = DCB_create(communicator, num_producers, num_channels, num_words)
     is_valid = this % is_valid()
   end function create
 
@@ -132,5 +142,78 @@ contains
 
     num_elements = DCB_get_latest_num_elements(this % c_buffer)
   end function get_num_elements_latest
+
+  function check_integrity(this, verbose) result(is_ok)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    logical, intent(in) :: verbose
+    logical :: is_ok !< True if the pointer is valid and the metadata is consistent
+
+    integer(C_INT) :: c_verbose = 0
+
+    if (verbose) c_verbose = 1
+
+    is_ok = .false.
+
+    if (this % is_valid()) then
+      if (DCB_check_integrity(this % c_buffer, c_verbose) == 0) then
+        is_ok = .true.
+      end if
+    end if
+
+  end function check_integrity
+
+  subroutine sync_window(this)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    call DCB_sync_window(this % c_buffer)
+  end subroutine sync_window
+
+  function get_producer_id(this) result(producer_id)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: producer_id
+    producer_id = DCB_get_producer_id(this % c_buffer)
+  end function get_producer_id
+
+  function get_receiver_id(this) result(receiver_id)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: receiver_id
+    receiver_id = DCB_get_receiver_id(this % c_buffer)
+  end function get_receiver_id
+
+  function get_consumer_id(this) result(consumer_id)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: consumer_id
+    consumer_id = DCB_get_consumer_id(this % c_buffer)
+  end function get_consumer_id
+
+  function get_num_producers(this) result(num_producers)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: num_producers
+    num_producers = DCB_get_num_producers(this % c_buffer)
+  end function get_num_producers
+
+  function start_receiving(this) result(return_value)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: return_value
+    return_value = DCB_start_receiving(this % c_buffer)
+  end function start_receiving
+
+  subroutine full_barrier(this)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    call DCB_full_barrier(this % c_buffer)
+  end subroutine full_barrier
+
+  subroutine server_barrier(this)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    call DCB_server_barrier(this % c_buffer)
+  end subroutine server_barrier
 
 end module distributed_circular_buffer_module

@@ -1,4 +1,4 @@
-! Copyright (C) 2020  Environnement Canada
+! Copyright (C) 2021  Environnement Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -16,142 +16,341 @@
 ! Boston, MA 02111-1307, USA.
 !
 ! Authors:
-!     M. Valin,   Recherche en Prevision Numerique, 2020
-!     V. Magnoux, Recherche en Prevision Numerique, 2020
+!     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+!     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
-program test_distributed_circular_buffer
+module parameters
+  implicit none
+  public
 
-  use ISO_C_BINDING
+
+  integer, parameter :: NUM_BUFFER_ELEMENTS = 200
+  integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
+  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 500
+  integer, parameter :: STEP_SIZE = 5
+  integer, parameter :: NUM_CONSUMERS = 2
+
+end module parameters
+
+
+function test_dcb_receiver(buffer) result(num_errors)
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
+  class(distributed_circular_buffer), intent(inout) :: buffer
+  integer :: num_errors
+  integer :: return_value
 
-  integer, parameter :: NUM_BUFFER_ELEMENTS = 10000
-  integer, parameter :: NUM_DATA_ELEMENTS = 10
-  integer, parameter :: NUM_CONSUMERS = 2
+  return_value = buffer % start_receiving()
+
+  num_errors = 1
+  if (return_value == 0) num_errors = 0
+end function test_dcb_receiver
+
+
+function test_dcb_consumer(buffer, rank) result(num_errors)
+  use iso_c_binding
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use circular_buffer_module
+  use parameters
+  implicit none
+
+  interface
+    subroutine init_array(array, rank)
+      import :: DATA_ELEMENT
+      implicit none
+      integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+      integer, intent(in) :: rank
+    end subroutine init_array
+  end interface
+
+  class(distributed_circular_buffer), intent(inout) :: buffer
+  integer, intent(in) :: rank
+  integer :: num_errors
+
+  integer        :: i, i_prod
+  integer(C_INT) :: num_elements, num_producers, consumer_id
+  integer :: first_prod, num_prod_local, last_prod
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small, expected_data_small
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large, expected_data_large
+
+  num_errors = 0
+  num_producers = buffer % get_num_producers()
+  consumer_id = buffer % get_consumer_id()
+
+  num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
+  first_prod = consumer_id * num_prod_local
+  last_prod = min(first_prod + num_prod_local, num_producers) - 1
+
+  do i = 0, num_producers - 1
+    num_elements = buffer % get_num_elements(i)
+    if (num_elements .ne. 0) num_errors = num_errors + 1
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  do i = 0, num_producers - 1
+    num_elements = buffer % get_num_elements(i)
+    if (num_elements .ne. NUM_DATA_ELEMENTS_SMALL) then
+      num_errors = num_errors + 1
+      print *, 'Wrong number of elements in buffer !!!!!!!!', rank, i
+    end if
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  do i_prod = first_prod, last_prod
+    call init_array(expected_data_small, i_prod)
+
+    num_elements = buffer % get(i_prod, data_small, NUM_DATA_ELEMENTS_SMALL)
+
+    if (num_elements .ne. 0) then
+      num_errors = num_errors + 1
+    end if
+    if (.not. all(data_small == expected_data_small)) then
+      num_errors = num_errors + 1
+    end if
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  do i_prod = first_prod, last_prod
+    call init_array(expected_data_large, i_prod)
+    do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+
+      num_elements = buffer % get(i_prod, data_large(i : i + STEP_SIZE - 1), STEP_SIZE)
+
+      if (.not. all(data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
+        num_errors = num_errors + 1
+        print *, 'Did not get the right data!!!', data_large(i:i+STEP_SIZE - 1), expected_data_large(i : i + STEP_SIZE - 1)
+      end if
+
+    end do
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+end function test_dcb_consumer
+
+
+function test_dcb_producer(buffer, rank) result(num_errors)
+  use iso_c_binding
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use circular_buffer_module
+  use parameters
+  implicit none
+
+  interface
+    subroutine init_array(array, rank)
+      import :: DATA_ELEMENT
+      implicit none
+      integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+      integer, intent(in) :: rank
+    end subroutine init_array
+  end interface
+
+  class(distributed_circular_buffer), intent(inout) :: buffer
+  integer, intent(in) :: rank
+  integer :: num_errors
+
+  integer(C_INT) :: num_spaces
+  integer :: i
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small
+  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large
+
+  num_errors = 0
+
+  call init_array(data_small, rank)
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  num_spaces = buffer % put(data_small, NUM_DATA_ELEMENTS_SMALL)
+
+  if (num_spaces < 0) then
+    num_errors = num_errors + 1
+    print *, 'Unable to insert stuff in the buffer!!!!!'
+  end if
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+    num_spaces = buffer % get_num_elements()
+    if (num_spaces .ne. 0) then
+      num_errors = num_errors + 1
+      print *, 'There should be nothing in the buffer!'
+    end if
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+  call init_array(data_large, rank)
+  do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+    num_spaces = buffer % put(data_large(i:i + STEP_SIZE - 1), STEP_SIZE)
+  end do
+
+  !---------------------------
+  call buffer % full_barrier()
+  !---------------------------
+
+end function test_dcb_producer
+
+
+program test_distributed_circular_buffer
+  use ISO_C_BINDING
+  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use parameters
+  implicit none
 
   include 'mpif.h'
   include 'io-server/common.inc'
 
-  integer :: error, i
-  integer :: rank, comm_size
-  integer :: available
-  logical :: success
+  interface
+  subroutine init_array(array, rank)
+    import :: DATA_ELEMENT
+    implicit none
+    integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+    integer, intent(in) :: rank
+  end subroutine init_array
+  function test_dcb_receiver(buffer) result(num_errors)
+    use distributed_circular_buffer_module, only : distributed_circular_buffer
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: buffer
+    integer :: num_errors
+  end function test_dcb_receiver
+  function test_dcb_consumer(buffer, rank) result(num_errors)
+    use distributed_circular_buffer_module, only : distributed_circular_buffer
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: buffer
+  integer, intent(in) :: rank
+    integer :: num_errors
+  end function test_dcb_consumer
+  function test_dcb_producer(buffer, rank) result(num_errors)
+    use distributed_circular_buffer_module, only : distributed_circular_buffer
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: buffer
+    integer, intent(in) :: rank
+    integer :: num_errors
+  end function test_dcb_producer
+  end interface
 
-  type(distributed_circular_buffer)                   :: circ_buffer
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS) :: in_data, out_data
-  integer :: num_producers, consumer_id
+  integer :: error
+  integer :: rank, comm_size
+  logical :: success
+  integer :: num_errors, tmp_errors
+
+  type(distributed_circular_buffer) :: circ_buffer
+  integer :: num_producers, consumer_id, receiver_id, producer_id
+
+  ! Initialization
+
+  num_errors = 0
 
   call MPI_init(error)
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
-  if (comm_size < 4) then
-    print *, 'Need at least 4 processes for this test!'
+  if (comm_size < 6) then
+    print *, 'Need at least 6 processes for this test!'
+    num_errors = num_errors + 1
     goto 777
   end if
 
-  num_producers = comm_size - NUM_CONSUMERS;
-  consumer_id = rank - num_producers
+  num_producers = comm_size - 2*NUM_CONSUMERS;
 
-  success = circ_buffer % create(MPI_COMM_WORLD, num_producers, NUM_BUFFER_ELEMENTS)
+  ! Beginning of test
+
+  success = circ_buffer % create(MPI_COMM_WORLD, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
+    num_errors = num_errors + 1
     goto 777
   end if
 
-  print *, 'Successfully created the buffer!'
+  consumer_id = circ_buffer % get_consumer_id()
+  receiver_id = circ_buffer % get_receiver_id()
+  producer_id = circ_buffer % get_producer_id()
 
-  if (rank < num_producers) then
+!  print *, 'rank, prod, receive, consume ', rank, producer_id, receiver_id, consumer_id
 
-    in_data(:) = -1
-    out_data(:) = -2
 
-    do i = 1, NUM_DATA_ELEMENTS
-      in_data(i) = rank * 1000 + i
-    end do
-
-    available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
-
-    !---------------------------------------
-    call MPI_Barrier(MPI_COMM_WORLD, error)
-    !---------------------------------------
-    print *, 'Just put stuff: buffer, num_data', rank, circ_buffer % get_num_elements()
-
-  else
-
-    !---------------------------------------
-    call MPI_Barrier(MPI_COMM_WORLD, error)
-    !---------------------------------------
-
-    available = circ_buffer % get_num_elements(0)
-    if (available <= 0) then
-      print *, 'There is nothing in buffer 0!!!!!!!!', rank
-      goto 777
-    end if
-
-    available = circ_buffer % get_num_elements(1)
-    if (available <= 0) then
-      print *, 'There is nothing in buffer 1!!!!!!!!', rank
-      goto 777
-    end if
-
+  if (.not. circ_buffer % check_integrity(.true.)) then
+    print *, 'Something wrong with the newly-created buffer!!!'
+    num_errors = num_errors + 1
+    goto 777
   end if
-
 
   !---------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, error)
   !---------------------------------------
 
-  if (rank < num_producers) then
-
-    call sleep_us(200)
-
-    in_data(:) = -1
-    out_data(:) = -2
-
-    do i = 1, NUM_DATA_ELEMENTS
-      in_data(i) = rank * 1000 + i
-    end do
-
-    available = circ_buffer % put(in_data, NUM_DATA_ELEMENTS)
-
-    if (available < 0) then
-      print *, 'Unable to insert stuff in the buffer!!!!!'
-    else
-      print *, 'There is now that many slots available in the buffer: ', available
-    end if
-
+  if (consumer_id >= 0) then
+    num_errors =  test_dcb_consumer(circ_buffer, rank)
+  else if (producer_id >= 0) then
+    num_errors = test_dcb_producer(circ_buffer, rank)
+  else if (receiver_id >= 0) then
+    num_errors = test_dcb_receiver(circ_buffer)
   else
-!    call sleep_us(20000)
-    block
-      integer :: first_prod, num_prod_local, last_prod
-      integer :: i_prod
-
-      num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
-      first_prod = consumer_id * num_prod_local
-      last_prod = min(first_prod + num_prod_local, num_producers) - 1
-
-!      print *, 'Reading buffers from ', first_prod, last_prod
-      do i_prod = first_prod, last_prod
-        print *, 'Reading from producer ', i_prod
-        available = circ_buffer % get(i_prod, out_data, NUM_DATA_ELEMENTS)
-        print *, 'Read from producer: ', out_data
-        print *, 'It now has: ', available
-      end do
-
-    end block
-
+    num_errors = 1
   end if
 
-  call MPI_Barrier(MPI_COMM_WORLD, error)
-!  call buffer_write_test(circ_buffer)
 
-  call circ_buffer % print()
+!  call circ_buffer % print()
   call circ_buffer % delete()
 
 777 CONTINUE
 
+  tmp_errors = num_errors
+  call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, error)
+
+  if(rank == 0) then  ! check that we got back what we sent
+    if(num_errors > 0) then
+      print *, 'ERRORS IN DISTRIBUTED BUFFER TEST ', num_errors
+    else
+      print *, 'Distributed circular buffer test has succeeded'
+    end if
+  endif
+
   call MPI_finalize(error)
 
 end program test_distributed_circular_buffer
+
+subroutine init_array(array, rank)
+  use circular_buffer_module, only: DATA_ELEMENT
+  implicit none
+
+  integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+  integer, intent(in) :: rank
+
+  integer :: i
+  do i = 1, size(array)
+    array(i) = (rank + 1) * 10000 + i
+  end do
+end subroutine init_array
