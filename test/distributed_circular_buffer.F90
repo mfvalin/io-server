@@ -266,6 +266,8 @@ program test_distributed_circular_buffer
   integer :: rank, comm_size
   logical :: success
   integer :: num_errors, tmp_errors
+  integer :: server_comm, server_group, world_group
+  integer, dimension(3, 1) :: excl_range
 
   type(distributed_circular_buffer) :: circ_buffer
   integer :: num_producers, consumer_id, receiver_id, producer_id
@@ -286,9 +288,21 @@ program test_distributed_circular_buffer
 
   num_producers = comm_size - 2*NUM_CONSUMERS;
 
+  server_comm = MPI_COMM_NULL
+  call MPI_Comm_group(MPI_COMM_WORLD, world_group, error)
+
+  if (rank >= num_producers) then
+    excl_range(1, 1) = 0
+    excl_range(2, 1) = num_producers - 1
+    excl_range(3, 1) = 1
+    call MPI_Group_range_excl(world_group, 1, excl_range, server_group, error)
+    call MPI_Comm_create_group(MPI_COMM_WORLD, server_group, 0, server_comm, error)
+  end if
+
+
   ! Beginning of test
 
-  success = circ_buffer % create(MPI_COMM_WORLD, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
+  success = circ_buffer % create(MPI_COMM_WORLD, server_comm, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
@@ -326,6 +340,10 @@ program test_distributed_circular_buffer
 
 !  call circ_buffer % print()
   call circ_buffer % delete()
+  if (rank >= num_producers) then
+    call MPI_Group_free(server_group, error)
+    call MPI_Comm_free(server_comm, error)
+  end if
 
 777 CONTINUE
 

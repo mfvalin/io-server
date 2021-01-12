@@ -66,10 +66,10 @@ contains
   end function is_valid
 
   !> Create and initialize a distributed circular buffer. See DCB_create
-  function create(this, communicator, num_producers, num_channels, num_words) result(is_valid)
+  function create(this, communicator, server_communicator, num_producers, num_channels, num_words) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT), intent(in)                        :: communicator
+    integer(C_INT), intent(in)                        :: communicator, server_communicator
     integer(C_INT), intent(in)                        :: num_producers
     integer(C_INT), intent(in)                        :: num_channels
     integer(C_INT), intent(in)                        :: num_words
@@ -79,7 +79,7 @@ contains
       call this % delete()
     end if
 
-    this % c_buffer = DCB_create(communicator, num_producers, num_channels, num_words)
+    this % c_buffer = DCB_create(communicator, server_communicator, num_producers, num_channels, num_words)
     is_valid = this % is_valid()
   end function create
 

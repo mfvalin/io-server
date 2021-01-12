@@ -153,6 +153,15 @@
 
 {
    <OpenMPI_window>
+   Memcheck:Addr16
+   ...
+   fun:ompi_osc_pt2pt_process_receive
+   ...
+   fun:PMPI_Win_*
+}
+
+{
+   <OpenMPI_window>
    Memcheck:Addr8
    ...
    fun:opal_convertor_pack
@@ -353,6 +362,41 @@
    fun:PMPI_Accumulate
 }
 
+{
+   <OpenMPI_init_drd>
+   drd:MutexErr
+   ...
+   fun:ompi_mpi_init
+}
+
+{
+   <OpenMPI_init_drd>
+   drd:ConflictingAccess
+   ...
+   fun:ompi_mpi_init
+}
+
+{
+   <OpenMPI_finalize_drd>
+   drd:ConflictingAccess
+   ...
+   fun:ompi_mpi_finalize
+}
+
+{
+   <OpenMPI_finalize_drd>
+   drd:GenericErr
+   ...
+   fun:ompi_mpi_finalize
+}
+
+{
+   <insert_a_suppression_name_here>
+   drd:ConflictingAccess
+   ...
+   fun:start_thread
+   fun:clone
+}
 
 
 

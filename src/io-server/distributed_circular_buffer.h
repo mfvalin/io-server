@@ -88,7 +88,7 @@ typedef struct {
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
   MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
-  MPI_Comm server_communicator; //!< Communicator that groups
+  MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
 
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
@@ -109,7 +109,8 @@ typedef distributed_circular_buffer* distributed_circular_buffer_p;
 void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p);
 distributed_circular_buffer_p DCB_create(
-    MPI_Comm      communicator,  //!< [in] Communicator on which the distributed buffer is shared
+    MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
+    MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)

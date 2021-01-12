@@ -174,7 +174,7 @@ subroutine run_io_server(node_comm, io_comm, num_worker_nodes, num_channels, num
   call MPI_Comm_rank(io_comm, io_rank, ierr)
   call MPI_Comm_size(io_comm, num_io_procs, ierr)
 
-  success = io_buffer % create(io_comm, num_worker_nodes, num_channels, NUM_IO_BUFFER_ELEMENTS)
+  success = io_buffer % create(io_comm, node_comm, num_worker_nodes, num_channels, NUM_IO_BUFFER_ELEMENTS)
   call io_buffer % delete()
 
 end subroutine run_io_server
@@ -184,6 +184,7 @@ subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels,
   use distributed_circular_buffer_module, only: distributed_circular_buffer
 
   implicit none
+  include 'mpif.h'
 
   integer, intent(in)    :: node_comm, io_comm
   integer, intent(in)    :: num_worker_nodes, num_channels
@@ -198,7 +199,7 @@ subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels,
   call MPI_Comm_rank(io_comm, io_rank, ierr)
   call MPI_Comm_size(io_comm, num_io_procs, ierr)
 
-  success = io_buffer % create(io_comm, num_worker_nodes, num_channels, 0)
+  success = io_buffer % create(io_comm, MPI_COMM_NULL, num_worker_nodes, num_channels, 0)
   call io_buffer % delete()
 
 end subroutine run_relay_process

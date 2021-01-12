@@ -32,10 +32,11 @@ type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_sync_window
 
 
-function DCB_create(f_communicator, num_producers, num_channels, num_elements) result(p) BIND(C, name = 'DCB_create_f')
+function DCB_create(f_communicator, f_server_communicator, num_producers, num_channels, num_elements) result(p) BIND(C, name = 'DCB_create_f')
 import :: C_PTR, C_INT
 implicit none
 integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
+integer(C_INT), intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
 integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
 integer(C_INT), intent(IN), value :: num_channels   !< Number of receivers (PEs used for communication only)
 integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer

@@ -97,7 +97,7 @@ typedef struct {
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
   MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
-  MPI_Comm server_communicator; //!< Communicator that groups
+  MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
 
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
@@ -291,6 +291,10 @@ static inline MPI_Aint remote_header_displacement(const distributed_circular_buf
 //! Rank of the "root" process, responsible for managing the buffer's shared memory
 static inline int get_root_id(const distributed_circular_buffer_p buffer) {
   return buffer->num_producers + buffer->num_channels;
+}
+
+static inline int get_server_comm_root_id(const distributed_circular_buffer_p buffer) {
+  return buffer->num_channels;
 }
 
 //! Check whether the given distributed buffer is located on a consumer process
@@ -517,7 +521,8 @@ void DCB_sync_window(distributed_circular_buffer_p buffer) {
 //! @return A pointer to a newly-allocated distributed circular buffer struct that contains all the relevant info
 //C_StArT
 distributed_circular_buffer_p DCB_create(
-    MPI_Comm      communicator,  //!< [in] Communicator on which the distributed buffer is shared
+    MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
+    MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
@@ -527,11 +532,12 @@ distributed_circular_buffer_p DCB_create(
   distributed_circular_buffer_p buffer = (distributed_circular_buffer*)malloc(sizeof(distributed_circular_buffer));
 
   buffer->communicator             = communicator;
+  buffer->server_communicator      = MPI_COMM_NULL;
   buffer->num_producers            = num_producers;
   buffer->num_channels             = num_channels;
   buffer->num_element_per_instance = num_elements;
-  MPI_Comm_rank(buffer->communicator, &buffer->rank);
   buffer->local_header.target_rank = -1;
+  MPI_Comm_rank(buffer->communicator, &buffer->rank);
 
   // Set internal ID for each type of process participating in the buffer set
   {
@@ -557,16 +563,20 @@ distributed_circular_buffer_p DCB_create(
       sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
-  // Create the shared memory window (only for shared memory allocation). Only the root is allocating a non-zero amount
-  MPI_Win_allocate_shared(
-      shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->raw_data,
-      &buffer->window_mem_dummy);
+  if (is_consumer(buffer) || is_receiver(buffer)) {
+    buffer->server_communicator = server_communicator;
 
-  // This window is only used to allocated shared memory, so that everyone on the server can update stats
-  const MPI_Aint consumer_stats_size = is_root(buffer) ? buffer->num_producers * sizeof(DCB_stats) : 0;
-  MPI_Win_allocate_shared(
-      consumer_stats_size, 1, MPI_INFO_NULL, buffer->communicator, &buffer->consumer_stats,
-      &buffer->consumer_stats_window);
+    // Create the shared memory window (only for shared memory allocation). Only the root is allocating a non-zero amount
+    MPI_Win_allocate_shared(
+        shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->server_communicator, &buffer->raw_data,
+        &buffer->window_mem_dummy);
+
+    // This window is only used to allocate shared memory, so that everyone on the server can update stats
+    const MPI_Aint consumer_stats_size = is_root(buffer) ? buffer->num_producers * sizeof(DCB_stats) : 0;
+    MPI_Win_allocate_shared(
+        consumer_stats_size, 1, MPI_INFO_NULL, buffer->server_communicator, &buffer->consumer_stats,
+        &buffer->consumer_stats_window);
+  }
 
   int init_result = 1;
 
@@ -598,9 +608,10 @@ distributed_circular_buffer_p DCB_create(
     // in order to create the window with it
     MPI_Aint size;
     int      disp_unit;
-    MPI_Win_shared_query(buffer->window_mem_dummy, get_root_id(buffer), &size, &disp_unit, &buffer->raw_data);
     MPI_Win_shared_query(
-        buffer->consumer_stats_window, get_root_id(buffer), &size, &disp_unit, &buffer->consumer_stats);
+        buffer->window_mem_dummy, get_server_comm_root_id(buffer), &size, &disp_unit, &buffer->raw_data);
+    MPI_Win_shared_query(
+        buffer->consumer_stats_window, get_server_comm_root_id(buffer), &size, &disp_unit, &buffer->consumer_stats);
   }
 
   // Create the actual window that will be used for data transmission, using a pointer to the same shared memory on the server
@@ -622,26 +633,15 @@ distributed_circular_buffer_p DCB_create(
     update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
   }
 
-  // Create a communicator for processes located on the server
-  if (is_consumer(buffer) || is_receiver(buffer)) {
-    MPI_Group main_group;
-    MPI_Group server_group;
-
-    MPI_Comm_group(buffer->communicator, &main_group);
-    int ranges[1][3] = {{0, buffer->num_producers - 1, 1}};
-    MPI_Group_range_excl(main_group, 1, ranges, &server_group);
-
-    MPI_Comm_create_group(buffer->communicator, server_group, 0, &buffer->server_communicator);
-  }
-
   return buffer;
 }
 
 //F_StArT
-//  function DCB_create(f_communicator, num_producers, num_channels, num_elements) result(p) BIND(C, name = 'DCB_create_f')
+//  function DCB_create(f_communicator, f_server_communicator, num_producers, num_channels, num_elements) result(p) BIND(C, name = 'DCB_create_f')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
+//    integer(C_INT), intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
 //    integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
 //    integer(C_INT), intent(IN), value :: num_channels   !< Number of receivers (PEs used for communication only)
 //    integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
@@ -650,12 +650,14 @@ distributed_circular_buffer_p DCB_create(
 //F_EnD
 //! Wrapper function to call from Fortran code, with a Fortran MPI communicator
 distributed_circular_buffer_p DCB_create_f(
-    int32_t f_communicator, //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
-    int32_t num_producers,  //!< [in] Number or producers (circular buffer instances)
-    int32_t num_channels,   //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
-    int32_t num_elements    //!< [in] Number of #data_element tokens in the buffer
+    int32_t f_communicator,        //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
+    int32_t f_server_communicator, //!< [in] Communicator that groups server processes (in Fortran)
+    int32_t num_producers,         //!< [in] Number or producers (circular buffer instances)
+    int32_t num_channels,          //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
+    int32_t num_elements           //!< [in] Number of #data_element tokens in the buffer
 ) {
-  return DCB_create(MPI_Comm_f2c(f_communicator), num_producers, num_channels, num_elements);
+  return DCB_create(
+      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), num_producers, num_channels, num_elements);
 }
 
 //F_StArT
@@ -717,8 +719,12 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
   }
 
   MPI_Win_free(&buffer->window);
-  MPI_Win_free(&buffer->window_mem_dummy);
-  MPI_Win_free(&buffer->consumer_stats_window);
+
+  if (is_consumer(buffer) || is_receiver(buffer)) {
+    MPI_Win_free(&buffer->window_mem_dummy);
+    MPI_Win_free(&buffer->consumer_stats_window);
+  }
+
   free(buffer);
 }
 
