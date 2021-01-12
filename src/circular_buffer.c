@@ -918,6 +918,33 @@ int32_t CB_insert(
   return available_space(in, out, limit);
 }
 
+/**
+ * @brief Verify the header of the given buffer is self-consistent (correct version, first = 0, in/out within limits)
+ * @return 0 if the Buffer is consistent, a negative number otherwise
+ */
+//  C_StArT
+int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
+                       )
+//  C_EnD
+{
+  if (buffer == NULL)
+    return -1;
+
+  if (buffer->m.version != FIOL_VERSION)
+    return -1;
+
+  if (buffer->m.first != 0)
+    return -1;
+
+  if (buffer->m.in < buffer->m.first || buffer->m.in >= buffer->m.limit)
+    return -1;
+
+  if (buffer->m.out < buffer->m.first || buffer->m.out >= buffer->m.limit)
+    return -1;
+
+  return 0;
+}
+
 //F_StArT
 //  end interface
 //F_EnD

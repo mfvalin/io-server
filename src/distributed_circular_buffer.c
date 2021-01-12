@@ -1049,6 +1049,21 @@ int DCB_get(
   return CB_get_available_data(queue);
 }
 
+/**
+ * @brief Check the integrity of a single CB instance within the given DCB _(only valid for consumers/receivers)_
+ * @return 0 if the check is successful, a negative value otherwise
+ */
+int DCB_check_instance_integrity(
+    const distributed_circular_buffer_p buffer,   //!< [in] The DCB we want to check
+    const int                           buffer_id //!< [in] The ID of the CB we want to check within the DCB
+) {
+  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
+  if (CB_check_integrity(&instance->buf) != 0)
+    return -1;
+
+  return 0;
+}
+
 //F_StArT
 //  function DCB_check_integrity(buffer, verbose) result(result) BIND(C, name = 'DCB_check_integrity')
 //    import :: C_PTR, C_INT
@@ -1058,7 +1073,15 @@ int DCB_get(
 //    integer(C_INT)                    :: result
 //  end function DCB_check_integrity
 //F_EnD
-int DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose) {
+/**
+ * @brief Check whether the given DCB is consistent. For producers, check the CB header. For consumers, check
+ * every CB header.
+ * @return 0 if everything is consistent, a negative number otherwise
+ */
+int DCB_check_integrity(
+    const distributed_circular_buffer_p buffer, //!< [in] The buffer we want to check
+    int                                 verbose //!< [in] Whether to display certain information in case of failure
+) {
   if (buffer == NULL)
     return -1;
 
@@ -1073,6 +1096,15 @@ int DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose)
             total_num_elem);
       }
       return -1;
+    }
+
+    if (CB_check_integrity(circ_buf) != 0)
+      return -1;
+  }
+  else if (is_consumer(buffer)) {
+    for (int i = 0; i < buffer->num_producers; ++i) {
+      if (DCB_check_instance_integrity(buffer, i) != 0)
+        return -1;
     }
   }
 

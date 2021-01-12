@@ -278,5 +278,7 @@ int32_t CB_insert(
     int               offset, //!< [in]  offset from the "in" position
     int               update  //!< [in]  if nonzero, update the "in" pointer
 );
+int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
+);
 
 #endif // IO_SERVER_circular_buffer_GEN_H

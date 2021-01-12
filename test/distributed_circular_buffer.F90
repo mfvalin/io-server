@@ -317,7 +317,7 @@ program test_distributed_circular_buffer
 !  print *, 'rank, prod, receive, consume ', rank, producer_id, receiver_id, consumer_id
 
 
-  if (.not. circ_buffer % check_integrity(.true.)) then
+  if (.not. circ_buffer % is_valid()) then
     print *, 'Something wrong with the newly-created buffer!!!'
     num_errors = num_errors + 1
     goto 777
