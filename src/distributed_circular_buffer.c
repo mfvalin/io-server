@@ -182,6 +182,15 @@ static inline data_index offset_header_size(
   return num_elem_from_bytes(num_bytes);
 }
 
+static inline data_index total_circular_buffer_size(const int num_desired_elem) {
+  return num_desired_elem + circular_buffer_header_size() + 1;
+}
+
+//! Size of an entire circular buffer instance, based on the number of
+static inline data_index total_circular_buffer_instance_size(const int num_desired_elem) {
+  return instance_header_size() + total_circular_buffer_size(num_desired_elem);
+}
+
 //! Compute the total size needed by the shared memory window to fit all circular buffers and metadata, in number of
 //! #data_element tokens
 static inline data_index total_window_num_elem(
@@ -189,7 +198,7 @@ static inline data_index total_window_num_elem(
     const int num_channels,               //!< How many communication channels with the IO server will be used
     const int num_desired_elem_per_buffer //!< How many #data_element tokens we want to be able to store in each buffer
 ) {
-  return num_buffers * (num_desired_elem_per_buffer + instance_header_size()) +
+  return num_buffers * (total_circular_buffer_instance_size(num_desired_elem_per_buffer)) +
          offset_header_size(num_buffers, num_channels);
 }
 
@@ -221,7 +230,7 @@ static inline void init_offset_header(
   header->num_signals = num_channels;
 
   for (int i = 0; i < header->num_offsets; ++i) {
-    header->window_offsets[i] = header->size + i * (num_elements_per_instance + instance_header_size());
+    header->window_offsets[i] = header->size + i * (total_circular_buffer_instance_size(num_elements_per_instance));
   }
 
   receiver_signal_t* signals = (receiver_signal_t*)(header->window_offsets + header->num_offsets);
@@ -560,7 +569,7 @@ distributed_circular_buffer_p DCB_create(
 
   const MPI_Aint win_total_size =
       total_window_num_elem(buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance) *
-      sizeof(data_element);
+      (MPI_Aint)sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
   if (is_consumer(buffer) || is_receiver(buffer)) {
@@ -588,7 +597,7 @@ distributed_circular_buffer_p DCB_create(
         get_offset_header(buffer), buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance);
 
     // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
-    const int num_elem_in_circ_buffer = buffer->num_element_per_instance + circular_buffer_header_size();
+    const int num_elem_in_circ_buffer = total_circular_buffer_size(buffer->num_element_per_instance);
 
     int num_procs;
     MPI_Comm_size(buffer->communicator, &num_procs);
@@ -1057,7 +1066,7 @@ int DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose)
     const int               total_num_elem = buffer->num_element_per_instance;
     const circular_buffer_p circ_buf       = &buffer->local_header.buf;
 
-    if (total_num_elem != circ_buf->m.limit) {
+    if (total_num_elem != circ_buf->m.limit - 1) {
       if (verbose) {
         printf(
             "(rank %d) Limit seems to be wrong! It's %d, but it should be %d\n", buffer->rank, circ_buf->m.limit,
