@@ -506,6 +506,7 @@ static inline void send_receiver_signal(distributed_circular_buffer_p buffer, co
 //C_StArT
 void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p);
+void DCB_full_barrier(distributed_circular_buffer_p buffer);
 //C_EnD
 
 //F_StArT
@@ -642,6 +643,9 @@ distributed_circular_buffer_p DCB_create(
     update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
   }
 
+  // Wait until everyone (especially the producers) is properly initialized before allowing the use of the buffer
+  MPI_Barrier(buffer->communicator);
+
   return buffer;
 }
 
@@ -711,6 +715,8 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
 //! Release all data used by the given distributed circular buffer
 void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to delete
 ) {
+  DCB_full_barrier(buffer); // Make sure all transfers are done before we start the deletion process
+
   if (is_producer(buffer)) {
     MPI_Send(
         &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, get_root_id(buffer), buffer->rank, buffer->communicator);
@@ -928,7 +934,7 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 data_index DCB_put(
     distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
     data_element* const           src_data,    //!< Pointer to the data we want to insert
-    const int                     num_elements //!< How many 4-byte elements we want to insert
+    const int                     num_elements //!< How many #data_element tokens we want to insert
     )
 //C_EnD
 {

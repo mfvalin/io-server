@@ -108,6 +108,7 @@ typedef struct {
 typedef distributed_circular_buffer* distributed_circular_buffer_p;
 void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p);
+void DCB_full_barrier(distributed_circular_buffer_p buffer);
 distributed_circular_buffer_p DCB_create(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
@@ -122,7 +123,7 @@ int32_t DCB_get_num_elements(
 data_index DCB_put(
     distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
     data_element* const           src_data,    //!< Pointer to the data we want to insert
-    const int                     num_elements //!< How many 4-byte elements we want to insert
+    const int                     num_elements //!< How many #data_element tokens we want to insert
 );
 
 #endif // IO_SERVER_distributed_circular_buffer_GEN_H
