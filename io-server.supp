@@ -16,9 +16,6 @@
    Memcheck:Addr1
    ...
    fun:ompi_osc_pt2pt_process_receive
-   ...
-   fun:ompi_osc_pt2pt_free
-   fun:ompi_win_free
 }
 
 {
@@ -26,9 +23,6 @@
    Memcheck:Addr2
    ...
    fun:ompi_osc_pt2pt_process_receive
-   ...
-   fun:ompi_osc_pt2pt_free
-   fun:ompi_win_free
 }
 
 {
@@ -36,9 +30,6 @@
    Memcheck:Addr4
    ...
    fun:ompi_osc_pt2pt_process_receive
-   ...
-   fun:ompi_osc_pt2pt_free
-   fun:ompi_win_free
 }
 
 {
@@ -46,9 +37,6 @@
    Memcheck:Addr8
    ...
    fun:ompi_osc_pt2pt_process_receive
-   ...
-   fun:ompi_osc_pt2pt_free
-   fun:ompi_win_free
 }
 
 {
@@ -56,9 +44,6 @@
    Memcheck:Addr16
    ...
    fun:ompi_osc_pt2pt_process_receive
-   ...
-   fun:ompi_osc_pt2pt_free
-   fun:ompi_win_free
 }
 
 {
