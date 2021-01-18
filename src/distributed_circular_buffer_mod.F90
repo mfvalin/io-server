@@ -116,7 +116,7 @@ contains
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(DATA_ELEMENT), dimension(*), intent(in)     :: src_data
     integer(C_INT), intent(in)                          :: num_elements
-    integer(C_INT) :: num_space_available !< The return value of DCB_put
+    integer(C_INT) :: num_space_available !< The return value of DCB_put (number of available spaces, if successful)
 
     num_space_available = DCB_put(this % c_buffer, src_data, num_elements)
   end function put
