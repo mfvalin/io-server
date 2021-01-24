@@ -61,6 +61,7 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
 !!F_EnD
   use ioserver_mod
 !!F_StArT
+!!import :: C_FUNPTR
   implicit none
   integer, intent(OUT) :: model
   integer, intent(OUT) :: allio
