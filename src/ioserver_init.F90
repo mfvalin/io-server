@@ -33,8 +33,8 @@ end module ioserver_mod
 function RPNMPI_Commisnull(comm) result(status)
 !!F_EnD
   use ioserver_mod
-  implicit none
 !!F_StArT
+  implicit none
   integer, intent(IN) :: comm
   logical :: status
 !!F_EnD
@@ -93,6 +93,7 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
 
   if(color == 1) then                     ! IO server
     serverio_comm = temp_comm             ! communicator for the "io server"
+    serverio = serverio_comm
   else                                    ! model compute or IO on model node
     modelio_comm = temp_comm              ! communicator for "model compute and io" nodes
     call MPI_Comm_split_type(modelio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, temp_comm ,ierr)
@@ -113,8 +114,10 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
     call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)
     if(color == 0) then
       nodeio_comm = temp_comm  ! io processes on model nodes
+      nodeio = nodeio_comm
     else
       model_comm = temp_comm   ! compute processes on model nodes
+      model = model_comm
     endif
   endif
 
@@ -139,7 +142,7 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
   if(nodeio_comm .ne. MPI_COMM_NULL) then       ! IO process on model node
     p => NULL()
     if(C_ASSOCIATED(nodeio_fn)) then
-      print *,'nodeio_fn associated'
+      print *,'nodeio_fn is associated'
       call C_F_PROCPOINTER(nodeio_fn,p)
       ! the IO process on model node code may not return
       call p(220)    ! PLACEHOLDER CODE TO BE ADJUSTED
