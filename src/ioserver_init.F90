@@ -101,11 +101,13 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
     call MPI_Comm_size(node_comm, local_size, ierr)   ! rank on SMP node
 
     ! spread io processes across sockets (lowest and highest local ranks)
-    if(local_rank >= (nio_node/2) .or. local_rank < (local_size - ((nio_node+1)/2))) then
+    if(local_rank >= (nio_node/2) .and. local_rank < (local_size - ((nio_node+1)/2))) then
       color = 1    ! model compute process
       status = 0 
+      print *,'DEBUG: model compute process, local rank =',local_rank,local_size,nio_node/2,(local_size - ((nio_node+1)/2))
     else
       color = 0  ! IO process, status can be 1 or 2
+      print *,'DEBUG: IO relay process, local rank =',local_rank,local_size,nio_node/2,(local_size - ((nio_node+1)/2))
     endif
     call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)
     if(color == 0) then
@@ -155,7 +157,7 @@ end function ioserver_init
 
 
 
-
+#if defined(SELF_TEST)
 program test
   use ISO_C_BINDING
   implicit none
@@ -185,3 +187,4 @@ subroutine demo_fn(i)
   integer, intent(IN) :: i
   print *,'in demo',i
 end subroutine demo_fn
+#endif

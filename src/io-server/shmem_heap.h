@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2020  Environnement Canada
+ * Copyright (C) 2021  Environnement Canada
  * 
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  * 
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020
- *     V. Magnoux, Recherche en Prevision Numerique, 2020
+ *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 // This file has been generated from shmem_heap.c
 #ifndef IO_SERVER_shmem_heap_GEN_H
