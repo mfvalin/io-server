@@ -85,6 +85,9 @@
    x = useful data       . = free space
  \endverbatim
 */
+#include <stdlib.h>
+#include <string.h>
+
 #include "io-server/common.h"
 
 #if !defined(FIOL_VERSION)

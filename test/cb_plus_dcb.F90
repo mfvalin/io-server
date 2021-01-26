@@ -25,6 +25,21 @@ module parameters
   public
 
   integer, parameter :: NUM_IO_BUFFER_ELEMENTS = 128
+  integer, parameter :: NUM_WORKER_BUFFER_ELEMENTS = 128
+  integer, parameter :: MAX_NUM_WORKER_PER_NODE = 64
+
+  integer, parameter :: NUM_TEST_WORKER_DATA = 500000
+  integer, parameter :: WORKER_DATA_CHUNK_SIZE = 5
+
+contains
+  function compute_data_val(node_id, node_rank, id) result(val)
+    implicit none
+    integer, intent(in) :: node_id, node_rank, id
+    integer :: val
+
+    val = node_id * 100000000 + node_rank * 1000000 + id
+  end function compute_data_val
+
 end module parameters
 
 
@@ -154,7 +169,73 @@ subroutine init_comms(global_rank, num_procs, node_comm, io_comm, node_id, num_w
 end subroutine init_comms
 
 
-subroutine run_io_server(node_comm, io_comm, num_worker_nodes, num_channels, num_errors)
+subroutine run_io_server(node_comm, io_comm, num_consumer_procs, num_worker_nodes, num_worker_per_node, num_channels, num_errors)
+
+  use distributed_circular_buffer_module, only: distributed_circular_buffer
+  use circular_buffer_module
+  use parameters
+
+  implicit none
+
+  integer, intent(in)    :: node_comm, io_comm
+  integer, intent(in)    :: num_consumer_procs, num_worker_nodes, num_worker_per_node, num_channels
+  integer, intent(inout) :: num_errors
+
+  integer :: consumer_id
+  integer :: i_data, i_node, i_check, i_worker
+
+  type(distributed_circular_buffer) :: io_buffer
+  logical :: success
+  integer :: num_elements, total_received
+
+  integer(DATA_ELEMENT), dimension(WORKER_DATA_CHUNK_SIZE, MAX_NUM_WORKER_PER_NODE) :: received_data, expected_data
+  !integer(DATA_ELEMENT), dimension(5) :: received_data, expected_data
+
+  success = io_buffer % create(io_comm, node_comm, num_worker_nodes, num_channels, NUM_IO_BUFFER_ELEMENTS)
+
+  consumer_id = io_buffer % get_consumer_id()
+
+!  call sleep_us(1000000)
+
+  total_received = 0
+  do i_data = 1, NUM_TEST_WORKER_DATA, WORKER_DATA_CHUNK_SIZE
+      !print *, 'server receiving chunk', i_data, i_data + WORKER_DATA_CHUNK_SIZE
+    do i_node = 1 + consumer_id, num_worker_nodes, num_consumer_procs
+      num_elements = io_buffer % get(i_node - 1, received_data, WORKER_DATA_CHUNK_SIZE * num_worker_per_node)
+      !print *, 'num_elements = ', num_elements
+      total_received = total_received + WORKER_DATA_CHUNK_SIZE * num_worker_per_node
+
+      do i_worker = 1, num_worker_per_node
+        do i_check = 1, WORKER_DATA_CHUNK_SIZE
+          expected_data(i_check, i_worker) = compute_data_val(i_node, i_worker, i_check + i_data)
+          !if (received_data(i_worker, i_check) .ne. compute_data_val(i_node, i_worker, i_check + i_data)) then
+            !print *, 'received vs expected: ', received_data(i_worker, i_check), compute_data_val(i_node, i_worker, i_check + i_data)
+            !num_errors = num_errors + 1
+          !end if
+        end do
+      end do
+
+      !print *, 'received ', received_data(:, 1:num_worker_per_node)
+      !print *, 'expected ', expected_data(:, 1:num_worker_per_node)
+      if (.not. all(received_data(:,1:num_worker_per_node) == expected_data(:,1:num_worker_per_node))) then
+        num_errors = num_errors + 1
+      end if
+
+
+
+!      print *, 'Total received: ', total_received
+    end do
+  end do
+!  print *, 'END OF RECEIVING'
+
+
+  call io_buffer % delete()
+
+end subroutine run_io_server
+
+
+!> Do whatever a receiver process has to do: create the buffer, loop to refresh any incoming data, then delete the buffer
+subroutine run_receiver_process(node_comm, io_comm, num_worker_nodes, num_channels, num_errors)
 
   use distributed_circular_buffer_module, only: distributed_circular_buffer
   use parameters
@@ -193,12 +274,51 @@ subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels,
   integer :: ierr
 
   type(distributed_circular_buffer) :: io_buffer
+  type(circular_buffer), dimension(MAX_NUM_WORKER_PER_NODE) :: worker_buffers
+  integer, dimension(WORKER_DATA_CHUNK_SIZE, MAX_NUM_WORKER_PER_NODE) :: processed_data
+  integer, dimension(WORKER_DATA_CHUNK_SIZE) :: received_data
+  integer(DATA_ELEMENT)     :: dummy_element
+  integer(MPI_ADDRESS_KIND) :: base_mem_ptr
+  type(C_PTR)               :: shmem_ptr
   logical :: success
 
   call MPI_Comm_rank(io_comm, io_rank, ierr)
   call MPI_Comm_size(io_comm, num_io_procs, ierr)
 
-  success = io_buffer % create(io_comm, num_worker_nodes, num_channels, 0)
+  do i = 1, num_node_processes - 1
+    call MPI_Win_shared_query(window, i, window_size, disp_unit, base_mem_ptr, error)
+    shmem_ptr = transfer(base_mem_ptr, C_NULL_PTR)
+    success = worker_buffers(i) % create(shmem_ptr)
+    if (.not. success) num_errors = num_errors + 1
+  end do
+
+  ! Create the distributed circular buffer for sharing with the IO node
+  print *, 'creating DCB (relay)'
+  success = io_buffer % create(io_comm, MPI_COMM_NULL, num_worker_nodes, num_channels, 0)
+  print *, 'created DCB (relay)'
+
+
+  total_sent = 0
+  do i = 1, NUM_TEST_WORKER_DATA, WORKER_DATA_CHUNK_SIZE
+
+!    print *, 'receiving from worker'
+
+    do j = 1, num_node_processes - 1
+      num_elements = worker_buffers(j) % atomic_get(received_data, WORKER_DATA_CHUNK_SIZE)
+      processed_data(:,j) = received_data
+    end do
+
+    !print *, 'sending ', processed_data(:,1:num_node_processes-1)
+    !print *, 'processed data: ', processed_data(:, 1:num_node_processes-1)
+    num_spaces = io_buffer % put(processed_data, WORKER_DATA_CHUNK_SIZE * (num_node_processes - 1))
+    !print *, 'num_spaces = ', num_spaces
+    total_sent = total_sent + WORKER_DATA_CHUNK_SIZE * (num_node_processes - 1)
+!    print *, 'Total sent: ', total_sent, io_rank
+!    print *, 'num spaces: ', num_spaces
+  end do
+!  print *, 'END OF SENDING'
+
+  ! Cleanup
   call io_buffer % delete()
 
 end subroutine run_relay_process

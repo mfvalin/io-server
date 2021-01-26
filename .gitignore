@@ -2,4 +2,6 @@
 build*
 CMakeLists.txt.user
 
+*.swp
+
 

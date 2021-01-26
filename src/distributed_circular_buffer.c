@@ -135,6 +135,7 @@ typedef enum receiver_signal receiver_signal_t;
 typedef struct {
   data_element num_offsets; //!< How many offsets there are ( = number of producer processes)
   data_element size;        //!< Size in number of #data_element
+  //int lock;
   data_element num_signals;
   data_element window_offsets[]; //!< The offsets.
   // After the offsets, there are the signals, but we can't name them explicitly. We really need a better solution
@@ -823,7 +824,11 @@ int32_t DCB_start_receiving(distributed_circular_buffer_p buffer) {
 
   while (1) {
     sleep_us(WINDOW_SYNC_DELAY_US);
+    //lock_set(&get_offset_header(buffer)->lock);
+    //MPI_Win_lock(MPI_LOCK_SHARED, buffer->rank, MPI_MODE_NOCHECK, buffer->window);
+    //MPI_Win_unlock(buffer->rank, buffer->window);
     MPI_Win_sync(buffer->window);
+    //lock_reset(&get_offset_header(buffer)->lock);
 
     switch (*signal) {
     case RSIG_SERVER_BARRIER: // fallthrough
@@ -914,6 +919,10 @@ data_index DCB_put(
   const data_index out_index = buffer->local_header.buf.m.out;
   const data_index limit     = buffer->local_header.buf.m.limit;
 
+  //printf("Putting ");
+  //for (int i = 0; i < num_elements; ++i) printf("%d ", src_data[i]);
+  //printf("\n");
+
   if (in_index < out_index) {
     // 1 segment
     MPI_Accumulate(
@@ -983,6 +992,7 @@ int DCB_get(
 
   const int32_t in_index  = instance->buf.m.in;
   int32_t       out_index = instance->buf.m.out;
+  //printf("DCB_get: out_index = %d\n", out_index);
   const int32_t limit     = instance->buf.m.limit;
 
   const data_element* const buffer_data = instance->buf.data;
@@ -1015,7 +1025,21 @@ int DCB_get(
 
   memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
-  instance->buf.m.out = out_index; // Update actual extraction pointer
+  volatile data_index *d_out = &instance->buf.m.out;
+  //printf("out_index = %d\n", out_index);
+  //lock_set(&get_offset_header(buffer)->lock);
+  *d_out = out_index; // Update actual extraction pointer
+  //lock_reset(&get_offset_header(buffer)->lock);
+  //printf("d_out = %d\n", *d_out);
+  sleep_us(0);
+
+  //printf("Got ");
+  //for (int i = 0; i < num_elements; ++i) printf("%d ", dest_data[i]);
+  //printf("-- until out=%d, stored val=%d\n", out_index, *d_out);
+  if (out_index != *d_out)
+  {
+      printf("AAAAAHHHHH THIS SHOULD NOT EVER HAPPEN!!!! AAAAAHHHHHHHHHhhhh\n");
+  }
 
   return CB_get_available_data(queue);
 }
