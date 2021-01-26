@@ -145,7 +145,7 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
       print *,'nodeio_fn is associated'
       call C_F_PROCPOINTER(nodeio_fn,p)
       ! the IO process on model node code may not return
-      call p(220)    ! PLACEHOLDER CODE TO BE ADJUSTED
+      call p(model, allio, nodeio, serverio)    ! PLACEHOLDER CODE TO BE ADJUSTED
       call MPI_Finalize(ierr)
       stop
     else
