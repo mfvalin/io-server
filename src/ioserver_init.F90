@@ -30,6 +30,10 @@ module ioserver_mod
 end module ioserver_mod
 
 !!F_StArT
+!! interface
+!!F_EnD
+
+!!F_StArT
 function RPNMPI_Commisnull(comm) result(status)
 !!F_EnD
   use ioserver_mod
@@ -159,7 +163,9 @@ function ioserver_init(model, allio, nodeio, serverio, nio_node, app_class, node
 end function ioserver_init
 !!F_EnD
 
-
+!!F_StArT
+!! end interface
+!!F_EnD
 
 #if defined(SELF_TEST)
 program test
