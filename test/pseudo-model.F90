@@ -2,7 +2,7 @@ program pseudomodelandserver
   use ISO_C_BINDING
   implicit none
   external io_relay
-  include 'include/ioserver.inc'
+  include 'io-server/ioserver.inc'
   integer :: status
   integer :: model, allio, nodeio, serverio, nio_node
   integer :: comm, rank, size, nserv, ierr
@@ -43,7 +43,7 @@ subroutine io_relay(model, allio, nodeio, serverio)
   use ISO_C_BINDING
   implicit none
   integer, intent(IN) :: model, allio, nodeio, serverio
-  include 'include/ioserver.inc'
+  include 'io-server/ioserver.inc'
   integer :: rank, size, ierr
   call MPI_Comm_rank(nodeio, rank, ierr)
   call MPI_Comm_size(nodeio, size, ierr)

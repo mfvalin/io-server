@@ -1,7 +1,7 @@
 program pseudoserver
   use ISO_C_BINDING
   implicit none
-  include 'include/ioserver.inc'
+  include 'io-server/ioserver.inc'
   integer :: status
   integer :: model, allio, nodeio, serverio, nio_node
 
