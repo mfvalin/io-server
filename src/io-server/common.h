@@ -27,6 +27,7 @@
 
 #include <immintrin.h>
 #include <stdint.h>
+#include <time.h>
 
 //! Memory store fence
 static inline void write_fence() {
