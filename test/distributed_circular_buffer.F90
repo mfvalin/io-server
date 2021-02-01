@@ -23,12 +23,11 @@ module parameters
   implicit none
   public
 
-
   integer, parameter :: NUM_BUFFER_ELEMENTS = 200
   integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
   integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 5000
   integer, parameter :: STEP_SIZE = 5
-  integer, parameter :: NUM_CONSUMERS = 1
+  integer, parameter :: NUM_CONSUMERS = 2
 
 end module parameters
 
@@ -113,9 +112,12 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
     if (num_elements .ne. 0) then
       num_errors = num_errors + 1
+      print *, 'Error, buffer should be empty but has ', num_elements
     end if
     if (.not. all(data_small == expected_data_small)) then
       num_errors = num_errors + 1
+!      print *, 'Error, got ', data_small
+!      print *, 'Expected   ', expected_data_small
     end if
   end do
 
@@ -138,8 +140,8 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
       if (.not. all(data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
         num_errors = num_errors + 1
-        !print *, 'Wrong data!!!', data_large(i:i+STEP_SIZE - 1), '\n', expected_data_large(i : i + STEP_SIZE - 1)
-        !print *, 'Earlier data:', data_large(i - STEP_SIZE: i - 1), '\n', expected_data_large(i - STEP_SIZE:i - 1)
+!        print *, 'Wrong data!!!', data_large(i:i+STEP_SIZE - 1), '--', expected_data_large(i : i + STEP_SIZE - 1)
+!        print *, 'Earlier data:', data_large(i - STEP_SIZE: i - 1), '--', expected_data_large(i - STEP_SIZE:i - 1)
       end if
 
     end do
@@ -179,6 +181,8 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   class(distributed_circular_buffer), intent(inout) :: buffer
   integer, intent(in) :: rank
   integer :: num_errors
+  integer :: producer_id
+  logical :: success
 
   integer(C_INT) :: num_spaces
   integer :: i
@@ -187,7 +191,8 @@ function test_dcb_producer(buffer, rank) result(num_errors)
 
   num_errors = 0
 
-  call init_array(data_small, rank)
+  producer_id = buffer % get_producer_id()
+  call init_array(data_small, producer_id)
 
   !---------------------------
   call buffer % full_barrier()
@@ -222,7 +227,7 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
 
-  call init_array(data_large, rank)
+  call init_array(data_large, producer_id)
   do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
     num_spaces = buffer % put(data_large(i:i + STEP_SIZE - 1), STEP_SIZE)
   end do
@@ -277,7 +282,7 @@ program test_distributed_circular_buffer
   logical :: success
   integer :: num_errors, tmp_errors
   integer :: server_comm, server_group, world_group
-  integer, dimension(3, 1) :: excl_range
+  integer, dimension(3, 1) :: incl_range
 
   type(distributed_circular_buffer) :: circ_buffer
   integer :: num_producers, consumer_id, receiver_id, producer_id
@@ -301,17 +306,16 @@ program test_distributed_circular_buffer
   server_comm = MPI_COMM_NULL
   call MPI_Comm_group(MPI_COMM_WORLD, world_group, error)
 
-  if (rank >= num_producers) then
-    excl_range(1, 1) = 0
-    excl_range(2, 1) = num_producers - 1
-    excl_range(3, 1) = 1
-    call MPI_Group_range_excl(world_group, 1, excl_range, server_group, error)
+  if (rank < NUM_CONSUMERS * 2) then
+    incl_range(1, 1) = 0
+    incl_range(2, 1) = 2 * NUM_CONSUMERS - 1;
+    incl_range(3, 1) = 1
+    call MPI_Group_range_incl(world_group, 1, incl_range, server_group, error)
     call MPI_Comm_create_group(MPI_COMM_WORLD, server_group, 0, server_comm, error)
   end if
 
 
   ! Beginning of test
-
   success = circ_buffer % create(MPI_COMM_WORLD, server_comm, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
@@ -347,10 +351,9 @@ program test_distributed_circular_buffer
     num_errors = 1
   end if
 
-
 !  call circ_buffer % print()
   call circ_buffer % delete()
-  if (rank >= num_producers) then
+  if (consumer_id == 0) then
     call MPI_Group_free(server_group, error)
     call MPI_Comm_free(server_comm, error)
   end if
@@ -360,7 +363,7 @@ program test_distributed_circular_buffer
   tmp_errors = num_errors
   call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, error)
 
-  if(rank == 0) then  ! check that we got back what we sent
+  if(consumer_id == 0) then  ! check that we got back what we sent
     if(num_errors > 0) then
       print *, 'ERRORS IN DISTRIBUTED BUFFER TEST ', num_errors
     else
