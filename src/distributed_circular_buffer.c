@@ -163,14 +163,19 @@ static inline data_index num_elem_from_bytes(const size_t num_bytes) {
   return num_bytes / sizeof(data_element) + (num_bytes % sizeof(data_element) > 0);
 }
 
+static inline data_index num_elem_from_bytes_aligned64(const size_t num_bytes) {
+  const data_index num_elem_init = num_elem_from_bytes(num_bytes);
+  return num_elem_init % 2 == 0 ? num_elem_init : num_elem_init + 1;
+}
+
 //! Compute the number of #data_element taken by the circular_buffer_instance struct
 static inline data_index instance_header_size() {
-  return num_elem_from_bytes(sizeof(circular_buffer_instance));
+  return num_elem_from_bytes_aligned64(sizeof(circular_buffer_instance));
 }
 
 //! Compute the number of #data_element taken by the circular_buffer struct
 static inline data_index circular_buffer_header_size() {
-  return num_elem_from_bytes(sizeof(circular_buffer));
+  return num_elem_from_bytes_aligned64(sizeof(circular_buffer));
 }
 
 //! Size of the offset header, in number of #data_element tokens
@@ -180,7 +185,7 @@ static inline data_index offset_header_size(
 ) {
   const size_t num_bytes = sizeof(offset_header) + (size_t)(num_buffers) * sizeof(data_element) +
                            (size_t)num_channels * sizeof(receiver_signal_t);
-  return num_elem_from_bytes(num_bytes);
+  return num_elem_from_bytes_aligned64(num_bytes);
 }
 
 static inline data_index total_circular_buffer_size(const int num_desired_elem) {
@@ -1051,8 +1056,8 @@ int DCB_get(
 
   memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
-  volatile data_index *d_out = &instance->buf.m.out;
-  *d_out = out_index; // Update actual extraction pointer
+  volatile data_index* d_out = &instance->buf.m.out;
+  *d_out                     = out_index; // Update actual extraction pointer
 
   return CB_get_available_data(queue);
 }
@@ -1096,15 +1101,6 @@ int DCB_check_integrity(
   if (is_producer(buffer)) {
     const int               total_num_elem = buffer->num_element_per_instance;
     const circular_buffer_p circ_buf       = &buffer->local_header.buf;
-
-    if (total_num_elem != circ_buf->m.limit - 1) {
-      if (verbose) {
-        printf(
-            "(rank %d) Limit seems to be wrong! It's %d, but it should be %d\n", buffer->rank, circ_buf->m.limit,
-            total_num_elem);
-      }
-      return -1;
-    }
 
     if (CB_check_integrity(circ_buf) != 0)
       return -1;
