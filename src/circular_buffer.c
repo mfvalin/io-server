@@ -93,8 +93,6 @@
 //C_EnD
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
@@ -106,6 +104,9 @@
 //F_EnD
 
 //C_StArT
+#include <stdlib.h>
+#include <string.h>
+
 #include "io-server/common.h"
 
 #if !defined(FIOL_VERSION)

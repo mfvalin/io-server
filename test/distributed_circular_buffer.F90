@@ -26,9 +26,9 @@ module parameters
 
   integer, parameter :: NUM_BUFFER_ELEMENTS = 200
   integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
-  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 500
+  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 5000
   integer, parameter :: STEP_SIZE = 5
-  integer, parameter :: NUM_CONSUMERS = 2
+  integer, parameter :: NUM_CONSUMERS = 1
 
 end module parameters
 
@@ -58,7 +58,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
     subroutine init_array(array, rank)
       import :: DATA_ELEMENT
       implicit none
-      integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+      integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
       integer, intent(in) :: rank
     end subroutine init_array
   end interface
@@ -129,19 +129,29 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
   do i_prod = first_prod, last_prod
     call init_array(expected_data_large, i_prod)
+    !do i = 1, NUM_DATA_ELEMENTS_LARGE
+    !print *, 'expected ', expected_data_large(:)
+    !end do
     do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
 
       num_elements = buffer % get(i_prod, data_large(i : i + STEP_SIZE - 1), STEP_SIZE)
 
       if (.not. all(data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
         num_errors = num_errors + 1
-        print *, 'Did not get the right data!!!', data_large(i:i+STEP_SIZE - 1), expected_data_large(i : i + STEP_SIZE - 1)
+        !print *, 'Wrong data!!!', data_large(i:i+STEP_SIZE - 1), '\n', expected_data_large(i : i + STEP_SIZE - 1)
+        !print *, 'Earlier data:', data_large(i - STEP_SIZE: i - 1), '\n', expected_data_large(i - STEP_SIZE:i - 1)
       end if
 
     end do
+
+    num_elements = buffer % get_num_elements(i_prod)
+    if (num_elements .ne. 0) then
+      print *, 'Buffer is not empty!!!'
+      num_errors = num_errors + 1
+    end if
   end do
 
-  call buffer % server_barrier()
+  !call buffer % server_barrier()
 
   !---------------------------
   call buffer % full_barrier()
@@ -161,7 +171,7 @@ function test_dcb_producer(buffer, rank) result(num_errors)
     subroutine init_array(array, rank)
       import :: DATA_ELEMENT
       implicit none
-      integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+      integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
       integer, intent(in) :: rank
     end subroutine init_array
   end interface
@@ -237,7 +247,7 @@ program test_distributed_circular_buffer
   subroutine init_array(array, rank)
     import :: DATA_ELEMENT
     implicit none
-    integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+    integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
     integer, intent(in) :: rank
   end subroutine init_array
   function test_dcb_receiver(buffer) result(num_errors)
@@ -280,8 +290,8 @@ program test_distributed_circular_buffer
   call MPI_comm_rank(MPI_COMM_WORLD, rank, error)
   call MPI_comm_size(MPI_COMM_WORLD, comm_size, error)
 
-  if (comm_size < 6) then
-    print *, 'Need at least 6 processes for this test!'
+  if (comm_size < 3) then
+    print *, 'Need at least 3 processes for this test!'
     num_errors = num_errors + 1
     goto 777
   end if
@@ -366,7 +376,7 @@ subroutine init_array(array, rank)
   use circular_buffer_module, only: DATA_ELEMENT
   implicit none
 
-  integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+  integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
   integer, intent(in) :: rank
 
   integer :: i

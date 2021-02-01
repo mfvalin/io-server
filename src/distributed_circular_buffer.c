@@ -1051,7 +1051,8 @@ int DCB_get(
 
   memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
-  instance->buf.m.out = out_index; // Update actual extraction pointer
+  volatile data_index *d_out = &instance->buf.m.out;
+  *d_out = out_index; // Update actual extraction pointer
 
   return CB_get_available_data(queue);
 }

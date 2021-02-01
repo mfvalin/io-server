@@ -25,6 +25,7 @@
 
 #include <immintrin.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <time.h>
 
 //! Memory store fence
@@ -44,6 +45,15 @@ static inline void memory_fence() {
   __asm__ volatile("mfence" : : : "memory");
   //   _mm_mfence();
 }
+
+static inline void lock_set(int* location) {
+  while (__sync_val_compare_and_swap(location, 0, 1) != 0)
+    ;
+}
+static inline void lock_reset(int* location) {
+    *(volatile int*)location = 0;
+}
+
 //C_EnD
 
 //C_StArT
