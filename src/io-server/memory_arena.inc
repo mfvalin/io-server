@@ -20,7 +20,6 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 ! This file has been generated from memory_arena.c
-
 !> \file
 !> \brief memory arena management package (C and Fortran)
 !>
@@ -69,10 +68,7 @@
 !>    than likely to have said memory segment mapped at different addresses
 !>
 !> \endverbatim
-
-
 interface
-
 
 !> set owner's id (usually MPI rank) for memory arenas<br>
 !> me = memory_arena_set_id(id)
@@ -84,8 +80,6 @@ end function memory_arena_set_id
 
 !> set id for memory management arena, return identifier (-1 in case of error)
 !> id must be a POSITIVE INTEGER
-
-
 !> dump arena header and symbol table (description of contents of memory arena)<br>
 !> call memory_arena_print_status(mem)
 subroutine memory_arena_print_status(mem) BIND(C,name='memory_arena_print_status')
@@ -93,17 +87,15 @@ import :: C_PTR
 type(C_PTR), intent(IN), value :: mem      !< pointer to memory arena (see  memory_arena_init)
 end subroutine memory_arena_print_status
 
-
 !> initialize an already allocated 'memory arena' (usually node shared memory)<br>
 !> id = memory_arena_init(mem, nsym, size)
-function memory_arena_init(mem, nsym, size) result(me) BIND(C,name='memory_arena_init')
-import :: C_PTR, C_INT
-type(C_PTR), intent(IN), value :: mem                 !< pointer to memory arena (see  memory_arena_init)
+function memory_arena_init(mem, nsym, size) result(id) BIND(C,name='memory_arena_init')
+import :: C_PTR, C_INT, C_INT64_T
+type(C_PTR), intent(IN), value :: mem                 !< pointer to memory arena
 integer(C_INT), intent(IN), value :: nsym             !< size of symbol table to allocate (max number of blocks expected)
-integer(C_INT), intent(IN), value :: size             !< size of memory area in 32 bit units
-integer(C_INT) :: me                                  !< id of current owner process (not necessarily me)
+integer(C_INT64_T), intent(IN), value :: size         !< size of memory area in bytes (max 32GBytes)
+integer(C_INT) :: id                                  !< id of current owner process (not necessarily me)
 end function memory_arena_init
-
 
 !> update local arena control table from master arena<br>
 !> nareas = update_local_table(mem)
@@ -113,17 +105,15 @@ type(C_PTR), intent(IN), value :: mem            !< pointer to master memory are
 integer(C_INT) :: nareas                         !< number of arenas detected
 end function update_local_table
 
-
 !> initialize an already allocated 'master arena' (node shared memory usually)<br>
 !> id = master_arena_init(mem, nsym, size)
 function master_arena_init(mem, nsym, size) result(id) BIND(C,name='master_arena_init')
-import :: C_PTR, C_INT
+import :: C_PTR, C_INT, C_INT64_T
 type(C_PTR), intent(IN), value :: mem            !< pointer to master memory arena (see  memory_arena_init)
 integer(C_INT), intent(IN), value :: nsym        !< size of symbol table to allocate (max number of blocks expected)
-integer(C_INT), intent(IN), value :: size        !< size of memory area for master arena in 32 bit units
+integer(C_INT64_T), intent(IN), value :: size    !< size of memory area for master arena in bytes
 integer(C_INT) :: id                             !< id of current process
 end function master_arena_init
-
 
 !> find memory block called 'name'<br>
 !> ptr = memory_block_find(mem, size, flags, name)
@@ -135,7 +125,6 @@ integer(C_INT), intent(OUT) :: flags                     !< block flags (0 if no
 character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
 type(C_PTR) :: ptr                                       !< local address of memory block (NULL if not found)
 end function memory_block_find
-
 
 !> same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 !> ptr = memory_block_find_wait(mem, size, flags, name, timeout)
@@ -149,7 +138,6 @@ integer(C_INT), intent(IN), value :: timeout             !< timeout in milliseco
 type(C_PTR) :: ptr                                       !< local address of memory block (NULL if not found)
 end function memory_block_find_wait
 
-
 !> mark memory block 'name' as initialized<br>
 !> ptr = memory_block_mark_init(mem, name)
 function memory_block_mark_init(mem, name) result(ptr) BIND(C,name='memory_block_mark_init')
@@ -158,7 +146,6 @@ type(C_PTR), intent(IN), value :: mem                    !< pointer to the manag
 character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
 type(C_PTR) :: ptr                                       !< block address if found, NULL otherwise
 end function memory_block_mark_init
-
 
 !> create a named block in a managed 'memory arena'<br>
 !> ptr = memory_block_create(mem, size, name)
@@ -170,38 +157,44 @@ character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to cre
 type(C_PTR) :: ptr                                       !< local address of created block (NULL if error)
 end function memory_block_create
 
-
 !> allocate a shared memory segment<br>
 !> ptr = memory_allocate_shared(shmid, size)
 function memory_allocate_shared(shmid, size) result(ptr) BIND(C,name='memory_allocate_shared')
-import :: C_PTR, C_INT
-integer(C_INT), intent(OUT) :: shmid       !< shared memory id of segment (set by memory_allocate_shared) (see shmget)
-integer(C_INT), intent(IN), value :: size  !< size of segment in 32 bit units
-type(C_PTR) :: ptr                         !< local address of memory segment
+import :: C_PTR, C_INT, C_INT64_T
+integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (set by memory_allocate_shared) (see shmget)
+integer(C_INT64_T), intent(IN), value :: size  !< size of segment in bytes
+type(C_PTR) :: ptr                             !< local address of memory segment
 end function memory_allocate_shared
 
+!> create a memory arena in user memory<br>
+!> ptr = memory_arena_create_from_address(memaddr, nsym, size)
+function memory_arena_create_from_address(memaddr, nsym, size) result(ptr) BIND(C,name='memory_arena_create_from_address')
+import :: C_PTR, C_INT, C_INT64_T
+type(C_PTR), intent(IN), value :: memaddr      !< user memory address
+integer(C_INT), intent(IN), value :: nsym      !< size of symbol table to allocate (max number of blocks expected)
+integer(C_INT64_T), intent(IN), value :: size  !< size of arena in bytes
+type(C_PTR) :: ptr                             !< address of memory arena (NULL if error)
+end function memory_arena_create_from_address
 
 !> create a memory arena in shared memory<br>
 !> ptr = memory_arena_create_shared(shmid, nsym, size)
 function memory_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='memory_arena_create_shared')
-import :: C_PTR, C_INT
+import :: C_PTR, C_INT, C_INT64_T
 integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (see shmget)
 integer(C_INT), intent(IN), value :: nsym      !< size of symbol table to allocate (max number of blocks expected)
-integer(C_INT), intent(IN), value :: size      !< size of arena in 32 bit units
+integer(C_INT64_T), intent(IN), value :: size  !< size of arena in bytes
 type(C_PTR) :: ptr                             !< local address of memory arena
 end function memory_arena_create_shared
-
 
 !> create master memory arena in shared memory<br>
 !> ptr = master_arena_create_shared(shmid, nsym, size)
 function master_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='master_arena_create_shared')
-import :: C_PTR, C_INT
+import :: C_PTR, C_INT, C_INT64_T
 integer(C_INT), intent(OUT) :: shmid                  !< shared memory id of segment (see shmget)
 integer(C_INT), intent(IN), value :: nsym             !< size of symbol table to allocate (max number of blocks expected)
-integer(C_INT), intent(IN), value :: size             !< size of arena in 32 bit units
-type(C_PTR) :: ptr                             !< local address of master memory arena
+integer(C_INT64_T), intent(IN), value :: size         !< size of arena in bytes
+type(C_PTR) :: ptr                                    !< local address of master memory arena
 end function master_arena_create_shared
-
 
 !> get memory address associated with shared memory segment id<br>
 !> ptr = memory_address_from_id(shmid)
@@ -211,7 +204,6 @@ integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (s
 type(C_PTR) :: ptr                             !< local memory addres of shared memory segment
 end function memory_address_from_id
 
-
 !> get memory arena address of master arena address<br>
 !> ptr = memory_arena_from_master(mem)
 function memory_arena_from_master(mem) result(ptr) BIND(C,name='memory_arena_from_master')
@@ -219,7 +211,6 @@ import :: C_PTR
 type(C_PTR), intent(IN), value :: mem         !< pointer to the 'master memory arena'
 type(C_PTR) :: ptr                            !< local memory addres of memory arena of master arena
 end function memory_arena_from_master
-
 
 !> get memory address associated with shared memory segment id of master arena<br>
 !> 
@@ -229,6 +220,4 @@ integer(C_INT), intent(IN), value :: shmid    !< master arena segment id (from m
 type(C_PTR) :: ptr                            !< local memory addres of memory arena of master arena
 end function memory_arena_from_master_id
 
-
 end interface
-

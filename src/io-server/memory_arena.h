@@ -188,7 +188,7 @@ typedef struct{
 //! me = memory_arena_set_id(id)
 //! @return -1 upon error, value > 0 otherwise
 int32_t memory_arena_set_id(
-  uint32_t id                      //!< [in] owner's id (usually MPI rank) 
+  int32_t id                      //!< [in] owner's id (usually MPI rank) 
 );
 //! dump arena header and symbol table (description of contents of memory arena)<br>
 //! memory_arena_print_status(mem)
@@ -200,9 +200,9 @@ void memory_arena_print_status(
 //! id = memory_arena_init(mem, nsym, size)
 //! @return id of current owner process (not necessarily me)
 uint32_t memory_arena_init(
-  void *mem,                   //!< [in] pointer to memory arena (see  memory_arena_init)
+  void *mem,                   //!< [in] pointer to memory arena
   uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
-  uint32_t size                //!< [in] size of memory area in 32 bit units
+  uint64_t size                //!< [in] size of memory area in bytes
 );
 //! update local arena control table from master arena<br>
 //! nareas = update_local_table(mem)
@@ -216,7 +216,7 @@ uint32_t update_local_table(
 uint32_t master_arena_init(
   void *mem,                     //!< [in] pointer to master memory arena
   uint32_t nsym,                 //!< [in] size of symbol table to allocate (max number of blocks expected)
-  uint32_t size                  //!< [in] size of memory area for master arena in 32 bit units
+  uint64_t size                  //!< [in] size of memory area for master arena in bytes
 );
 //! find memory block called 'name'<br>
 //! ptr = memory_block_find(mem, size, flags, name)
@@ -257,7 +257,15 @@ void *memory_block_create(
 //! @return local address of memory block
 void *memory_allocate_shared(
   int *shmid,                 //!< [out] shared memory id of segment (set by memory_allocate_shared) (see shmget)
-  uint32_t size               //!< [in]  size of segment in 32 bit units
+  uint64_t size               //!< [in]  size of segment in 32 bit units
+);
+//! create a memory arena in user memory<br>
+//! ptr = memory_arena_create_from_address(memaddr, nsym, size)
+//! @return  address of memory arena (NULL if error)
+void *memory_arena_create_from_address(
+  void *memaddr,               //!< [in]  user memory address
+  uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
+  uint64_t size                //!< [in]  size of segment in 32 bit units
 );
 //! create a memory arena in shared memory<br>
 //! ptr = memory_arena_create_shared(shmid, nsym, size)
@@ -265,7 +273,7 @@ void *memory_allocate_shared(
 void *memory_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
-  uint32_t size                //!< [in]  size of segment in 32 bit units
+  uint64_t size                //!< [in]  size of segment in bytes
 );
 //! create master memory arena in shared memory<br>
 //! ptr = master_arena_create_shared(shmid, nsym, size)
@@ -273,7 +281,7 @@ void *memory_arena_create_shared(
 void *master_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
-  uint32_t size                //!< [in]  size of segment in 32 bit units
+  uint64_t size                //!< [in]  size of segment in bytes
 );
 //! get memory address associated with shared memory segment id<br>
 //! ptr = memory_address_from_id(shmid)
