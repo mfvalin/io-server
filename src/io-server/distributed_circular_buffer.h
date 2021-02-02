@@ -43,8 +43,10 @@ typedef struct {
  * Please don't change the order of data members (unless you know what the consequences are).
  */
 typedef struct {
-  int             target_rank; //!< With which process this instance should communicate for data transfers
-  circular_buffer buf;         //!< The buffer contained in this instance
+  int target_rank; //!< With which process this instance should communicate for data transfers
+
+  void*           dummy; // Force 64-bit alignment of the circular_buffer struct
+  circular_buffer buf;   //!< The buffer contained in this instance
 } circular_buffer_instance;
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
@@ -79,11 +81,13 @@ typedef struct {
   int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
+  int32_t    num_consumers;
   int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t receiver_id;
   int32_t consumer_id;
+  int32_t producer_id;
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data

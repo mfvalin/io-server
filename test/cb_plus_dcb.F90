@@ -28,7 +28,7 @@ module parameters
   integer, parameter :: NUM_WORKER_BUFFER_ELEMENTS = 128
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 64
 
-  integer, parameter :: NUM_TEST_WORKER_DATA = 100000
+  integer, parameter :: NUM_TEST_WORKER_DATA = 500000
   integer, parameter :: WORKER_DATA_CHUNK_SIZE = 5
 
 contains
@@ -200,7 +200,7 @@ subroutine run_io_server(node_comm, io_comm, num_consumer_procs, num_worker_node
   logical :: success
   integer :: num_elements, total_received
 
-  integer(DATA_ELEMENT), dimension(MAX_NUM_WORKER_PER_NODE, NUM_WORKER_BUFFER_ELEMENTS) :: received_data
+  integer(DATA_ELEMENT), dimension(WORKER_DATA_CHUNK_SIZE, MAX_NUM_WORKER_PER_NODE) :: received_data, expected_data
 
   success = io_buffer % create(io_comm, node_comm, num_worker_nodes, num_channels, NUM_IO_BUFFER_ELEMENTS)
 
@@ -212,17 +212,24 @@ subroutine run_io_server(node_comm, io_comm, num_consumer_procs, num_worker_node
   do i_data = 1, NUM_TEST_WORKER_DATA, WORKER_DATA_CHUNK_SIZE
     do i_node = 1 + consumer_id, num_worker_nodes, num_consumer_procs
       num_elements = io_buffer % get(i_node - 1, received_data, WORKER_DATA_CHUNK_SIZE * num_worker_per_node)
+      !print *, 'num_elements = ', num_elements
       total_received = total_received + WORKER_DATA_CHUNK_SIZE * num_worker_per_node
 
       do i_worker = 1, num_worker_per_node
         do i_check = 1, WORKER_DATA_CHUNK_SIZE
-          if (received_data(i_worker, i_check) .ne. compute_data_val(i_node, i_worker, i_check + i_data)) then
-            num_errors = num_errors + 1
-          end if
+          expected_data(i_check, i_worker) = compute_data_val(i_node, i_worker, i_check + i_data)
+          !if (received_data(i_worker, i_check) .ne. compute_data_val(i_node, i_worker, i_check + i_data)) then
+            !print *, 'received vs expected: ', received_data(i_worker, i_check), compute_data_val(i_node, i_worker, i_check + i_data)
+            !num_errors = num_errors + 1
+          !end if
         end do
       end do
 
-
+      !print *, 'received ', received_data(:, 1:num_worker_per_node)
+      !print *, 'expected ', expected_data(:, 1:num_worker_per_node)
+      if (.not. all(received_data(:,1:num_worker_per_node) == expected_data(:,1:num_worker_per_node))) then
+        num_errors = num_errors + 1
+      end if
 
 !      print *, 'Total received: ', total_received
     end do
@@ -287,7 +294,7 @@ subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels,
 
   type(distributed_circular_buffer) :: io_buffer
   type(circular_buffer), dimension(MAX_NUM_WORKER_PER_NODE) :: worker_buffers
-  integer, dimension(MAX_NUM_WORKER_PER_NODE, WORKER_DATA_CHUNK_SIZE) :: processed_data
+  integer, dimension(WORKER_DATA_CHUNK_SIZE, MAX_NUM_WORKER_PER_NODE) :: processed_data
   integer, dimension(WORKER_DATA_CHUNK_SIZE) :: received_data
   integer(DATA_ELEMENT)     :: dummy_element
   integer(MPI_ADDRESS_KIND) :: base_mem_ptr
@@ -327,11 +334,13 @@ subroutine run_relay_process(node_comm, io_comm, num_worker_nodes, num_channels,
 
     do j = 1, num_node_processes - 1
       num_elements = worker_buffers(j) % atomic_get(received_data, WORKER_DATA_CHUNK_SIZE)
-      processed_data(j,:) = received_data
+      processed_data(:,j) = received_data
     end do
 
-!    print *, 'sending ', processed_data(1:num_node_processes-1, :)
+    !print *, 'sending ', processed_data(:,1:num_node_processes-1)
+    !print *, 'processed data: ', processed_data(:, 1:num_node_processes-1)
     num_spaces = io_buffer % put(processed_data, WORKER_DATA_CHUNK_SIZE * (num_node_processes - 1))
+    !print *, 'num_spaces = ', num_spaces
     total_sent = total_sent + WORKER_DATA_CHUNK_SIZE * (num_node_processes - 1)
 !    print *, 'Total sent: ', total_sent, io_rank
 !    print *, 'num spaces: ', num_spaces
