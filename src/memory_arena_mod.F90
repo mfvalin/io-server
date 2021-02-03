@@ -7,6 +7,7 @@ module memory_arena_mod
     private
     type(C_PTR) :: p
   contains
+    procedure :: init
     procedure :: create_from_address
     procedure :: create_shared
     GENERIC   :: create => create_shared, create_from_address  ! create arena
@@ -21,6 +22,15 @@ module memory_arena_mod
   end type
 
   contains
+
+  function init(this, nsym, size) result(id)
+    implicit none
+    class(memory_arena), intent(INOUT)    :: this
+    integer(C_INT), intent(IN), value     :: nsym         !< size of symbol table to allocate (max number of blocks expected)
+    integer(C_INT64_T), intent(IN), value :: size         !< size of memory area in bytes (max 32GBytes)
+    integer(C_INT) :: id                                  !< id of current owner process (not necessarily me)
+    id = memory_arena_init(this%p, nsym, size)
+  end function init
 
   function create_from_address(this, memaddr, nsym, size) result(p)
     implicit none
