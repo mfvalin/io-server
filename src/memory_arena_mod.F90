@@ -8,16 +8,21 @@ module memory_arena_mod
     type(C_PTR) :: p
   contains
     procedure :: init
+    procedure :: clone
     procedure :: create_from_address
     procedure :: create_shared
     GENERIC   :: create => create_shared, create_from_address  ! create arena
-    procedure :: getblock_no_wait
-    procedure :: getblock_wait
-    GENERIC   :: getblock => getblock_wait, getblock_no_wait   ! find block in arena
+
+    procedure :: adrblock
+    procedure :: adrblockw
+    procedure :: getblock
+    procedure :: getblockw
+    GENERIC   :: find => adrblock, getblock, getblockw         ! find a block
+
     procedure :: newblock                                      ! create block in arena
+    procedure :: markblock                                     ! mark block as initialized
     procedure :: dump                                          ! dump arena metadata
     procedure :: addr                                          ! get arena address
-    procedure, nopass :: markblock                             ! mark block as initialized
     procedure, nopass :: setid                                 ! set local owner id for arena(s)
   end type
 
@@ -31,6 +36,15 @@ module memory_arena_mod
     integer(C_INT) :: id                                  !< id of current owner process (not necessarily me)
     id = memory_arena_init(this%p, nsym, size)
   end function init
+
+  function clone(this, memaddr) result(p)
+    implicit none
+    class(memory_arena), intent(INOUT)    :: this
+    type(C_PTR), intent(IN), value        :: memaddr      !< user memory address
+    type(C_PTR) :: p
+    this%p = memaddr
+    p      = this%p
+  end function clone
 
   function create_from_address(this, memaddr, nsym, size) result(p)
     implicit none
@@ -54,42 +68,63 @@ module memory_arena_mod
     p      = this%p
   end function create_shared
 
-  function getblock_wait(this, size, flags, name, timeout) result(p)
+  function getblockw(this, size, flags, name, timeout) result(p)
     implicit none
     class(memory_arena), intent(IN)       :: this
     integer(C_INT), intent(OUT)           :: size            !< size of memory block in 32 bit units (0 if not found)
     integer(C_INT), intent(OUT)           :: flags           !< block flags (0 if not found)
-    character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
+    character(len=*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
     integer(C_INT), intent(IN), value     :: timeout         !< timeout in milliseconds, -1 means practically forever
     type(C_PTR) :: p
-    p = memory_block_find_wait(this%p, size, flags, name, timeout)
-  end function getblock_wait
+    p = memory_block_find_wait(this%p, size, flags, trim(name)//achar(0), timeout)
+  end function getblockw
 
-  function getblock_no_wait(this, size, flags, name) result(p)
+  function adrblockw(this, name, timeout) result(p)
+    implicit none
+    class(memory_arena), intent(IN)       :: this
+    character(len=*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
+    integer(C_INT), intent(IN), value     :: timeout         !< timeout in milliseconds, -1 means practically forever
+    type(C_PTR) :: p
+    integer(C_INT)           :: size            !< size of memory block in 32 bit units (0 if not found)
+    integer(C_INT)           :: flags           !< block flags (0 if not found)
+    p = memory_block_find_wait(this%p, size, flags, trim(name)//achar(0), timeout)
+  end function adrblockw
+
+  function getblock(this, size, flags, name) result(p)
     implicit none
     class(memory_arena), intent(IN)       :: this
     integer(C_INT), intent(OUT)           :: size            !< size of memory block in 32 bit units (0 if not found)
     integer(C_INT), intent(OUT)           :: flags           !< block flags (0 if not found)
-    character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
+    character(len=*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
     type(C_PTR) :: p
-    p = memory_block_find(this%p, size, flags, name)
-  end function getblock_no_wait
+    p = memory_block_find(this%p, size, flags, trim(name)//achar(0))
+  end function getblock
+
+  function adrblock(this, name) result(p)
+    implicit none
+    class(memory_arena), intent(IN)       :: this
+    character(len=*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
+    type(C_PTR) :: p
+    integer(C_INT)      :: size            !< size of memory block in 32 bit units (0 if not found)
+    integer(C_INT)      :: flags           !< block flags (0 if not found)
+    p = memory_block_find(this%p, size, flags, trim(name)//achar(0))
+  end function adrblock
 
   function newblock(this, size, name) result(p)
     implicit none
     class(memory_arena), intent(IN)       :: this
     integer(C_INT), intent(IN), value     :: size            !< desired size of block in 32 bit units
-    character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to create (characters beyond the 8th will be ignored)
+    character(len=*), intent(IN) :: name      !< name of block to create (characters beyond the 8th will be ignored)
     type(C_PTR) :: p
-    p = memory_block_create(this%p, size, name)
+    p = memory_block_create(this%p, size, trim(name)//achar(0))
   end function newblock
 
-  function markblock(mem, name) result(p)
+  function markblock(this, name) result(p)
     implicit none
-    type(C_PTR), intent(IN), value :: mem                    !< pointer to the managed 'memory arena' (see  memory_arena_init)
-    character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to create (characters beyond the 8th will be ignored)
+    class(memory_arena), intent(IN)       :: this
+    character(len=*), intent(IN) :: name      !< name of block to mark as initialized (see newblock)
     type(C_PTR) :: p
-    p = memory_block_mark_init(mem, name)
+    p = memory_block_mark_init(this%p, trim(name)//achar(0))
   end function markblock
 
   function setid(id) result(me)
