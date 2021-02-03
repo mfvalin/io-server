@@ -6,6 +6,8 @@ program test_memory_arena
 #define NSYM 128
 #define DBLK 20
 #define STR(a) a//achar(0)
+#define NBLKS 99
+#define XTRA 100
 
   include 'mpif.h'
 !   include 'io-server/memory_arena.inc'
@@ -20,12 +22,14 @@ program test_memory_arena
     end function shmat
   end interface
 
-  integer(C_INT) :: ierr, rank, size, win, id, id2, shmid, bsize, bflags, timeout
+  integer(C_INT) :: ierr, rank, size, win, id, id2, shmid, bsize, bflags, timeout, i, j, jerr
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, shmaddr, disp_unit
   integer(C_INT64_T) :: shmsz64
   type(C_PTR) :: memadr, p
   integer, dimension(:), pointer :: fp
   type(memory_arena) :: m
+  character(len=8) :: bname
+  type(C_PTR), dimension(0:1024) :: pp
 
   call MPI_Init(ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
@@ -33,7 +37,7 @@ program test_memory_arena
   id = m % setid(rank)
 !   id = memory_arena_set_id(rank);
 
-  shmsz64 = 1024 * 1024 * 4        ! 4 MBytes
+  shmsz64 = 1024 * 1024 * 16       ! 16 MBytes
   shmid   = -1
   timeout = 1000                   ! 1 second
 
@@ -109,7 +113,46 @@ program test_memory_arena
   print 1,"BLOCK003 found at address",bsize, bflags,transfer(p,shmaddr)
   p = m%find("BLOCK004"                        ) ! p = memory_block_find(     memadr, bsize, bflags, STR("BLOCK004"))
   print 1,"BLOCK004 found at address",-1, -1,transfer(p,shmaddr)
-777 continue
+
+  do i = rank, NBLKS, size                          ! create blocks
+    write(bname,'(A,I4.4)') 'BLCK', i            ! create block name BLCKnnnn
+    pp(i) = m%newblock(XTRA+i, bname)             ! create the block
+  enddo
+  do i = rank, NBLKS, size                          ! fill blocks
+    call C_F_POINTER(pp(i), fp, [XTRA+i])
+    do j = 1, XTRA+i
+      fp(j) = XTRA+i - j
+    enddo
+!     print 2, fp
+  enddo
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
+!   call m % dump()
+  ierr = 0
+  do i = 0, NBLKS
+    write(bname,'(A,I4.4)') 'BLCK', i
+    pp(i) = m%find(bname)
+    if( C_ASSOCIATED(pp(i)) ) ierr = ierr + 1
+  enddo
+  print *,'blocks found =',ierr,', expected =',NBLKS+1
+  jerr = 0
+  do i = 0, NBLKS
+    call C_F_POINTER(pp(i), fp, [XTRA+i])
+    ierr = 0
+    do j = 1, XTRA+i
+      if( fp(j) .ne. XTRA+i - j ) then
+        ierr = ierr + 1
+        jerr = jerr + 1
+      endif
+    enddo
+    if(ierr > 0) then
+      print *,'errors in block',i,' =',ierr
+!       print 2, fp
+    endif
+  enddo
+  print *,'total errors =',jerr
+  
   call MPI_Finalize(ierr)
 1   format(A,2I10,2X,Z16.16)
+2 format(100I4)
 end program
