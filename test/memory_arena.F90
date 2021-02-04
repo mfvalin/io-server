@@ -19,7 +19,7 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020/2021
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
-program test_memory_arena
+subroutine simple_test
 
   use ISO_C_BINDING
   implicit none
@@ -45,7 +45,8 @@ program test_memory_arena
 
   integer :: err, rank, isiz, id, MY_World
   type(C_PTR) :: shmaddr, p, cio_from, cio_into, masteraddr
-  integer(C_INT) :: shmsz, shmid
+  integer(C_INT) :: shmid
+  integer(C_INT64_T) :: shmsz64
   character(len=128) :: command, myblock
   integer :: bsz, flags, i, errors, j, bsza, nareas
   integer, dimension(:), pointer :: fp
@@ -56,9 +57,9 @@ program test_memory_arena
 
   id = memory_arena_set_id(rank) ! send my rank as id
   if(rank == 0) then             ! PE0 creates arena and some blocks
-    shmsz = 1024 * 1024 * 128    ! 512 MBytes
-!     shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz)
-    masteraddr = master_arena_create_shared(shmid, NSYM, shmsz)
+    shmsz64 = 1024 * 1024 * 512    ! 512 MBytes
+!     shmaddr = memory_arena_create_shared(shmid, NSYM, shmsz64)
+    masteraddr = master_arena_create_shared(shmid, NSYM, shmsz64)
     shmaddr = memory_arena_from_master(masteraddr);                   ! get memory arena address from master arena address
     nareas = update_local_table(masteraddr)
 !     do id = 1, isiz
@@ -199,7 +200,7 @@ program test_memory_arena
 
   write(0, *)'I am process',rank+1,' of',isiz,' on node'
   call mpi_finalize(err)
-end program
+end subroutine
 
 
 subroutine mpi_split_by_node(oldcomm, newcomm, rank, isiz, err)

@@ -4,7 +4,7 @@ program test_memory_arena
   implicit none
 
 #define DBLK 20
-#define STR(a) a//achar(0)
+#define STR(a) trim(a)//achar(0)
 #define NBLKS 399
 #define NSYM (NBLKS+32)
 #define XTRA 10
