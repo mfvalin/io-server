@@ -68,8 +68,6 @@ contains
         is_valid = .true.
       end if
     end if
-
-    is_valid = c_associated(this % c_buffer)
   end function is_valid
 
   !> Create and initialize a distributed circular buffer. See DCB_create

@@ -53,8 +53,10 @@ typedef struct {
  * Please don't change the order of data members (unless you know what the consequences are).
  */
 typedef struct {
-  int             target_rank; //!< With which process this instance should communicate for data transfers
-  circular_buffer buf;         //!< The buffer contained in this instance
+  int target_rank; //!< With which process this instance should communicate for data transfers
+
+  void*           dummy; // Force 64-bit alignment of the circular_buffer struct
+  circular_buffer buf;   //!< The buffer contained in this instance
 } circular_buffer_instance;
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
@@ -89,11 +91,13 @@ typedef struct {
   int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
+  int32_t    num_consumers;
   int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t receiver_id;
   int32_t consumer_id;
+  int32_t producer_id;
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
@@ -163,14 +167,21 @@ static inline data_index num_elem_from_bytes(const size_t num_bytes) {
   return num_bytes / sizeof(data_element) + (num_bytes % sizeof(data_element) > 0);
 }
 
+//! Compute the _even_ number of #data_element needed to contain the given number of bytes. This guarantees that the
+//! final amount will have a size of a multiple of 64 bits (since we use either 32- or 64-bit elements)
+static inline data_index num_elem_from_bytes_aligned64(const size_t num_bytes) {
+  const data_index num_elem_init = num_elem_from_bytes(num_bytes);
+  return num_elem_init % 2 == 0 ? num_elem_init : num_elem_init + 1;
+}
+
 //! Compute the number of #data_element taken by the circular_buffer_instance struct
 static inline data_index instance_header_size() {
-  return num_elem_from_bytes(sizeof(circular_buffer_instance));
+  return num_elem_from_bytes_aligned64(sizeof(circular_buffer_instance));
 }
 
 //! Compute the number of #data_element taken by the circular_buffer struct
 static inline data_index circular_buffer_header_size() {
-  return num_elem_from_bytes(sizeof(circular_buffer));
+  return num_elem_from_bytes_aligned64(sizeof(circular_buffer));
 }
 
 //! Size of the offset header, in number of #data_element tokens
@@ -180,11 +191,12 @@ static inline data_index offset_header_size(
 ) {
   const size_t num_bytes = sizeof(offset_header) + (size_t)(num_buffers) * sizeof(data_element) +
                            (size_t)num_channels * sizeof(receiver_signal_t);
-  return num_elem_from_bytes(num_bytes);
+  return num_elem_from_bytes_aligned64(num_bytes);
 }
 
 static inline data_index total_circular_buffer_size(const int num_desired_elem) {
-  return num_desired_elem + circular_buffer_header_size() + 1;
+  // Add 2 instead of 1 so that all instances are aligned to 64 bits
+  return num_desired_elem + circular_buffer_header_size() + 2;
 }
 
 //! Size of an entire circular buffer instance, based on the number of
@@ -242,7 +254,7 @@ static inline void init_offset_header(
 
 static inline void print_offset_header(offset_header_p header) {
   printf(
-      "Num buffers %d, size %d bytes, num channels %d\n"
+      "Num buffers %d, size %d elements, num channels %d\n"
       "Address %ld\n",
       header->num_offsets, header->size, header->num_signals, (long)header);
   printf("Offsets: ");
@@ -274,7 +286,9 @@ static inline MPI_Aint buffer_element_displacement(
     const data_index                    index   //!< [in] Index of the element within the buffer
 ) {
   // Start of the buffer element section within the window
-  const MPI_Aint base_displacement = buffer->window_offset + instance_header_size();
+
+  ptrdiff_t      ptr_offset = (data_element*)buffer->local_header.buf.data - (data_element*)&buffer->local_header;
+  const MPI_Aint base_displacement = buffer->window_offset + ptr_offset;
   const MPI_Aint elem_displacement = base_displacement + index;
   return elem_displacement;
 }
@@ -298,23 +312,35 @@ static inline MPI_Aint remote_header_displacement(const distributed_circular_buf
 
 //! @{ @name Helper functions
 
+static inline int get_first_consumer_rank(const distributed_circular_buffer_p buffer) {
+  return 0;
+}
+
+static inline int get_first_receiver_rank(const distributed_circular_buffer_p buffer) {
+  return buffer->num_consumers;
+}
+
+static inline int get_first_producer_rank(const distributed_circular_buffer_p buffer) {
+  return buffer->num_consumers + buffer->num_channels;
+}
+
 //! Rank of the "root" process, responsible for managing the buffer's shared memory
 static inline int get_root_id(const distributed_circular_buffer_p buffer) {
-  return buffer->num_producers + buffer->num_channels;
+  return get_first_consumer_rank(buffer);
 }
 
 static inline int get_server_comm_root_id(const distributed_circular_buffer_p buffer) {
-  return buffer->num_channels;
+  return 0;
 }
 
 //! Check whether the given distributed buffer is located on a consumer process
 static inline int is_consumer(const distributed_circular_buffer_p buffer) {
-  return (buffer->consumer_id >= 0);
+  return (buffer->rank < buffer->num_consumers);
 }
 
 //! Check whether the given distributed buffer is located on a producer process
 static inline int is_producer(const distributed_circular_buffer_p buffer) {
-  return (buffer->rank < buffer->num_producers);
+  return (buffer->rank >= get_first_producer_rank(buffer));
 }
 
 //! Check whether the given distributed buffer is located on the DCB root process
@@ -324,7 +350,15 @@ static inline int is_root(const distributed_circular_buffer_p buffer) {
 
 //! Check whether the given distributed buffer is located on a receiver process
 static inline int is_receiver(const distributed_circular_buffer_p buffer) {
-  return (buffer->receiver_id >= 0);
+  return (buffer->rank >= get_first_receiver_rank(buffer) && buffer->rank < get_first_producer_rank(buffer));
+}
+
+static inline void assign_target_receiver(
+    const circular_buffer_instance_p    instance,    //!< [in, out] Buffer instance whose target we want to set
+    const int                           receiver_id, //!< [in] Which receiver (channel) this instance should use
+    const distributed_circular_buffer_p buffer       //!< [in] DCB to which this instance belongs
+) {
+  instance->target_rank = get_first_receiver_rank(buffer) + receiver_id;
 }
 
 //! Get a pointer to a certain circular_buffer_instance within the given distributed_circular_buffer
@@ -353,7 +387,7 @@ static void retrieve_window_offset_from_remote(
   const int root_rank = get_root_id(buffer);
   MPI_Win_lock(MPI_LOCK_SHARED, root_rank, MPI_MODE_NOCHECK, buffer->window);
   MPI_Get(
-      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, root_rank, window_offset_displacement(buffer->rank), 1,
+      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, root_rank, window_offset_displacement(buffer->producer_id), 1,
       CB_MPI_ELEMENT_TYPE, buffer->window);
   MPI_Win_unlock(root_rank, buffer->window);
 }
@@ -388,12 +422,12 @@ static inline data_index get_available_space_from_remote(
 //! If the latest copy of the header shows enough space, return immediately. Otherwise, copy metadata from the consumer
 //! process and check, until there is enough space.
 //! @return The number of available elements according to the latest copy of the header. If there was not enough
-//! initially, that copy is updated.
+//! initially, that copy is updated. If there is an error, returns -1.
 static data_index DCB_wait_space_available(
     distributed_circular_buffer_p buffer,       //!< [in] Pointer to the distributed buffer we're waiting for
     const int                     num_requested //!< [in] Needed number of available #data_element slots
 ) {
-  if (buffer == NULL || is_consumer(buffer))
+  if (buffer == NULL || !is_producer(buffer))
     return -1;
 
   const circular_buffer_p instance = &buffer->local_header.buf;
@@ -550,19 +584,24 @@ distributed_circular_buffer_p DCB_create(
   buffer->local_header.target_rank = -1;
   MPI_Comm_rank(buffer->communicator, &buffer->rank);
 
+  int total_num_procs;
+  MPI_Comm_size(buffer->communicator, &total_num_procs);
+  buffer->num_consumers = total_num_procs - buffer->num_producers - buffer->num_channels;
+
   // Set internal ID for each type of process participating in the buffer set
   {
     buffer->receiver_id = -1;
     buffer->consumer_id = -1;
+    buffer->producer_id = -1;
 
-    // Either a receiver or a consumer
-    if (buffer->rank >= buffer->num_producers) {
-      if (buffer->rank < buffer->num_producers + buffer->num_channels) {
-        buffer->receiver_id = buffer->rank - buffer->num_producers;
-      }
-      else {
-        buffer->consumer_id = buffer->rank - buffer->num_producers - buffer->num_channels;
-      }
+    if (is_producer(buffer)) {
+      buffer->producer_id = buffer->rank - get_first_producer_rank(buffer);
+    }
+    else if (is_consumer(buffer)) {
+      buffer->consumer_id = buffer->rank - get_first_consumer_rank(buffer);
+    }
+    else if (is_receiver(buffer)) {
+      buffer->receiver_id = buffer->rank - get_first_receiver_rank(buffer);
     }
   }
 
@@ -608,9 +647,7 @@ distributed_circular_buffer_p DCB_create(
     for (int i = 0; i < num_producers; i++) {
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
       init_result = init_result && (init_circular_buffer_instance(buffer_instance, num_elem_in_circ_buffer) != NULL);
-      // Assign a target consumer for the buffer
-      buffer_instance->target_rank = buffer->num_producers + i % num_channels;
-
+      assign_target_receiver(buffer_instance, i % buffer->num_channels, buffer);
       DCB_init_stats(&buffer->consumer_stats[i]);
     }
   }
@@ -720,7 +757,8 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   if (is_producer(buffer)) {
     MPI_Send(
-        &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, get_root_id(buffer), buffer->rank, buffer->communicator);
+        &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, get_root_id(buffer), buffer->producer_id,
+        buffer->communicator);
   }
 
   if (is_root(buffer)) {
@@ -729,7 +767,9 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
     for (int i = 0; i < buffer->num_producers; ++i) {
       DCB_stats  producer_stats;
       MPI_Status status;
-      MPI_Recv(&producer_stats, sizeof(DCB_stats), MPI_BYTE, i, i, buffer->communicator, &status);
+      MPI_Recv(
+          &producer_stats, sizeof(DCB_stats), MPI_BYTE, get_first_producer_rank(buffer) + i, i, buffer->communicator,
+          &status);
       print_instance_stats(&producer_stats, &buffer->consumer_stats[i], i, i == 0);
     }
   }
@@ -798,9 +838,7 @@ int32_t DCB_get_num_elements(
 // end function DCB_get_producer_id
 //F_EnD
 int32_t DCB_get_producer_id(const distributed_circular_buffer_p buffer) {
-  if (is_producer(buffer))
-    return buffer->rank;
-  return -1;
+  return buffer->producer_id;
 }
 
 //F_StArT
@@ -988,7 +1026,7 @@ data_index DCB_put(
 
   MPI_Win_unlock(target_rank, buffer->window);
 
-  buffer->producer_stats.num_elem += num_elements;
+  buffer->producer_stats.num_elem += (uint64_t)num_elements;
   buffer->producer_stats.num_transfers++;
 
   return CB_get_available_space(&buffer->local_header.buf);
@@ -1021,6 +1059,7 @@ int DCB_get(
   int32_t       out_index = instance->buf.m.out;
   const int32_t limit     = instance->buf.m.limit;
 
+  int32_t                   old_out     = out_index;
   const data_element* const buffer_data = instance->buf.data;
 
   if (out_index < in_index) {
@@ -1046,13 +1085,13 @@ int DCB_get(
     out_index += num_elements_2;
   }
 
-  buffer->consumer_stats[buffer_id].num_elem += num_elements;
+  buffer->consumer_stats[buffer_id].num_elem += (uint64_t)num_elements;
   buffer->consumer_stats[buffer_id].num_transfers++;
 
   memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
-  volatile data_index *d_out = &instance->buf.m.out;
-  *d_out = out_index; // Update actual extraction pointer
+  volatile data_index* d_out = &instance->buf.m.out;
+  *d_out                     = out_index; // Update actual extraction pointer
 
   return CB_get_available_data(queue);
 }
@@ -1096,15 +1135,6 @@ int DCB_check_integrity(
   if (is_producer(buffer)) {
     const int               total_num_elem = buffer->num_element_per_instance;
     const circular_buffer_p circ_buf       = &buffer->local_header.buf;
-
-    if (total_num_elem != circ_buf->m.limit - 1) {
-      if (verbose) {
-        printf(
-            "(rank %d) Limit seems to be wrong! It's %d, but it should be %d\n", buffer->rank, circ_buf->m.limit,
-            total_num_elem);
-      }
-      return -1;
-    }
 
     if (CB_check_integrity(circ_buf) != 0)
       return -1;

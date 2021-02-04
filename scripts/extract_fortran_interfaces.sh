@@ -9,5 +9,5 @@ FILE_BASE=${FILE_NAME_ONLY%.*}
 
 sed -e 's/^\(.*\)$/! &/' < ${SCRIPT_DIR}/common_header.txt
 echo -e "\n! This file has been generated from ${FILE_NAME_ONLY}"
-sed -n '/F_StArT/,/F_EnD/p' ${1:-UnknownFile} | sed -e 's:^[/!]*[ ]*::' -e 's/.*F_EnD.*//' -e 's/.*F_StArT.*//' | grep -v '^$'
+sed -n '/F_StArT/,/F_EnD/p' ${1:-UnknownFile} | sed -e 's:^[/!]*[ ]*::' | grep -vE 'F_EnD|F_StArT'
 
