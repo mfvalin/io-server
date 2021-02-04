@@ -86,7 +86,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
-#include <immintrin.h>
+// #include <immintrin.h>
 
 #include "io-server/memory_arena.h"
 
@@ -617,7 +617,7 @@ void *memory_block_mark_init(
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
   uint64_t name64 = block_name(name);
-  int32_t i, j;
+  int32_t i;
   void *dataptr = NULL;
 
   i = find_block(ma, sym, name64);
@@ -625,7 +625,7 @@ void *memory_block_mark_init(
 
   while(__sync_val_compare_and_swap(&(sym[i].lock), 0, me) != 0); // lock block
   if(sym[i].flags == 0) sym[i].flags = me;                        // mark as initialized by me
-  j = __sync_val_compare_and_swap(&(sym[i].lock), me, 0);         // unlock block
+  __sync_val_compare_and_swap(&(sym[i].lock), me, 0);         // unlock block
 
   dataptr = &mem64[sym[i].data_index + BlockHeaderSize64];        // pointer to actual data
   return dataptr;
