@@ -1,4 +1,4 @@
-! Copyright (C) 2021  Environnement Canada
+! Copyright (C) 2021  Environnement et Changement climatique Canada
 ! 
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
