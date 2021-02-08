@@ -11,6 +11,8 @@ program pseudomodelandserver
 
   call mpi_init(status)
 
+  call IOSERVER_debug(.true.)            ! activate debug mode
+
   arg = '0'
   if(COMMAND_ARGUMENT_COUNT() >= 3) call GET_COMMAND_ARGUMENT(3, arg)
   read(arg,*)noops
@@ -30,16 +32,17 @@ program pseudomodelandserver
 
   if(rank >= nserv) then
     read(arg,*) nio_node ! relay processes per node
-    status = ioserver_init(model, allio, nodeio, serverio, nio_node, 'M', C_FUNLOC(io_relay))
+    call set_IOSERVER_relay(io_relay)
+    status = ioserver_init(model, allio, nodeio, serverio, nio_node, 'M')
     call MPI_Comm_rank(model, rank, ierr)
     call MPI_Comm_size(model, size, ierr)
     print *,'in pseudo model, PE',rank+1,' of',size
   else  ! ranks 0, 1, nserv-1 : server
     nio_node = -1
     if(rank < noops) then ! ranks below noops are NO-OP processes
-      status = ioserver_init(model, allio, nodeio, serverio, nio_node, 'Z', C_NULL_FUNPTR)
+      status = ioserver_init(model, allio, nodeio, serverio, nio_node, 'Z')
     else
-      status = ioserver_init(model, allio, nodeio, serverio, nio_node, 'S', C_NULL_FUNPTR)
+      status = ioserver_init(model, allio, nodeio, serverio, nio_node, 'O')
     endif
     call MPI_Comm_rank(serverio, rank, ierr)
     call MPI_Comm_size(serverio, size, ierr)

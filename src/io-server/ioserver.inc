@@ -24,10 +24,14 @@
 integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
 integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
 
+integer, parameter :: NO_COLOR     = 1
 integer, parameter :: MODEL_COLOR  = 1
 integer, parameter :: RELAY_COLOR  = 2
 integer, parameter :: SERVER_COLOR = 4
-integer, parameter :: NO_OP_COLOR  = 1024   ! MUST BE THE HIGHEST VALUE
+integer, parameter :: OUTPUT_COLOR = 8
+integer, parameter :: INPUT_COLOR  = 16
+integer, parameter :: INOUT_COLOR  = INPUT_COLOR + OUTPUT_COLOR
+integer, parameter :: NO_OP_COLOR  = 8192   ! MUST BE THE HIGHEST VALUE
 
 interface
 
@@ -38,6 +42,10 @@ function IOSERVER_is_time_to_quit() result(status)  BIND(C,name='IOSERVER_is_tim
 implicit none
 logical :: status   ! .true. if time to quit
 end function IOSERVER_is_time_to_quit
+
+subroutine IOSERVER_debug(mode) BIND(C,name='IOSERVER_debug')
+logical, intent(IN), value :: mode
+end subroutine IOSERVER_debug
 
 function IOSERVER_Commisnull(comm) result(status)
 implicit none
@@ -57,7 +65,12 @@ implicit none
 integer, intent(IN) :: comm
 end subroutine set_IOSERVER_global_comm
 
-function IOSERVER_init(model, allio, nodeio, serverio, nio_node, app_class, nodeio_fn) result(status)
+subroutine set_IOSERVER_relay(fn)
+implicit none
+external :: fn
+end subroutine set_IOSERVER_relay
+
+function IOSERVER_init(model, allio, nodeio, serverio, nio_node, app_class) result(status)
 import :: C_FUNPTR
 implicit none
 integer, intent(OUT) :: model
@@ -66,7 +79,6 @@ integer, intent(OUT) :: nodeio
 integer, intent(OUT) :: serverio
 integer, intent(IN) :: nio_node      ! number of io processes per compute node
 character(len=*), intent(IN) :: app_class
-type(C_FUNPTR), intent(IN) :: nodeio_fn
 integer :: status
 end function IOSERVER_init
 
