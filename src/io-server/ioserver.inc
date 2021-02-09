@@ -35,49 +35,79 @@ integer, parameter :: NO_OP_COLOR  = 8192   ! MUST BE THE HIGHEST VALUE
 
 interface
 
-subroutine IOSERVER_time_to_quit() BIND(C,name='IOSERVER_time_to_quit')
+subroutine IOSERVER_time_to_quit() BIND(C,name='IOSERVER_time_to_quit')   ! set time to quit flag in control area
 end subroutine IOSERVER_time_to_quit
 
-function IOSERVER_is_time_to_quit() result(status)  BIND(C,name='IOSERVER_is_time_to_quit')
+function IOSERVER_is_time_to_quit() result(status)  BIND(C,name='IOSERVER_is_time_to_quit')  ! is it time to quit ?
+import :: C_INT
 implicit none
-logical :: status   ! .true. if time to quit
+integer(C_INT) :: status   ! .true. if time to quit
 end function IOSERVER_is_time_to_quit
 
-subroutine IOSERVER_debug(mode) BIND(C,name='IOSERVER_debug')
-logical, intent(IN), value :: mode
+subroutine IOSERVER_debug(mode) BIND(C,name='IOSERVER_debug')   ! set io server debug mode
+import :: C_INT
+integer(C_INT), intent(IN), value :: mode
 end subroutine IOSERVER_debug
 
-function IOSERVER_Commisnull(comm) result(status)
+function IOSERVER_Commisnull(comm) result(status)   !  is this communicator the NULL communicator ?
 implicit none
 integer, intent(IN) :: comm
 logical :: status
 end function IOSERVER_Commisnull
 
-function IOSERVER_winsizes(sz_base, sz_relay, sz_server) result(status)
+function IOSERVER_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
 import :: C_SIZE_T
 implicit none
-integer(C_SIZE_T), intent(IN) :: sz_base, sz_relay, sz_server
+integer(C_SIZE_T), intent(IN) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
+integer(C_SIZE_T), intent(IN) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
+integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
 logical :: status
 end function IOSERVER_winsizes
 
-subroutine set_IOSERVER_global_comm(comm)
+function IOSERVER_set_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
+import :: C_SIZE_T
+implicit none
+integer(C_SIZE_T), intent(IN) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
+integer(C_SIZE_T), intent(IN) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
+integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
+logical :: status
+end function IOSERVER_set_winsizes
+
+subroutine IOSERVER_get_winsizes(sz_base, sz_relay, sz_server) !  get communication window / shared memory area sizes
+import :: C_SIZE_T
+implicit none
+integer(C_SIZE_T), intent(OUT) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
+integer(C_SIZE_T), intent(OUT) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
+integer(C_SIZE_T), intent(OUT) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
+end subroutine IOSERVER_get_winsizes
+
+subroutine IOSERVER_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area sizes
+import :: C_PTR
+implicit none
+type(C_PTR), intent(OUT) :: p_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
+type(C_PTR), intent(OUT) :: p_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
+type(C_PTR), intent(OUT) :: p_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
+end subroutine IOSERVER_get_winmem
+
+subroutine set_IOSERVER_global_comm(comm)   !  set global communicator to other than MPI_COMM_WORLD
 implicit none
 integer, intent(IN) :: comm
 end subroutine set_IOSERVER_global_comm
 
-subroutine set_IOSERVER_relay(fn)
+subroutine set_IOSERVER_relay(fn)  ! set relay function to call to fn
 implicit none
 external :: fn
 end subroutine set_IOSERVER_relay
 
-function IOSERVER_init(model, allio, nodeio, serverio, nio_node, app_class) result(status)
+function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_class) result(status)
 import :: C_FUNPTR
 implicit none
-integer, intent(OUT) :: model
-integer, intent(OUT) :: allio
-integer, intent(OUT) :: nodeio
-integer, intent(OUT) :: serverio
-integer, intent(IN) :: nio_node      ! number of io processes per compute node
+integer, intent(OUT) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
+integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
+integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
+integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
+integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+integer, intent(IN)  :: nio_node     ! number of io processes per compute node
 character(len=*), intent(IN) :: app_class
 integer :: status
 end function IOSERVER_init
