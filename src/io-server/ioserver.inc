@@ -99,7 +99,7 @@ implicit none
 external :: fn
 end subroutine set_IOSERVER_relay
 
-function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_class) result(status)
+function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class) result(status)
 import :: C_FUNPTR
 implicit none
 integer, intent(OUT) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
@@ -107,6 +107,7 @@ integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs   
 integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
 integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
 integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+integer, intent(OUT) :: nodecom     ! communicator for io server PEs             (may be MPI_COMM_NULL)
 integer, intent(IN)  :: nio_node     ! number of io processes per compute node
 character(len=*), intent(IN) :: app_class
 integer :: status

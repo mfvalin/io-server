@@ -1,17 +1,62 @@
+module helpers
+  use ISO_C_BINDING
+  contains
+subroutine print_created(temp, name)
+  implicit none
+  type(C_PTR), intent(IN), value :: temp
+  character(len=*), intent(IN) :: name
+  if(C_ASSOCIATED(temp)) then
+    write(6,*)"block "//name//" created"
+  else
+    write(6,*)"block "//name//" creation failed"
+  endif
+end subroutine print_created
+
+subroutine print_comm(is_null, name)
+  implicit none
+  logical, intent(IN), value :: is_null
+  character(len=*), intent(IN) :: name
+  character(len=8) :: n8
+  n8 = name
+  if(is_null) then
+    write(6,*)n8//' communicator is NULL'
+  else
+    write(6,*)n8//' communicator is DEFINED'
+  endif
+end subroutine print_comm
+
+subroutine print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+  implicit none
+  integer, intent(IN) :: model, allio, nodeio, serverio, modelio, nodecom
+  include 'io-server/ioserver.inc'
+  call print_comm(IOSERVER_Commisnull(model),    'model')
+  call print_comm(IOSERVER_Commisnull(modelio),  'modelio')
+  call print_comm(IOSERVER_Commisnull(allio),    'allio')
+  call print_comm(IOSERVER_Commisnull(nodeio),   'nodeio')
+  call print_comm(IOSERVER_Commisnull(serverio), 'serverio')
+  call print_comm(IOSERVER_Commisnull(nodecom),  'nodecom')
+end subroutine print_comms
+
+end module helpers
+
 program pseudomodelandserver
   use ISO_C_BINDING
+  use helpers
   use memory_arena_mod
   implicit none
   external io_relay
   include 'io-server/ioserver.inc'
 !   include 'io-server/memory_arena.inc'
   integer :: status
-  integer :: model, allio, nodeio, serverio, nio_node, modelio, me
-  integer :: comm, rank, size, nserv, ierr, noops, node_rank, node_size
+  integer :: model, allio, nodeio, serverio, nio_node, modelio, nodecom, me
+  integer :: comm, rank, size, nserv, ierr, noops, noderank, nodesize
   logical :: error
   character(len=128) :: arg
   type(C_PTR) :: p_base, p_relay, p_server, temp
+  integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
+  integer :: sz32
   type(memory_arena) :: ma
+  character(len=8) :: blockname
 
   call mpi_init(status)
 
@@ -35,41 +80,57 @@ program pseudomodelandserver
     goto 777
   endif
 
-  if(rank >= nserv) then
-    read(arg,*) nio_node ! relay processes per node
+  if(rank >= nserv) then                    ! compute or IO relay Processes
+    read(arg,*) nio_node                    ! number of relay processes per node
     call set_IOSERVER_relay(io_relay)
-    status = ioserver_init(model, modelio, allio, nodeio, serverio, nio_node, 'M')
+    !  no return from ioserver_init in the case of IO relay processes
+    !  compute processes will return from call
+    status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'M')
+    !  from this point on, this is a model compute process
+    call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+
     call MPI_Comm_rank(model, rank, ierr)
     call MPI_Comm_size(model, size, ierr)
+    call MPI_Comm_rank(nodecom, noderank, ierr)
+    call MPI_Comm_size(nodecom, nodesize, ierr)
     write(6,*)'in pseudo model, PE',rank+1,' of',size
+    write(6,*)'            node PE',noderank+1,' of', nodesize
+
     call IOSERVER_get_winmem(p_base, p_relay, p_server)
+    call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)  ! of interest is sz_relay
+    sz_relay = sz_relay / 4       ! convert to 32 bit units
+    sz_relay = sz_relay / (size + nio_node)
+
+    call MPI_Barrier(modelio, ierr)
     temp = ma%clone(p_relay)
-    write(6,*)'model before barrier'
+    write(blockname,'(A5,I3.3)') "MHEAP",rank
+    sz32 = sz_relay * 3 / 4       ! use 3/4 of relay memory
+    temp = ma%newblock(sz32, blockname)
+    call print_created(temp, blockname)
+    write(blockname,'(A4,I4.4)') "MCIO",rank
+    sz32 = sz_relay / 10
+    temp = ma%newblock(sz32, blockname)
+    call print_created(temp, blockname)
+    write(blockname,'(A4,I4.4)') "MCIO",rank+1000
+    temp = ma%newblock(sz32, blockname)
+    call print_created(temp, blockname)
     call MPI_Barrier(modelio, ierr)
     call flush(6)
     call ma%dump()
-  else  ! ranks 0, 1, nserv-1 : server
+
+  else            ! ranks 0, 1,..., nserv-1 : server and no-op processes
+
     nio_node = -1
-    if(rank < noops) then ! ranks below noops are NO-OP processes
-      status = ioserver_init(model, modelio, allio, nodeio, serverio, nio_node, 'Z')
-    else
-      status = ioserver_init(model, modelio, allio, nodeio, serverio, nio_node, 'O')
-      call IOSERVER_get_winmem(p_base, p_relay, p_server)
+    if(rank < noops) then          ! ranks below noops are NO-OP processes
+      ! no return from ioserver_init in the case of NO-OP processes
+      status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'Z')
+    else                           ! server processes (normally on another node)
+      status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'O')
+      ! io_server_out will return from call
+      call io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
     endif
-    call MPI_Comm_rank(serverio, rank, ierr)
-    call MPI_Comm_size(serverio, size, ierr)
-    write(6,*)'in pseudo IO server, PE',rank+1,' of',size
+
   endif
-  if(IOSERVER_Commisnull(model))    write(6,*)'model    communicator is NULL'
-  if(.not. IOSERVER_Commisnull(model))    write(6,*)'model    communicator is DEFINED'
-  if(IOSERVER_Commisnull(modelio))  write(6,*)'modelio  communicator is NULL'
-  if(.not. IOSERVER_Commisnull(modelio))  write(6,*)'modelio  communicator is DEFINED'
-  if(IOSERVER_Commisnull(allio))    write(6,*)'allio    communicator is NULL'
-  if(.not. IOSERVER_Commisnull(allio))    write(6,*)'allio    communicator is DEFINED'
-  if(IOSERVER_Commisnull(nodeio))   write(6,*)'nodeio   communicator is NULL'
-  if(.not. IOSERVER_Commisnull(nodeio))   write(6,*)'nodeio   communicator is DEFINED'
-  if(IOSERVER_Commisnull(serverio)) write(6,*)'serverio communicator is NULL'
-  if(.not. IOSERVER_Commisnull(serverio)) write(6,*)'serverio communicator is DEFINED'
 777 continue
   call IOSERVER_time_to_quit()
   call mpi_finalize(status)
@@ -77,11 +138,12 @@ end program
 
 subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
   use ISO_C_BINDING
+  use helpers
   use memory_arena_mod
   implicit none
   integer, intent(IN) :: model, allio, nodeio, serverio, nodecom, modelio
   include 'io-server/ioserver.inc'
-  integer :: rank, size, ierr, noderank
+  integer :: rank, size, ierr, noderank, nodesize
   type(C_PTR) :: p_base, p_relay, p_server, temp
   type(memory_arena) :: ma
   integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
@@ -89,34 +151,56 @@ subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
 
   call MPI_Comm_rank(nodeio, rank, ierr)
   call MPI_Comm_size(nodeio, size, ierr)
+  call MPI_Comm_rank(nodecom, noderank, ierr)
+  call MPI_Comm_size(nodecom, nodesize, ierr)
   write(6,*)'in pseudo io-relay, PE',rank+1,' of',size
+  write(6,*)'               node PE',noderank+1,' of', nodesize
 
   call IOSERVER_get_winmem(p_base, p_relay, p_server)
   call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
 
-  if(IOSERVER_Commisnull(model))    write(6,*)'model    communicator is NULL'
-  if(.not. IOSERVER_Commisnull(model))    write(6,*)'model    communicator is DEFINED'
-  if(IOSERVER_Commisnull(modelio))  write(6,*)'modelio  communicator is NULL'
-  if(.not. IOSERVER_Commisnull(modelio))  write(6,*)'modelio  communicator is DEFINED'
-  if(IOSERVER_Commisnull(allio))    write(6,*)'allio    communicator is NULL'
-  if(.not. IOSERVER_Commisnull(allio))    write(6,*)'allio    communicator is DEFINED'
-  if(IOSERVER_Commisnull(nodeio))   write(6,*)'nodeio   communicator is NULL'
-  if(.not. IOSERVER_Commisnull(nodeio))   write(6,*)'nodeio   communicator is DEFINED'
-  if(IOSERVER_Commisnull(serverio)) write(6,*)'serverio communicator is NULL'
-  if(.not. IOSERVER_Commisnull(serverio)) write(6,*)'serverio communicator is DEFINED'
-  call MPI_Comm_rank(nodecom, noderank, ierr)
+  call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+
   if(noderank == 0) then
     shmsz64 = sz_relay - 1024
     temp = ma%create(p_relay, 128, shmsz64)
-    temp = ma%newblock(1024*1024, "HEAP000")
-    temp = ma%newblock(1024*1024, "CIOB000")
-    temp = ma%newblock(1024*1024, "CIOB001")
+    temp = ma%newblock(1024*1024, "RHEAP000")
+    temp = ma%newblock(1024*1024, "RCIOB000")
+    temp = ma%newblock(1024*1024, "RCIOB001")
     call flush(6)
     call ma%dump()
   endif
   write(6,*)'relay before barrier'
   call MPI_Barrier(modelio, ierr)
+  call MPI_Barrier(modelio, ierr)
+  call ma%dump()
 end subroutine io_relay
+
+subroutine io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
+  use ISO_C_BINDING
+  use helpers
+  use memory_arena_mod
+  implicit none
+  integer, intent(IN) :: model, allio, nodeio, serverio, modelio, nodecom
+  include 'io-server/ioserver.inc'
+
+  type(C_PTR) :: p_base, p_relay, p_server
+  integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
+  integer :: rank, size, ierr, noderank, nodesize
+
+  call MPI_Comm_rank(serverio, rank, ierr)
+  call MPI_Comm_size(serverio, size, ierr)
+  call MPI_Comm_rank(nodecom, noderank, ierr)
+  call MPI_Comm_size(nodecom, nodesize, ierr)
+
+  write(6,*)'in pseudo IO server, PE',rank+1,' of',size
+  write(6,*)'         server node PE',noderank+1,' of', nodesize
+  call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+
+  call IOSERVER_get_winmem(p_base, p_relay, p_server)
+  call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
+
+end subroutine io_server_out
 
 subroutine get_local_world(comm, rank, size)
   use ISO_C_BINDING

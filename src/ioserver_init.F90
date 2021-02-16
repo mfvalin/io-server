@@ -321,7 +321,7 @@ subroutine IOSERVER_noop()  !  NO OP loop to park processes with minimal CPU con
 end subroutine IOSERVER_noop
 
 !! F_StArT
-function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_class) result(status)
+function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class) result(status)
 !! F_EnD
   use ioserver_mod
 !! F_StArT
@@ -332,6 +332,7 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_cl
   integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
   integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
   integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+  integer, intent(OUT) :: nodecom     ! communicator for io server PEs             (may be MPI_COMM_NULL)
   integer, intent(IN)  :: nio_node     ! number of io processes per compute node
   character(len=*), intent(IN) :: app_class
   integer :: status
@@ -348,6 +349,7 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_cl
   allio    = MPI_COMM_NULL
   nodeio   = MPI_COMM_NULL
   serverio = MPI_COMM_NULL
+  nodecom  = MPI_COMM_NULL
   status   = NO_COLOR       ! precondition for failure
 
   call MPI_Initialized(initialized, ierr)      ! is MPI library already initialized ?
@@ -405,6 +407,7 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_cl
     serverio = serverio_comm              ! output argument
     ! split serverio_comm by node, PEs on same SMP node
     call MPI_Comm_split_type(serverio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_com ,ierr)
+    nodecom = node_com                              ! server processes on same node
 
     call MPI_Comm_rank(node_com, node_rank, ierr)   ! rank on SMP node
     call MPI_Comm_size(node_com, node_size, ierr)   ! population of SMP node
@@ -424,6 +427,7 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_cl
     modelio      = modelio_comm
     ! split modelio_comm by node, PEs on same SMP node (compute and IO processes)
     call MPI_Comm_split_type(modelio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_com ,ierr)
+    nodecom = node_com
 
     call MPI_Comm_rank(node_com, node_rank, ierr)   ! rank on SMP node
     call MPI_Comm_size(node_com, node_size, ierr)   ! population of SMP node
@@ -495,7 +499,7 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nio_node, app_cl
       call C_F_PROCPOINTER(relay_fn,p)          ! associate procedure pointer with caller supplied address
 
       ! call user supplied relay code
-      call p(model, modelio, allio, nodeio, serverio, node_com)    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
+      call p(model, modelio, allio, nodeio, serverio, nodecom)    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
       call IOSERVER_time_to_quit()              ! activate quit signal for NO-OP PEs
       call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
