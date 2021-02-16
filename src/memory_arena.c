@@ -86,7 +86,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
-#include <immintrin.h>
+// #include <immintrin.h>
 
 #include "io-server/memory_arena.h"
 
@@ -289,14 +289,15 @@ void memory_arena_print_status(
   block_header *bh, *bhnext;
   block_tail *bt;
 
-  fprintf(stderr,"Arena Header, id = %d, address = %p\n", me, ma);
-  fprintf(stderr,"owner       = %8.8x\n",ma->owner);
-  fprintf(stderr,"max entries = %d\n",ma->max_entries);
-  fprintf(stderr,"max size    = %d\n",ma->arena_size);
-  fprintf(stderr,"entries     = %d\n",ma->n_entries);
-  fprintf(stderr,"first free  = %d\n",ma->first_free);
+  fprintf(stdout,"\n==============================================\n");
+  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me, ma);
+  fprintf(stdout,"owner       = %8.8x\n",ma->owner);
+  fprintf(stdout,"max entries = %d\n",ma->max_entries);
+  fprintf(stdout,"max size    = %d\n",ma->arena_size);
+  fprintf(stdout,"entries     = %d\n",ma->n_entries);
+  fprintf(stdout,"first free  = %d\n",ma->first_free);
 
-  fprintf(stderr,"\nSymbol table\n==============================================\n");
+  fprintf(stdout,"\nSymbol table\n");
   for(i = 0 ; i < ma->n_entries ; i++){
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
@@ -318,12 +319,13 @@ void memory_arena_print_status(
       name[j] = dname >> 56;
       dname <<= 8;
     }
-    fprintf(stderr,"%4d: %4d F=%8.8x I=%8d S=%8d (%8d) %s %s %s FW=%8d FWNXT=%8d BW=%8d '%s'\n",
+    fprintf(stdout,"%4d: %4d F=%8.8x I=%8d S=%8d (%8d) %s %s %s FW=%8d FWNXT=%8d BW=%8d '%s'\n",
             i,bh->ix,sym[i].flags,sym[i].data_index,sym[i].data_size,bh->nwd,
             sane ? "T" : "F", ( bh->sign == 0xBEEFF00D ) ? "t" : "f", ( bt->sign == 0xDEADBEEF ) ? "t" : "f",
             bh->fwd, bhnext->fwd, bt->bwd, name);
   }
-  fprintf(stderr,"==============================================\n");
+  fprintf(stdout,"==============================================\n");
+  fflush(stdout);
 }
 
 //F_StArT
@@ -617,7 +619,7 @@ void *memory_block_mark_init(
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
   uint64_t name64 = block_name(name);
-  int32_t i, j;
+  int32_t i;
   void *dataptr = NULL;
 
   i = find_block(ma, sym, name64);
@@ -625,7 +627,7 @@ void *memory_block_mark_init(
 
   while(__sync_val_compare_and_swap(&(sym[i].lock), 0, me) != 0); // lock block
   if(sym[i].flags == 0) sym[i].flags = me;                        // mark as initialized by me
-  j = __sync_val_compare_and_swap(&(sym[i].lock), me, 0);         // unlock block
+  __sync_val_compare_and_swap(&(sym[i].lock), me, 0);         // unlock block
 
   dataptr = &mem64[sym[i].data_index + BlockHeaderSize64];        // pointer to actual data
   return dataptr;

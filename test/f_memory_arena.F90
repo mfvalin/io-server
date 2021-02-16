@@ -3,11 +3,11 @@ program test_memory_arena
   use memory_arena_mod
   implicit none
 
-#define NSYM 128
 #define DBLK 20
-#define STR(a) a//achar(0)
-#define NBLKS 99
-#define XTRA 100
+#define STR(a) trim(a)//achar(0)
+#define NBLKS 399
+#define NSYM (NBLKS+32)
+#define XTRA 10
 
   include 'mpif.h'
 !   include 'io-server/memory_arena.inc'
@@ -29,7 +29,7 @@ program test_memory_arena
   integer, dimension(:), pointer :: fp
   type(memory_arena) :: m
   character(len=8) :: bname
-  type(C_PTR), dimension(0:1024) :: pp
+  type(C_PTR), dimension(0:NBLKS*2) :: pp
 
   call MPI_Init(ierr)
   call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
@@ -37,7 +37,7 @@ program test_memory_arena
   id = m % setid(rank)
 !   id = memory_arena_set_id(rank);
 
-  shmsz64 = 1024 * 1024 * 16       ! 16 MBytes
+  shmsz64 = 1024 * 1024 * 96       ! 96 MBytes
   shmid   = -1
   timeout = 1000                   ! 1 second
 
@@ -103,6 +103,8 @@ program test_memory_arena
   print *,"I am process",rank+1," of",size
   call m % dump()
 
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
   p = m%find(bsize, bflags, "BLOCK000", timeout) ! p = memory_block_find_wait(memadr, bsize, bflags, STR("BLOCK000"), timeout)
   print 1,"BLOCK000 found at address",bsize, bflags,transfer(p,shmaddr)
   p = m%find(bsize, bflags, "BLOCK001", timeout) ! p = memory_block_find_wait(memadr, bsize, bflags, STR("BLOCK001"), timeout)
@@ -114,17 +116,22 @@ program test_memory_arena
   p = m%find("BLOCK004"                        ) ! p = memory_block_find(     memadr, bsize, bflags, STR("BLOCK004"))
   print 1,"BLOCK004 found at address",-1, -1,transfer(p,shmaddr)
 
+  ierr = 0
   do i = rank, NBLKS, size                          ! create blocks
     write(bname,'(A,I4.4)') 'BLCK', i            ! create block name BLCKnnnn
     pp(i) = m%newblock(XTRA+i, bname)             ! create the block
+    if( .not. C_ASSOCIATED(pp(i)) ) ierr = ierr + 1
   enddo
+  if(ierr .ne. 0) then
+    print *,ierr," errors in block creation"
+  endif
   do i = rank, NBLKS, size                          ! fill blocks
     call C_F_POINTER(pp(i), fp, [XTRA+i])
     do j = 1, XTRA+i
       fp(j) = XTRA+i - j
     enddo
-!     print 2, fp
   enddo
+
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
 !   call m % dump()
@@ -134,7 +141,12 @@ program test_memory_arena
     pp(i) = m%find(bname)
     if( C_ASSOCIATED(pp(i)) ) ierr = ierr + 1
   enddo
-  print *,'blocks found =',ierr,', expected =',NBLKS+1
+!   print *,'blocks found =',ierr,', expected =',NBLKS+1
+  if(ierr .ne. NBLKS+1) then
+    print *,'blocks found =',ierr,', expected =',NBLKS+1
+    goto 888
+  endif
+
   jerr = 0
   do i = 0, NBLKS
     call C_F_POINTER(pp(i), fp, [XTRA+i])
@@ -147,12 +159,16 @@ program test_memory_arena
     enddo
     if(ierr > 0) then
       print *,'errors in block',i,' =',ierr
-!       print 2, fp
     endif
   enddo
   print *,'total errors =',jerr
-  
+
+777 continue
   call MPI_Finalize(ierr)
+  stop
+888 continue
+  print *,'ERROR IN TEST'
+  goto 777
 1   format(A,2I10,2X,Z16.16)
 2 format(100I4)
 end program
