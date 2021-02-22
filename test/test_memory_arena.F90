@@ -22,8 +22,12 @@ program test_memory_arena
     end function shmat
   end interface
 
-  integer(C_INT) :: ierr, rank, size, win, id, id2, shmid, bsize, bflags, timeout, i, j, jerr
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, shmaddr, disp_unit
+#if defined(MPI_SHARED)
+  integer(C_INT) :: win
+  integer(KIND=MPI_ADDRESS_KIND) :: winsize, disp_unit
+#endif
+  integer(C_INT) :: ierr, rank, size, id, id2, shmid, bsize, bflags, timeout, i, j, jerr
+  integer(KIND=MPI_ADDRESS_KIND) :: shmaddr
   integer(C_INT64_T) :: shmsz64
   type(C_PTR) :: memadr, p
   integer, dimension(:), pointer :: fp
@@ -170,5 +174,5 @@ program test_memory_arena
   print *,'ERROR IN TEST'
   goto 777
 1   format(A,2I10,2X,Z16.16)
-2 format(100I4)
+! 2 format(100I4)
 end program
