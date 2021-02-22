@@ -123,10 +123,12 @@ module shmem_heap
     procedure :: alloc                  !< allocate a block in a registered heap
 
     !> \return                          0 if O.K., nonzero if error
-    procedure, NOPASS :: free           !< free an allocated block by address in memory
+    procedure, NOPASS :: freebyaddress  !< free an allocated block by address in memory
 
     !> \return                          0 if O.K., nonzero if error
     procedure, NOPASS :: freebymeta     !< free an allocated block using its metadata
+
+    GENERIC   :: free => freebyaddress, freebymeta, freebyoffset
 
     !> \return                           0 if O.K., nonzero if error
     procedure :: freebyoffset           !< free space associated to offset into heap
@@ -549,13 +551,13 @@ module shmem_heap
   
   !> \brief free block by address in memory
   !> <br>example :<br>type(heap) :: h<br>integer(C_INT) :: status<br>type(C_PTR) :: addr<br>
-  !> status = h\%free(addr)
-  function free(addr) result(status)
+  !> status = h\%freebyaddress(addr)
+  function freebyaddress(addr) result(status)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< address of block to free
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
     status = ShmemHeapFreeBlock(addr)
-  end function free 
+  end function freebyaddress 
   
   !> \brief free block by offset in heap
   !> <br>example :<br>type(heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br> integer(C_INT) :: status<br>

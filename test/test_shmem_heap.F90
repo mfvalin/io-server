@@ -27,6 +27,7 @@ program test_shmen_heap
   implicit none
   include 'mpif.h'
   integer :: myrank, nprocs, ierr
+  character(len=128) :: arg
 
   myrank = 0
   nprocs = 1
@@ -36,8 +37,14 @@ program test_shmen_heap
   call mpi_comm_rank(MPI_COMM_WORLD, myrank, ierr)
   print 3,'this is PE', myrank+1, ' of', nprocs
 
-!   call base_test(nprocs, myrank)
-  call relay_test(nprocs, myrank)
+  arg = '0'
+  if(COMMAND_ARGUMENT_COUNT() >= 1) call GET_COMMAND_ARGUMENT(1, arg)
+
+  if(arg(1:1) == '0') then
+    call base_test(nprocs, myrank)
+  else
+    call relay_test(nprocs, myrank)
+  endif
 
   call Mpi_Finalize(ierr)
   stop
