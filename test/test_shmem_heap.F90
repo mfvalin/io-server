@@ -113,6 +113,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   enddo
   mybase = bases(myrank)  ! my own base address
   print 5,'INFO: PE ',myrank,', my base address = ',bases(myrank)
+
 ! ================================= setup of the "model" PE heaps =================================
   if(myrank == 0 .or. myrank == nprocs-1) then  ! relay PE (first rank and last rank)
     do i = 0, nprocs-1
@@ -136,10 +137,11 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
       blk_meta = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
       metas(i) = blk_meta
-      if((.not. (metas(i) == blk_meta)) .or. (metas(i) .ne. blk_meta)) print 6,'FAIL: failed equality check'
+      if((.not. (metas(i) == blk_meta)) .or. (metas(i) .ne. blk_meta)) print 6,'FAIL: failed equality check for block',i
       print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta%k(), blk_meta%r(), metas(i)%dims()
       if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
         print 6,'WARN: allocation failed for block',i       ! failure expected at some point for high rank PEs
+        print 6,'      failed equality check for this block is expected'
         exit                                          ! exit loop as all subsequent allocations would fail (heap full)
       endif
       blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
@@ -232,7 +234,6 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
-
   call MPI_Win_free(win, ierr)
 
   return
@@ -274,11 +275,13 @@ subroutine base_test(nprocs, myrank)
   print 3,'==================== BASIC TEST ===================='
   winsize = 1024*1024
   disp_unit = C_SIZEOF(he)                          ! size of a heap element
+  print *,'AVANT: winsize =',winsize,' disp_unit =',disp_unit
   call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
   call MPI_Win_shared_query(win, 0, mysize, disp_unit, mybase,   ierr)  ! get my base address
-
+  print *,'APRES: winsize =',winsize,' disp_unit =',disp_unit
   p = transfer(mybase, C_NULL_PTR)
   call c_f_pointer(p, ram,[winsize/4])              ! ram points to shared memory segment
+
   if(myrank == 0) then
     ram(1) = MAXINDEXES                             ! post index table size
   endif
@@ -297,16 +300,17 @@ subroutine base_test(nprocs, myrank)
 
   if(myrank == 0) then                              ! create, initialize, register the heap
     ixtab = -1
-    p = h%create(p, 1024*8*C_SIZEOF(he))            ! create heap, 32 KBytes
+    p = h % create(p, 1024*8*C_SIZEOF(he))          ! create heap, 32 KBytes
     do i = 1, 10
 !       blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
-      blk_meta = sm_allocate(h, demo, [1022+i])
+!       blk_meta = sm_allocate(h, demo, [1022+i])
+      blk_meta = h % allocate(demo, [1022+i])
       blocks(i) = C_LOC(demo(1))
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
         exit
       endif
-      ixtab(i) = h%offset(blocks(i))
+      ixtab(i) = h % offset(blocks(i))
       print *,'ixtab =',ixtab(i),h%offset(h%address(ixtab(i))),h%offset(blocks(i))  ! test of address and offset methods
     enddo
   endif
@@ -317,10 +321,10 @@ subroutine base_test(nprocs, myrank)
     do i = 1, MAXINDEXES
       if(ixtab(i) > 0 .and. myrank == nprocs - 1) print *,'ixtab',i,ixtab(i)
     enddo
-    i = h%register(p)                               ! register heap on this process (other than process 0)
+    i = h % register(p)                             ! register heap on this process (other than process 0)
     print *,'process',myrank,', nheaps =',i
     print 1 , 'RAM address  :',loc(ram), ', HEAP address :',transfer(p,baseptr)
-    status = h%check(free_blocks, free_space, used_blocks, used_space)
+    status = h % check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
            ,free_space,' free bytes,',used_space,' bytes in use'
   endif
@@ -330,7 +334,8 @@ subroutine base_test(nprocs, myrank)
   if(myrank .ne. 0) then
     do i = myrank, used_blocks-1,nprocs-1           ! each process will free some blocks
       if(ixtab(i) > 0) then                         ! block allocated previously by process 0
-        status = h%freebyoffset(ixtab(i))
+!         status = h % freebyoffset(ixtab(i))
+        status = h % free(ixtab(i))                 ! use GENERIC procedure to free blocks
         print 3,'h%free status =',status,', offset =',h%offset(h%address(ixtab(i)))
         if(status == 0) ixtab(i) = 0                ! set index to free
       endif
@@ -339,12 +344,14 @@ subroutine base_test(nprocs, myrank)
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! allow all free operations to complete
 
-  status = h%check(free_blocks, free_space, used_blocks, used_space)
+  status = h % check(free_blocks, free_space, used_blocks, used_space)
   print 2,free_blocks,' free block(s),',used_blocks,' used block(s)' &
          ,free_space,' free bytes,',used_space,' bytes in use'
   if(myrank == 0) then
     print 4, 'IXTAB(1:10) =',ixtab(1:10)
   endif
+
+777 continue
 
   call MPI_Win_free(win, ierr)
 

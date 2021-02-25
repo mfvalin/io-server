@@ -1,6 +1,9 @@
 module helpers
   use ISO_C_BINDING
-  contains
+  include 'io-server/ioserver.inc'
+
+ contains
+
 subroutine print_created(temp, name)
   implicit none
   type(C_PTR), intent(IN), value :: temp
@@ -28,7 +31,7 @@ end subroutine print_comm
 subroutine print_comms(model, modelio, allio, nodeio, serverio, nodecom)
   implicit none
   integer, intent(IN) :: model, allio, nodeio, serverio, modelio, nodecom
-  include 'io-server/ioserver.inc'
+!   include 'io-server/ioserver.inc'
   call print_comm(IOSERVER_Commisnull(model),    'model')
   call print_comm(IOSERVER_Commisnull(modelio),  'modelio')
   call print_comm(IOSERVER_Commisnull(allio),    'allio')
@@ -45,8 +48,6 @@ program pseudomodelandserver
   use memory_arena_mod
   implicit none
   external io_relay
-  include 'io-server/ioserver.inc'
-!   include 'io-server/memory_arena.inc'
   integer :: status
   integer :: model, allio, nodeio, serverio, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, nserv, ierr, noops, noderank, nodesize
@@ -57,8 +58,10 @@ program pseudomodelandserver
   integer :: sz32
   type(memory_arena) :: ma
   character(len=8) :: blockname
+  type(comm_rank_size) :: local_crs
 
   call mpi_init(status)
+  local_crs = COMM_RANK_SIZE_NULL
 
   call IOSERVER_debug(1)            ! activate debug mode
 
@@ -74,7 +77,7 @@ program pseudomodelandserver
 
   call get_local_world(comm, rank, size)
   me = ma%setid(rank)
-  error = ioserver_set_winsizes(2*MBYTE, GBYTE/2, GBYTE)   !  base, relay, server
+  error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
   if(error) then
     write(6,*)'ERROR: bad window sizes'
     goto 777
@@ -117,6 +120,7 @@ program pseudomodelandserver
     call MPI_Barrier(modelio, ierr)
     call flush(6)
     call ma%dump()
+    write(6,*)'END: pseudo compute, PE',noderank
 
   else            ! ranks 0, 1,..., nserv-1 : server and no-op processes
 
@@ -133,6 +137,7 @@ program pseudomodelandserver
   endif
 777 continue
   call IOSERVER_time_to_quit()
+  write(6,*)'FINAL:, PE',noderank
   call mpi_finalize(status)
 end program
 
@@ -142,7 +147,7 @@ subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
   use memory_arena_mod
   implicit none
   integer, intent(IN) :: model, allio, nodeio, serverio, nodecom, modelio
-  include 'io-server/ioserver.inc'
+!   include 'io-server/ioserver.inc'
   integer :: rank, size, ierr, noderank, nodesize
   type(C_PTR) :: p_base, p_relay, p_server, temp
   type(memory_arena) :: ma
@@ -169,11 +174,16 @@ subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
     temp = ma%newblock(1024*1024, "RCIOB001")
     call flush(6)
     call ma%dump()
+  else
+    temp = ma%clone(p_relay)
   endif
   write(6,*)'relay before barrier'
   call MPI_Barrier(modelio, ierr)
   call MPI_Barrier(modelio, ierr)
+  write(6,*)'relay after barrier'
+  call flush(6)
   call ma%dump()
+  write(6,*)'END: pseudo relay, PE',noderank
 end subroutine io_relay
 
 subroutine io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
@@ -182,7 +192,7 @@ subroutine io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
   use memory_arena_mod
   implicit none
   integer, intent(IN) :: model, allio, nodeio, serverio, modelio, nodecom
-  include 'io-server/ioserver.inc'
+!   include 'io-server/ioserver.inc'
 
   type(C_PTR) :: p_base, p_relay, p_server
   integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
@@ -199,6 +209,7 @@ subroutine io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
 
   call IOSERVER_get_winmem(p_base, p_relay, p_server)
   call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
+  write(6,*)'END: pseudo IO server, PE'
 
 end subroutine io_server_out
 

@@ -19,26 +19,33 @@ module ioserver_mod
   include 'mpif.h'
 !! F_StArT
 !!
+  integer(C_SIZE_T), parameter :: KBYTE = 1024
   integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
   integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
 
-  integer, parameter :: NO_COLOR     = 1
+  integer, parameter :: NO_COLOR     = 0
   integer, parameter :: MODEL_COLOR  = 1
   integer, parameter :: RELAY_COLOR  = 2
   integer, parameter :: SERVER_COLOR = 4
   integer, parameter :: OUTPUT_COLOR = 8
   integer, parameter :: INPUT_COLOR  = 16
   integer, parameter :: INOUT_COLOR  = INPUT_COLOR + OUTPUT_COLOR
+  integer, parameter :: NODE_COLOR   = 4096
   integer, parameter :: NO_OP_COLOR  = 8192   ! MUST BE THE HIGHEST VALUE
-!!
-!! F_EnD
+
+  integer, parameter :: CONTROL_MEMORY = 1000
+  integer, parameter :: BASE_MEMORY    = 1001
+  integer, parameter :: RELAY_MEMORY   = 1002
+  integer, parameter :: SERVER_MEMORY  = 1003
 
   type :: comm_rank_size
-    integer :: comm = MPI_COMM_NULL
+    integer :: comm = -1
     integer :: rank = -1
     integer :: size = 0
   end type
-  type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(MPI_COMM_NULL, -1, 0)
+  type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
+!!
+!! F_EnD
 
   type :: ctrl_shared_memory
     integer :: time_to_quit = 0
@@ -93,11 +100,11 @@ module ioserver_mod
   type(C_FUNPTR) :: relay_fn = C_NULL_FUNPTR
 
   interface
-    function sleep(nsec) result(ok) BIND(C,name='sleep')
+    function sleep(nsec) result(left) BIND(C,name='sleep')
       import :: C_INT
       implicit none
-      integer(C_INT), value :: nsec
-      integer :: ok
+      integer(C_INT), intent(IN), value :: nsec
+      integer(C_INT) :: left
     end function sleep
   end interface
 
@@ -135,6 +142,82 @@ end function IOSERVER_is_time_to_quit
 !!
 !! F_EnD
 
+function server_set_winsize(wkind, sz) result(status)  !  set shared memory area sizes
+  implicit none
+  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+  integer(C_SIZE_T), intent(IN) :: sz        ! shared memory area size
+  logical :: status                          ! true if there was an error
+
+  status = .true.
+  if(sz <=0) return
+
+  select case (wkind)
+    case(CONTROL_MEMORY)
+      if(sz > KBYTE * 32) then
+        ctrlsiz = sz                   ! control memory (normally very small)
+        status = .false.
+      endif
+    case(BASE_MEMORY)
+      if(sz > MBYTE) then
+        basesiz = sz                   ! 1 sided window on relay PEs
+        status = .false.
+      endif
+    case(RELAY_MEMORY)
+      if(sz > MBYTE * 128) then
+        relaysiz = sz                  ! memory shared between relay and compute PEs
+        status = .false.
+      endif
+    case(SERVER_MEMORY)
+      if(sz > MBYTE * 128) then
+        serversiz = sz                 ! shared memory and window on server PEs
+        status = .false.
+      endif
+    case DEFAULT
+      status = .true.
+  end select
+  return
+end function server_set_winsize
+
+function server_get_winsize(wkind) result(sz)  !  get shared memory area sizes
+  implicit none
+  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+  integer(C_SIZE_T)             :: sz
+
+  select case (wkind)
+    case(CONTROL_MEMORY)
+      sz = ctrlsiz
+    case(BASE_MEMORY)
+      sz = basesiz
+    case(RELAY_MEMORY)
+      sz = relaysiz
+    case(SERVER_MEMORY)
+      sz = serversiz
+    case DEFAULT
+      sz = 0
+  end select
+  return
+end function server_get_winsize
+
+function server_get_winptr(wkind) result(ptr)  !  get shared memory area sizes
+  implicit none
+  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+  type(C_PTR)                   :: ptr
+
+  select case (wkind)
+    case(CONTROL_MEMORY)
+      ptr = ctrlmem
+    case(BASE_MEMORY)
+      ptr = basemem
+    case(RELAY_MEMORY)
+      ptr = relaymem
+    case(SERVER_MEMORY)
+      ptr = servermem
+    case DEFAULT
+      ptr = C_NULL_PTR
+  end select
+  return
+end function server_get_winptr
+
 end module ioserver_mod
 
 !! F_StArT
@@ -150,6 +233,24 @@ subroutine IOSERVER_debug(mode) BIND(C,name='IOSERVER_debug')   ! set io server 
   print *,'INFO: debug mode =', debug_mode
 !! F_StArT
 end subroutine IOSERVER_debug
+!!
+!! F_EnD
+
+!! F_StArT
+function IOSERVER_CRSisnull(crs) result(status)   !  is this a NULL communicator combo ?
+!! F_EnD
+  use ioserver_mod
+!! F_StArT
+!! import :: comm_rank_size
+  implicit none
+  type(comm_rank_size), intent(INOUT) :: crs
+  logical :: status
+!! F_EnD
+  status = (crs % rank < 0 .or. crs % size <= 0)
+  if(status) crs % comm = MPI_COMM_NULL
+  return
+!! F_StArT
+end function IOSERVER_CRSisnull
 !!
 !! F_EnD
 
@@ -170,28 +271,58 @@ end function IOSERVER_Commisnull
 !! F_EnD
 
 !! F_StArT
-function IOSERVER_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
+function IOSERVER_set_winsize(wkind, sz) result(status)  !  set shared memory area sizes
 !! F_EnD
   use ioserver_mod
 !! F_StArT
 !! import :: C_SIZE_T
   implicit none
-  integer(C_SIZE_T), intent(IN) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-  integer(C_SIZE_T), intent(IN) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-  integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-  logical :: status
+  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+  integer(C_SIZE_T), intent(IN) :: sz        ! shared memory area size
+  logical :: status                          ! true if there was an error
 !! F_EnD
-  status = (sz_base >= MBYTE .and. sz_relay >= MBYTE .and. sz_server >= MBYTE)
-  if(.not. status) return     ! ERROR
 
-  basesiz   = sz_base
-  relaysiz  = sz_relay
-  serversiz = sz_server
-  status = .false.
-  
+  status = server_set_winsize(wkind, sz)
+
   return
 !! F_StArT
-end function IOSERVER_winsizes
+end function IOSERVER_set_winsize
+!!
+!! F_EnD
+
+!! F_StArT
+function IOSERVER_get_winsize(wkind) result(sz)  !  get shared memory area sizes
+!! F_EnD
+  use ioserver_mod
+!! F_StArT
+!! import :: C_SIZE_T
+  implicit none
+  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+  integer(C_SIZE_T)             :: sz
+!! F_EnD
+  sz = server_get_winsize(wkind)
+
+  return
+!! F_StArT
+end function IOSERVER_get_winsize
+!!
+!! F_EnD
+
+!! F_StArT
+function IOSERVER_get_win_ptr(wkind) result(ptr)  !  get shared memory area address
+!! F_EnD
+  use ioserver_mod
+!! F_StArT
+!! import :: C_PTR
+  implicit none
+  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+  type(C_PTR)                   :: ptr
+!! F_EnD
+  ptr = server_get_winptr(wkind)
+
+  return
+!! F_StArT
+end function IOSERVER_get_win_ptr
 !!
 !! F_EnD
 
@@ -207,13 +338,14 @@ function IOSERVER_set_winsizes(sz_base, sz_relay, sz_server) result(status)  !  
   integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
   logical :: status
 !! F_EnD
-  status = (sz_base >= MBYTE .and. sz_relay >= MBYTE .and. sz_server >= MBYTE)
-  if(.not. status) return     ! ERROR
+  status = server_set_winsize(BASE_MEMORY, sz_base)
+  if(status) return
 
-  basesiz   = sz_base
-  relaysiz  = sz_relay
-  serversiz = sz_server
-  status = .false.
+  status = server_set_winsize(RELAY_MEMORY, sz_relay)
+  if(status) return
+
+  status = server_set_winsize(SERVER_MEMORY, sz_server)
+  if(status) return
   
   return
 !! F_StArT
@@ -233,9 +365,9 @@ subroutine IOSERVER_get_winsizes(sz_base, sz_relay, sz_server) !  get communicat
   integer(C_SIZE_T), intent(OUT) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
 !! F_EnD
 
-  sz_base   = basesiz
-  sz_relay  = relaysiz
-  sz_server = serversiz
+  sz_base   = server_get_winsize(BASE_MEMORY)
+  sz_relay  = server_get_winsize(RELAY_MEMORY)
+  sz_server = server_get_winsize(SERVER_MEMORY)
   
   return
 !! F_StArT
@@ -244,7 +376,7 @@ end subroutine IOSERVER_get_winsizes
 !! F_EnD
 
 !! F_StArT
-subroutine IOSERVER_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area sizes
+subroutine IOSERVER_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area addresses
 !! F_EnD
   use ioserver_mod
 !! F_StArT
@@ -256,9 +388,9 @@ subroutine IOSERVER_get_winmem(p_base, p_relay, p_server) !  get communication w
 !! F_EnD
   integer(C_INTPTR_T) :: t
 
-  p_base   = basemem
-  p_relay  = relaymem
-  p_server = servermem
+  p_base   = server_get_winptr(BASE_MEMORY)
+  p_relay  = server_get_winptr(RELAY_MEMORY)
+  p_server = server_get_winptr(SERVER_MEMORY)
   if(debug_mode) then
     if(C_ASSOCIATED(p_base))         print 1,'DEBUG: basemem   is DEFINED',transfer(p_base,t),' size =',basesiz/1024/1024,' MB'
     if(.not. C_ASSOCIATED(p_base))   print *,'DEBUG: basemem   is NULL'
@@ -315,6 +447,7 @@ subroutine IOSERVER_noop()  !  NO OP loop to park processes with minimal CPU con
     if(debug_mode) print *,'MSG: SLEEP LOOP'
     ierr = sleep(1)
   enddo
+  write(6,*)'FINAL:, NO-OP',global_rank
   call MPI_Finalize(ierr)
   stop
 
@@ -332,17 +465,19 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
   integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
   integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
   integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-  integer, intent(OUT) :: nodecom     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-  integer, intent(IN)  :: nio_node     ! number of io processes per compute node
+  integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
+  integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
   character(len=*), intent(IN) :: app_class
   integer :: status
 !! F_EnD
-  integer :: color, temp_comm, ierr, temp_win, temp, iocolor
+  integer :: color, temp_comm, ierr, temp, iocolor
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, win_base
   logical :: initialized
   type(ctrl_shared_memory), pointer :: main
   procedure(), pointer :: p
-
+  integer, dimension(:), pointer :: f_win_base
+  type(C_PTR) :: c_win_base
+#include <iso_c_binding_extras.hf>
   ! 2 (model or server PE) or 3 (relay PE) of these 5 communicators will be true upon return from subroutine
   model    = MPI_COMM_NULL  ! preset all communicators to the NULL communicator
   modelio  = MPI_COMM_NULL
@@ -369,10 +504,9 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
   call MPI_Comm_rank(smp_comm, smp_rank, ierr)                  ! rank on SMP node
 
   ! allocate shared memory segment used for control, communicator = smp_comm
-  winsize = 0
-  if(smp_rank == 0) winsize = ctrlsiz                            ! size is supplied by local rank 0 only
-  call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, smp_comm, win_base, ctrlwin, ierr)
-  call MPI_Win_shared_query(ctrlwin, 0, ctrlsiz, disp_unit, win_base, ierr)   ! get base address of rank 0 memory
+  call RPN_Win_allocate_shared(ctrlsiz, disp_unit, MPI_INFO_NULL, smp_comm, win_base, ctrlwin, ierr)
+
+  if(debug_mode) print *,'DEBUG: ctrlsiz, smp_rank, ierr =',ctrlsiz, smp_rank, ierr
   ! ctrlwin is no longer used after this query
   ctrlmem = transfer(win_base, C_NULL_PTR)
   call C_F_POINTER(ctrlmem, main)                ! main control structure points to shared memory at ctrlmem
@@ -414,11 +548,17 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
     ! for now, node_size should be equal to serverio_size
 
     ! allocate shared memory used for intra node communication between server PEs and 1 sided get/put with relay PEs
-    winsize = 0
-    if(node_rank == 0) winsize  = serversiz           ! size is supplied by node rank 0
-    call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, node_com, win_base, serverwin, ierr)
-    call MPI_Win_shared_query(serverwin, 0, serversiz, disp_unit, win_base, ierr)   ! get base address of rank 0 memory
-    servermem = transfer(win_base, C_NULL_PTR)        ! base address 
+    if(debug_mode) print *,'DEBUG: before MPI_Win_allocate_shared serverwin, size, rank =',serversiz, node_rank
+    call RPN_Win_allocate_shared(serversiz, disp_unit, MPI_INFO_NULL, node_com, win_base, serverwin, ierr)
+    if(debug_mode) print *,'DEBUG: after MPI_Win_allocate_shared serverwin, size, rank, err =',serversiz, node_rank, ierr
+    if(ierr == MPI_SUCCESS) then
+      if(debug_mode) print *,'DEBUG: serverwin query, ierr =', ierr, serversiz
+      servermem = transfer(win_base, C_NULL_PTR)        ! base address 
+      winsize = serversiz
+    else
+      print *,"ERROR: IO server processes failed to allocate shared memory"
+      servermem = C_NULL_PTR
+    endif
     ! serverwin will never be used after this point, all we are interested in is the shared memory
 
   else                                    ! model compute or IO relay process
@@ -433,23 +573,33 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
     call MPI_Comm_size(node_com, node_size, ierr)   ! population of SMP node
 
     ! allocate shared memory window used for intra node communication between model and relay PEs
-    winsize = 0
-    if(node_rank == 0) winsize  = relaysiz           ! size is supplied by node rank 0
-    call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, node_com, win_base, relaywin, ierr)
-    call MPI_Win_shared_query(relaywin, 0, relaysiz, disp_unit, win_base, ierr)   ! get base address of rank 0 memory
-    relaymem = transfer(win_base, C_NULL_PTR)        ! base address 
+!     if(node_rank == 0) winsize  = relaysiz           ! size is supplied by node rank 0
+    if(debug_mode) print *,'DEBUG: before MPI_Win_allocate_shared relaywin, size, rank =',relaysiz,node_rank
+    call RPN_Win_allocate_shared(relaysiz, disp_unit, MPI_INFO_NULL, node_com, win_base, relaywin, ierr)
+    if(debug_mode) print *,'DEBUG: after MPI_Win_allocate_shared relaywin, size, rank =',relaysiz,node_rank
+    if(ierr == MPI_SUCCESS) then
+!       call MPI_Win_shared_query(relaywin, 0, relaysiz, disp_unit, win_base, ierr)   ! get base address of rank 0 memory
+      if(debug_mode) print *,'DEBUG: relaywin query, ierr =', ierr, serversiz
+      relaymem = transfer(win_base, C_NULL_PTR)        ! base address 
+    else
+      print *,"ERROR: relay processes failed to allocate shared memory"
+      relaymem = C_NULL_PTR
+    endif
     ! relaywin will no longer be needed nor used after this point
 
     ! spread the nio_node relay PEs across the node (lowest and highest node ranks)
     if(node_rank >= (nio_node/2) .and. node_rank < (node_size - ((nio_node+1)/2))) then   ! model compute process
       color  = MODEL_COLOR
-      if(debug_mode) print *,'DEBUG: model compute process, node rank =',node_rank,node_size,nio_node/2,(node_size - ((nio_node+1)/2))
+      if(debug_mode) &
+          print *,'DEBUG: model compute process, node rank =', &
+                  node_rank,node_size,nio_node/2,(node_size - ((nio_node+1)/2))
     else                                                                                     ! relay IO process
       color = RELAY_COLOR  ! relay IO process
       if(debug_mode) print *,'DEBUG: IO relay process, node rank =',node_rank,node_size,nio_node/2,(node_size - ((nio_node+1)/2))
       ! not much memory is needed on the relay PEs for the remote IO window, allocate it
       winsize = basesiz           ! 1 sided window size for relay <-> server PEs on relay PEs
       call MPI_Alloc_mem(winsize, MPI_INFO_NULL, win_base, ierr)     ! allocate memory through MPI library for 1 sided get/put with server PEs
+      if(debug_mode) print *,'DEBUG: after MPI_Alloc_mem, rank, ierr, base =',smp_rank,ierr, win_base
     endif
 
     call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)    ! split into model compute and IO relay processes
@@ -485,8 +635,13 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
       status = SERVER_COLOR                     ! IO server
     endif
 
-    ! winsize and win_base have been allocated previously, allocate 1 sided window for relay and server PEs
-    call MPI_Win_create(win_base, winsize, disp_unit, MPI_INFO_NULL, allio_com, allio_win, ierr)
+    ! winsize and win_base have been obtained previously, allocate 1 sided window for relay and server PEs
+    call MPI_Barrier(allio_com, ierr)
+    if(debug_mode) print *,'DEBUG: before MPI_Win_create, rank , base, size, ierr', smp_rank,win_base,winsize, ierr
+    c_win_base = transfer(win_base, c_win_base)
+    call C_F_POINTER(c_win_base, f_win_base, [winsize/4])   !  make honest Fortran pointer for call to MPI_Win_create
+    call MPI_Win_create(f_win_base, winsize, disp_unit, MPI_INFO_NULL, allio_com, allio_win, ierr)
+    if(debug_mode) print *,'DEBUG: after MPI_Win_create, rank, ierr, base = smp_rank', smp_rank, ierr, win_base
     basemem = transfer(win_base, C_NULL_PTR)    ! base address of local window (address in integer -> C pointer)
     basesiz = winsize                           ! basemem same as servermem for server PEs
 
@@ -502,6 +657,7 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
       call p(model, modelio, allio, nodeio, serverio, nodecom)    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
       call IOSERVER_time_to_quit()              ! activate quit signal for NO-OP PEs
+      write(6,*)'FINAL:, relay PE',node_rank
       call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
       stop
 
@@ -517,7 +673,48 @@ function IOSERVER_init(model, modelio, allio, nodeio, serverio, nodecom, nio_nod
 end function IOSERVER_init
 !!
 !! F_EnD
+! module errors
+!   USE ISO_C_BINDING
+!   
+!   integer(C_INT) :: errno
+!   bind(C,name='errno') :: errno
+!   
+! end module
+! same interface as MPI_Win_allocate_shared
+subroutine RPN_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, win, ierror)
+  USE ISO_C_BINDING
+!   use errors
+  use ioserver_mod
+  implicit none
+  include 'io-server/memory_arena.inc'
+!   include 'mpif.h'
+  INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize
+  INTEGER, INTENT(IN) :: disp_unit_, info, comm
+  INTEGER, INTENT(OUT) :: win, ierror
+  INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(OUT) :: baseptr
 
+  integer :: myrank, shmid
+  integer(C_INT64_T) :: siz
+  type(C_PTR) :: p
+
+  baseptr = 0
+  win = MPI_WIN_NULL
+  ierror = MPI_ERROR
+  if(info .ne. MPI_INFO_NULL) return
+  if(disp_unit_ == 0) return
+
+  call MPI_Comm_rank(comm, myrank, ierror)
+  if(myrank == 0) then
+    siz = wsize
+    p = memory_allocate_shared(shmid, siz)
+  endif
+  call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, comm, ierror)
+  if(myrank .ne. 0) then
+    p = memory_address_from_id(shmid)
+  endif
+  baseptr = transfer(p, baseptr)
+  ierror = MPI_SUCCESS
+end subroutine RPN_Win_allocate_shared
 !! F_StArT
 !! end interface
 !! F_EnD

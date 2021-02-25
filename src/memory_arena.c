@@ -865,7 +865,7 @@ printf("MA = %p, id = %d\n",MA, MA->arena_id);
 // !> ptr = memory_address_from_id(shmid)
 // function memory_address_from_id(shmid) result(ptr) BIND(C,name='memory_address_from_id')
 //   import :: C_PTR, C_INT
-//   integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (see shmget)
+//   integer(C_INT), intent(IN), value :: shmid           !< shared memory id of segment (see shmget)
 //   type(C_PTR) :: ptr                             !< local memory addres of shared memory segment
 // end function memory_address_from_id
 //
@@ -879,7 +879,9 @@ void *memory_address_from_id(
   )
 //C_EnD
 {
-  return shmat(shmid, NULL, 0);
+  void *p = shmat(shmid, NULL, 0) ;
+//   printf("shmid = %d, address = %p\n",shmid, p);
+  return p;
 }
 
 //F_StArT

@@ -200,7 +200,7 @@ end function master_arena_create_shared
 !> ptr = memory_address_from_id(shmid)
 function memory_address_from_id(shmid) result(ptr) BIND(C,name='memory_address_from_id')
 import :: C_PTR, C_INT
-integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (see shmget)
+integer(C_INT), intent(IN), value :: shmid           !< shared memory id of segment (see shmget)
 type(C_PTR) :: ptr                             !< local memory addres of shared memory segment
 end function memory_address_from_id
 

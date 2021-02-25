@@ -21,17 +21,31 @@
 
 ! This file has been generated from ioserver_init.F90
 
+integer(C_SIZE_T), parameter :: KBYTE = 1024
 integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
 integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
 
-integer, parameter :: NO_COLOR     = 1
+integer, parameter :: NO_COLOR     = 0
 integer, parameter :: MODEL_COLOR  = 1
 integer, parameter :: RELAY_COLOR  = 2
 integer, parameter :: SERVER_COLOR = 4
 integer, parameter :: OUTPUT_COLOR = 8
 integer, parameter :: INPUT_COLOR  = 16
 integer, parameter :: INOUT_COLOR  = INPUT_COLOR + OUTPUT_COLOR
+integer, parameter :: NODE_COLOR   = 4096
 integer, parameter :: NO_OP_COLOR  = 8192   ! MUST BE THE HIGHEST VALUE
+
+integer, parameter :: CONTROL_MEMORY = 1000
+integer, parameter :: BASE_MEMORY    = 1001
+integer, parameter :: RELAY_MEMORY   = 1002
+integer, parameter :: SERVER_MEMORY  = 1003
+
+type :: comm_rank_size
+integer :: comm = -1
+integer :: rank = -1
+integer :: size = 0
+end type
+type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
 
 interface
 
@@ -49,20 +63,40 @@ import :: C_INT
 integer(C_INT), intent(IN), value :: mode
 end subroutine IOSERVER_debug
 
+function IOSERVER_CRSisnull(crs) result(status)   !  is this a NULL communicator combo ?
+import :: comm_rank_size
+implicit none
+type(comm_rank_size), intent(INOUT) :: crs
+logical :: status
+end function IOSERVER_CRSisnull
+
 function IOSERVER_Commisnull(comm) result(status)   !  is this communicator the NULL communicator ?
 implicit none
 integer, intent(IN) :: comm
 logical :: status
 end function IOSERVER_Commisnull
 
-function IOSERVER_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
+function IOSERVER_set_winsize(wkind, sz) result(status)  !  set shared memory area sizes
 import :: C_SIZE_T
 implicit none
-integer(C_SIZE_T), intent(IN) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-integer(C_SIZE_T), intent(IN) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-logical :: status
-end function IOSERVER_winsizes
+integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+integer(C_SIZE_T), intent(IN) :: sz        ! shared memory area size
+logical :: status                          ! true if there was an error
+end function IOSERVER_set_winsize
+
+function IOSERVER_get_winsize(wkind) result(sz)  !  get shared memory area sizes
+import :: C_SIZE_T
+implicit none
+integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+integer(C_SIZE_T)             :: sz
+end function IOSERVER_get_winsize
+
+function IOSERVER_get_win_ptr(wkind) result(ptr)  !  get shared memory area address
+import :: C_PTR
+implicit none
+integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
+type(C_PTR)                   :: ptr
+end function IOSERVER_get_win_ptr
 
 function IOSERVER_set_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
 import :: C_SIZE_T
@@ -81,7 +115,7 @@ integer(C_SIZE_T), intent(OUT) :: sz_relay       ! shared memory size for relay 
 integer(C_SIZE_T), intent(OUT) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
 end subroutine IOSERVER_get_winsizes
 
-subroutine IOSERVER_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area sizes
+subroutine IOSERVER_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area addresses
 import :: C_PTR
 implicit none
 type(C_PTR), intent(OUT) :: p_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
@@ -107,8 +141,8 @@ integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs   
 integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
 integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
 integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-integer, intent(OUT) :: nodecom     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-integer, intent(IN)  :: nio_node     ! number of io processes per compute node
+integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
+integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
 character(len=*), intent(IN) :: app_class
 integer :: status
 end function IOSERVER_init
