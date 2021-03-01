@@ -1,0 +1,32 @@
+!  helpers for C and FORTRAN programming
+!  Copyright (C) 2021  Recherche en Prevision Numerique
+! 
+!  This software is free software; you can redistribute it and/or
+!  modify it under the terms of the GNU Lesser General Public
+!  License as published by the Free Software Foundation,
+!  version 2.1 of the License.
+! 
+!  This software is distributed in the hope that it will be useful,
+!  but WITHOUT ANY WARRANTY; without even the implied warranty of
+!  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+!  Lesser General Public License for more details.
+!
+! SERIALIZING / DESERIALIZING macros. there is a set of macros for scalar objets and a set for array objects
+! terminology borrowed from Python
+! item is an array expression for PICKLE_ARRAY and UNPICKLE_ARRAY
+! item MUST be a scalar (rank 0) expression for PICKLE_SCALAR and UNPICKLE_SCALAR
+!
+
+! transfer all bits from item into jar starting at jar(bottom) 
+#define PICKLE_SCALAR(jar, bottom, top, item)   jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)) = transfer(item, jar) ;\
+                                                top = bottom + storage_size(item)/storage_size(jar)
+
+#define PICKLE_ARRAY(jar, bottom, top, item)    jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)*size(item)) = transfer(item, jar) ;\
+                                                top = bottom + storage_size(item)/storage_size(jar)*size(item)
+
+! transfer all bits from jar starting at jar(bottom) into item
+#define UNPICKLE_SCALAR(jar, bottom, top,item) item = transfer(jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)), item) ;\
+                                               top = bottom + storage_size(item)/storage_size(jar)
+
+#define UNPICKLE_ARRAY(jar, bottom, top,item)  item = transfer(jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)*size(item)), item) ;\
+                                               top = bottom + storage_size(item)/storage_size(jar)*size(item)
