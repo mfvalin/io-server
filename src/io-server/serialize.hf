@@ -17,16 +17,16 @@
 ! item MUST be a scalar (rank 0) expression for PICKLE_SCALAR and UNPICKLE_SCALAR
 !
 
-! transfer all bits from item into jar starting at jar(bottom) 
-#define PICKLE_SCALAR(jar, bottom, top, item)   jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)) = transfer(item, jar) ;\
-                                                top = bottom + storage_size(item)/storage_size(jar)
+! transfer all bits from item into jar starting at jar(offset) 
+#define PICKLE_SCALAR(jar, offset, top, item)   jar(offset+1:offset + storage_size(item)/storage_size(jar)) = transfer(item, jar) ;\
+                                                top = offset + storage_size(item)/storage_size(jar)
 
-#define PICKLE_ARRAY(jar, bottom, top, item)    jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)*size(item)) = transfer(item, jar) ;\
-                                                top = bottom + storage_size(item)/storage_size(jar)*size(item)
+#define PICKLE_ARRAY(jar, offset, top, item)    jar(offset+1:offset + storage_size(item)/storage_size(jar)*size(item)) = transfer(item, jar) ;\
+                                                top = offset + storage_size(item)/storage_size(jar)*size(item)
 
-! transfer all bits from jar starting at jar(bottom) into item
-#define UNPICKLE_SCALAR(jar, bottom, top,item) item = transfer(jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)), item) ;\
-                                               top = bottom + storage_size(item)/storage_size(jar)
+! transfer all bits from jar starting at jar(offset) into item
+#define UNPICKLE_SCALAR(jar, offset, top,item) item = transfer(jar(offset+1:offset + storage_size(item)/storage_size(jar)), item) ;\
+                                               top = offset + storage_size(item)/storage_size(jar)
 
-#define UNPICKLE_ARRAY(jar, bottom, top,item)  item = transfer(jar(bottom:bottom-1 + storage_size(item)/storage_size(jar)*size(item)), item) ;\
-                                               top = bottom + storage_size(item)/storage_size(jar)*size(item)
+#define UNPICKLE_ARRAY(jar, offset, top,item)  item = transfer(jar(offset+1:offset + storage_size(item)/storage_size(jar)*size(item)), item) ;\
+                                               top = offset + storage_size(item)/storage_size(jar)*size(item)
