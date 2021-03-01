@@ -16,7 +16,12 @@
 ! item is an array expression for PICKLE_ARRAY and UNPICKLE_ARRAY
 ! item MUST be a scalar (rank 0) expression for PICKLE_SCALAR and UNPICKLE_SCALAR
 !
-
+!
+! jar    : integer array
+! offset : elements to skip before starting to store / retrieve (start from jar(offset+1) )
+! top    : last position used in jar
+! item   : data is to be serialized / deserialized
+!
 ! transfer all bits from item into jar starting at jar(offset) 
 #define PICKLE_SCALAR(jar, offset, top, item)   jar(offset+1:offset + storage_size(item)/storage_size(jar)) = transfer(item, jar) ;\
                                                 top = offset + storage_size(item)/storage_size(jar)
