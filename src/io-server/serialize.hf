@@ -17,21 +17,30 @@
 ! item MUST be a scalar (rank 0) expression for PICKLE_SCALAR and UNPICKLE_SCALAR
 !
 !
-! jar    : integer array
+! jar    : normally an integer array large enough to store all items
 ! offset : elements to skip before starting to store / retrieve (start from jar(offset+1) )
 ! top    : last position used in jar
-! item   : data is to be serialized / deserialized
+! item   : data item (scalar or array) is to be serialized / deserialized
+!
+! evaluate needed size of jar as a function of item type and number of items to store and jar type
+! scalar or single item
+#define JARSIZE_SCALAR(jar, item) storage_size(item)/storage_size(jar)
+
+! multiple items (array or array section)
+#define JARSIZE_ARRAY(jar, item) storage_size(item)/storage_size(jar)*size(item)
 !
 ! transfer all bits from item into jar starting at jar(offset) 
+! scalar or single item
 #define PICKLE_SCALAR(jar, offset, top, item)   jar(offset+1:offset + storage_size(item)/storage_size(jar)) = transfer(item, jar) ;\
                                                 top = offset + storage_size(item)/storage_size(jar)
-
+! multiple items (array or array section)
 #define PICKLE_ARRAY(jar, offset, top, item)    jar(offset+1:offset + storage_size(item)/storage_size(jar)*size(item)) = transfer(item, jar) ;\
                                                 top = offset + storage_size(item)/storage_size(jar)*size(item)
 
 ! transfer all bits from jar starting at jar(offset) into item
+! scalar or single item
 #define UNPICKLE_SCALAR(jar, offset, top,item) item = transfer(jar(offset+1:offset + storage_size(item)/storage_size(jar)), item) ;\
                                                top = offset + storage_size(item)/storage_size(jar)
-
+! multiple items (array or array section)
 #define UNPICKLE_ARRAY(jar, offset, top,item)  item = transfer(jar(offset+1:offset + storage_size(item)/storage_size(jar)*size(item)), item) ;\
                                                top = offset + storage_size(item)/storage_size(jar)*size(item)
