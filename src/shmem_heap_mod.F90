@@ -30,7 +30,7 @@ module shmem_heap
   type, public, bind(C) :: block_meta_c
     private
     !> \private
-    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d   !< array dimensions
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d  = [0, 0, 0, 0, 0] !< array dimensions
     !> \private
     integer(C_INT) :: tkr = 0                        !< array type, kind, rank
   end type block_meta_c
@@ -179,11 +179,6 @@ module shmem_heap
   end interface
   
   interface
-    function c_malloc(sz) result(p) BIND(C,name='malloc')
-      import :: C_PTR, C_SIZE_T
-      integer(C_SIZE_T), value :: sz
-      type(C_PTR) :: p
-    end function c_malloc
 
     function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
       import :: C_PTR, C_SIZE_T
