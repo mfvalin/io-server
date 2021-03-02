@@ -47,7 +47,7 @@ program pseudomodelandserver
   use helpers
   use memory_arena_mod
   implicit none
-  external io_relay
+  external io_relay_fn
   integer :: status
   integer :: model, allio, nodeio, serverio, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, nserv, ierr, noops, noderank, nodesize
@@ -85,7 +85,7 @@ program pseudomodelandserver
 
   if(rank >= nserv) then                    ! compute or IO relay Processes
     read(arg,*) nio_node                    ! number of relay processes per node
-    call set_IOSERVER_relay(io_relay)
+    call set_IOSERVER_relay(io_relay_fn)
     !  no return from ioserver_init in the case of IO relay processes
     !  compute processes will return from call
     status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'M')
@@ -136,12 +136,12 @@ program pseudomodelandserver
 
   endif
 777 continue
-  call IOSERVER_time_to_quit()
+  call ioserver_set_time_to_quit()
   write(6,*)'FINAL:, PE',noderank
   call mpi_finalize(status)
 end program
 
-subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
+subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
   use ISO_C_BINDING
   use helpers
   use memory_arena_mod
@@ -184,7 +184,7 @@ subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
   call flush(6)
   call ma%dump()
   write(6,*)'END: pseudo relay, PE',noderank
-end subroutine io_relay
+end subroutine io_relay_fn
 
 subroutine io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
   use ISO_C_BINDING
