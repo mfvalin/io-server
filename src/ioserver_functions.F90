@@ -32,6 +32,30 @@ module ioserver_functions
     procedure   :: close => ioserver_close
   end type
 
+  type :: grid
+    integer :: id            ! grid id
+    integer :: gni, gnj      ! horizontal dimensions of full grid
+  end type
+
+  type :: subgrid
+    integer :: i0            ! starting point of this subgrid in the x direction
+    integer :: ni            ! number of points of this subgrid in the x direction
+    integer :: j0            ! starting point of this subgrid in the y direction
+    integer :: nj            ! number of points of this subgrid in the y direction
+    integer :: nk            ! number of vertical levels
+    integer :: nv            ! number of variablethiss
+  end type
+
+  type :: data_header        ! record : data_header , metadata(nm integers) , subgrid(ni * nj * nk * nv elements)
+    integer :: nw            ! number of elements in record
+    integer :: tag           ! unique sequence tag
+    integer :: weight        ! number of pieces in parcel (normally 1)
+    integer :: np            ! number of peices to reassemble
+    type(grid)    :: g       ! grid description
+    type(subgrid) :: s       ! subgrid description
+    integer :: nm            ! length of metadata "jar"
+  end type
+
   private  :: fd_seq, local_heap, cio_in, cio_out, initialized
   logical                :: initialized = .false.
   integer                :: fd_seq = 0

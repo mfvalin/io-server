@@ -1,6 +1,7 @@
 module helpers
   use ISO_C_BINDING
-  include 'io-server/ioserver.inc'
+  use ioserver_functions
+!   include 'io-server/ioserver.inc'
 
  contains
 
@@ -45,6 +46,7 @@ end module helpers
 program pseudomodelandserver
   use ISO_C_BINDING
   use helpers
+  use ioserver_functions
   use memory_arena_mod
   implicit none
   external io_relay_fn
@@ -86,9 +88,9 @@ program pseudomodelandserver
   if(rank >= nserv) then                    ! compute or IO relay Processes
     read(arg,*) nio_node                    ! number of relay processes per node
     call set_IOSERVER_relay(io_relay_fn)
-    !  no return from ioserver_init in the case of IO relay processes
+    !  no return from ioserver_int_init in the case of IO relay processes
     !  compute processes will return from call
-    status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'M')
+    status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'M')
     !  from this point on, this is a model compute process
     call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
 
@@ -126,10 +128,10 @@ program pseudomodelandserver
 
     nio_node = -1
     if(rank < noops) then          ! ranks below noops are NO-OP processes
-      ! no return from ioserver_init in the case of NO-OP processes
-      status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'Z')
+      ! no return from ioserver_int_init in the case of NO-OP processes
+      status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'Z')
     else                           ! server processes (normally on another node)
-      status = ioserver_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'O')
+      status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'O')
       ! io_server_out will return from call
       call io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
     endif
