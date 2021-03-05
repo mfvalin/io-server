@@ -558,7 +558,8 @@ void *ShmemHeapAllocBlock(
   t = NULL ;
   if(h[limit] > 1  || h[limit] < -1) return NULL  ;  // not a Server Heap or corrupted information
   if(safe){                                          // lock heap
-    while(! __sync_bool_compare_and_swap(h + limit, 0, -1) ) ;  // wait for 0, then set to -1 to indicate lock
+//     while(! __sync_bool_compare_and_swap(h + limit, 0, -1) ) ;  // wait for 0, then set to -1 to indicate lock
+    while(! __sync_bool_compare_and_swap(h + limit, 0, 1) ) ;  // wait for 0, then set to 1 to indicate lock
   }
   bsz += 4 ;                                         // add head + tail elements
   for(cur = 1 ; cur < limit ; cur += sz){            // scan block list to find/make a large enough free block
@@ -707,7 +708,8 @@ void ShmemHeapLock(
 
   sz = h[0] ;
   h = h + sz - 1 ;                                     // last element
-  while( ! __sync_bool_compare_and_swap(h, 0, -1) ) ;  // if zero, set to -1 to indicate lock
+//   while( ! __sync_bool_compare_and_swap(h, 0, -1) ) ;  // if zero, set to -1 to indicate lock
+  while( ! __sync_bool_compare_and_swap(h, 0, 1) ) ;  // if zero, set to 1 to indicate lock
 }
 
 //  C_StArT

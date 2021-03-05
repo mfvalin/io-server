@@ -79,6 +79,7 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:${D}) = di(1:${D})    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ${METADATA}(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function ${RI}${L}_${D}D

@@ -246,6 +246,8 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 8 format(A,i3,4I10)
 end subroutine relay_test
 
+#define NBLKS 128
+
 subroutine base_test(nprocs, myrank)
   use shmem_heap
   implicit none
@@ -351,7 +353,7 @@ subroutine base_test(nprocs, myrank)
     print 4, 'IXTAB(1:10) =',ixtab(1:10)
   endif
 
-777 continue
+! 777 continue
 
   call MPI_Win_free(win, ierr)
 

@@ -42,6 +42,7 @@ module shmem_heap
     type(block_meta_c) :: a         !< array descriptor
     !> \private
     type(C_PTR) :: p = C_NULL_PTR   !< array address
+    type(C_PTR) :: h = C_NULL_PTR   !< heap base address
 
   contains
     !> \return array type code (1=integer, 2=real)

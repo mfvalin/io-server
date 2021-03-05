@@ -531,6 +531,7 @@ function IOserver_int_finalize() result(status)
   integer :: status
 !! F_EnD
    ! code to be added later 
+   status = 0
 !! F_StArT
 end function IOserver_int_finalize
 !!

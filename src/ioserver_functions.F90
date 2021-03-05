@@ -17,6 +17,8 @@ module ioserver_functions
   implicit none
   include 'io-server/ioserver.inc'
 
+  save
+
   public :: server_file
   type :: server_file
     private
@@ -32,12 +34,12 @@ module ioserver_functions
     procedure   :: close => ioserver_close
   end type
 
-  type :: grid
+  type, public :: grid
     integer :: id            ! grid id
     integer :: gni, gnj      ! horizontal dimensions of full grid
   end type
 
-  type :: subgrid
+  type, public :: subgrid
     integer :: i0            ! starting point of this subgrid in the x direction
     integer :: ni            ! number of points of this subgrid in the x direction
     integer :: j0            ! starting point of this subgrid in the y direction
@@ -46,22 +48,27 @@ module ioserver_functions
     integer :: nv            ! number of variablethiss
   end type
 
-  type :: data_header        ! record : data_header , metadata(nm integers) , subgrid(ni * nj * nk * nv elements)
+  type, private :: data_header        ! record : data_header , metadata(nm integers) , subgrid(ni * nj * nk * nv elements)
     integer :: nw            ! number of elements in record
+    integer :: nbits         ! number of bits per subgrid element in record
     integer :: tag           ! unique sequence tag
     integer :: weight        ! number of pieces in parcel (normally 1)
-    integer :: np            ! number of peices to reassemble
-    type(grid)    :: g       ! grid description
+    integer :: np            ! number of pieces to reassemble
+    integer :: grid          ! grid id
     type(subgrid) :: s       ! subgrid description
-    integer :: nm            ! length of metadata "jar"
+    integer :: nm            ! length of metadata "jar" (32 bit units)
   end type
 
-  private  :: fd_seq, local_heap, cio_in, cio_out, initialized
+  private  :: fd_seq, local_heap, cio_in, cio_out, initialized    ! , gdt, MAXGRIDS
+
   logical                :: initialized = .false.
   integer                :: fd_seq = 0
   type(heap)             :: local_heap   ! type is self initializing
   type(circular_buffer)  :: cio_in       ! type is self initializing
   type(circular_buffer)  :: cio_out      ! type is self initializing
+
+!   integer, parameter :: MAXGRIDS = 1024
+!   type(grid), dimension(MAXGRIDS) :: gdt   ! grid description table
  contains
 
   function ioserver_heap(n) result(h)
@@ -118,6 +125,7 @@ module ioserver_functions
     if(f % fd > 0)           return    ! already open
     if(associated(f % name)) return    ! already open
 
+    fd_seq = fd_seq + 1
     lname = len(trim(name))
     allocate(f % name(lname))
     f % name(1:lname) = transfer(trim(name), f % name)
@@ -146,6 +154,7 @@ endif
     if(f % fd <= 0)                return    ! not open
     if(.not. associated(f % name)) return    ! not open
 
+    fd_seq = fd_seq + 1
     f % fd = -1
     deallocate(f % name)
     status = 0
@@ -158,6 +167,7 @@ endif
 
     status = -1
     if(f % fd <= 0) return
+    fd_seq = fd_seq + 1
 
     status = 0
   end function ioserver_write
@@ -169,6 +179,7 @@ endif
 
     status = -1
     if(f % fd <= 0) return
+    fd_seq = fd_seq + 1
 
     status = 0
   end function ioserver_read

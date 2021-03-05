@@ -62,6 +62,7 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I1_5D
@@ -97,6 +98,7 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I1_4D
@@ -132,6 +134,7 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I1_3D
@@ -167,6 +170,7 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I1_2D
@@ -202,6 +206,7 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I1_1D
@@ -237,6 +242,7 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I2_5D
@@ -272,6 +278,7 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I2_4D
@@ -307,6 +314,7 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I2_3D
@@ -342,6 +350,7 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I2_2D
@@ -377,6 +386,7 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I2_1D
@@ -412,6 +422,7 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I4_5D
@@ -447,6 +458,7 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I4_4D
@@ -482,6 +494,7 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I4_3D
@@ -517,6 +530,7 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I4_2D
@@ -552,6 +566,7 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I4_1D
@@ -587,6 +602,7 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I8_5D
@@ -622,6 +638,7 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I8_4D
@@ -657,6 +674,7 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I8_3D
@@ -692,6 +710,7 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I8_2D
@@ -727,6 +746,7 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function I8_1D
@@ -762,6 +782,7 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R4_5D
@@ -797,6 +818,7 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R4_4D
@@ -832,6 +854,7 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R4_3D
@@ -867,6 +890,7 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R4_2D
@@ -902,6 +926,7 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R4_1D
@@ -937,6 +962,7 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R8_5D
@@ -972,6 +998,7 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R8_4D
@@ -1007,6 +1034,7 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R8_3D
@@ -1042,6 +1070,7 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R8_2D
@@ -1077,6 +1106,7 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
     bmi%a%d = 1                     ! set all 5 dimensions to 1
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     bmi%p = cptr
+    bmi%h = h%p
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)  ! insert metadata into data block
   endif
 end function R8_1D
