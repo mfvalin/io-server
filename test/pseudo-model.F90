@@ -170,10 +170,11 @@ subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
 
   if(noderank == 0) then
     shmsz64 = sz_relay - 1024
-    temp = ma%create(p_relay, 128, shmsz64)
-    temp = ma%newblock(1024*1024, "RHEAP000")
-    temp = ma%newblock(1024*1024, "RCIOB000")
-    temp = ma%newblock(1024*1024, "RCIOB001")
+!     temp = ma%create(p_relay, 128, shmsz64)
+    temp = ma%clone(p_relay)
+!     temp = ma%newblock(1024*1024, "RHEAP000")
+!     temp = ma%newblock(1024*1024, "RCIOB000")
+!     temp = ma%newblock(1024*1024, "RCIOB001")
     call flush(6)
     call ma%dump()
   else

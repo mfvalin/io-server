@@ -15,23 +15,43 @@ module ioserver_functions
   use shmem_heap
   use circular_buffer_module
   implicit none
+#if ! defined(VERSION)
+#define VERSION 10000
+#endif
   include 'io-server/ioserver.inc'
+!   private :: ioserver_int_init
 
   save
+
+  public :: cmeta, MAXPACK
+  integer, parameter :: MAXPACK = 16
+  type :: cmeta
+    real(kind=8)    :: errabs_r = 0.0
+    integer(kind=8) :: errabs_i = 0
+    real(kind=4)    :: errrel_r = 0.0
+    integer         :: errrel_i = 0
+    integer         :: nbits    = 0
+    integer, dimension(MAXPACK) :: pack_type
+  end type
 
   public :: server_file
   type :: server_file
     private
-    integer :: fd = -1
+    integer    :: version = VERSION    ! version marker, used toi check verison consistency
+    integer    :: fd = -1              ! file number for internal use
     character(len=1), dimension(:), pointer :: name => NULL()
     type(heap) :: h
+    logical    :: debug = .false.      ! debug mode at the file level
 
     contains
 
-    procedure   :: open => ioserver_open
-    procedure   :: read => ioserver_read
-    procedure   :: write => ioserver_write
-    procedure   :: close => ioserver_close
+    procedure   :: open      => ioserver_open
+    procedure   :: read      => ioserver_read
+    procedure   :: write     => ioserver_write
+    procedure   :: close     => ioserver_close
+    procedure   :: is_open   => file_is_open
+    procedure   :: is_valid  => file_version_is_valid
+    procedure   :: set_debug => set_file_debug
   end type
 
   type, public :: grid
@@ -59,17 +79,83 @@ module ioserver_functions
     integer :: nm            ! length of metadata "jar" (32 bit units)
   end type
 
-  private  :: fd_seq, local_heap, cio_in, cio_out, initialized    ! , gdt, MAXGRIDS
+  private  :: fd_seq, local_heap, cio_in, cio_out, initialized    
+!   private gdt, MAXGRIDS
 
   logical                :: initialized = .false.
   integer                :: fd_seq = 0
   type(heap)             :: local_heap   ! type is self initializing
   type(circular_buffer)  :: cio_in       ! type is self initializing
   type(circular_buffer)  :: cio_out      ! type is self initializing
+  integer, parameter     :: ioserver_version = VERSION
+  logical                :: debug = .false.
+
+  private :: model, modelio, allio, nodeio, serverio, nodecom
+  integer :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
+  integer :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
+  integer :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
+  integer :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
+  integer :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+  integer :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
 
 !   integer, parameter :: MAXGRIDS = 1024
 !   type(grid), dimension(MAXGRIDS) :: gdt   ! grid description table
+
+  private :: bump_ioserver_tag
+
  contains
+
+  function set_io_debug(dbg) result(status)
+    implicit none
+    logical, intent(IN) :: dbg
+    logical :: status
+
+    status = debug
+    debug = dbg
+
+  end function set_io_debug
+
+  function set_file_debug(this, dbg) result(status)
+    implicit none
+    class(server_file), intent(INOUT) :: this
+    logical, intent(IN) :: dbg
+    logical :: status
+
+    status = this % debug
+    this % debug = dbg
+
+  end function set_file_debug
+
+  function file_version_is_valid(this) result(status)
+    implicit none
+    class(server_file), intent(IN) :: this
+    logical :: status
+
+    status = this % version == VERSION
+
+  end function file_version_is_valid
+
+  function file_is_open(this) result(status)
+    implicit none
+    class(server_file), intent(IN) :: this
+    integer :: status
+
+    status = file_version_is_valid(this)
+    status = status .and. (this % fd > 0) 
+    status = status .and. associated(this % name)
+
+  end function file_is_open
+
+  subroutine bump_ioserver_tag(this)
+    implicit none
+    class(server_file), intent(IN) :: this
+    integer :: ierr
+
+    if(debug .or. this % debug) then
+      call MPI_Barrier(model, ierr)    ! in debug mode, enforce collective mode
+    endif
+    fd_seq = fd_seq + 1
+  end subroutine bump_ioserver_tag
 
   function ioserver_heap(n) result(h)
     implicit none
@@ -92,12 +178,6 @@ module ioserver_functions
     integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
     character(len=*), intent(IN) :: app_class
     integer :: status
-    integer :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-    integer :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-    integer :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-    integer :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-    integer :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-    integer :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class)
     if(.not. initialized) then
       local_heap  = IOserver_get_heap()
@@ -113,29 +193,29 @@ module ioserver_functions
     status = ioserver_int_finalize()
   end function ioserver_finalize
 
-  function ioserver_open(f, name) result(status)
+  function ioserver_open(this, name) result(status)
     implicit none
-    class(server_file), intent(INOUT) :: f
+    class(server_file), intent(INOUT) :: this
     character(len=*), intent(IN) :: name
     integer :: status
     integer :: lname
     type(C_PTR) :: p
 
     status = -1
-    if(f % fd > 0)           return    ! already open
-    if(associated(f % name)) return    ! already open
+    if(.not. file_version_is_valid(this) ) return ! wrong version
+    if(file_is_open(this) )        return ! already open
 
-    fd_seq = fd_seq + 1
+    call bump_ioserver_tag(this)
     lname = len(trim(name))
-    allocate(f % name(lname))
-    f % name(1:lname) = transfer(trim(name), f % name)
-print *,"'",f % name(1:lname),"'"
+    allocate(this % name(lname))
+    this % name(1:lname) = transfer(trim(name), this % name)
+print *,"'",this % name(1:lname),"'"
 
     if(.not. C_ASSOCIATED(local_heap % ptr()) ) then
       print *,'locating local heap'
     endif
-    f % h = local_heap                 ! associate heap to file
-p = f % h % ptr()
+    this % h = local_heap                 ! associate heap to file
+p = this % h % ptr()
 if(C_ASSOCIATED(p)) then 
 print *,' p is defined'
 else
@@ -145,41 +225,41 @@ endif
     status = 0
   end function ioserver_open
 
-  function ioserver_close(f) result(status)
+  function ioserver_close(this) result(status)
     implicit none
-    class(server_file), intent(INOUT) :: f
+    class(server_file), intent(INOUT) :: this
     integer :: status
 
     status = -1
-    if(f % fd <= 0)                return    ! not open
-    if(.not. associated(f % name)) return    ! not open
+    if(this % fd <= 0)                return    ! not open
+    if(.not. associated(this % name)) return    ! not open
 
-    fd_seq = fd_seq + 1
-    f % fd = -1
-    deallocate(f % name)
+    call bump_ioserver_tag(this)
+    this % fd = -1
+    deallocate(this % name)
     status = 0
   end function ioserver_close
 
-  function ioserver_write(f) result(status)
+  function ioserver_write(this) result(status)
     implicit none
-    class(server_file), intent(INOUT) :: f
+    class(server_file), intent(INOUT) :: this
     integer :: status
 
     status = -1
-    if(f % fd <= 0) return
-    fd_seq = fd_seq + 1
+    if(this % fd <= 0) return
+    call bump_ioserver_tag(this)
 
     status = 0
   end function ioserver_write
 
-  function ioserver_read(f) result(status)
+  function ioserver_read(this) result(status)
     implicit none
-    class(server_file), intent(INOUT) :: f
+    class(server_file), intent(INOUT) :: this
     integer :: status
 
     status = -1
-    if(f % fd <= 0) return
-    fd_seq = fd_seq + 1
+    if(this % fd <= 0) return
+    call bump_ioserver_tag(this)
 
     status = 0
   end function ioserver_read
@@ -196,6 +276,7 @@ subroutine ioserver_functions_demo
 #if defined(WITH_ERRORS)
   print *, fd_seq               ! this line must not compile successfully (private reference)
   print *, f % fd               ! this line must not compile successfully (private reference)
+  call bump_ioserver_tag(f)
 #endif
   status = ioserver_init(0, 'M')
   h = ioserver_heap(0)
