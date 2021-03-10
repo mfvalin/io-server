@@ -220,6 +220,7 @@ circular_buffer_p CB_init(
     return NULL;
   if (nwords < MIN_CIRC_BUFFER_SIZE)
     return NULL; // area is too small
+
   p->m.version = FIOL_VERSION;
   p->m.first   = 0;
   p->m.in      = 0;
@@ -919,6 +920,14 @@ int32_t CB_insert(
   return available_space(in, out, limit);
 }
 
+//  F_StArT
+//    function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
+//      import C_INT, C_PTR
+//      implicit none
+//      type(C_PTR), intent(in), value :: buffer
+//      integer(C_INT) is_valid
+//    end function CB_check_integrity
+//  F_EnD
 /**
  * @brief Verify the header of the given buffer is self-consistent (correct version, first = 0, in/out within limits)
  * @return 0 if the Buffer is consistent, a negative number otherwise
@@ -929,19 +938,34 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
 //  C_EnD
 {
   if (buffer == NULL)
+  {
+    // printf("Invalid b/c NULL pointer\n");
     return -1;
+  }
 
   if (buffer->m.version != FIOL_VERSION)
+  {
+    // printf("INVALID b/c wrong version (%d, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
     return -1;
+  }
 
   if (buffer->m.first != 0)
+  {
+    // printf("INVALID b/c m.first is NOT 0 (%d)\n", buffer->m.first);
     return -1;
+  }
 
   if (buffer->m.in < buffer->m.first || buffer->m.in >= buffer->m.limit)
+  {
+    // printf("INVALID b/c \"in\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in, buffer->m.version);
     return -1;
+  }
 
   if (buffer->m.out < buffer->m.first || buffer->m.out >= buffer->m.limit)
+  {
+    // printf("INVALID b/c \"out\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out, buffer->m.limit);
     return -1;
+  }
 
   return 0;
 }

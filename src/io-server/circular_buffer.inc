@@ -249,4 +249,10 @@ integer(C_INT), intent(IN), value :: offset        !< offset from the "in" posit
 integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
 integer(C_INT) :: n                                !< number of free slots available after this operation
 end function CB_insert
+function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
+import C_INT, C_PTR
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) is_valid
+end function CB_check_integrity
 end interface

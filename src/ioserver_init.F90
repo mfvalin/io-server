@@ -702,6 +702,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
   ! color/NO_OP_COLOR has value 1 if NO-OP, 0 otherwise (NO_OP_COLOR MUST BE THE LARGEST CODE VALUE)
   call mpi_comm_split(global_comm, color/NO_OP_COLOR, global_rank, all_comm, ierr)
 
+
   if(color == NO_OP_COLOR) then       ! this is a NO-OP process, enter wait loop for finalize
     call IOserver_noop()              ! this subroutine will never return and call finalize
     call MPI_Finalize(ierr)           ! IOserver_noop should never return, but ... in case it does
@@ -864,7 +865,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 
   endif   ! (color == SERVER_COLOR)
 ! ===================================================================================
-! split IO PEs into server and relay PEs, create 1 sided communication windew
+! split IO PEs into server and relay PEs, create 1 sided communication window
 ! set return code to appropriate value or call supplied relay subroutine
 ! ===================================================================================
   if(model_comm == MPI_COMM_NULL) then    ! not compute PE, IO server or IO relay PE
