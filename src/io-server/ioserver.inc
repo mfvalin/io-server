@@ -53,7 +53,7 @@ function IOserver_get_crs(color) result(crs)
 import :: comm_rank_size
 implicit none
 integer, intent(IN), value :: color
-type(comm_rank_size), intent(OUT) :: crs
+type(comm_rank_size) :: crs
 end function IOserver_get_crs
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
 end subroutine IOserver_set_time_to_quit

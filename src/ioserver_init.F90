@@ -114,11 +114,11 @@ module ioserver_internal_mod
 
   ! global_comm  = all_comm + NO-OP PEs
   ! all_comm     = modelio_comm + server_comm
-  ! modelio_comm = model_comm   + relay_comm
+  ! modelio_comm = model_comm   + iorelay_comm
   integer :: all_comm      = MPI_COMM_NULL       !  non NO-OP PEs               (all nodes) (subset of global_comm)
   integer :: modelio_comm  = MPI_COMM_NULL       !  model compute and relay PEs (all nodes) (subset of all_comm)
   integer :: model_comm    = MPI_COMM_NULL       !  model compute PEs           (all nodes) (subset of all_comm and modelio_comm)
-  integer :: relay_comm    = MPI_COMM_NULL       !  relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
+  integer :: iorelay_comm  = MPI_COMM_NULL       !  relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
   integer :: server_comm   = MPI_COMM_NULL       !  IO server PEs               (subset of all_comm)
 
   !  ==========================================================================================
@@ -147,44 +147,44 @@ module ioserver_internal_mod
 !!  import :: comm_rank_size
     implicit none
     integer, intent(IN), value :: color
-    type(comm_rank_size), intent(OUT) :: crs
+    type(comm_rank_size) :: crs
 !! F_EnD
     integer :: ierr
 
     crs = comm_rank_size(MPI_COMM_NULL, -1, 0)
 
     select case(color)
-      case(NO_COLOR)
+      case(NO_COLOR)                                ! all non NO-OP PEs               (subset of global_comm)
         crs % comm = all_comm
 
-      case(NODE_COLOR)
+      case(NODE_COLOR)                              ! all PEs on this SMP node        (subset of global_comm)
         crs % comm = smp_comm
 
-      case(MODEL_COLOR)
-        crs % comm = model_comm
-
-      case(MODEL_COLOR + NODE_COLOR)
-        crs % comm = model_smp_comm
-
-      case(MODEL_COLOR + RELAY_COLOR)
-        crs % comm = modelio_comm
-
-      case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
-        crs % comm = relaycom
-
-      case(RELAY_COLOR)
-        crs % comm = relay_comm
-
-      case(RELAY_COLOR + NODE_COLOR)
-        crs % comm = relay_smp_comm
-
-      case(RELAY_COLOR + SERVER_COLOR)
-        crs % comm = alliocom
-
-      case(SERVER_COLOR)
+      case(SERVER_COLOR)                            ! server PEs                      (subset of all_comm)
         crs % comm = server_comm
 
-      case(SERVER_COLOR + NODE_COLOR)
+      case(MODEL_COLOR + RELAY_COLOR)               ! compute and relay PEs           (subset of all_comm)
+        crs % comm = modelio_comm
+
+      case(MODEL_COLOR)                             ! all model compute PEs           (subset of all_comm, modelio_comm)
+        crs % comm = model_comm
+
+      case(RELAY_COLOR)                             ! all IO relay PEs                (subset of all_comm, modelio_comm)
+        crs % comm = iorelay_comm
+
+      case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of smp_comm, model_comm, iorelay_comm)
+        crs % comm = relaycom
+
+      case(MODEL_COLOR + NODE_COLOR)                ! compute PEs on SMP node         (subset of  smp_comm, model_comm)
+        crs % comm = model_smp_comm
+
+      case(RELAY_COLOR + NODE_COLOR)                ! relay PEs on SMP node           (subset of  smp_comm, iorelay_comm)
+        crs % comm = relay_smp_comm
+
+      case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of all_comm)
+        crs % comm = alliocom
+
+      case(SERVER_COLOR + NODE_COLOR)               ! server PEs on SMP node          (subset of smp_comm, server_comm)
         crs % comm = servercom
 
       case default
@@ -812,8 +812,8 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
     ! =========================================================================
     ! ================================ IO relay process =======================
     ! =========================================================================
-      relay_comm  = temp_comm                                ! for internal module
-      nodeio      = relay_comm                               ! output argument
+      iorelay_comm  = temp_comm                                ! for internal module
+      nodeio        = iorelay_comm                             ! output argument
       !  allocate nominal heap and circular buffers (8K elements)
       write(heap_name  ,'(A5,I3.3)') "RHEAP",memory_map % pe_rank(relayrank)
       temp_ptr = local_arena % newblock(1024*8, heap_name)
@@ -894,7 +894,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 
   endif
 
-  if(relay_comm .ne. MPI_COMM_NULL) then       ! IO relay process, check if caller supplied relay routine
+  if(iorelay_comm .ne. MPI_COMM_NULL) then       ! IO relay process, check if caller supplied relay routine
 
     if(C_ASSOCIATED(io_relay_fn)) then             ! caller supplied subroutine to be called on relay PEs
       if(debug_mode) print *,'INFO: io_relay_fn is associated'
