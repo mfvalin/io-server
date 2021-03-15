@@ -143,63 +143,6 @@ module ioserver_internal_mod
 !! F_EnD
 
 !! F_StArT
-  function IOserver_get_crs(color) result(crs)
-!!  import :: comm_rank_size
-    implicit none
-    integer, intent(IN), value :: color
-    type(comm_rank_size) :: crs
-!! F_EnD
-    integer :: ierr
-
-    crs = comm_rank_size(MPI_COMM_NULL, -1, 0)
-
-    select case(color)
-      case(NO_COLOR)                                ! all non NO-OP PEs               (subset of global_comm)
-        crs % comm = all_comm
-
-      case(NODE_COLOR)                              ! all PEs on this SMP node        (subset of global_comm)
-        crs % comm = smp_comm
-
-      case(SERVER_COLOR)                            ! server PEs                      (subset of all_comm)
-        crs % comm = server_comm
-
-      case(MODEL_COLOR + RELAY_COLOR)               ! compute and relay PEs           (subset of all_comm)
-        crs % comm = modelio_comm
-
-      case(MODEL_COLOR)                             ! all model compute PEs           (subset of all_comm, modelio_comm)
-        crs % comm = model_comm
-
-      case(RELAY_COLOR)                             ! all IO relay PEs                (subset of all_comm, modelio_comm)
-        crs % comm = iorelay_comm
-
-      case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of smp_comm, model_comm, iorelay_comm)
-        crs % comm = relaycom
-
-      case(MODEL_COLOR + NODE_COLOR)                ! compute PEs on SMP node         (subset of  smp_comm, model_comm)
-        crs % comm = model_smp_comm
-
-      case(RELAY_COLOR + NODE_COLOR)                ! relay PEs on SMP node           (subset of  smp_comm, iorelay_comm)
-        crs % comm = relay_smp_comm
-
-      case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of all_comm)
-        crs % comm = alliocom
-
-      case(SERVER_COLOR + NODE_COLOR)               ! server PEs on SMP node          (subset of smp_comm, server_comm)
-        crs % comm = servercom
-
-      case default
-        crs % comm = MPI_COMM_NULL
-    end select
-
-    if(crs % comm .ne. MPI_COMM_NULL) then
-      call MPI_Comm_rank(crs % comm, crs % rank, ierr)
-      call MPI_Comm_size(crs % comm, crs % size, ierr)
-    endif
-!! F_StArT
-  end function IOserver_get_crs
-!! F_EnD
-
-!! F_StArT
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
 !! F_EnD
   implicit none
@@ -316,6 +259,66 @@ end module ioserver_internal_mod
 !  ==========================================================================================
 !                                           END OF MODULE
 !  ==========================================================================================
+
+!! F_StArT
+  function IOserver_get_crs(color) result(crs)
+!! F_EnD
+    use ioserver_internal_mod
+!! F_StArT
+!!  import :: comm_rank_size
+    implicit none
+    integer, intent(IN), value :: color
+    type(comm_rank_size) :: crs
+!! F_EnD
+    integer :: ierr
+
+    crs = comm_rank_size(MPI_COMM_NULL, -1, 0)
+
+    select case(color)
+      case(NO_COLOR)                                ! all non NO-OP PEs               (subset of global_comm)
+        crs % comm = all_comm
+
+      case(NODE_COLOR)                              ! all PEs on this SMP node        (subset of global_comm)
+        crs % comm = smp_comm
+
+      case(SERVER_COLOR)                            ! server PEs                      (subset of all_comm)
+        crs % comm = server_comm
+
+      case(MODEL_COLOR + RELAY_COLOR)               ! compute and relay PEs           (subset of all_comm)
+        crs % comm = modelio_comm
+
+      case(MODEL_COLOR)                             ! all model compute PEs           (subset of all_comm, modelio_comm)
+        crs % comm = model_comm
+
+      case(RELAY_COLOR)                             ! all IO relay PEs                (subset of all_comm, modelio_comm)
+        crs % comm = iorelay_comm
+
+      case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of smp_comm, model_comm, iorelay_comm)
+        crs % comm = relaycom
+
+      case(MODEL_COLOR + NODE_COLOR)                ! compute PEs on SMP node         (subset of  smp_comm, model_comm)
+        crs % comm = model_smp_comm
+
+      case(RELAY_COLOR + NODE_COLOR)                ! relay PEs on SMP node           (subset of  smp_comm, iorelay_comm)
+        crs % comm = relay_smp_comm
+
+      case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of all_comm)
+        crs % comm = alliocom
+
+      case(SERVER_COLOR + NODE_COLOR)               ! server PEs on SMP node          (subset of smp_comm, server_comm)
+        crs % comm = servercom
+
+      case default
+        crs % comm = MPI_COMM_NULL
+    end select
+
+    if(crs % comm .ne. MPI_COMM_NULL) then
+      call MPI_Comm_rank(crs % comm, crs % rank, ierr)
+      call MPI_Comm_size(crs % comm, crs % size, ierr)
+    endif
+!! F_StArT
+  end function IOserver_get_crs
+!! F_EnD
 
 !! F_StArT
 function IOserver_get_heap() result(h)

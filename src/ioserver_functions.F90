@@ -179,6 +179,8 @@ module ioserver_functions
     integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
     character(len=*), intent(IN) :: app_class
     integer :: status
+    type(comm_rank_size) :: crs 
+
     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class)
     if(.not. initialized) then
       local_heap  = IOserver_get_heap()
@@ -187,6 +189,9 @@ module ioserver_functions
       initialized = .true.
       print *,'initializing io heap and circular buffers'
     endif
+    crs = IOserver_get_crs(MODEL_COLOR)
+    if(model .ne. crs % comm) print *,'ERROR : model .ne. crs % comm'
+    if(model .eq. crs % comm) print *,'INFO : model .eq. crs % comm'
   end function ioserver_init
 
   function ioserver_finalize() result(status)

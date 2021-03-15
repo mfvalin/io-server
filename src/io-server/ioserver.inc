@@ -49,12 +49,6 @@ type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 
 
 interface
 
-function IOserver_get_crs(color) result(crs)
-import :: comm_rank_size
-implicit none
-integer, intent(IN), value :: color
-type(comm_rank_size) :: crs
-end function IOserver_get_crs
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
 end subroutine IOserver_set_time_to_quit
 
@@ -64,6 +58,12 @@ implicit none
 integer(C_INT) :: status   ! .true. if time to quit
 end function IOserver_is_time_to_quit
 
+function IOserver_get_crs(color) result(crs)
+import :: comm_rank_size
+implicit none
+integer, intent(IN), value :: color
+type(comm_rank_size) :: crs
+end function IOserver_get_crs
 function IOserver_get_heap() result(h)
 import :: heap
 type(heap) :: h

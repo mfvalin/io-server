@@ -41,6 +41,22 @@ subroutine print_comms(model, modelio, allio, nodeio, serverio, nodecom)
   call print_comm(IOSERVER_Commisnull(nodecom),  'nodecom')
 end subroutine print_comms
 
+subroutine check_comm(comm, crs, name)
+  implicit none
+  include 'mpif.h'
+  integer, intent(IN) :: comm
+  type(comm_rank_size), intent(IN) :: crs
+  character(len=*), intent(IN) :: name
+  character(len=16) :: extra
+  extra = ' (defined)'
+  if(crs % comm == MPI_COMM_NULL) extra = ' (null)'
+  if(comm == crs % comm) then
+    print *,'INFO : '//trim(name)//' .eq. crs % comm'
+  else
+    print *,'ERROR: '//trim(name)//' .ne. crs % comm'//trim(extra)
+  endif
+end subroutine check_comm
+
 end module helpers
 
 program pseudomodelandserver
@@ -93,6 +109,12 @@ program pseudomodelandserver
     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'M')
     !  from this point on, this is a model compute process
     call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+    call check_comm(model, IOserver_get_crs(MODEL_COLOR), 'model')
+    call check_comm(modelio, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR), 'modelio')
+    call check_comm(allio, IOserver_get_crs(RELAY_COLOR + SERVER_COLOR), 'allio')
+    call check_comm(nodeio, IOserver_get_crs(RELAY_COLOR), 'nodeio')
+    call check_comm(serverio, IOserver_get_crs(SERVER_COLOR), 'serverio')
+    call check_comm(nodecom, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR), 'nodecom')
 
     call MPI_Comm_rank(model, rank, ierr)
     call MPI_Comm_size(model, size, ierr)
@@ -146,6 +168,15 @@ subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
   type(memory_arena) :: ma
   integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
 !   integer(C_INT64_T) :: shmsz64
+  type(comm_rank_size) :: local_crs
+
+  call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+  call check_comm(model, IOserver_get_crs(MODEL_COLOR), 'model')
+  call check_comm(modelio, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR), 'modelio')
+  call check_comm(allio, IOserver_get_crs(RELAY_COLOR + SERVER_COLOR), 'allio')
+  call check_comm(nodeio, IOserver_get_crs(RELAY_COLOR), 'nodeio')
+  call check_comm(serverio, IOserver_get_crs(SERVER_COLOR), 'serverio')
+  call check_comm(nodecom, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR), 'nodecom')
 
   call MPI_Comm_rank(nodeio, rank, ierr)
   call MPI_Comm_size(nodeio, size, ierr)
