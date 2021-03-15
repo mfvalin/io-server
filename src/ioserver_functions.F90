@@ -52,6 +52,7 @@ module ioserver_functions
     procedure   :: is_open   => file_is_open
     procedure   :: is_valid  => file_version_is_valid
     procedure   :: set_debug => set_file_debug
+
   end type
 
   type, public :: grid
@@ -138,7 +139,7 @@ module ioserver_functions
   function file_is_open(this) result(status)
     implicit none
     class(server_file), intent(IN) :: this
-    integer :: status
+    logical :: status
 
     status = file_version_is_valid(this)
     status = status .and. (this % fd > 0) 

@@ -106,20 +106,11 @@ program pseudomodelandserver
     sz_relay = sz_relay / 4       ! convert to 32 bit units
     sz_relay = sz_relay / (size + nio_node)
 
-    call MPI_Barrier(modelio, ierr)
     temp = ma%clone(p_relay)
-    write(blockname,'(A5,I3.3)') "MHEAP",rank
-    sz32 = sz_relay * 3 / 4       ! use 3/4 of relay memory
-    temp = ma%newblock(sz32, blockname)
-    call print_created(temp, blockname)
-    write(blockname,'(A4,I4.4)') "MCIO",rank
-    sz32 = sz_relay / 10
-    temp = ma%newblock(sz32, blockname)
-    call print_created(temp, blockname)
-    write(blockname,'(A4,I4.4)') "MCIO",rank+1000
-    temp = ma%newblock(sz32, blockname)
-    call print_created(temp, blockname)
-    call MPI_Barrier(modelio, ierr)
+
+    call MPI_Barrier(modelio, ierr)                      ! barrier 1 compute/relay
+    ! compute -> relay traffic
+    call MPI_Barrier(modelio, ierr)                      ! barrier 2 compute/relay
     call flush(6)
     call ma%dump()
     write(6,*)'END: pseudo compute, PE',noderank
@@ -154,7 +145,7 @@ subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
   type(C_PTR) :: p_base, p_relay, p_server, temp
   type(memory_arena) :: ma
   integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
-  integer(C_INT64_T) :: shmsz64
+!   integer(C_INT64_T) :: shmsz64
 
   call MPI_Comm_rank(nodeio, rank, ierr)
   call MPI_Comm_size(nodeio, size, ierr)
@@ -168,22 +159,12 @@ subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
 
   call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
 
-  if(noderank == 0) then
-    shmsz64 = sz_relay - 1024
-!     temp = ma%create(p_relay, 128, shmsz64)
-    temp = ma%clone(p_relay)
-!     temp = ma%newblock(1024*1024, "RHEAP000")
-!     temp = ma%newblock(1024*1024, "RCIOB000")
-!     temp = ma%newblock(1024*1024, "RCIOB001")
-    call flush(6)
-    call ma%dump()
-  else
-    temp = ma%clone(p_relay)
-  endif
-  write(6,*)'relay before barrier'
-  call MPI_Barrier(modelio, ierr)
-  call MPI_Barrier(modelio, ierr)
-  write(6,*)'relay after barrier'
+  temp = ma%clone(p_relay)
+
+  call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
+  ! compute -> relay traffic
+  call MPI_Barrier(modelio, ierr)        ! barrier 2 compute/relay
+
   call flush(6)
   call ma%dump()
   write(6,*)'END: pseudo relay, PE',noderank

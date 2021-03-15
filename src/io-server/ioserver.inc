@@ -49,6 +49,12 @@ type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 
 
 interface
 
+function IOserver_get_crs(color) result(crs)
+import :: comm_rank_size
+implicit none
+integer, intent(IN), value :: color
+type(comm_rank_size), intent(OUT) :: crs
+end function IOserver_get_crs
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
 end subroutine IOserver_set_time_to_quit
 
@@ -161,7 +167,7 @@ integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs 
 integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
 integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
 integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
-integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
+integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
 character(len=*), intent(IN) :: app_class
 integer :: status
 end function IOserver_int_init
