@@ -42,6 +42,7 @@ module shmem_heap
     type(block_meta_c) :: a         !< array descriptor
     !> \private
     type(C_PTR) :: p = C_NULL_PTR   !< array address
+    type(C_PTR) :: h = C_NULL_PTR   !< heap base address
 
   contains
     !> \return array type code (1=integer, 2=real)
@@ -78,7 +79,12 @@ module shmem_heap
   contains
 
     !> \return                          address of heap
-    procedure :: create                 !< create, initialize, register a heap at specified address
+    procedure :: createb                !< create, initialize, register a heap at specified address
+
+    !> \return                          address of heap
+    procedure :: createw               !< create, initialize, register a heap at specified address
+
+    GENERIC   :: create => createb, createw
 
     !> \return                          address of default heap
     procedure :: get_default            !< get address of the default heap
@@ -87,7 +93,8 @@ module shmem_heap
     procedure :: set_default            !< make this heap the default heap
 
     !> \return                          address of heap
-    procedure :: clone                  !< clone a heap object using the address of an existing heap
+    procedure :: clone_h                !< clone a heap object using the address of an existing heap
+    GENERIC   :: clone => clone_h
 
     !> \return                          address of heap
     procedure :: register               !< register an existing heap at specified address
@@ -487,9 +494,24 @@ module shmem_heap
   include 'io-server/f_alloc.inc'
 
   !> \brief create, initialize, and register a heap
+  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p, addr<br>integer(C_SIZE_T) :: nwds<br>
+  !> p = h\%createw(addr, nwds)
+  function createw(h, addr, nwds) result(p)
+    implicit none
+    class(heap), intent(INOUT) :: h                         !< heap object
+    type(C_PTR), intent(IN), value :: addr                  !< memory address
+    integer, intent(IN), value     :: nwds                  !< size in 32 bit units of the heap
+    type(C_PTR) :: p                                        !< address of created heap
+    integer(C_SIZE_T) :: nbytes
+    nbytes = nwds * 4_8
+    h%p = ShmemHeapInit(addr, nbytes)
+    p = h%p
+  end function createw
+
+  !> \brief create, initialize, and register a heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p, addr<br>integer(C_SIZE_T) :: nbytes<br>
-  !> p = h\%create(addr, nbytes)
-  function create(h, addr, nbytes) result(p)
+  !> p = h\%createb(addr, nbytes)
+  function createb(h, addr, nbytes) result(p)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
     type(C_PTR), intent(IN), value :: addr                  !< memory address
@@ -497,7 +519,7 @@ module shmem_heap
     type(C_PTR) :: p                                        !< address of created heap
     h%p = ShmemHeapInit(addr, nbytes)
     p = h%p
-  end function create 
+  end function createb
 
   !> \brief get the address of the default heap, set heap object to default heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p<br>
@@ -522,15 +544,15 @@ module shmem_heap
 
   !> \brief create a new heap object using the address of an existing heap (NO SETUP)
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p, addr<br>
-  !> p = h\%clone(addr)
-  function clone(h, addr) result(p)
+  !> p = h\%clone_h(addr)
+  function clone_h(h, addr) result(p)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
     type(C_PTR), intent(IN), value :: addr                  !< memory address (must be an existing heap address)
     type(C_PTR) :: p                                        !< address of already created heap
     h%p = addr
     p = h%p
-  end function clone 
+  end function clone_h
 
   !> \brief allocate a memory block in a heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p<br>integer(C_SIZE_T) :: nbytes<br>

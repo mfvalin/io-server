@@ -58,6 +58,12 @@ implicit none
 integer(C_INT) :: status   ! .true. if time to quit
 end function IOserver_is_time_to_quit
 
+function IOserver_get_crs(color) result(crs)
+import :: comm_rank_size
+implicit none
+integer, intent(IN), value :: color
+type(comm_rank_size) :: crs
+end function IOserver_get_crs
 function IOserver_get_heap() result(h)
 import :: heap
 type(heap) :: h
@@ -161,7 +167,7 @@ integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs 
 integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
 integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
 integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
-integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
+integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
 character(len=*), intent(IN) :: app_class
 integer :: status
 end function IOserver_int_init

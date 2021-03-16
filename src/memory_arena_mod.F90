@@ -8,7 +8,8 @@ module memory_arena_mod
     type(C_PTR) :: p
   contains
     procedure :: init
-    procedure :: clone
+    procedure :: clone_ma
+    GENERIC   :: clone => clone_ma
     procedure :: addr                                          ! get memory arena address
     procedure :: dump                                          ! dump arena metadata
     procedure, nopass :: setid                                 ! set local owner id for arena(s)
@@ -38,14 +39,14 @@ module memory_arena_mod
     id = memory_arena_init(this%p, nsym, size)
   end function init
 
-  function clone(this, memaddr) result(p)                 !< build memory arena object using address of existing arena
+  function clone_ma(this, memaddr) result(p)              !< build memory arena object using address of existing arena
     implicit none
     class(memory_arena), intent(INOUT)    :: this
     type(C_PTR), intent(IN), value        :: memaddr      !< user memory address
     type(C_PTR) :: p                                      !< address of memory arena, NULL if error
     this%p = memaddr
     p      = this%p
-  end function clone
+  end function clone_ma
 
   function create_from_address(this, memaddr, nsym, size) result(p)   !< use supplied address, initialize arena
     implicit none
