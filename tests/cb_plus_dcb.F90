@@ -48,9 +48,9 @@ end module cb_plus_dcb_parameters
 
 program pseudomodelandserver
   use ISO_C_BINDING
+  use ioserver_functions
   implicit none
-  external io_relay
-  include 'io-server/ioserver.inc'
+  external io_relay_process
   integer :: status
   integer :: model, allio, nodeio, serverio, nio_node, modelio, me
   integer :: comm, rank, size
@@ -92,17 +92,17 @@ program pseudomodelandserver
   if (.not. is_server_node) then
     read(arg, *) nio_node ! relay processes per node
     if (nio_node < 2) nio_node = 2
-    call set_IOSERVER_relay(io_relay)
-    status = ioserver_init(model, modelio, allio, nodeio, serverio, node_comm, nio_node, 'M') ! Will not return for relay processes
+    call set_IOSERVER_relay(io_relay_process)
+    status = ioserver_int_init(model, modelio, allio, nodeio, serverio, node_comm, nio_node, 'M') ! Will not return for relay processes
 
     call model_process(node_comm, rank)
 
   else  ! ranks 0, 1, nserv-1 : server
     nio_node = -1
     if(node_rank < nserv) then
-      status = ioserver_init(model, modelio, allio, nodeio, serverio, node_comm, nio_node, 'O')
+      status = ioserver_int_init(model, modelio, allio, nodeio, serverio, node_comm, nio_node, 'O')
     else
-      status = ioserver_init(model, modelio, allio, nodeio, serverio, node_comm, nio_node, 'Z') ! This call will never return
+      status = ioserver_int_init(model, modelio, allio, nodeio, serverio, node_comm, nio_node, 'Z') ! This call will never return
     endif
 
     call server_process(serverio, allio, rank)
@@ -110,7 +110,7 @@ program pseudomodelandserver
   endif
 
 777 continue
-  call IOSERVER_time_to_quit()
+  call ioserver_set_time_to_quit()
   call mpi_finalize(status)
 
 end program
@@ -266,14 +266,13 @@ subroutine model_process(node_comm, global_rank)
 end subroutine model_process
 
 
-subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
+subroutine io_relay_process(model, modelio, allio, nodeio, serverio, nodecom)
   use ISO_C_BINDING
   use cb_plus_dcb_parameters
   use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
   integer, intent(IN) :: model, allio, nodeio, serverio, nodecom, modelio
-  include 'io-server/ioserver.inc'
   include 'mpif.h'
 
   integer :: rank, size, ierr, i_loop, index
@@ -414,7 +413,7 @@ subroutine io_relay(model, modelio, allio, nodeio, serverio, nodecom)
   ! write (6,*) 'Relay, deleting DCB', local_relay_id
   call data_buffer % delete()
 
-end subroutine io_relay
+end subroutine io_relay_process
 
 
 subroutine get_local_world(comm, rank, size, node_comm, node_rank, node_size, is_server_node)
