@@ -1,6 +1,7 @@
 variables:
   build_dir: /home/vincent/tmp/io-server-ci
   install_dir: ${build_dir}/install
+  GIT_SUBMODULE_STRATEGY: recursive
 
 stages:
   - configure
