@@ -6,6 +6,7 @@ variables:
 stages:
   - configure
   - build
+  - test
   - install
 
 configure_job:
@@ -21,4 +22,10 @@ build_job:
   script:
     - cd ${build_dir}
     - make -j8
+
+test_job:
+  stage: test
+  script:
+    - cd ${build_dir}
+    - make test
 
