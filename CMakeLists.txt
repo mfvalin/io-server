@@ -7,6 +7,8 @@ include(ec_parse_manifest)
 
 project(${NAME} VERSION ${VERSION} DESCRIPTION "${DESCRIPTION}")
 
+enable_testing()
+
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
    set(CMAKE_INSTALL_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/install CACHE PATH "..." FORCE)
 endif()
@@ -42,5 +44,5 @@ if (BUILD_DOC)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(test)
+add_subdirectory(tests)
 

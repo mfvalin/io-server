@@ -14,9 +14,21 @@ set(TEST_SOURCES
    test_shmem_heap.F90
    )
 
+function(get_test_name SOURCE_FILE TEST_NAME)
+#   message(STATUS "Arguments: ${ARGN}")
+#   message(STATUS "SOURCE_FILE = ${SOURCE_FILE}")
+   get_filename_component(BASE_NAME ${SOURCE_FILE} NAME_WLE)
+   set(${TEST_NAME} ${PROJECT_NAME}_${BASE_NAME} PARENT_SCOPE)
+endfunction(get_test_name)
+
 foreach(TEST_SOURCE ${TEST_SOURCES})
-   get_filename_component(BASE_NAME ${TEST_SOURCE} NAME_WLE)
-   set(TEST_TARGET ${PROJECT_NAME}_${BASE_NAME})
+   get_test_name(${TEST_SOURCE} TEST_TARGET)
    add_executable(${TEST_TARGET} ${TEST_SOURCE})
    target_link_libraries(${TEST_TARGET} ${PROJECT_NAME})
 endforeach(TEST_SOURCE)
+
+
+
+get_test_name(circular_buffer_single_thread.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET}
+   COMMAND ${TEST_TARGET})
