@@ -1,6 +1,3 @@
-[submodule "test/cmake_shared"]
-	path = test/cmake_shared
-	url = git@gitlab.science.gc.ca:RPN-SI/cmake_shared.git
-[submodule "src/cmake_shared"]
-	path = src/cmake_shared
-	url = git@gitlab.science.gc.ca:RPN-SI/cmake_shared.git
+[submodule "cmake"]
+	path = cmake
+	url = git@gitlab.science.gc.ca:RPN-SI/cmake_rpn.git

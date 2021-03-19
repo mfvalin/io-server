@@ -1,10 +1,31 @@
+variables:
+  build_dir: /home/vincent/tmp/io-server-ci
+  install_dir: ${build_dir}/install
+  GIT_SUBMODULE_STRATEGY: recursive
 
 stages:
+  - configure
+  - build
   - test
+  - install
+
+configure_job:
+  stage: configure
+  script:
+    - mkdir -p ${build_dir}
+    - cd ${build_dir}
+    - cmake ${CI_PROJECT_DIR}
+      -DCMAKE_INSTALL_PREFIX=${install_dir}
+
+build_job:
+  stage: build
+  script:
+    - cd ${build_dir}
+    - make -j8
 
 test_job:
   stage: test
   script:
-    - env | sort
-
+    - cd ${build_dir}
+    - make test
 

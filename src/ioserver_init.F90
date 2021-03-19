@@ -654,7 +654,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
   integer(C_INT64_T) :: shmsz64
   integer :: sz32
   logical :: ok
-#include <iso_c_binding_extras.hf>
+#include <io-server/iso_c_binding_extras.hf>
 
   interface
     function sleep(nsec) result(left) BIND(C,name='sleep')
