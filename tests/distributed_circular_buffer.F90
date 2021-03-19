@@ -247,6 +247,7 @@ program test_distributed_circular_buffer
 
   include 'mpif.h'
   include 'io-server/common.inc'
+  include 'test_common.inc'
 
   interface
   subroutine init_array(array, rank)
@@ -372,6 +373,8 @@ program test_distributed_circular_buffer
   endif
 
   call MPI_finalize(error)
+
+  if (num_errors > 0) call exit(num_errors)
 
 end program test_distributed_circular_buffer
 

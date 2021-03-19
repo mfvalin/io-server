@@ -34,6 +34,7 @@ subroutine shared_mem_test()
   implicit none
 
   include 'mpif.h'
+  include 'test_common.inc'
 
   interface
   subroutine init_array(array, rank)
@@ -192,6 +193,7 @@ subroutine shared_mem_test()
   call MPI_Win_free(window, ierr)
   call MPI_Finalize(ierr)
 
+  if (errors > 0) call exit(-1)
 
 end subroutine shared_mem_test
 

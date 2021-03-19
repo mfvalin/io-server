@@ -33,7 +33,7 @@ void init_array(data_element* array, const int num_elements, const int rank) {
     array[i] = (rank + 1) * 10000 + i;
 }
 
-void fill_test(int argc, char** argv) {
+int fill_test(int argc, char** argv) {
   const int NUM_BUFFER_ELEMENTS = 128;
   const int NPTEST              = NUM_BUFFER_ELEMENTS * 2;
   const int READ_DELAY_US       = 1000;
@@ -182,9 +182,10 @@ void fill_test(int argc, char** argv) {
 
   MPI_Win_free(&window);
   MPI_Finalize();
+
+  return num_errors;
 }
 
 int main(int argc, char** argv) {
-  fill_test(argc, argv);
-  return 0;
+  return fill_test(argc, argv);
 }

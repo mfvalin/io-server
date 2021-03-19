@@ -10,6 +10,7 @@ program test_memory_arena
 #define XTRA 10
 
   include 'mpif.h'
+  include 'test_common.inc'
 !   include 'io-server/memory_arena.inc'
   interface
     function shmat(shmid, ptr, opt) result(p) BIND(C,name='shmat')
@@ -169,6 +170,7 @@ program test_memory_arena
 
 777 continue
   call MPI_Finalize(ierr)
+  if (jerr > 0) call exit(jerr)
   stop
 888 continue
   print *,'ERROR IN TEST'
