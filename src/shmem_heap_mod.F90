@@ -32,17 +32,17 @@ module shmem_heap
     !> \private
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d  = [0, 0, 0, 0, 0] !< array dimensions
     !> \private
-    integer(C_INT) :: tkr = 0                        !< array type, kind, rank
+    integer(C_INT)    :: tkr = 0           !< array type, kind, rank
+    integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely)
   end type block_meta_c
 
   !> \brief Fortran 2008 data block metadata (using the C layout)
   type, public :: block_meta_f08
     private
     !> \private
-    type(block_meta_c) :: a         !< array descriptor
+    type(block_meta_c) :: a           !< array descriptor, C interoperable
     !> \private
-    type(C_PTR) :: p = C_NULL_PTR   !< array address
-    type(C_PTR) :: h = C_NULL_PTR   !< heap base address
+    type(C_PTR) :: p   = C_NULL_PTR   !< array address
 
   contains
     !> \return array type code (1=integer, 2=real)
@@ -75,14 +75,21 @@ module shmem_heap
   type, public :: heap
     private
     !> \private
-    type(C_PTR) :: p = C_NULL_PTR       !< address of storage used by heap
+    type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by heap
+    type(C_PTR) :: ref = C_NULL_PTR      !< reference address to compute offsets into memory arena for this heap
   contains
 
-    !> \return                          address of heap
-    procedure :: createb                !< create, initialize, register a heap at specified address
+    !> \return                          none
+    procedure :: set_base               !< set reference address to compute offsets into memory arena
+
+    !> \return                          base address to compute offsets for this heap
+    procedure :: get_base               !< set reference address to compute offsets into memory arena
 
     !> \return                          address of heap
-    procedure :: createw               !< create, initialize, register a heap at specified address
+    procedure :: createb                !< create, initialize, register a heap at specified address (size in uint64_t bytes)
+
+    !> \return                          address of heap
+    procedure :: createw               !< create, initialize, register a heap at specified address (size in uint32_t 32 bit words)
 
     GENERIC   :: create => createb, createw
 
@@ -335,6 +342,20 @@ module shmem_heap
 
 !> \endcond
   contains
+
+  function get_base(this) result(addr)
+    implicit none
+    class(heap), intent(IN) :: this                      ! heap object
+    type(C_PTR) :: addr                                  ! reference address
+    addr = this % ref
+  end function get_base
+
+  subroutine set_base(this, addr)
+    implicit none
+    class(heap), intent(INOUT) :: this                   ! heap object
+    type(C_PTR), intent(IN), value :: addr               ! reference address
+    this % ref = addr
+  end subroutine set_base
 
   !> get heap index in registered table
   function GetIndex(h) result(ix)

@@ -127,11 +127,17 @@ module ioserver_internal_mod
   logical :: debug_mode = .false.
 
   public :: local_arena, local_heap, local_cio_in, local_cio_out
+  public :: local_arena_ptr, local_heap_ptr, local_cioin_ptr, local_cioout_ptr
 
-  type(memory_arena)     :: local_arena
-  type(heap)             :: local_heap
-  type(circular_buffer)  :: local_cio_in
-  type(circular_buffer)  :: local_cio_out
+  type(C_PTR), bind(C, name='LocalArenaPtr')  :: local_arena_ptr      ! will be used to compute offsets into local arena
+  type(C_PTR), bind(C, name='LocalHeapPtr')   :: local_heap_ptr       ! will be used to compute offsets into local heap
+  type(C_PTR), bind(C, name='LocalCioinPtr')  :: local_cioin_ptr
+  type(C_PTR), bind(C, name='LocalCiooutPtr') :: local_cioout_ptr
+
+  type(memory_arena)     :: local_arena          ! local memory arena
+  type(heap)             :: local_heap           ! local heap (located in memory arena)
+  type(circular_buffer)  :: local_cio_in         ! inbound circular buffer  (located in memory arena)
+  type(circular_buffer)  :: local_cio_out        ! outbound circular buffer  (located in memory arena)
 
   type(C_FUNPTR) :: io_relay_fn = C_NULL_FUNPTR  !  procedure to call on relay processes (if not NULL)
 
@@ -781,6 +787,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
     else
       temp_ptr = local_arena % clone(relaymem)   !  cloning is O.K. even if arena is not initialized
     endif
+    local_arena_ptr = local_arena % addr()
 
     ! spread the nio_node relay PEs across the node (lowest and highest node ranks)
     if(relayrank >= (nio_node/2) .and. relayrank < (relaysize - ((nio_node+1)/2))) then   ! model compute process
@@ -822,6 +829,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       temp_ptr = local_arena % newblock(1024*8, heap_name)
       temp_ptr = local_heap % create(temp_ptr, 1024*32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
+      call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
       write(cioin_name ,'(A4,I4.4)') "RCIO", memory_map % pe_rank(relayrank)
       temp_ptr = local_arena % newblock(1024*8, cioin_name)
       ok = local_cio_in % create(temp_ptr, 1024*8)
@@ -845,6 +853,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       if(debug_mode) call print_created(temp_ptr, heap_name, sz32)
       temp_ptr = local_heap % create(temp_ptr, sz32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
+      call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
 
       !  1%  of per PE size for relay -> compute circular buffer
       write(cioin_name ,'(A4,I4.4)') "MCIO", memory_map % pe_rank(relayrank)

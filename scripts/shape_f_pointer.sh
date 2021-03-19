@@ -58,29 +58,39 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   type(block_meta_f08)              :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref
   type(block_meta_c)   :: bmc
-  type(C_PTR) :: cptr
+  type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = 1
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0), C_NULL_PTR)
+  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
+
     print *,'bad rank request, expecting',${D}, ', got',size(di)
+
   else                              ! NO, allocate array (size is in BYTES)
-    bsz = C_SIZEOF(bmc)
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   !  size of data + size of metadata
-    cptr = ${MALLOC}(h%p, asz, 0)            ! allocate block
+
+    bsz = C_SIZEOF(bmc)                      ! size of C metadata
+    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
+    cptr = ${MALLOC}(h%p, asz, 0)            ! allocate block in heap
     if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
-    call C_F_POINTER(cptr, p, [di]) ! make Fortran pointer from C pointer
+
+    call C_F_POINTER(cptr, p, [di]) ! make Fortran array pointer from C pointer
+
     tkr = 256*${L}+16*${RI}+${D}    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr = tkr                 ! build C interoperable metadata
-    bmi%a%d = 1                     ! set all 5 dimensions to 1
+    bmi%a%d         = 1             ! set all 5 dimensions to 1
     bmi%a%d(1:${D}) = di(1:${D})    ! set relevant dimensions to correct value
-    bmi%p = cptr
-    bmi%h = h%p
-    status = ${METADATA}(cptr, bmi%a, bsz)  ! insert metadata into data block
+    ref          = h%get_base()                 ! get reference address for this heap
+    asz          = transfer(ref, asz)           ! reference address
+    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
+    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%p        = cptr                         ! actual address of array
+    status = ${METADATA}(cptr, bmi%a, bsz)      ! insert metadata into data block
+
   endif
 end function ${RI}${L}_${D}D
 
