@@ -36,6 +36,16 @@ static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(i
                                                 : sizeof(data_element) == sizeof(int64_t) ? MPI_LONG_LONG_INT
                                                                                           : MPI_DATATYPE_NULL;
 
+//! How long to wait between checks for free space in a buffer (microseconds)
+static const int SPACE_CHECK_DELAY_US = 100;
+//! How long to wait between checks for data in a buffer (microseconds)
+static const int DATA_CHECK_DELAY_US = 20;
+//! How long to wait between each window sync from a receiver process
+static const int WINDOW_SYNC_DELAY_US = 10;
+
+//! ID of the server process that is considered the root of a DCB
+static const int DCB_ROOT_ID = 0;
+
 //C_StArT
 /**
  * @brief Needs to be aligned to size of #data_element
@@ -88,16 +98,17 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * _The receiver processes must be located on the same physical node as the consumers._
  */
 typedef struct {
-  int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
-  int32_t    num_consumers;
+  int32_t    num_consumers; //!< How many server processes will read from the individual buffers
   int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t receiver_id;
   int32_t consumer_id;
   int32_t producer_id;
+
+  int32_t server_rank;
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
@@ -149,13 +160,6 @@ typedef struct {
 } offset_header;
 
 typedef offset_header* offset_header_p;
-
-//! How long to wait between checks for free space in a buffer (microseconds)
-static const int SPACE_CHECK_DELAY_US = 100;
-//! How long to wait between checks for data in a buffer (microseconds)
-static const int DATA_CHECK_DELAY_US = 20;
-//! How long to wait between each window sync from a receiver process
-static const int WINDOW_SYNC_DELAY_US = 10;
 
 //F_StArT
 //  include 'io-server/circular_buffer.inc'
@@ -397,49 +401,24 @@ static inline MPI_Aint remote_header_displacement(const distributed_circular_buf
 
 //! @{ @name Helper functions
 
-static inline int get_first_consumer_rank(const distributed_circular_buffer_p buffer) {
-  return 0;
-}
-
-static inline int get_first_receiver_rank(const distributed_circular_buffer_p buffer) {
-  return buffer->num_consumers;
-}
-
-static inline int get_first_producer_rank(const distributed_circular_buffer_p buffer) {
-  return buffer->num_consumers + buffer->num_channels;
-}
-
-//! Rank of the "root" process, responsible for managing the buffer's shared memory
-static inline int get_root_id(const distributed_circular_buffer_p buffer) {
-  return get_first_consumer_rank(buffer);
-}
-
-static inline int get_server_comm_root_id(const distributed_circular_buffer_p buffer) {
-  return 0;
-}
-
-static inline int get_num_server_processes(const distributed_circular_buffer_p buffer) {
-  return buffer->num_consumers + buffer->num_channels;
-}
-
 //! Check whether the given distributed buffer is located on a consumer process
 static inline int is_consumer(const distributed_circular_buffer_p buffer) {
-  return (buffer->rank < buffer->num_consumers);
+  return (buffer->consumer_id >= 0);
 }
 
 //! Check whether the given distributed buffer is located on a producer process
 static inline int is_producer(const distributed_circular_buffer_p buffer) {
-  return (buffer->rank >= get_first_producer_rank(buffer));
+  return (buffer->producer_id >= 0);
 }
 
 //! Check whether the given distributed buffer is located on the DCB root process
 static inline int is_root(const distributed_circular_buffer_p buffer) {
-  return (buffer->rank == get_root_id(buffer));
+  return (buffer->server_rank == DCB_ROOT_ID);
 }
 
 //! Check whether the given distributed buffer is located on a receiver process
 static inline int is_receiver(const distributed_circular_buffer_p buffer) {
-  return (buffer->rank >= get_first_receiver_rank(buffer) && buffer->rank < get_first_producer_rank(buffer));
+  return (buffer->receiver_id >= 0);
 }
 
 //! Set the process rank to be used for MPI communication for the given CB instance
@@ -474,12 +453,11 @@ static void retrieve_window_offset_from_remote(
     distributed_circular_buffer_p buffer //!< Buffer for which we want the window offset
 ) {
   // We communicate through the root process, because we don't yet know the rank of our target
-  const int root_rank = get_root_id(buffer);
-  MPI_Win_lock(MPI_LOCK_SHARED, root_rank, MPI_MODE_NOCHECK, buffer->window);
+  MPI_Win_lock(MPI_LOCK_SHARED, DCB_ROOT_ID, MPI_MODE_NOCHECK, buffer->window);
   MPI_Get(
-      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, root_rank, window_offset_displacement(buffer->producer_id), 1,
+      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, DCB_ROOT_ID, window_offset_displacement(buffer->producer_id), 1,
       CB_MPI_ELEMENT_TYPE, buffer->window);
-  MPI_Win_unlock(root_rank, buffer->window);
+  MPI_Win_unlock(DCB_ROOT_ID, buffer->window);
 }
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance
@@ -487,9 +465,8 @@ static inline void update_local_header_from_remote(
     distributed_circular_buffer_p buffer //!< [in] Buffer set from which we want to update a single instance
 ) {
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
-  const int target_rank =
-      buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : get_root_id(buffer);
-  const int num_elem = instance_header_size();
+  const int target_rank = buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : DCB_ROOT_ID;
+  const int num_elem    = instance_header_size();
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
   MPI_Get(
       &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, remote_header_displacement(buffer), num_elem,
@@ -693,17 +670,21 @@ distributed_circular_buffer_p DCB_create(
   buffer->num_channels             = num_channels;
   buffer->num_element_per_instance = num_elements;
   buffer->local_header.target_rank = -1;
-  MPI_Comm_rank(buffer->communicator, &buffer->rank);
+
+  buffer->receiver_id = -1;
+  buffer->consumer_id = -1;
+  buffer->producer_id = -1;
+  buffer->server_rank = -1;
+
+  int dcb_rank;
+  MPI_Comm_rank(buffer->communicator, &dcb_rank);
 
   // Determine which process will be the root of the DCB
   if (buffer->server_communicator != MPI_COMM_NULL) {
-    MPI_Comm_rank(buffer->server_communicator, &buffer->rank);
-    if (buffer->rank == 0) {
-      // Check that the root of the DCB is also rank 0 on the entire communicator
-      int total_rank;
-      MPI_Comm_rank(buffer->communicator, &total_rank);
-      if (total_rank != 0) {
-        printf("ERROR during DCB_create. Rank 0 is not on the server communicator...\n");
+    MPI_Comm_rank(buffer->server_communicator, &buffer->server_rank);
+    if (buffer->server_rank == DCB_ROOT_ID) {
+      if (dcb_rank != DCB_ROOT_ID) {
+        printf("ERROR during DCB_create. DCB rank %d is not on the server communicator...\n", DCB_ROOT_ID);
         return NULL;
       }
 
@@ -715,36 +696,30 @@ distributed_circular_buffer_p DCB_create(
 
   // We assume the rank 0 process is the root and contains the relevant info
   // Now make sure the other processes have the same info
-  MPI_Bcast(&buffer->num_producers, 1, MPI_INT, 0, buffer->communicator);
-  MPI_Bcast(&buffer->num_channels, 1, MPI_INT, 0, buffer->communicator);
-  MPI_Bcast(&buffer->num_consumers, 1, MPI_INT, 0, buffer->communicator);
-  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INT, 0, buffer->communicator);
+  MPI_Bcast(&buffer->num_producers, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
+  MPI_Bcast(&buffer->num_channels, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
+  MPI_Bcast(&buffer->num_consumers, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
+  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
 
-  // Assign a "buffer rank" to every producer process
+  // Assign a "buffer rank" to every producer process. It will be their producer ID
   if (server_communicator == MPI_COMM_NULL) {
     MPI_Comm new_comm;
     MPI_Comm_split(buffer->communicator, 1, 0, &new_comm);
-    MPI_Comm_rank(new_comm, &buffer->rank);
-    buffer->rank += get_num_server_processes(buffer);
+    MPI_Comm_rank(new_comm, &buffer->producer_id);
   }
   else {
     MPI_Comm dummy;
-    MPI_Comm_split(buffer->communicator, 0, buffer->rank, &dummy);
-  }
+    MPI_Comm_split(buffer->communicator, 0, dcb_rank, &dummy);
 
-  // Set internal ID for each type of process participating in the buffer set
-  buffer->receiver_id = -1;
-  buffer->consumer_id = -1;
-  buffer->producer_id = -1;
+    if (buffer->server_rank < 0) {
+      printf("WE HAVE A PROBLEM!!!\n");
+      return NULL;
+    }
 
-  if (is_producer(buffer)) {
-    buffer->producer_id = buffer->rank - get_first_producer_rank(buffer);
-  }
-  else if (is_consumer(buffer)) {
-    buffer->consumer_id = buffer->rank - get_first_consumer_rank(buffer);
-  }
-  else if (is_receiver(buffer)) {
-    buffer->receiver_id = buffer->rank - get_first_receiver_rank(buffer);
+    if (buffer->server_rank < buffer->num_consumers)
+      buffer->consumer_id = buffer->server_rank;
+    else
+      buffer->receiver_id = buffer->server_rank - buffer->num_consumers;
   }
 
   const MPI_Aint win_total_size =
@@ -797,10 +772,8 @@ distributed_circular_buffer_p DCB_create(
 
     MPI_Aint size;
     int      disp_unit;
-    MPI_Win_shared_query(
-        buffer->window_mem_dummy, get_server_comm_root_id(buffer), &size, &disp_unit, &buffer->raw_data);
-    MPI_Win_shared_query(
-        buffer->consumer_stats_window, get_server_comm_root_id(buffer), &size, &disp_unit, &buffer->consumer_stats);
+    MPI_Win_shared_query(buffer->window_mem_dummy, DCB_ROOT_ID, &size, &disp_unit, &buffer->raw_data);
+    MPI_Win_shared_query(buffer->consumer_stats_window, DCB_ROOT_ID, &size, &disp_unit, &buffer->consumer_stats);
 
     if (is_receiver(buffer)) {
       int full_rank;
@@ -816,7 +789,7 @@ distributed_circular_buffer_p DCB_create(
   MPI_Win_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
 
-  MPI_Bcast(&init_result, 1, MPI_INTEGER, get_root_id(buffer), buffer->communicator);
+  MPI_Bcast(&init_result, 1, MPI_INTEGER, DCB_ROOT_ID, buffer->communicator);
 
   if (!init_result) {
     DCB_delete(buffer);
@@ -878,18 +851,22 @@ distributed_circular_buffer_p DCB_create_f(
 void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which to print data
 ) {
   printf(
-      "Printing distributed circ buf, rank: %d, num producers %d, num channels %d, buf sizes %d, window offset = %d\n",
-      buffer->rank, buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance,
-      buffer->window_offset);
+      "Printing distributed circ buf: num producers %d, num channels %d, buf sizes %d, window offset = %d\n"
+      "Consumer ID: %d\n"
+      "Producer ID: %d\n"
+      "Channel ID:  %d\n"
+      "Server rank: %d\n",
+      buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance, buffer->window_offset,
+      buffer->consumer_id, buffer->producer_id, buffer->receiver_id, buffer->server_rank);
   if (is_producer(buffer)) {
     printf(
-        "Num elems: %ld, num spaces: %ld (rank %d, might be outdated)\n"
+        "Num elems: %ld, num spaces: %ld\n"
         "Target rank: %ld\n"
         "version: %d, first %d, in %d, out %d, limit %d\n",
         (int64_t)CB_get_available_data(&buffer->local_header.buf),
-        (int64_t)CB_get_available_space(&buffer->local_header.buf), buffer->rank,
-        (int64_t)buffer->local_header.target_rank, buffer->local_header.buf.m.version, buffer->local_header.buf.m.first,
-        buffer->local_header.buf.m.in, buffer->local_header.buf.m.out, buffer->local_header.buf.m.limit);
+        (int64_t)CB_get_available_space(&buffer->local_header.buf), (int64_t)buffer->local_header.target_rank,
+        buffer->local_header.buf.m.version, buffer->local_header.buf.m.first, buffer->local_header.buf.m.in,
+        buffer->local_header.buf.m.out, buffer->local_header.buf.m.limit);
   }
   else if (is_root(buffer)) {
     for (int i = 0; i < buffer->num_producers; ++i) {
@@ -913,8 +890,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   if (is_producer(buffer)) {
     MPI_Send(
-        &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, get_root_id(buffer), buffer->producer_id,
-        buffer->communicator);
+        &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, DCB_ROOT_ID, buffer->producer_id, buffer->communicator);
   }
 
   if (is_root(buffer)) {

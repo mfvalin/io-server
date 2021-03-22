@@ -78,7 +78,7 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * _The receiver processes must be located on the same physical node as the consumers._
  */
 typedef struct {
-  int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
+  //  int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
   int32_t    num_consumers;
@@ -88,6 +88,8 @@ typedef struct {
   int32_t receiver_id;
   int32_t consumer_id;
   int32_t producer_id;
+
+  int32_t server_rank;
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
