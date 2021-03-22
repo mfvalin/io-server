@@ -33,7 +33,7 @@ implicit none
 integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
 integer(C_INT), intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
 integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
-integer(C_INT), intent(IN), value :: num_channels   !< Number of receivers (PEs used for communication only)
+integer(C_INT), intent(IN), value :: num_channels   !< Number of channels (PEs used for communication only)
 integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
 type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
 end function DCB_create
@@ -66,12 +66,12 @@ implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) :: producer_id
 end function DCB_get_producer_id
-function DCB_get_receiver_id(buffer) result(receiver_id) BIND(C, name = 'DCB_get_receiver_id')
+function DCB_get_channel_id(buffer) result(channel_id) BIND(C, name = 'DCB_get_channel_id')
 import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
-integer(C_INT) :: receiver_id
-end function DCB_get_receiver_id
+integer(C_INT) :: channel_id
+end function DCB_get_channel_id
 function DCB_get_consumer_id(buffer) result(consumer_id) BIND(C, name = 'DCB_get_consumer_id')
 import :: C_PTR, C_INT
 implicit none
@@ -90,12 +90,12 @@ implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) :: num_consumers
 end function DCB_get_num_consumers
-function DCB_start_receiving(buffer) result(return_value) BIND(C, name = 'DCB_start_receiving')
+function DCB_channel_start_listening(buffer) result(return_value) BIND(C, name = 'DCB_channel_start_listening')
 import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) :: return_value
-end function DCB_start_receiving
+end function DCB_channel_start_listening
 subroutine DCB_full_barrier(buffer) BIND(C, name = 'DCB_full_barrier')
 import :: C_PTR, C_INT
 implicit none

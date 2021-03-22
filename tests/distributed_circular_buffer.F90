@@ -32,18 +32,18 @@ module parameters
 end module parameters
 
 
-function test_dcb_receiver(buffer) result(num_errors)
+function test_dcb_channel(buffer) result(num_errors)
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
   class(distributed_circular_buffer), intent(inout) :: buffer
   integer :: num_errors
   integer :: return_value
 
-  return_value = buffer % start_receiving()
+  return_value = buffer % start_listening()
 
   num_errors = 1
   if (return_value == 0) num_errors = 0
-end function test_dcb_receiver
+end function test_dcb_channel
 
 
 function test_dcb_consumer(buffer, rank) result(num_errors)
@@ -256,12 +256,12 @@ program test_distributed_circular_buffer
     integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
     integer, intent(in) :: rank
   end subroutine init_array
-  function test_dcb_receiver(buffer) result(num_errors)
+  function test_dcb_channel(buffer) result(num_errors)
     use distributed_circular_buffer_module, only : distributed_circular_buffer
     implicit none
     class(distributed_circular_buffer), intent(inout) :: buffer
     integer :: num_errors
-  end function test_dcb_receiver
+  end function test_dcb_channel
   function test_dcb_consumer(buffer, rank) result(num_errors)
     use distributed_circular_buffer_module, only : distributed_circular_buffer
     implicit none
@@ -286,7 +286,7 @@ program test_distributed_circular_buffer
   integer, dimension(3, 1) :: incl_range
 
   type(distributed_circular_buffer) :: circ_buffer
-  integer :: num_producers, consumer_id, receiver_id, producer_id
+  integer :: num_producers, consumer_id, channel_id, producer_id
 
   ! Initialization
 
@@ -326,10 +326,10 @@ program test_distributed_circular_buffer
   end if
 
   consumer_id = circ_buffer % get_consumer_id()
-  receiver_id = circ_buffer % get_receiver_id()
+  channel_id  = circ_buffer % get_channel_id()
   producer_id = circ_buffer % get_producer_id()
 
-!  print *, 'rank, prod, receive, consume ', rank, producer_id, receiver_id, consumer_id
+!  print *, 'rank, prod, channel, consume ', rank, producer_id, channel_id, consumer_id
 
 
   if (.not. circ_buffer % is_valid()) then
@@ -346,8 +346,8 @@ program test_distributed_circular_buffer
     num_errors =  test_dcb_consumer(circ_buffer, rank)
   else if (producer_id >= 0) then
     num_errors = test_dcb_producer(circ_buffer, rank)
-  else if (receiver_id >= 0) then
-    num_errors = test_dcb_receiver(circ_buffer)
+  else if (channel_id >= 0) then
+    num_errors = test_dcb_channel(circ_buffer)
   else
     num_errors = 1
   end if

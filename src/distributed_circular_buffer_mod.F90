@@ -45,11 +45,11 @@ module distributed_circular_buffer_module
 !    procedure :: get_num_spaces
     procedure :: sync_window
     procedure :: get_producer_id
-    procedure :: get_receiver_id
+    procedure :: get_channel_id
     procedure :: get_consumer_id
     procedure :: get_num_producers
     procedure :: get_num_consumers
-    procedure :: start_receiving
+    procedure :: start_listening
     procedure :: server_barrier
     procedure :: full_barrier
   end type distributed_circular_buffer
@@ -162,12 +162,12 @@ contains
     producer_id = DCB_get_producer_id(this % c_buffer)
   end function get_producer_id
 
-  function get_receiver_id(this) result(receiver_id)
+  function get_channel_id(this) result(channel_id)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT) :: receiver_id
-    receiver_id = DCB_get_receiver_id(this % c_buffer)
-  end function get_receiver_id
+    integer(C_INT) :: channel_id
+    channel_id = DCB_get_channel_id(this % c_buffer)
+  end function get_channel_id
 
   function get_consumer_id(this) result(consumer_id)
     implicit none
@@ -190,12 +190,12 @@ contains
     num_consumers = DCB_get_num_consumers(this % c_buffer)
   end function get_num_consumers
 
-  function start_receiving(this) result(return_value)
+  function start_listening(this) result(return_value)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT) :: return_value
-    return_value = DCB_start_receiving(this % c_buffer)
-  end function start_receiving
+    return_value = DCB_channel_start_listening(this % c_buffer)
+  end function start_listening
 
   subroutine full_barrier(this)
     implicit none

@@ -74,18 +74,17 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * always passive; this removes any need for explicit synchronization related to data transfer. To enable a larger
  * bandwidth for remote data transfers, producers are able to access the shared memory window through multiple channels
  * (one process per channel). To ensure that the data will be received as quickly as possible from the passive/target
- * side, the "receiver" process of each channel is constantly polling for updates by synchronizing the window.
- * _The receiver processes must be located on the same physical node as the consumers._
+ * side, each channel process is constantly polling for updates by synchronizing the window.
+ * _The channel processes must be located on the same physical node as the consumers._
  */
 typedef struct {
-  //  int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
-  int32_t    num_consumers;
+  int32_t    num_consumers; //!< How many server processes will read from the individual buffers
   int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
-  int32_t receiver_id;
+  int32_t channel_id;
   int32_t consumer_id;
   int32_t producer_id;
 
@@ -119,7 +118,7 @@ distributed_circular_buffer_p DCB_create(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
-    const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
+    const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
 );
 int32_t DCB_get_num_elements(
