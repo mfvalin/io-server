@@ -52,12 +52,18 @@ module ioserver_internal_mod
   save
 
   integer, parameter :: MAX_PES_PER_NODE = 128
+  type :: pe_info 
+    integer(C_INTPTR_T) :: heap                     ! offset into shared memory arena
+    integer(C_INTPTR_T) :: cio_in                   ! offset into shared memory arena
+    integer(C_INTPTR_T) :: cio_out                  ! offset into shared memory arena
+    integer             :: color                    ! PE type (compute/relay/server/...)
+    integer             :: rank                     ! rank on node
+  end type
   type :: ctrl_shared_memory
     integer :: time_to_quit = 0
-    integer, dimension(MAX_PES_PER_NODE) :: pe_color
-    integer, dimension(MAX_PES_PER_NODE) :: pe_rank
+    type(pe_info), dimension(MAX_PES_PER_NODE) :: pe
   end type
-  type(ctrl_shared_memory), pointer :: memory_map
+  type(ctrl_shared_memory), pointer :: mem => NULL()
   !  ==========================================================================================
   !                        shared memory areas , addresses, communicators, windows
   !  ==========================================================================================
@@ -152,7 +158,7 @@ module ioserver_internal_mod
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
 !! F_EnD
   implicit none
-  memory_map % time_to_quit = 1
+  mem % time_to_quit = 1
   print *,'MSG: time to quit'
 !! F_StArT
 end subroutine IOserver_set_time_to_quit
@@ -165,7 +171,7 @@ function IOserver_is_time_to_quit() result(status)  BIND(C,name='IOserver_is_tim
   implicit none
   integer(C_INT) :: status   ! .true. if time to quit
 !! F_EnD
-  status = memory_map % time_to_quit
+  status = mem % time_to_quit
 !! F_StArT
 end function IOserver_is_time_to_quit
 !!
@@ -698,9 +704,9 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 !   if(debug_mode) print *,'DEBUG: ctrlsiz, smp_rank, ierr =',ctrlsiz, smp_rank, ierr
   ! ctrlwin is no longer used after this query
   ctrlmem = transfer(win_base, C_NULL_PTR)
-  call C_F_POINTER(ctrlmem, memory_map)             ! main control structure points to shared memory at ctrlmem
+  call C_F_POINTER(ctrlmem, mem)             ! main control structure points to shared memory at ctrlmem
 
-  if(smp_rank == 0) memory_map % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
+  if(smp_rank == 0) mem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
   call MPI_barrier(global_comm, ierr)               ! wait until control area initialization is done everywhere
 
   ! split global communicator into : server+model+relay / no-op
@@ -803,15 +809,15 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       call MPI_Alloc_mem(winsize, MPI_INFO_NULL, win_base, ierr)     ! allocate memory through MPI library for 1 sided get/put with server PEs
 !       if(debug_mode) print *,'DEBUG: after MPI_Alloc_mem, rank, ierr, base =',smp_rank,ierr, win_base
     endif
-    memory_map % pe_color(relayrank) = color
+    mem % pe(relayrank) % color = color
     call MPI_Comm_split(relaycom, color, relayrank, temp_comm, ierr)      ! split into compute and IO relay
     if(color == RELAY_COLOR) then
       relay_smp_comm = temp_comm    ! relay PEs on same SMP node
     else
       model_smp_comm = temp_comm    ! compute PEs on same SMP node
     endif
-    call MPI_Comm_rank(temp_comm, memory_map % pe_rank(relayrank), ierr)  ! rank on node in my color
-    if(debug_mode) print *,'DEBUG: rank',memory_map % pe_rank(relayrank),' in color',color
+    call MPI_Comm_rank(temp_comm, mem % pe(relayrank)%rank, ierr)  ! rank on node in my color
+    if(debug_mode) print *,'DEBUG: rank',mem % pe(relayrank)%rank,' in color',color
 
     call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)    ! split into model compute and IO relay processes
 
@@ -825,15 +831,15 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       iorelay_comm  = temp_comm                                ! for internal module
       nodeio        = iorelay_comm                             ! output argument
       !  allocate nominal heap and circular buffers (8K elements)
-      write(heap_name  ,'(A5,I3.3)') "RHEAP",memory_map % pe_rank(relayrank)
+      write(heap_name  ,'(A5,I3.3)') "RHEAP",mem % pe(relayrank)%rank
       temp_ptr = local_arena % newblock(1024*8, heap_name)
       temp_ptr = local_heap % create(temp_ptr, 1024*32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
-      write(cioin_name ,'(A4,I4.4)') "RCIO", memory_map % pe_rank(relayrank)
+      write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(relayrank)%rank
       temp_ptr = local_arena % newblock(1024*8, cioin_name)
       ok = local_cio_in % create(temp_ptr, 1024*8)
-      write(cioout_name,'(A4,I4.4)') "RCIO", memory_map % pe_rank(relayrank) + 1000
+      write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(relayrank)%rank + 1000
       temp_ptr = local_arena % newblock(1024*8, cioout_name)
       ok = local_cio_out % create(temp_ptr, 1024*8)
 
@@ -847,7 +853,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       shmsz64 = shmsz64 / relaysize                          ! size per PE on node
 
       ! 80%  of per PE size for heap
-      write(heap_name  ,'(A5,I3.3)') "MHEAP",memory_map % pe_rank(relayrank)
+      write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(relayrank)%rank
       sz32 = shmsz64 * 0.8
       temp_ptr = local_arena % newblock(sz32, heap_name)
       if(debug_mode) call print_created(temp_ptr, heap_name, sz32)
@@ -856,14 +862,14 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
 
       !  1%  of per PE size for relay -> compute circular buffer
-      write(cioin_name ,'(A4,I4.4)') "MCIO", memory_map % pe_rank(relayrank)
+      write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(relayrank)%rank
       sz32 = shmsz64 * 0.01
       temp_ptr = local_arena % newblock(sz32, cioin_name)
       if(debug_mode) call print_created(temp_ptr, cioin_name, sz32)
       ok = local_cio_in % create(temp_ptr, sz32)
 
       ! 10%  of per PE size for compute -> relay circular buffer
-      write(cioout_name,'(A4,I4.4)') "MCIO", memory_map % pe_rank(relayrank) + 1000
+      write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(relayrank)%rank + 1000
       sz32 = shmsz64 * 0.1           ! 10% for outbound circular buffer
       temp_ptr = local_arena % newblock(sz32, cioout_name)
       if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
