@@ -61,6 +61,7 @@ contains
     class(circular_buffer), intent(INOUT) :: cb
     logical :: is_valid
     is_valid = c_associated(cb % p)
+    if (is_valid) is_valid = (CB_check_integrity(cb % p) == 0)
   end function is_valid
 
   subroutine print_header(cb)

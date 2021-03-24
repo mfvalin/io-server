@@ -48,6 +48,7 @@ module distributed_circular_buffer_module
     procedure :: get_receiver_id
     procedure :: get_consumer_id
     procedure :: get_num_producers
+    procedure :: get_num_consumers
     procedure :: start_receiving
     procedure :: server_barrier
     procedure :: full_barrier
@@ -181,6 +182,13 @@ contains
     integer(C_INT) :: num_producers
     num_producers = DCB_get_num_producers(this % c_buffer)
   end function get_num_producers
+
+  function get_num_consumers(this) result(num_consumers)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: num_consumers
+    num_consumers = DCB_get_num_consumers(this % c_buffer)
+  end function get_num_consumers
 
   function start_receiving(this) result(return_value)
     implicit none

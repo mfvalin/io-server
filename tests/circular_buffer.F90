@@ -56,7 +56,7 @@ subroutine shared_mem_test()
   type(circular_buffer) :: buffer_a, buffer_b
   type(C_PTR)           :: shmem_ptr_a, shmem_ptr_b
   integer(DATA_ELEMENT) :: dummy_element
-  logical               :: success
+  logical               :: success, dummy_bool
 
   integer(DATA_ELEMENT), dimension(NPTEST) :: local_data, received_data, source_data
 
@@ -98,13 +98,13 @@ subroutine shared_mem_test()
   shmem_ptr_a  = transfer(base_mem_ptr, C_NULL_PTR)   ! pointer to my circular buffer
   shmem_ptr_b  = transfer(target_mem_ptr, C_NULL_PTR) ! pointer to my target's circular buffer
   success = buffer_a % create(shmem_ptr_a, NUM_BUFFER_ELEMENTS)  ! create my circular buffer
-  success = buffer_b % create(shmem_ptr_b) .and. success         ! point to target's circular buffer
+  dummy_bool = buffer_b % create(shmem_ptr_b)                      ! point to target's circular buffer
 
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if (.not. success) then
+  if (.not. success .or. .not. buffer_a % is_valid() .or. .not. buffer_b % is_valid()) then
     print *, 'Buffer initialisation failed ', buffer_a % is_valid(), buffer_b % is_valid()
     errors = errors + 1
   end if

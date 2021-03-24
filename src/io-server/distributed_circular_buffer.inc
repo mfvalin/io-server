@@ -84,6 +84,12 @@ implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) :: num_producers
 end function DCB_get_num_producers
+function DCB_get_num_consumers(buffer) result(num_consumers) BIND(C, name = 'DCB_get_num_consumers')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer
+integer(C_INT) :: num_consumers
+end function DCB_get_num_consumers
 function DCB_start_receiving(buffer) result(return_value) BIND(C, name = 'DCB_start_receiving')
 import :: C_PTR, C_INT
 implicit none
