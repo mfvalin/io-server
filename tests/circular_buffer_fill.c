@@ -82,10 +82,22 @@ int fill_test(int argc, char** argv) {
     num_errors++;
 
   const int max_num_elements = CB_get_available_space(local_buffer);
+  const int capacity         = CB_get_capacity(local_buffer);
   init_array(local_data, NPTEST, my_rank);
 
   if (my_rank != 0) {
-    const int num_free = CB_atomic_put(local_buffer, local_data, max_num_elements);
+    if (capacity != max_num_elements) {
+      printf("Ahhhh inconsistency between free space (%d) and capacity (%d)!\n", max_num_elements, capacity);
+      num_errors++;
+    }
+
+    const int expected_error = CB_atomic_put(local_buffer, local_data, capacity + 1, CB_COMMIT);
+    if (expected_error != -1) {
+      printf("Wrong return value after trying to put more than max into the buffer! %d\n", expected_error);
+      num_errors++;
+    }
+
+    const int num_free = CB_atomic_put(local_buffer, local_data, max_num_elements, CB_COMMIT);
     if (num_free != 0)
       num_errors++;
   }
@@ -105,11 +117,11 @@ int fill_test(int argc, char** argv) {
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
         sleep_us(READ_DELAY_US);
-        CB_atomic_get(all_buffers[i], received_data, NUM_BUFFER_ELEMENTS / 2);
+        CB_atomic_get(all_buffers[i], received_data, NUM_BUFFER_ELEMENTS / 2, CB_COMMIT);
       }
     }
     else {
-      CB_atomic_put(local_buffer, local_data + NUM_BUFFER_ELEMENTS, 1);
+      CB_atomic_put(local_buffer, local_data + NUM_BUFFER_ELEMENTS, 1, CB_COMMIT);
       io_timer_stop(&put_time);
 
       const double t = io_time_ms(&put_time);
@@ -134,7 +146,7 @@ int fill_test(int argc, char** argv) {
 
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
-        CB_atomic_get(all_buffers[i], received_data, max_num_elements - NUM_BUFFER_ELEMENTS / 2 + 2);
+        CB_atomic_get(all_buffers[i], received_data, max_num_elements - NUM_BUFFER_ELEMENTS / 2 + 2, CB_COMMIT);
         io_timer_stop(&read_time);
         io_timer_start(&read_time);
         const double t = io_time_ms(&read_time);
@@ -142,11 +154,17 @@ int fill_test(int argc, char** argv) {
           num_errors++;
 
         //        printf("Read in %f ms\n", t);
+
+        const int expected_error = CB_atomic_get(all_buffers[i], received_data, capacity + 1, CB_COMMIT);
+        if (expected_error != -1) {
+          printf("Wrong return code after trying to read more than max buffer size! (%d)\n", expected_error);
+          num_errors++;
+        }
       }
     }
     else {
       sleep_us(WRITE_DELAY_US * my_rank);
-      CB_atomic_put(local_buffer, local_data, 1);
+      CB_atomic_put(local_buffer, local_data, 1, CB_COMMIT);
     }
   }
 

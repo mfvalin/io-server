@@ -27,6 +27,8 @@ module circular_buffer_module
   implicit none
   include 'io-server/circular_buffer.inc'
 
+#include "io-server/circular_buffer_defines.hf"
+
   !> \brief circular_buffer user defined type
   type, public :: circular_buffer
     !> \private
@@ -46,6 +48,8 @@ module circular_buffer_module
 
     procedure :: get_available_space !< Get number of empty slots available. \return Number of slot, -1 on error
     procedure :: get_available_data  !< Get current number of data elements available. \return Number of elements stored, -1 on error
+    procedure :: get_capacity        !< \return Maximum number of data elements that can be stored in the buffer
+    procedure :: peek !< Wait until enough data is available and just peek at it. \return number of elements in the buffer, -1 on error
     procedure :: atomic_get !< Wait until enough data is available then extract it. \return Number of elements left after operation, -1 on error
     procedure :: atomic_put !< Wait until enough free slots are available then insert data. \return Number of free slots after operation, -1 on error
 
@@ -154,28 +158,54 @@ contains
     n = CB_get_available_data(cb%p)
   end function get_available_data
 
+  function get_capacity(this) result(num_elements)
+    implicit none
+    class(circular_buffer), intent(INOUT) :: this
+    integer(C_INT) :: num_elements !< max number of elements that can fit
+    num_elements = CB_get_capacity(this % p)
+  end function get_capacity
+
+  function peek(cb, dest, num_elements) result(n)
+    implicit none
+    class(circular_buffer), intent(INOUT)            :: cb   !< The circular_buffer
+    integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dest !< Destination array to receive the data
+    integer(C_INT), intent(IN), value                :: num_elements !< How many elements we want to look at
+
+    integer(C_INT) :: n !< Number of elements available after this operation, -1 if error
+
+    n = CB_atomic_get(cb % p, dest, num_elements, CB_PEEK)
+  end function peek
+
   !> \brief wait until ndst tokens are available then extract them into dst
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
-  !> n = cb\%atomic_get(dst, ndst)
-  function atomic_get(cb, dst, ndst) result(n)
+  !> n = cb\%atomic_get(dst, ndst, commit_transaction)
+  function atomic_get(cb, dst, ndst, commit_transaction) result(n)
     implicit none
     class(circular_buffer), intent(INOUT)            :: cb    !< circular_buffer
     integer(C_INT), intent(IN), value                :: ndst  !< number of tokens to extract
     integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+    logical, intent(IN), value                       :: commit_transaction !< Whether to update the buffer (ie _extract_ the data)
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
-    n = CB_atomic_get(cb%p, dst, ndst)
+
+    integer(C_INT) :: operation = CB_NO_COMMIT
+    if (commit_transaction) operation = CB_COMMIT
+    n = CB_atomic_get(cb%p, dst, ndst, operation)
   end function atomic_get
 
   !> \brief wait until nsrc free slots are available then insert from src array
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%atomic_put(src, nsrc)
-  function atomic_put(cb, src, nsrc) result(n)
+  function atomic_put(cb, src, nsrc, commit_transaction) result(n)
     implicit none
     class(circular_buffer), intent(INOUT)           :: cb    !< circular_buffer
     integer(C_INT), intent(IN), value               :: nsrc  !< number of tokens to insert from src
     integer(DATA_ELEMENT), dimension(*), intent(IN) :: src   !< source array for data insertion
+    logical, intent(IN), value                      :: commit_transaction !< Whether to make the inserted data immediately available
     integer(C_INT) :: n                                    !< number of free slots available after this operation, -1 if error
-    n = CB_atomic_put(cb%p, src, nsrc)
+
+    integer(C_INT) :: operation = CB_NO_COMMIT
+    if (commit_transaction) operation = CB_COMMIT
+    n = CB_atomic_put(cb%p, src, nsrc, operation)
   end function atomic_put
 
   function delete(cb) result(status)

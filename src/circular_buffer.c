@@ -86,6 +86,23 @@
 // !>                 |                               |
 // !>                 IN                             OUT
 // !>   x = useful data       . = free space
+// !>
+// !>
+// !>      With partial insertion/extraction
+// !>
+// !>  avail. data            available space           avail. data
+// !>   ...________          _________________         ____...
+// !>              |        |                 |       |
+// !>   +------------------------------------------------------+
+// !>   xxxxxxxxxxxx::::::::...................;;;;;;;xxxxxxxx
+// !>   +-----------^-------^------------------^------^--------+
+// !>               |       |                  |      |
+// !>               IN      |                 OUT     |
+// !>                  PARTIAL_IN                PARTIAL_OUT
+// !>
+// !>   x = useful data    : = partially inserted data
+// !>   . = free space     ; = partially extracted data
+// !>
 // !> \endverbatim
 //F_EnD //C_EnD
 //C_StArT
@@ -107,6 +124,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "io-server/circular_buffer_defines.h"
 #include "io-server/common.h"
 
 #if !defined(FIOL_VERSION)
@@ -119,11 +137,13 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
-  data_element version; //!< version marker
-  data_index   first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index   in;      //!< start inserting data at data[in]
-  data_index   out;     //!< start extracting data at data[out]
-  data_index   limit;   //!< size of data buffer (last available index + 1)
+  data_element version;     //!< version marker
+  data_index   first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_index   in;          //!< Start inserting data at data[in]
+  data_index   partial_in;  //!< Temporary store start index, before 'committing' a store (insert)
+  data_index   out;         //!< Start reading data at data[out]
+  data_index   partial_out; //!< Temporary read start index, before 'committing' a read (extract)
+  data_index   limit;       //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -158,17 +178,6 @@ static inline data_index available_data(
   return (in >= out) ? in - out : limit - out + in;
 }
 
-/**
- * @brief Copy buffer elements into another array (either into or out of the buffer)
- */
-static inline void copy_elements(
-    data_element*       dst, //!< [out] Where to copy the elements
-    const data_element* src, //!< [in]  The elements to copy
-    int                 n    //!< [in] How many we want to copy
-) {
-  memcpy(dst, src, sizeof(data_element) * (size_t)n);
-}
-
 #endif
 //C_EnD
 
@@ -176,6 +185,8 @@ static inline void copy_elements(
 static const int DATA_READ_WAIT_TIME_US = 10;
 //! Number of microseconds to wait between reads of the IN/OUT indices of a buffer when waiting for space to be freed
 static const int SPACE_READ_WAIT_TIME_US = 10;
+
+int CB_check_integrity(const circular_buffer_p buffer);
 
 //F_StArT
 //  subroutine CB_print_header(buffer) bind(C, name = 'CB_print_header')
@@ -221,10 +232,12 @@ circular_buffer_p CB_init(
   if (nwords < MIN_CIRC_BUFFER_SIZE)
     return NULL; // area is too small
 
-  p->m.version = FIOL_VERSION;
-  p->m.first   = 0;
-  p->m.in      = 0;
-  p->m.out     = 0;
+  p->m.version     = FIOL_VERSION;
+  p->m.first       = 0;
+  p->m.in          = 0;
+  p->m.partial_in  = 0;
+  p->m.out         = 0;
+  p->m.partial_out = 0;
 
   // Header size in number of elements
   const data_index header_size =
@@ -298,7 +311,7 @@ circular_buffer_p CB_create_shared(
 //! detach "shared memory segment" used by circular buffer
 //! <br> = CB_detach_shared
 //! @return 0 upon success, nonzero upon error
-int32_t CB_detach_shared(circular_buffer_p p //!< [in]  pointer to a circular buffer
+int32_t CB_detach_shared(circular_buffer_p p //!< [in] pointer to a circular buffer
                          )
 //C_EnD
 {
@@ -350,8 +363,8 @@ circular_buffer_p CB_create(int32_t nwords //!< [in]  size in number of elements
 //! <br> = CB_from_pointer(p, nwords)
 //! @return address of the circular buffer upon success, NULL otherwise
 circular_buffer_p CB_from_pointer(
-    void*   p,     //!< [in]  pointer to user supplied memory space
-    int32_t nwords //!< [in]  size in number of elements of the circular buffer (#data_element)
+    void*   p,     //!< [in] Pointer to user supplied memory space
+    int32_t nwords //!< [in] Size in number of elements of the circular buffer (#data_element)
     )
 //C_EnD
 {
@@ -380,7 +393,7 @@ data_index CB_get_available_space(const circular_buffer_p buffer //!< [in] The b
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.in;
+  volatile data_index* in  = &buffer->m.partial_in;
   volatile data_index* out = &buffer->m.out;
   return available_space(*in, *out, buffer->m.limit);
 }
@@ -402,8 +415,25 @@ data_index CB_get_available_data(const circular_buffer_p buffer //!< [in] The bu
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
   volatile data_index* in  = &buffer->m.in;
-  volatile data_index* out = &buffer->m.out;
+  volatile data_index* out = &buffer->m.partial_out;
   return available_data(*in, *out, buffer->m.limit);
+}
+
+//F_StArT
+//  function CB_get_capacity(buffer) result(num_elements) BIND(C, name = 'CB_get_capacity')
+//    import C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer !< Pointer to the circular buffer we want to query
+//    integer(C_INT) :: num_elements           !< How many total elements can potentially be store in the buffer
+//  end function CB_get_capacity
+//F_EnD
+//C_StArT
+//! Compute the maximum number of elements the buffer can hold
+data_index CB_get_capacity(const circular_buffer_p buffer //!< [in] The buffer we want to query
+                           )
+//C_EnD
+{
+  return buffer->m.limit - buffer->m.first - 1;
 }
 
 //F_StArT
@@ -427,9 +457,10 @@ int32_t CB_wait_space_available(
     )
 //C_EnD
 {
-  if (p == NULL)
+  if (CB_check_integrity(p) != 0)
     return -1;
-  if (n < 0 || p->m.version != FIOL_VERSION)
+
+  if (n < 0 || n >= p->m.limit)
     return -1;
 
   data_index num_available = CB_get_available_space(p);
@@ -457,14 +488,15 @@ int32_t CB_wait_space_available(
 //! <br> = CB_wait_data_available(p, n)
 //! @return actual number of data tokens available, -1 if error
 int32_t CB_wait_data_available(
-    circular_buffer_p p, //!< [in]  pointer to a circular buffer
-    int               n  //!< [in]  needed number of available  #data_element tokens
+    circular_buffer_p p, //!< [in] pointer to a circular buffer
+    int               n  //!< [in] needed number of available  #data_element tokens
     )
 //C_EnD
 {
-  if (p == NULL)
+  if (CB_check_integrity(p) != 0)
     return -1;
-  if (p->m.version != FIOL_VERSION || n < 0)
+
+  if (n < 0 || n >= p->m.limit)
     return -1;
 
   data_index num_available = CB_get_available_data(p);
@@ -478,13 +510,14 @@ int32_t CB_wait_data_available(
 
 //F_StArT
 //   !> wait until ndst tokens are available then extract them into dst<br>
-//   !> n = CB_atomic_get(p, dst, ndst)
-//   function CB_atomic_get(p, dst, ndst) result(n) BIND(C,name='CB_atomic_get')
+//   !> n = CB_atomic_get(p, dst, ndst, operation)
+//   function CB_atomic_get(p, dst, ndst, operation) result(n) BIND(C,name='CB_atomic_get')
 //     import :: C_PTR, C_INT, DATA_ELEMENT
 //     implicit none
 //     type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 //     integer(C_INT), intent(IN), value :: ndst          !< number of tokens to extract
 //     integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+//     integer(C_INT), intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
 //     integer(C_INT) :: n                                !< number of data tokens available after this operation, -1 if error
 //   end function CB_atomic_get
 //F_EnD
@@ -493,93 +526,98 @@ int32_t CB_wait_data_available(
 //! <br> = CB_atomic_get(p, dst, n)
 //! @return number of data tokens available after this operation, -1 if error
 int32_t CB_atomic_get(
-    circular_buffer_p p,   //!< [in]  pointer to a circular buffer
-    data_element*     dst, //!< [out] destination array for data extraction
-    int               n    //!< [in]  number of #data_element data items to extract
+    circular_buffer_p p,   //!< [in]  Pointer to a circular buffer
+    data_element*     dst, //!< [out] Destination array for data extraction
+    int               n,   //!< [in]  Number of #data_element data items to extract
+    int operation          //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
     )
 //C_EnD
 {
-  CB_wait_data_available(p, n);
+  if (CB_wait_data_available(p, n) < 0)
+    return -1;
 
-  const data_index in    = p->m.in;
-  data_index       out   = p->m.out;
+  data_index       out   = p->m.partial_out;
   const data_index limit = p->m.limit;
   data_element*    buf   = p->data;
-  int              ni;
 
-  if (out < in) { // 1 segment
-    copy_elements(dst, buf + out, n);
-    out += n;
-  }
-  else { // 1 or 2 segments
-    ni = n > (limit - out) ? (limit - out) : n;
-    copy_elements(dst, buf + out, ni);
-    n -= ni;
-    out += ni;
-    dst += ni;
-    if (out >= limit)
-      out = 0;
-    copy_elements(dst, buf + out, n);
-    out += n;
+  const int num_elem_1 = n > (limit - out) ? (limit - out) : n;
+  copy_elements(dst, buf + out, num_elem_1);
+  out += num_elem_1;
+
+  if (out >= limit)
+    out = p->m.first;
+
+  if (num_elem_1 < n) {
+    const int num_elem_2 = n - num_elem_1;
+    copy_elements(dst + num_elem_1, buf + out, num_elem_2);
+    out += num_elem_2;
   }
 
-  memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
-  data_index volatile* outp = &(p->m.out);
-  *outp                     = out;
+  if (operation != CB_PEEK) {
+    p->m.partial_out = out;
+  }
+
+  if (operation == CB_COMMIT) {
+    memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+    data_index volatile* outp = &(p->m.out);
+    *outp                     = out;
+  }
 
   return CB_get_available_data(p);
 }
 
 //F_StArT
 //   !> wait until nsrc free slots are available then insert from src array<br>
-//   !> n = CB_atomic_put(p, src, nsrc)
-//   function CB_atomic_put(p, src, nsrc) result(n) BIND(C,name='CB_atomic_put')
+//   !> n = CB_atomic_put(p, src, nsrc, commit_transaction)
+//   function CB_atomic_put(p, src, nsrc, commit_transaction) result(n) BIND(C,name='CB_atomic_put')
 //     import :: C_PTR, C_INT, DATA_ELEMENT
 //     implicit none
-//     type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
-//     integer(C_INT), intent(IN), value :: nsrc          !< number of tokens to insert from src
-//     integer(DATA_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
-//     integer(C_INT) :: n                                !< number of free slots available after this operation
+//     type(C_PTR), intent(IN), value :: p                     !< pointer to a circular buffer
+//     integer(C_INT), intent(IN), value :: nsrc               !< number of tokens to insert from src
+//     integer(DATA_ELEMENT), dimension(*), intent(IN) :: src  !< source array for data insertion
+//     integer(C_INT), intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+//     integer(C_INT) :: n                                     !< number of free slots available after this operation
 //   end function CB_atomic_put
 //F_EnD
 //C_StArT
 //! wait until nsrc free slots are available then insert from src array
-//! <br> = CB_atomic_put(p, src, n)
+//! <br> = CB_atomic_put(p, src, n, commit_transaction)
 //! @return number of free slots available after this operation, -1 upon error
 int32_t CB_atomic_put(
-    circular_buffer_p p,   //!< [in]  pointer to a circular buffer
-    data_element*     src, //!< [in]  source array for data insertion
-    int               n    //!< [in]  number of #data_element data items to insert
+    circular_buffer_p p,   //!< [in] Pointer to a circular buffer
+    data_element*     src, //!< [in] Source array for data insertion
+    int               n,   //!< [in] Number of #data_element data items to insert
+    int operation //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
     )
 //C_EnD
 {
-  CB_wait_space_available(p, n);
+  if (CB_wait_space_available(p, n) < 0)
+    return -1;
 
-  data_element*    buf   = p->data;
-  data_index       in    = p->m.in;
-  const data_index out   = p->m.out;
-  const data_index limit = p->m.limit;
-  int              ni;
+  data_element*    buf        = p->data;
+  data_index       current_in = p->m.partial_in;
+  const data_index limit      = p->m.limit;
 
-  if (in < out) { // 1 segment
-    copy_elements(buf + in, src, n);
-    in += n;
-  }
-  else { // 1 or 2 segments
-    ni = n > (limit - in) ? (limit - in) : n;
-    copy_elements(buf + in, src, ni);
-    n -= ni;
-    in += ni;
-    src += ni;
-    if (in >= limit)
-      in = 0;
-    copy_elements(buf + in, src, n);
-    in += n;
+  const int num_elem_1 = n > (limit - current_in) ? (limit - current_in) : n;
+  copy_elements(buf + current_in, src, num_elem_1);
+  current_in += num_elem_1;
+
+  if (current_in >= limit)
+    current_in = p->m.first;
+
+  if (n > num_elem_1) {
+    const int num_elem_2 = n - num_elem_1;
+    copy_elements(buf, src + num_elem_1, num_elem_2);
+    current_in += num_elem_2;
   }
 
-  write_fence(); // make sure everything is in memory before adjusting the "in" pointer
-  data_index volatile* inp = &(p->m.in);
-  *inp                     = in;
+  p->m.partial_in = current_in;
+
+  if (operation == CB_COMMIT) {
+    write_fence(); // make sure everything is in memory before adjusting the "in" pointer
+    data_index volatile* inp = &(p->m.in);
+    *inp                     = current_in;
+  }
 
   return CB_get_available_space(p);
 }
@@ -601,32 +639,27 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
                        )
 //  C_EnD
 {
-  if (buffer == NULL)
-  {
+  if (buffer == NULL) {
     // printf("Invalid b/c NULL pointer\n");
     return -1;
   }
 
-  if (buffer->m.version != FIOL_VERSION)
-  {
+  if (buffer->m.version != FIOL_VERSION) {
     // printf("INVALID b/c wrong version (%d, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
     return -1;
   }
 
-  if (buffer->m.first != 0)
-  {
+  if (buffer->m.first != 0) {
     // printf("INVALID b/c m.first is NOT 0 (%d)\n", buffer->m.first);
     return -1;
   }
 
-  if (buffer->m.in < buffer->m.first || buffer->m.in >= buffer->m.limit)
-  {
+  if (buffer->m.in < buffer->m.first || buffer->m.in >= buffer->m.limit) {
     // printf("INVALID b/c \"in\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in, buffer->m.version);
     return -1;
   }
 
-  if (buffer->m.out < buffer->m.first || buffer->m.out >= buffer->m.limit)
-  {
+  if (buffer->m.out < buffer->m.first || buffer->m.out >= buffer->m.limit) {
     // printf("INVALID b/c \"out\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out, buffer->m.limit);
     return -1;
   }

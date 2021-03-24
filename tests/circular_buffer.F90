@@ -66,6 +66,7 @@ subroutine shared_mem_test()
   integer :: ierr, i, n, errors, tmp_errors
   integer :: window, disp_unit, target_disp_unit
   integer :: target_proc, source_proc
+  integer(C_INT) :: capacity
 
   errors = 0
 
@@ -100,6 +101,7 @@ subroutine shared_mem_test()
   success = buffer_a % create(shmem_ptr_a, NUM_BUFFER_ELEMENTS)  ! create my circular buffer
   dummy_bool = buffer_b % create(shmem_ptr_b)                      ! point to target's circular buffer
 
+  capacity = buffer_a % get_capacity()
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
@@ -119,24 +121,81 @@ subroutine shared_mem_test()
     errors = errors + 1
   end if
 
-  !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, ierr)
-  !--------------------------------------
-
-  n = buffer_b % atomic_put(local_data, STEP_SIZE) ! inject data into target's circular buffer
 
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  n = buffer_a % atomic_get(received_data, STEP_SIZE - 1) ! get from my own buffer (put there by source_proc)
+  n = buffer_b % atomic_put(local_data, STEP_SIZE, .false.) ! inject data into target's circular buffer
+
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  if (buffer_a % get_available_data() .ne. 0) then
+    print *, 'GOT ERROR. We did not commit the transaction, but there is data in the buffer!'
+    errors = errors + 1
+  end if
+
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  n = buffer_b % atomic_put(local_data, 0, .true.)
+
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  if (buffer_a % get_available_data() .ne. STEP_SIZE) then
+    print *, 'GOT ERROR. We just committed the previous transaction, so there should be exactly that many elements: ', STEP_SIZE
+    errors = errors + 1
+  end if
+
+  n = buffer_a % peek(received_data, STEP_SIZE)
+
+  if ((buffer_a % get_available_data() .ne. STEP_SIZE) .or. (n .ne. STEP_SIZE)) then
+    print *, 'GOT ERROR. We just peeked at the buffer, but the resulting number of elements is wrong!', n, STEP_SIZE
+    errors = errors + 1
+  end if
+
+  n = buffer_a % atomic_get(received_data, STEP_SIZE, .false.)
+  if (buffer_a % get_available_data() .ne. 0) then
+    print *, 'GOT ERROR. We just read the data, but it looks like the buffer is *not* empty', n
+    errors = errors + 1
+  end if
+
+  if (buffer_a % get_available_space() .ne. capacity - STEP_SIZE) then
+    print *, 'GOT ERROR. We only read the data without extracting it. The space should not be available'
+    errors = errors + 1
+  end if
+
+  n = buffer_a % atomic_get(received_data, 0, .true.)
+  if ((buffer_a % get_available_data() .ne. 0) .or. (buffer_a % get_available_space() .ne. capacity)) then
+    print *, 'GOT ERROR. Buffer should be completely empty'
+    errors = errors + 1
+  end if
+
+  print *, my_rank, 'Got to this point'
+
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  n = buffer_b % atomic_put(local_data, STEP_SIZE, .true.) ! inject data into target's circular buffer
+
+  !--------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !--------------------------------------
+
+  n = buffer_a % atomic_get(received_data, STEP_SIZE - 1, .true.) ! get from my own buffer (put there by source_proc)
 
   if (.not. all(received_data(1:STEP_SIZE - 2) == source_data(1:STEP_SIZE - 2))) then
     print *, 'GOT ERROR, data put directly in buffer by neighbor process (first call)'
     errors = errors + 1
   end if
 
-  n = buffer_a % atomic_get(received_data(STEP_SIZE), 1)  ! get from my own buffer (remainder of what was put)
+  n = buffer_a % atomic_get(received_data(STEP_SIZE), 1, .true.)  ! get from my own buffer (remainder of what was put)
 
   if (.not. all(received_data(1:STEP_SIZE - 2) == source_data(1:STEP_SIZE - 2))) then
     print *, 'GOT ERROR, data put directly in buffer by neighbor process (second call)'
@@ -149,8 +208,8 @@ subroutine shared_mem_test()
 
   do i = 1, NPTEST, STEP_SIZE  ! ring test with wraparound , make sure NPTEST > size of circular buffer
     if(my_rank == 0) then
-      n = buffer_b % atomic_put(local_data(i) , STEP_SIZE) ! send to next in ring
-      n = buffer_a % atomic_get(received_data(i), STEP_SIZE) ! then get from previous in ring
+      n = buffer_b % atomic_put(local_data(i) , STEP_SIZE, .true.) ! send to next in ring
+      n = buffer_a % atomic_get(received_data(i), STEP_SIZE, .true.) ! then get from previous in ring
 
       if (.not. all(local_data(i:i + STEP_SIZE - 1) == received_data(i:i + STEP_SIZE - 1))) then
         print *, 'GOT ERROR in ring data'
@@ -158,8 +217,8 @@ subroutine shared_mem_test()
       end if
 
     else
-      n = buffer_a % atomic_get(received_data(i) , STEP_SIZE) ! get from previous in ring
-      n = buffer_b % atomic_put(received_data(i) , STEP_SIZE) ! pass to next in ring
+      n = buffer_a % atomic_get(received_data(i) , STEP_SIZE, .true.) ! get from previous in ring
+      n = buffer_b % atomic_put(received_data(i) , STEP_SIZE, .true.) ! pass to next in ring
     endif
 
   enddo

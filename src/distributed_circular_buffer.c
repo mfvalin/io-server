@@ -29,7 +29,8 @@
 //C_StArT
 #include <mpi.h>
 
-#include "io-server/circular_buffer.h"
+#include "io-server/circular_buffer_defines.h"
+#include "io-server/common.h"
 //C_EnD
 
 static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INTEGER
@@ -56,6 +57,12 @@ typedef struct {
   double   total_wait_time_ms;
 } DCB_stats;
 
+enum
+{
+  DCB_FULL    = 0,
+  DCB_PARTIAL = 1
+};
+
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
  * distributed circular buffers.
@@ -65,8 +72,13 @@ typedef struct {
 typedef struct {
   int target_rank; //!< With which process this instance should communicate for data transfers
 
-  void*           dummy; // Force 64-bit alignment of the circular_buffer struct
-  circular_buffer buf;   //!< The buffer contained in this instance
+  void* dummy; //!< Force 64-bit alignment of the rest of the struct
+
+  data_index capacity; //!< How many elements can fit in the buffer
+  data_index out[2];   //!< Start reading data at data[out]
+  data_index in[2];    //!< Start inserting data at data[in]
+
+  data_element data[]; //!< The buffer's content
 } circular_buffer_instance;
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
@@ -144,16 +156,18 @@ enum channel_signal
 typedef enum channel_signal channel_signal_t;
 
 /**
- * @brief Small header located at the beginning of the shared memory region on consumer processes. Stores the offset
- * of every instance within that shared memory region.
+ * @brief Small header located at the beginning of the shared memory region on server processes. Stores the offset
+ * of every instance within that shared memory region, the ranks of producer and channel processes on the DCB
+ * communicator and locations that can be used to send signals to channel processes.
  * It will be stored in the remotely-accessible MPI window, so everything in it must have a size that is a multiple of
  * the size of an element to be addressable individually. So basically, just data_elements
  */
 typedef struct {
-  data_element num_offsets;      //!< How many offsets there are ( = number of producer processes)
-  data_element size;             //!< Size in number of #data_element
-  data_element num_signals;      //!< How many communication channels there are in the buffer set (1 signal per channel)
-  data_element window_offsets[]; //!< The offsets.
+  data_element num_offsets; //!< How many offsets there are ( = number of producer processes)
+  data_element size;        //!< Size in number of #data_element
+  data_element num_signals; //!< How many communication channels there are in the buffer set (1 signal per channel)
+  data_element data[];      //!< The data available to everyone. Organized as follows:
+  // First, the window offsets
   // After the offsets, there are the producer ranks, but we can't name them explicitly. We really need a better solution
   // After the producer ranks, there are the channel ranks.
   // After the ranks, there are the signals. This is starting to get messy
@@ -185,11 +199,6 @@ static inline data_index instance_header_size() {
   return num_elem_from_bytes_aligned64(sizeof(circular_buffer_instance));
 }
 
-//! Compute the number of #data_element taken by the circular_buffer struct
-static inline data_index circular_buffer_header_size() {
-  return num_elem_from_bytes_aligned64(sizeof(circular_buffer));
-}
-
 //! Size of the offset header, in number of #data_element tokens
 static inline data_index offset_header_size(
     const int num_buffers, //!< Number of circular buffers in the set
@@ -203,14 +212,10 @@ static inline data_index offset_header_size(
   return num_elem_from_bytes_aligned64(num_bytes);
 }
 
-static inline data_index total_circular_buffer_size(const int num_desired_elem) {
-  // Add 2 instead of 1 so that all instances are aligned to 64 bits
-  return num_desired_elem + circular_buffer_header_size() + 2;
-}
-
 //! Size of an entire circular buffer instance, based on the number of
 static inline data_index total_circular_buffer_instance_size(const int num_desired_elem) {
-  return instance_header_size() + total_circular_buffer_size(num_desired_elem);
+  // Add 2 instead of 1 so that all instances are aligned to 64 bits
+  return instance_header_size() + num_desired_elem + 2;
 }
 
 //! Compute the total size needed by the shared memory window to fit all circular buffers and metadata, in number of
@@ -226,11 +231,78 @@ static inline data_index total_window_num_elem(
 
 //! @}
 
+//! @{ \name Circular buffer instance management
+
+//! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline data_index available_data(
+    const data_index in,      //!< [in] Index of insertion location in the buffer
+    const data_index out,     //!< [in] Index of extraction location in the buffer
+    const data_index capacity //!< [in] Number of elements that the buffer can hold
+) {
+  return (in >= out) ? in - out : capacity - out + in + 1;
+}
+
+//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline data_index available_space(
+    const data_index in,      //!< [in] Index of insertion location in the buffer
+    const data_index out,     //!< [in] Index of extraction location in the buffer
+    const data_index capacity //!< [in] Number of elements that the buffer can hold
+) {
+  return capacity - available_data(in, out, capacity);
+}
+
+static inline data_index get_available_space(
+    const circular_buffer_instance_p buffer //!< [in] The buffer instance we want to query
+) {
+  // Make sure that the values are really read by accessing them through a volatile pointer
+  volatile data_index* in  = &buffer->in[DCB_PARTIAL];
+  volatile data_index* out = &buffer->out[DCB_FULL];
+  return available_space(*in, *out, buffer->capacity);
+}
+
+static inline data_index get_available_data(
+    const circular_buffer_instance_p buffer //!< [in] The buffer instance we want to query
+) {
+  // Make sure that the values are really read by accessing them through a volatile pointer
+  volatile data_index* in  = &buffer->in[DCB_FULL];
+  volatile data_index* out = &buffer->out[DCB_PARTIAL];
+  return available_data(*in, *out, buffer->capacity);
+}
+
+static inline int check_instance_consistency(const circular_buffer_instance_p instance) {
+  if (instance == NULL) {
+    // printf("Invalid b/c NULL pointer\n");
+    return -1;
+  }
+
+  if (instance->in[DCB_FULL] < 0 || instance->in[DCB_FULL] >= instance->capacity) {
+    return -1;
+  }
+
+  if (instance->in[DCB_PARTIAL] < 0 || instance->in[DCB_PARTIAL] >= instance->capacity) {
+    return -1;
+  }
+
+  if (instance->out[DCB_FULL] < 0 || instance->out[DCB_FULL] >= instance->capacity) {
+    return -1;
+  }
+
+  if (instance->out[DCB_PARTIAL] < 0 || instance->out[DCB_PARTIAL] >= instance->capacity) {
+    return -1;
+  }
+
+  return 0;
+}
+
+//! @}
+
 //! @{ \name Shared server data management
 
 //! Get a pointer to the list of window offsets, from a pointer to the header
 static inline data_element* get_offsets_pointer_from_offset_header(offset_header_p header) {
-  return header->window_offsets;
+  return header->data;
 }
 
 //! Get a pointer to the list of producer ranks, from a pointer to the header and the number of buffers in the DCB
@@ -301,8 +373,9 @@ static inline void init_offset_header(
   header->size        = offset_header_size(num_buffers, num_channels);
   header->num_signals = num_channels;
 
+  data_element* window_offsets = get_offsets_pointer_from_offset_header(header);
   for (int i = 0; i < header->num_offsets; ++i) {
-    header->window_offsets[i] = header->size + i * (total_circular_buffer_instance_size(num_elements_per_instance));
+    window_offsets[i] = header->size + i * (total_circular_buffer_instance_size(num_elements_per_instance));
   }
 
   data_element* producer_ranks = get_prod_ranks_pointer_from_offset_header(header, num_buffers);
@@ -328,8 +401,9 @@ static inline void print_offset_header(offset_header_p header) {
       "Address %ld\n",
       header->num_offsets, header->size, header->num_signals, (long)header);
   printf("Offsets: ");
+  data_element* offsets = get_offsets_pointer_from_offset_header(header);
   for (int i = 0; i < header->num_offsets; ++i) {
-    printf("%ld ", (long)header->window_offsets[i]);
+    printf("%ld ", (long)offsets[i]);
   }
   printf("\nRanks: ");
   data_element* ranks = get_prod_ranks_pointer_from_offset_header(header, header->num_offsets);
@@ -376,18 +450,16 @@ static inline MPI_Aint buffer_element_displacement(
     const data_index                    index   //!< [in] Index of the element within the buffer
 ) {
   // Start of the buffer element section within the window
-  ptrdiff_t      ptr_offset = (data_element*)buffer->local_header.buf.data - (data_element*)&buffer->local_header;
-  const MPI_Aint base_displacement = buffer->window_offset + ptr_offset;
-  const MPI_Aint elem_displacement = base_displacement + index;
+  const ptrdiff_t ptr_offset        = (data_element*)buffer->local_header.data - (data_element*)&buffer->local_header;
+  const MPI_Aint  base_displacement = buffer->window_offset + ptr_offset;
+  const MPI_Aint  elem_displacement = base_displacement + index;
   return elem_displacement;
 }
 
 //! @return The displacement in the shared memory window where the insertion index of the given buffer is located
 static inline MPI_Aint insertion_index_displacement(const distributed_circular_buffer_p buffer) {
-  // TODO We'd better wish the offset is aligned to the size of a data_element
-  const int        index_byte_offset = offsetof(circular_buffer_instance, buf) + offsetof(fiol_management, in);
-  const int        index_elem_offset = num_elem_from_bytes(index_byte_offset);
-  const data_index displacement      = buffer->window_offset + index_elem_offset;
+  const ptrdiff_t  ptr_offset   = (data_element*)buffer->local_header.in - (data_element*)&buffer->local_header;
+  const data_index displacement = buffer->window_offset + ptr_offset;
   return displacement;
 }
 
@@ -435,16 +507,8 @@ static inline circular_buffer_instance_p get_circular_buffer_instance(
     distributed_circular_buffer_p buffer_set, //!< [in] The buffer set from which we want the circ buffer instance
     const int                     buffer_id   //!< [in] ID of the circ buffer instance within the buffer set
 ) {
-  const offset_header_p offsets = get_offset_header(buffer_set);
-  return (circular_buffer_instance_p)(buffer_set->raw_data + offsets->window_offsets[buffer_id]);
-}
-
-//! Retrieve a pointer to a certain circular buffer managed by the given distributed circular buffer set
-static inline circular_buffer_p get_circular_buffer(
-    distributed_circular_buffer_p buffer_set, //!< [in] The buffer set from which we want a circular buffer
-    const int                     buffer_id   //!< [in] ID of the circular buffer within the buffer set
-) {
-  return &get_circular_buffer_instance(buffer_set, buffer_id)->buf;
+  const data_element* offsets = get_offsets_pointer_from_offset_header(get_offset_header(buffer_set));
+  return (circular_buffer_instance_p)(buffer_set->raw_data + offsets[buffer_id]);
 }
 
 //! Retrieve the window offset of the appropriate circular buffer instance within the given distributed buffer
@@ -462,11 +526,12 @@ static void retrieve_window_offset_from_remote(
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance
 static inline void update_local_header_from_remote(
-    distributed_circular_buffer_p buffer //!< [in] Buffer set from which we want to update a single instance
+    distributed_circular_buffer_p buffer, //!< [in] Buffer set from which we want to update a single instance
+    const int                     full    //!< [in] Whether to perform a full update or only a partial one
 ) {
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
   const int target_rank = buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : DCB_ROOT_ID;
-  const int num_elem    = instance_header_size();
+  const int num_elem    = instance_header_size() - (full == 1 ? 0 : 2); // Skip last 2 if partial (IN indices)
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
   MPI_Get(
       &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, remote_header_displacement(buffer), num_elem,
@@ -499,8 +564,8 @@ static void set_producer_rank_on_remote(
 static inline data_index get_available_space_from_remote(
     const distributed_circular_buffer_p buffer //!< [in] The buffer we want to query
 ) {
-  update_local_header_from_remote(buffer);
-  return CB_get_available_space(&buffer->local_header.buf);
+  update_local_header_from_remote(buffer, 0);
+  return get_available_space(&buffer->local_header);
 }
 
 //! @brief Stop and wait until there is enough space in this circular buffer instance.
@@ -516,12 +581,12 @@ static data_index DCB_wait_space_available(
   if (buffer == NULL || !is_producer(buffer))
     return -1;
 
-  const circular_buffer_p instance = &buffer->local_header.buf;
-  if (num_requested < 0 || instance->m.version != FIOL_VERSION)
+  const circular_buffer_instance_p instance = &buffer->local_header;
+  if (num_requested < 0 || num_requested > instance->capacity || check_instance_consistency(instance) < 0)
     return -1;
 
   // First check locally
-  data_index num_available = CB_get_available_space(instance);
+  data_index num_available = get_available_space(instance);
   if (num_available >= num_requested)
     return num_available;
 
@@ -545,17 +610,17 @@ static data_index DCB_wait_data_available(
     const int buffer_id,    //!< [in] Which specific circular buffer we want to query (there are multiple ones)
     const int num_requested //!< [in] Number of elements we want to read
 ) {
-  if (buffer == NULL || is_producer(buffer) || num_requested < 0)
+  if (buffer == NULL || is_producer(buffer))
     return -1;
 
-  const circular_buffer_p instance = get_circular_buffer(buffer, buffer_id);
-  if (instance->m.version != FIOL_VERSION)
+  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
+  if (num_requested < 0 || num_requested > instance->capacity || check_instance_consistency(instance) < 0)
     return -1;
 
   // Only check locally, waiting a bit between each check
   data_index num_available = 0;
   int        num_waits     = 0;
-  while ((void)(num_available = CB_get_available_data(instance)), num_available < num_requested) {
+  while ((void)(num_available = get_available_data(instance)), num_available < num_requested) {
     num_waits++;
     sleep_us(DATA_CHECK_DELAY_US);
   }
@@ -566,12 +631,18 @@ static data_index DCB_wait_data_available(
 }
 
 //! Initialize the given circular buffer instance, including the circular_buffer it contains
-static circular_buffer_p init_circular_buffer_instance(
+static inline void init_circular_buffer_instance(
     circular_buffer_instance_p instance, //!< Buffer instance we want to init
     const int                  num_elem  //!< How many #data_element are taken by the circular buffer
 ) {
   instance->target_rank = -1;
-  return CB_init(&instance->buf, num_elem);
+
+  instance->in[DCB_FULL]     = 0;
+  instance->in[DCB_PARTIAL]  = 0;
+  instance->out[DCB_FULL]    = 0;
+  instance->out[DCB_PARTIAL] = 0;
+
+  instance->capacity = num_elem - instance_header_size() - 1;
 }
 
 //! Initialize the DCB_stats struct to all 0
@@ -699,7 +770,6 @@ distributed_circular_buffer_p DCB_create(
   MPI_Bcast(&buffer->num_producers, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
   MPI_Bcast(&buffer->num_channels, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
   MPI_Bcast(&buffer->num_consumers, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
-  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
 
   // Assign a "buffer rank" to every producer process. It will be their producer ID
   if (server_communicator == MPI_COMM_NULL) {
@@ -741,8 +811,6 @@ distributed_circular_buffer_p DCB_create(
 
   MPI_Barrier(buffer->communicator);
 
-  int init_result = 1;
-
   if (is_root(buffer)) {
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of #data_element.
@@ -754,15 +822,17 @@ distributed_circular_buffer_p DCB_create(
     MPI_Barrier(buffer->server_communicator); // Wait until the channels have set their rank
 
     // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
-    const int num_elem_in_circ_buffer = total_circular_buffer_size(buffer->num_element_per_instance);
+    const int num_elem_in_circ_buffer = total_circular_buffer_instance_size(buffer->num_element_per_instance);
 
     // Initialize the individual buffers
     for (int i = 0; i < num_producers; i++) {
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
-      init_result = init_result && (init_circular_buffer_instance(buffer_instance, num_elem_in_circ_buffer) != NULL);
+      init_circular_buffer_instance(buffer_instance, num_elem_in_circ_buffer);
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
       DCB_init_stats(&buffer->consumer_stats[i]);
     }
+
+    buffer->num_element_per_instance = get_circular_buffer_instance(buffer, 0)->capacity;
   }
   else if (is_consumer(buffer) || is_channel(buffer)) {
     // Consumer nodes that are _not_ the first one (the "root") need to get the proper address in shared memory
@@ -789,18 +859,13 @@ distributed_circular_buffer_p DCB_create(
   MPI_Win_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
 
-  MPI_Bcast(&init_result, 1, MPI_INTEGER, DCB_ROOT_ID, buffer->communicator);
-
-  if (!init_result) {
-    DCB_delete(buffer);
-    return NULL;
-  }
+  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
 
   if (is_producer(buffer)) {
     DCB_init_stats(&buffer->producer_stats);
 
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
-    update_local_header_from_remote(buffer);    // Get the header to sync the instance locally
+    update_local_header_from_remote(buffer, 1); // Get the header to sync the instance locally
 
     int producer_rank;
     MPI_Comm_rank(buffer->communicator, &producer_rank);
@@ -862,16 +927,16 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
     printf(
         "Num elems: %ld, num spaces: %ld\n"
         "Target rank: %ld\n"
-        "version: %d, first %d, in %d, out %d, limit %d\n",
-        (int64_t)CB_get_available_data(&buffer->local_header.buf),
-        (int64_t)CB_get_available_space(&buffer->local_header.buf), (int64_t)buffer->local_header.target_rank,
-        buffer->local_header.buf.m.version, buffer->local_header.buf.m.first, buffer->local_header.buf.m.in,
-        buffer->local_header.buf.m.out, buffer->local_header.buf.m.limit);
+        "in %d, out %d, partial in %d, partial out %d, capacity %d\n",
+        (int64_t)get_available_data(&buffer->local_header), (int64_t)get_available_space(&buffer->local_header),
+        (int64_t)buffer->local_header.target_rank, buffer->local_header.in[DCB_FULL],
+        buffer->local_header.out[DCB_FULL], buffer->local_header.in[DCB_PARTIAL], buffer->local_header.out[DCB_PARTIAL],
+        buffer->local_header.capacity);
   }
   else if (is_root(buffer)) {
     for (int i = 0; i < buffer->num_producers; ++i) {
       const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i);
-      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)CB_get_available_data(&instance->buf));
+      printf("From root: buffer %d has %ld data in it\n", i, (int64_t)get_available_data(instance));
     }
   }
 }
@@ -915,27 +980,6 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 }
 
 //F_StArT
-//  function DCB_get_latest_num_elements(buffer) result(num_elements) BIND(C, name = 'DCB_get_latest_num_elements')
-//    import :: C_PTR, C_INT
-//    implicit none
-//    type(C_PTR), intent(in), value :: buffer
-//    integer(C_INT) :: num_elements
-//  end function DCB_get_latest_num_elements
-//F_EnD
-//! Check how many elements are stored in the buffer, after updating from the remote.
-//! _Can only be called from a producer process._
-//! @return The (updated) number of elements in the buffer, or -1 if called from a consumer process
-int32_t DCB_get_latest_num_elements(distributed_circular_buffer_p buffer //!< [in]
-) {
-  if (is_producer(buffer)) {
-    update_local_header_from_remote(buffer);
-    return (int32_t)CB_get_available_data(&buffer->local_header.buf);
-  }
-
-  return -1;
-}
-
-//F_StArT
 //  function DCB_get_num_elements(buffer, buffer_id) result(num_elements) BIND(C, name = 'DCB_get_num_elements')
 //    import :: C_PTR, C_INT
 //    implicit none
@@ -949,13 +993,38 @@ int32_t DCB_get_latest_num_elements(distributed_circular_buffer_p buffer //!< [i
 //! @return The number of elements in the specified buffer, or -1 if called from a producer process
 //C_StArT
 int32_t DCB_get_num_elements(
-    distributed_circular_buffer_p buffer,   //!< [in]
-    const int                     buffer_id //!< [in]
+    distributed_circular_buffer_p buffer,   //!< [in] DCB we are querying
+    const int                     buffer_id //!< [in] Which specific buffer in the DCB
     )
 //C_EnD
 {
   if (is_consumer(buffer))
-    return (int32_t)CB_get_available_data(get_circular_buffer(buffer, buffer_id));
+    return (int32_t)get_available_data(get_circular_buffer_instance(buffer, buffer_id));
+  return -1;
+}
+
+//F_StArT
+//  function DCB_get_num_spaces(buffer, update_from_remote) result(num_spaces) BIND(C, name = 'DCB_get_num_spaces')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+//    integer(C_INT), intent(in), value :: update_from_remote
+//    integer(C_INT) :: num_spaces
+//  end function DCB_get_num_spaces
+//F_EnD
+//C_StArT
+int32_t DCB_get_num_spaces(
+    distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
+    int update_from_remote                //!< [in] Whether to look at the server to get the absolute latest num spaces
+    )
+//C_EnD
+{
+  if (is_producer(buffer)) {
+    if (update_from_remote == 1)
+      return get_available_space_from_remote(buffer);
+    else
+      return get_available_space(&buffer->local_header);
+  }
   return -1;
 }
 
@@ -1017,6 +1086,18 @@ int32_t DCB_get_num_producers(const distributed_circular_buffer_p buffer) {
 //F_EnD
 int32_t DCB_get_num_consumers(const distributed_circular_buffer_p buffer) {
   return buffer->num_consumers;
+}
+
+//F_StArT
+//  function DCB_max_num_element_per_instance(buffer) result(num_elements) BIND(C, name = 'DCB_max_num_element_per_instance')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR), intent(in), value :: buffer
+//    integer(C_INT) :: num_elements
+//  end function DCB_max_num_element_per_instance
+//F_EnD
+int32_t DCB_max_num_element_per_instance(const distributed_circular_buffer_p buffer) {
+  return buffer->num_element_per_instance;
 }
 
 //F_StArT
@@ -1094,13 +1175,14 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 }
 
 //F_StArT
-//  function DCB_put(buffer, src_data, num_elements) result(num_available) BIND(C, name = 'DCB_put')
+//  function DCB_put(buffer, src_data, num_elements, operation) result(num_available) BIND(C, name = 'DCB_put')
 //    import :: C_PTR, C_INT, DATA_ELEMENT
 //    implicit none
-//    type(C_PTR), intent(in), value           :: buffer
-//    integer(DATA_ELEMENT), dimension(*), intent(in) :: src_data
-//    integer(C_INT), intent(in), value        :: num_elements
-//    integer(C_INT) :: num_available
+//    type(C_PTR), intent(in), value           :: buffer          !< Buffer where we want to insert data
+//    integer(DATA_ELEMENT), dimension(*), intent(in) :: src_data !< Data to insert
+//    integer(C_INT), intent(in), value        :: num_elements    !< How many data elements we want to insert
+//    integer(C_INT), intent(in), value        :: operation       !< Whether to commit the transaction or wait
+//    integer(C_INT) :: num_available !< How many element can still fit in the buffer after this call
 //  end function DCB_put
 //F_EnD
 //! @brief Insert data into the given buffer, once there is enough space (will wait if there isn't enough initially)
@@ -1113,9 +1195,10 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 //! @return How many elements can still fit after the insertion, if everything went smoothly, -1 otherwise
 //C_StArT
 data_index DCB_put(
-    distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
-    data_element* const           src_data,    //!< Pointer to the data we want to insert
-    const int                     num_elements //!< How many #data_element tokens we want to insert
+    distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
+    data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
+    const int                     num_elements, //!< [in] How many #data_element tokens we want to insert
+    const int                     operation     //!< [in] What operation to perform (whether to commit the transaction)
     )
 //C_EnD
 {
@@ -1126,116 +1209,114 @@ data_index DCB_put(
 
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
 
-  data_index       in_index  = buffer->local_header.buf.m.in;
-  const data_index out_index = buffer->local_header.buf.m.out;
-  const data_index limit     = buffer->local_header.buf.m.limit;
+  data_index       in_index = buffer->local_header.in[DCB_PARTIAL];
+  const data_index capacity = buffer->local_header.capacity;
 
-  if (in_index < out_index) {
-    // 1 segment
-    MPI_Accumulate(
-        src_data, num_elements, CB_MPI_ELEMENT_TYPE, target_rank, buffer_element_displacement(buffer, in_index),
-        num_elements, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
-    in_index += num_elements;
-  }
-  else {
-    // First segment
-    const int num_elem_segment_1 = num_elements > (limit - in_index) ? (limit - in_index) : num_elements;
-    MPI_Accumulate(
-        src_data, num_elem_segment_1, CB_MPI_ELEMENT_TYPE, target_rank, buffer_element_displacement(buffer, in_index),
-        num_elem_segment_1, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
+  // First segment
+  const int num_elem_segment_1 = num_elements >= (capacity - in_index) ? (capacity - in_index + 1) : num_elements;
+  MPI_Accumulate(
+      src_data, num_elem_segment_1, CB_MPI_ELEMENT_TYPE, target_rank, buffer_element_displacement(buffer, in_index),
+      num_elem_segment_1, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
 
-    // Update temporary insertion pointer
-    in_index += num_elem_segment_1;
-    if (in_index >= limit)
-      in_index = 0;
+  // Update temporary insertion pointer
+  in_index += num_elem_segment_1;
+  if (in_index > capacity)
+    in_index = 0;
 
-    // Second segment (if there is one)
-    const int num_elem_segment_2 = num_elements - num_elem_segment_1;
+  // Second segment (if there is one)
+  const int num_elem_segment_2 = num_elements - num_elem_segment_1;
+  if (num_elem_segment_2 > 0) {
     MPI_Accumulate(
         src_data + num_elem_segment_1, num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank,
         buffer_element_displacement(buffer, in_index), num_elem_segment_2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE,
         buffer->window);
 
-    // Update temporary insertion pointer
     in_index += num_elem_segment_2;
   }
 
+  // Update partial insertion pointer (locally only)
+  buffer->local_header.in[DCB_PARTIAL] = in_index;
+
   // Update insertion index remotely and locally
-  MPI_Accumulate(
-      &in_index, 1, CB_MPI_ELEMENT_TYPE, target_rank, insertion_index_displacement(buffer), 1, CB_MPI_ELEMENT_TYPE,
-      MPI_REPLACE, buffer->window);
-  buffer->local_header.buf.m.in = in_index;
+  if (operation == CB_COMMIT) {
+    MPI_Accumulate(
+        &in_index, 1, CB_MPI_ELEMENT_TYPE, target_rank, insertion_index_displacement(buffer), 2, CB_MPI_ELEMENT_TYPE,
+        MPI_REPLACE, buffer->window);
+    buffer->local_header.in[DCB_FULL] = in_index;
+  }
 
   MPI_Win_unlock(target_rank, buffer->window);
 
   buffer->producer_stats.num_elem += (uint64_t)num_elements;
   buffer->producer_stats.num_transfers++;
 
-  return CB_get_available_space(&buffer->local_header.buf);
+  return get_available_space(&buffer->local_header);
 }
 
 //F_StArT
-//  function DCB_get(buffer, buffer_id, dest_data, num_elements) result(num_available) BIND(C, name = 'DCB_get')
+//  function DCB_get(buffer, buffer_id, dest_data, num_elements, operation) result(num_available) BIND(C, name = 'DCB_get')
 //    import :: C_PTR, C_INT, DATA_ELEMENT
 //    implicit none
-//    type(C_PTR), intent(in), value              :: buffer
-//    integer(C_INT), intent(in), value           :: buffer_id
-//    integer(DATA_ELEMENT), dimension(*), intent(inout) :: dest_data
-//    integer(C_INT), intent(in), value           :: num_elements
+//    type(C_PTR), intent(in), value       :: buffer        !< DCB from which we want to read
+//    integer(C_INT), intent(in), value    :: buffer_id     !< Which buffer in the DCB we want to read from
+//    integer(DATA_ELEMENT), dimension(*), intent(inout) :: dest_data !< Where to put the data from the buffer
+//    integer(C_INT), intent(in), value    :: num_elements  !< How many data elements to read
+//    integer(C_INT), intent(in), value    :: operation     !< Whether to actually extract, read or just peek at the data
 //    integer(C_INT) :: num_available
 //  end function DCB_get
 //F_EnD
 int DCB_get(
-    distributed_circular_buffer_p buffer,      //!<
-    const int                     buffer_id,   //!<
-    int32_t*                      dest_data,   //!<
-    const int                     num_elements //!<
+    distributed_circular_buffer_p buffer,       //!< [in,out] DCB from which we want to read
+    const int                     buffer_id,    //!< [in] Specific buffer in the DCB
+    int32_t*                      dest_data,    //!< [in] Where to put the data from the buffer
+    const int                     num_elements, //!< [in] How many elements to read
+    const int                     operation     //!< [in] What operation to perform: extract, read or just peek
 ) {
   if (DCB_wait_data_available(buffer, buffer_id, num_elements) < 0)
     return -1;
 
   circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
-  circular_buffer_p          queue    = get_circular_buffer(buffer, buffer_id);
 
-  const int32_t in_index  = instance->buf.m.in;
-  int32_t       out_index = instance->buf.m.out;
-  const int32_t limit     = instance->buf.m.limit;
+  int32_t       out_index = instance->out[DCB_PARTIAL];
+  const int32_t capacity  = instance->capacity;
 
-  int32_t                   old_out     = out_index;
-  const data_element* const buffer_data = instance->buf.data;
+  const data_element* const buffer_data = instance->data;
 
-  if (out_index < in_index) {
-    // 1 segment
-    copy_elements(dest_data, buffer_data + out_index, num_elements);
-    out_index += num_elements;
-  }
-  else {
-    // 1st segment
-    const int num_elements_1 = num_elements > (limit - out_index) ? (limit - out_index) : num_elements;
-    copy_elements(dest_data, buffer_data + out_index, num_elements_1);
+  // 1st segment
+  const int num_elements_1 = num_elements >= (capacity - out_index) ? (capacity - out_index + 1) : num_elements;
+  copy_elements(dest_data, buffer_data + out_index, num_elements_1);
 
-    // Update temporary extraction pointer
-    out_index += num_elements_1;
-    if (out_index >= limit)
-      out_index = 0;
+  // Update temporary extraction pointer
+  out_index += num_elements_1;
+  if (out_index > capacity)
+    out_index = 0;
 
-    // 2nd segment (if there is one)
-    const int num_elements_2 = num_elements - num_elements_1;
+  // 2nd segment (if there is one)
+  const int num_elements_2 = num_elements - num_elements_1;
+  if (num_elements_2 > 0) {
     copy_elements(dest_data + num_elements_1, buffer_data + out_index, num_elements_2);
 
-    // Update temporary extraction pointer
     out_index += num_elements_2;
   }
 
-  buffer->consumer_stats[buffer_id].num_elem += (uint64_t)num_elements;
-  buffer->consumer_stats[buffer_id].num_transfers++;
+  // Update partial extraction pointer if needed
+  if (operation != CB_PEEK) {
+    instance->out[DCB_PARTIAL] = out_index;
+  }
 
-  memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
+  if (operation == CB_COMMIT) {
+    memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
-  volatile data_index* d_out = &instance->buf.m.out;
-  *d_out                     = out_index; // Update actual extraction pointer
+    volatile data_index* d_out = &instance->out[DCB_FULL];
+    *d_out                     = out_index; // Update actual extraction pointer
+  }
 
-  return CB_get_available_data(queue);
+  if (operation != CB_PEEK) {
+    buffer->consumer_stats[buffer_id].num_elem += (uint64_t)num_elements;
+    buffer->consumer_stats[buffer_id].num_transfers++;
+  }
+
+  return get_available_data(instance);
 }
 
 /**
@@ -1247,7 +1328,7 @@ int DCB_check_instance_integrity(
     const int                           buffer_id //!< [in] The ID of the CB we want to check within the DCB
 ) {
   const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
-  if (CB_check_integrity(&instance->buf) != 0)
+  if (check_instance_consistency(instance) != 0)
     return -1;
 
   return 0;
@@ -1271,8 +1352,10 @@ int DCB_check_integrity(
     const distributed_circular_buffer_p buffer, //!< [in] The buffer we want to check
     int                                 verbose //!< [in] Whether to display certain information in case of failure
 ) {
-  if (buffer == NULL)
+  if (buffer == NULL) {
+    printf("Buffer pointer is NULL!\n");
     return -1;
+  }
 
   if ((buffer->producer_id >= 0) + (buffer->channel_id >= 0) + (buffer->consumer_id >= 0) != 1) {
     printf("Inconsistency in DCB IDs\n");
@@ -1280,11 +1363,12 @@ int DCB_check_integrity(
   }
 
   if (is_producer(buffer)) {
-    const int               total_num_elem = buffer->num_element_per_instance;
-    const circular_buffer_p circ_buf       = &buffer->local_header.buf;
+    const int total_num_elem = buffer->num_element_per_instance;
 
-    if (CB_check_integrity(circ_buf) != 0)
+    if (check_instance_consistency(&buffer->local_header) != 0) {
+      printf("Local instance failed integrity check!\n");
       return -1;
+    }
   }
   else if (is_consumer(buffer)) {
     for (int i = 0; i < buffer->num_producers; ++i) {

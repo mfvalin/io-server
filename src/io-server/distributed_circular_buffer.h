@@ -26,7 +26,8 @@
 
 #include <mpi.h>
 
-#include "io-server/circular_buffer.h"
+#include "io-server/circular_buffer_defines.h"
+#include "io-server/common.h"
 /**
  * @brief Needs to be aligned to size of #data_element
  */
@@ -35,6 +36,12 @@ typedef struct {
   uint64_t num_elem;
   double   total_wait_time_ms;
 } DCB_stats;
+
+enum
+{
+  DCB_FULL    = 0,
+  DCB_PARTIAL = 1
+};
 
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
@@ -45,8 +52,13 @@ typedef struct {
 typedef struct {
   int target_rank; //!< With which process this instance should communicate for data transfers
 
-  void*           dummy; // Force 64-bit alignment of the circular_buffer struct
-  circular_buffer buf;   //!< The buffer contained in this instance
+  void* dummy; //!< Force 64-bit alignment of the rest of the struct
+
+  data_index capacity; //!< How many elements can fit in the buffer
+  data_index out[2];   //!< Start reading data at data[out]
+  data_index in[2];    //!< Start inserting data at data[in]
+
+  data_element data[]; //!< The buffer's content
 } circular_buffer_instance;
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
@@ -122,13 +134,18 @@ distributed_circular_buffer_p DCB_create(
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
 );
 int32_t DCB_get_num_elements(
-    distributed_circular_buffer_p buffer,   //!< [in]
-    const int                     buffer_id //!< [in]
+    distributed_circular_buffer_p buffer,   //!< [in] DCB we are querying
+    const int                     buffer_id //!< [in] Which specific buffer in the DCB
+);
+int32_t DCB_get_num_spaces(
+    distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
+    int update_from_remote                //!< [in] Whether to look at the server to get the absolute latest num spaces
 );
 data_index DCB_put(
-    distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
-    data_element* const           src_data,    //!< Pointer to the data we want to insert
-    const int                     num_elements //!< How many #data_element tokens we want to insert
+    distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
+    data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
+    const int                     num_elements, //!< [in] How many #data_element tokens we want to insert
+    const int                     operation     //!< [in] What operation to perform (whether to commit the transaction)
 );
 
 #endif // IO_SERVER_distributed_circular_buffer_GEN_H

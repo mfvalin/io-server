@@ -78,6 +78,23 @@
 !>                 |                               |
 !>                 IN                             OUT
 !>   x = useful data       . = free space
+!>
+!>
+!>      With partial insertion/extraction
+!>
+!>  avail. data            available space           avail. data
+!>   ...________          _________________         ____...
+!>              |        |                 |       |
+!>   +------------------------------------------------------+
+!>   xxxxxxxxxxxx::::::::...................;;;;;;;xxxxxxxx
+!>   +-----------^-------^------------------^------^--------+
+!>               |       |                  |      |
+!>               IN      |                 OUT     |
+!>                  PARTIAL_IN                PARTIAL_OUT
+!>
+!>   x = useful data    : = partially inserted data
+!>   . = free space     ; = partially extracted data
+!>
 !> \endverbatim
 include 'io-server/common.inc'
 interface
@@ -141,6 +158,12 @@ implicit none
 type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
 integer(C_INT) :: num_elements           !< How many elements are stored in the buffer
 end function CB_get_available_data
+function CB_get_capacity(buffer) result(num_elements) BIND(C, name = 'CB_get_capacity')
+import C_PTR, C_INT
+implicit none
+type(C_PTR), intent(in), value :: buffer !< Pointer to the circular buffer we want to query
+integer(C_INT) :: num_elements           !< How many total elements can potentially be store in the buffer
+end function CB_get_capacity
 !> wait until at least na empty slots are available for inserting data<br>
 !> n = CB_wait_space_available(p, na)
 function CB_wait_space_available(p, na) result(n) BIND(C,name='CB_wait_space_available')
@@ -159,96 +182,28 @@ type(C_PTR), intent(IN), value :: p            !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: na        !< needed number of available tokens
 integer(C_INT) :: n                            !< actual number of data tokens available, -1 if error
 end function CB_wait_data_available
-!> get the address of the first position in the circular data buffer<br>
-!> start = CB_start(p)
-function CB_start(p) result(start) BIND(C,name='CB_start')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-type(C_PTR) :: start                   !< pointer to beginning of circular buffer
-end function CB_start
-!> get the address of the  insertion point in the circular data buffer (data snoop)<br>
-!> inp = CB_data_in(p)
-function CB_data_in(p) result(inp) BIND(C,name='CB_data_in')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-type(C_PTR) :: inp                     !< address of the  insertion point in the circular data buffer
-end function CB_data_in
-!> get the address of the extraction point in the circular data buffer (data snoop)<br>
-!> outp = CB_data_out(p)
-function CB_data_out(p) result(outp) BIND(C,name='CB_data_out')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-type(C_PTR) :: outp                    !< address of the extraction point in the circular data buffer
-end function CB_data_out
-!> get pointer to the in position, assume that the caller knows the start of data buffer<br>
-!> inp = CB_advance_in(p, n1, n2)
-function CB_advance_in(p, n1, n2) result(inp) BIND(C,name='CB_advance_in')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-integer(C_INT), intent(OUT)    :: n1   !< number of slots available at the "in" position, -1 upon error
-integer(C_INT), intent(OUT)    :: n2   !< number of slots available at the "start" of the buffer, -1 upon error
-type(C_PTR)                    :: inp  !< pointer to the "in" position, C_NULL_PTR upon error
-end function CB_advance_in
-!> get pointer to the "out" position, assume that the caller knows the start of data buffer<br>
-!> outp = CB_advance_out(p, n1, n2)
-function CB_advance_out(p, n1, n2) result(outp) BIND(C,name='CB_advance_out')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
-integer(C_INT), intent(OUT)    :: n1   !< number of tokens available at the "out" position, -1 upon error
-integer(C_INT), intent(OUT)    :: n2   !< number of tokens available at the "start" of the buffer, -1 upon error
-type(C_PTR)                    :: outp !< pointer to the "out" position, C_NULL_PTR upon error
-end function CB_advance_out
 !> wait until ndst tokens are available then extract them into dst<br>
-!> n = CB_atomic_get(p, dst, ndst)
-function CB_atomic_get(p, dst, ndst) result(n) BIND(C,name='CB_atomic_get')
+!> n = CB_atomic_get(p, dst, ndst, operation)
+function CB_atomic_get(p, dst, ndst, operation) result(n) BIND(C,name='CB_atomic_get')
 import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: ndst          !< number of tokens to extract
 integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+integer(C_INT), intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
 integer(C_INT) :: n                                !< number of data tokens available after this operation, -1 if error
 end function CB_atomic_get
-!> wait until ndst tokens are available then copy to dst array<br>
-!> DO NOT UPDATE "out" unless update flag is non zero<br>
-!> n = CB_extract(p, dst, ndst, offset, update)
-function CB_extract(p, dst, ndst, offset, update) result(n) BIND(C,name='CB_extract')
-import :: C_PTR, C_INT, DATA_ELEMENT
-implicit none
-type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: ndst          !< number of tokens to copy to dst
-integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array for data extraction
-integer(C_INT), intent(IN), value :: offset        !< offset from the "in" position
-integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
-integer(C_INT) :: n                                !< number of free slots available after this operation
-end function CB_extract
 !> wait until nsrc free slots are available then insert from src array<br>
-!> n = CB_atomic_put(p, src, nsrc)
-function CB_atomic_put(p, src, nsrc) result(n) BIND(C,name='CB_atomic_put')
+!> n = CB_atomic_put(p, src, nsrc, commit_transaction)
+function CB_atomic_put(p, src, nsrc, commit_transaction) result(n) BIND(C,name='CB_atomic_put')
 import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
-type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: nsrc          !< number of tokens to insert from src
-integer(DATA_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
-integer(C_INT) :: n                                !< number of free slots available after this operation
+type(C_PTR), intent(IN), value :: p                     !< pointer to a circular buffer
+integer(C_INT), intent(IN), value :: nsrc               !< number of tokens to insert from src
+integer(DATA_ELEMENT), dimension(*), intent(IN) :: src  !< source array for data insertion
+integer(C_INT), intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+integer(C_INT) :: n                                     !< number of free slots available after this operation
 end function CB_atomic_put
-!> wait until nsrc free slots are available then insert from src array<br>
-!> DO NOT UPDATE the "in" pointer unless update flag is non zero<br>
-!> n = CB_insert(p, src, nsrc, offset, update)
-function CB_insert(p, src, nsrc, offset, update) result(n) BIND(C,name='CB_insert')
-import :: C_PTR, C_INT, DATA_ELEMENT
-implicit none
-type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: nsrc          !< number of tokens to insert from src
-integer(DATA_ELEMENT), dimension(*), intent(IN) :: src    !< source array for data insertion
-integer(C_INT), intent(IN), value :: offset        !< offset from the "in" position
-integer(C_INT), intent(IN), value :: update        !< if nonzero, update the "in" pointer
-integer(C_INT) :: n                                !< number of free slots available after this operation
-end function CB_insert
 function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
 import C_INT, C_PTR
 implicit none
