@@ -26,7 +26,8 @@
 
 #include <mpi.h>
 
-#include "io-server/circular_buffer.h"
+#include "io-server/circular_buffer_defines.h"
+#include "io-server/common.h"
 /**
  * @brief Needs to be aligned to size of #data_element
  */
@@ -35,6 +36,12 @@ typedef struct {
   uint64_t num_elem;
   double   total_wait_time_ms;
 } DCB_stats;
+
+enum
+{
+  DCB_FULL    = 0,
+  DCB_PARTIAL = 1
+};
 
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
@@ -45,8 +52,13 @@ typedef struct {
 typedef struct {
   int target_rank; //!< With which process this instance should communicate for data transfers
 
-  void*           dummy; // Force 64-bit alignment of the circular_buffer struct
-  circular_buffer buf;   //!< The buffer contained in this instance
+  void* dummy; //!< Force 64-bit alignment of the rest of the struct
+
+  data_index capacity; //!< How many elements can fit in the buffer
+  data_index out[2];   //!< Start reading data at data[out]
+  data_index in[2];    //!< Start inserting data at data[in]
+
+  data_element data[]; //!< The buffer's content
 } circular_buffer_instance;
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
@@ -74,20 +86,21 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * always passive; this removes any need for explicit synchronization related to data transfer. To enable a larger
  * bandwidth for remote data transfers, producers are able to access the shared memory window through multiple channels
  * (one process per channel). To ensure that the data will be received as quickly as possible from the passive/target
- * side, the "receiver" process of each channel is constantly polling for updates by synchronizing the window.
- * _The receiver processes must be located on the same physical node as the consumers._
+ * side, each channel process is constantly polling for updates by synchronizing the window.
+ * _The channel processes must be located on the same physical node as the consumers._
  */
 typedef struct {
-  int32_t    rank; //!< Rank of the process that initialized this instance of the distributed buffer description
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
-  int32_t    num_consumers;
+  int32_t    num_consumers; //!< How many server processes will read from the individual buffers
   int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
-  int32_t receiver_id;
+  int32_t channel_id;
   int32_t consumer_id;
   int32_t producer_id;
+
+  int32_t server_rank;
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
@@ -117,17 +130,22 @@ distributed_circular_buffer_p DCB_create(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
-    const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (receivers)
+    const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
     const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
 );
 int32_t DCB_get_num_elements(
-    distributed_circular_buffer_p buffer,   //!< [in]
-    const int                     buffer_id //!< [in]
+    distributed_circular_buffer_p buffer,   //!< [in] DCB we are querying
+    const int                     buffer_id //!< [in] Which specific buffer in the DCB
+);
+int32_t DCB_get_num_spaces(
+    distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
+    int update_from_remote                //!< [in] Whether to look at the server to get the absolute latest num spaces
 );
 data_index DCB_put(
-    distributed_circular_buffer_p buffer,      //!< Distributed buffer in which we want to put data
-    data_element* const           src_data,    //!< Pointer to the data we want to insert
-    const int                     num_elements //!< How many #data_element tokens we want to insert
+    distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
+    data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
+    const int                     num_elements, //!< [in] How many #data_element tokens we want to insert
+    const int                     operation     //!< [in] What operation to perform (whether to commit the transaction)
 );
 
 #endif // IO_SERVER_distributed_circular_buffer_GEN_H

@@ -26,6 +26,8 @@ module distributed_circular_buffer_module
   implicit none
   include 'io-server/distributed_circular_buffer.inc'
 
+#include <io-server/circular_buffer_defines.hf>
+
   private
 
   !> A set of FIFO queues used by multiple pairs of processes, with their data stored on a single one of these processes
@@ -39,17 +41,19 @@ module distributed_circular_buffer_module
     procedure :: print    !< distributed_circular_buffer_module::print
     procedure :: put      !< distributed_circular_buffer_module::put
     procedure :: get      !< distributed_circular_buffer_module::get
-    GENERIC :: get_num_elements => get_num_elements_local, get_num_elements_latest
+    procedure :: peek     !< distributed_circular_buffer_module::peek
+    GENERIC :: get_num_elements => get_num_elements_local
     procedure :: get_num_elements_local
-    procedure :: get_num_elements_latest
+    procedure :: get_num_spaces
 !    procedure :: get_num_spaces
     procedure :: sync_window
     procedure :: get_producer_id
-    procedure :: get_receiver_id
+    procedure :: get_channel_id
     procedure :: get_consumer_id
     procedure :: get_num_producers
     procedure :: get_num_consumers
-    procedure :: start_receiving
+    procedure :: get_capacity
+    procedure :: start_listening
     procedure :: server_barrier
     procedure :: full_barrier
   end type distributed_circular_buffer
@@ -110,18 +114,35 @@ contains
   end subroutine print
 
   !> Insert elements into a distributed circular buffer. See DCB_put
-  function put(this, src_data, num_elements) result(num_space_available)
+  function put(this, src_data, num_elements, commit_transaction) result(num_space_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(DATA_ELEMENT), dimension(*), intent(in)     :: src_data
     integer(C_INT), intent(in)                          :: num_elements
+    logical, intent(in)                                 :: commit_transaction
     integer(C_INT) :: num_space_available !< The return value of DCB_put (number of available spaces, if successful)
 
-    num_space_available = DCB_put(this % c_buffer, src_data, num_elements)
+    integer(C_INT) :: operation = CB_NO_COMMIT
+    if (commit_transaction) operation = CB_COMMIT
+    num_space_available = DCB_put(this % c_buffer, src_data, num_elements, operation)
   end function put
 
   !> Extract elements from a distributed circular buffer. See DCB_get
-  function get(this, buffer_id, dest_data, num_elements) result(num_data_available)
+  function get(this, buffer_id, dest_data, num_elements, commit_transaction) result(num_data_available)
+    implicit none
+    class(distributed_circular_buffer), intent(inout)   :: this
+    integer(C_INT), intent(in)                          :: buffer_id
+    integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
+    integer(C_INT), intent(in)                          :: num_elements
+    logical, intent(in)                                 :: commit_transaction
+    integer(C_INT) :: num_data_available !< The return value of DCB_get
+
+    integer(C_INT) :: operation = CB_NO_COMMIT
+    if (commit_transaction) operation = CB_COMMIT
+    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_data, num_elements, operation)
+  end function get
+
+  function peek(this, buffer_id, dest_data, num_elements) result(num_data_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(C_INT), intent(in)                          :: buffer_id
@@ -129,8 +150,8 @@ contains
     integer(C_INT), intent(in)                          :: num_elements
     integer(C_INT) :: num_data_available !< The return value of DCB_get
 
-    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_data, num_elements)
-  end function get
+    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_data, num_elements, CB_PEEK)
+  end function peek
 
   function get_num_elements_local(this, buffer_id) result(num_elements)
     implicit none
@@ -141,13 +162,16 @@ contains
     num_elements = DCB_get_num_elements(this % c_buffer, buffer_id)
   end function get_num_elements_local
 
-  function get_num_elements_latest(this) result(num_elements)
+  function get_num_spaces(this, update_from_remote) result(num_spaces)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT) :: num_elements
+    logical, intent(in)                               :: update_from_remote
+    integer(C_INT) :: num_spaces
 
-    num_elements = DCB_get_latest_num_elements(this % c_buffer)
-  end function get_num_elements_latest
+    integer(C_INT) :: c_update = 0
+    if (update_from_remote) c_update = 1
+    num_spaces = DCB_get_num_spaces(this % c_buffer, c_update)
+  end function get_num_spaces
 
   subroutine sync_window(this)
     implicit none
@@ -162,12 +186,12 @@ contains
     producer_id = DCB_get_producer_id(this % c_buffer)
   end function get_producer_id
 
-  function get_receiver_id(this) result(receiver_id)
+  function get_channel_id(this) result(channel_id)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT) :: receiver_id
-    receiver_id = DCB_get_receiver_id(this % c_buffer)
-  end function get_receiver_id
+    integer(C_INT) :: channel_id
+    channel_id = DCB_get_channel_id(this % c_buffer)
+  end function get_channel_id
 
   function get_consumer_id(this) result(consumer_id)
     implicit none
@@ -190,12 +214,19 @@ contains
     num_consumers = DCB_get_num_consumers(this % c_buffer)
   end function get_num_consumers
 
-  function start_receiving(this) result(return_value)
+  function get_capacity(this) result(num_elements)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT) :: num_elements
+    num_elements = DCB_max_num_element_per_instance(this % c_buffer)
+  end function get_capacity
+
+  function start_listening(this) result(return_value)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT) :: return_value
-    return_value = DCB_start_receiving(this % c_buffer)
-  end function start_receiving
+    return_value = DCB_channel_start_listening(this % c_buffer)
+  end function start_listening
 
   subroutine full_barrier(this)
     implicit none

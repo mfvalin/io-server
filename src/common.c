@@ -26,6 +26,7 @@
 #include <immintrin.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 //! Memory store fence
@@ -51,9 +52,8 @@ static inline void lock_set(int* location) {
     ;
 }
 static inline void lock_reset(int* location) {
-    *(volatile int*)location = 0;
+  *(volatile int*)location = 0;
 }
-
 //C_EnD
 
 //C_StArT
@@ -67,6 +67,19 @@ typedef int32_t data_index;
 //  integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element
 //  interface
 //F_EnD
+
+//C_StArT
+/**
+ * @brief Copy buffer elements into another array (either into or out of the buffer)
+ */
+static inline void copy_elements(
+    data_element*       dst, //!< [out] Where to copy the elements
+    const data_element* src, //!< [in]  The elements to copy
+    int                 n    //!< [in] How many we want to copy
+) {
+  memcpy(dst, src, sizeof(data_element) * (size_t)n);
+}
+//C_EnD
 
 //F_StArT
 //  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')

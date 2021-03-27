@@ -5,6 +5,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake)
 include(ec_init)
 include(ec_parse_manifest)
 
+ec_parse_manifest()
 project(${NAME} VERSION ${VERSION} DESCRIPTION "${DESCRIPTION}")
 
 enable_testing()
@@ -16,7 +17,7 @@ endif()
 enable_language(Fortran)
 enable_language(C)
 
-include(compiler_presets)
+include(ec_compiler_presets)
 
 find_package(MPI)
 if (MPI_FOUND)
@@ -40,7 +41,7 @@ endif()
 
 option(BUILD_DOC "Build the Doxygen documentation" FALSE)
 if (BUILD_DOC)
-  include(cmake_shared/doxygen.cmake)
+  include(doxygen)
 endif()
 
 add_subdirectory(src)
