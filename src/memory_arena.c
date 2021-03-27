@@ -384,7 +384,7 @@ uint32_t memory_arena_init(
   ma->owner = me;  // flag area as initialized by me
 
   i = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
-// fprintf(stderr,"DEBUG: memory arena %p UNlocked by %d\n", ma, me);
+fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
   return i ;
 }
 

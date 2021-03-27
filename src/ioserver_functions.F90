@@ -195,7 +195,7 @@ module ioserver_functions
   end function ioserver_init
 
   function ioserver_finalize() result(status)
-  integer :: status
+    integer :: status
     status = ioserver_int_finalize()
   end function ioserver_finalize
 

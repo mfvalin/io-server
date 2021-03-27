@@ -49,6 +49,13 @@ type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 
 
 interface
 
+function ptr_diff(pref, p) result(diff) BIND(C,name='Ptr_diff')  !  address difference (in bytes)
+import :: C_PTR, C_INTPTR_T
+type(C_PTR), intent(IN), value :: pref    ! reference address
+type(C_PTR), intent(IN), value :: p       ! address for which an offset (displacement) is needed
+integer(C_INTPTR_T)            :: diff
+end function ptr_diff
+
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
 end subroutine IOserver_set_time_to_quit
 

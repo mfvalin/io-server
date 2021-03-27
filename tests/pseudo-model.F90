@@ -170,6 +170,8 @@ subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
 !   integer(C_INT64_T) :: shmsz64
   type(comm_rank_size) :: local_crs
 
+  write(6,*)'in pseudo io-relay, PE',rank+1,' of',size
+  call flush(6)
   call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
   call check_comm(model, IOserver_get_crs(MODEL_COLOR), 'model')
   call check_comm(modelio, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR), 'modelio')
@@ -182,8 +184,8 @@ subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
   call MPI_Comm_size(nodeio, size, ierr)
   call MPI_Comm_rank(nodecom, noderank, ierr)
   call MPI_Comm_size(nodecom, nodesize, ierr)
-  write(6,*)'in pseudo io-relay, PE',rank+1,' of',size
   write(6,*)'               node PE',noderank+1,' of', nodesize
+  call flush(6)
 
   call IOSERVER_get_winmem(p_base, p_relay, p_server)
   call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)

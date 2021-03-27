@@ -23,8 +23,16 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
+  implicit none
+
+  private :: DATA_ELEMENT   ! prevent ambiguous definition if made available by another module
+  include 'io-server/common.inc'
+
   !> \brief maximum number of allowed dimensions
   integer, parameter :: MAX_ARRAY_RANK = 5
+
+! type of a heap element (must be consistent with io-server definition)
+  integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
 
   !> \brief C compatible data block metadata
   type, public, bind(C) :: block_meta_c
@@ -175,11 +183,6 @@ module shmem_heap
                               R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
                               R8_5D, R8_4D, R8_3D, R8_2D, R8_1D       !< generic Fortran array type associated allocatior
   end type heap
-
-  include 'io-server/common.inc'
-
-! type of a heap element (must be consistent with io-server definition)
-  integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
