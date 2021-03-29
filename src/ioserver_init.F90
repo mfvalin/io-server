@@ -1003,7 +1003,8 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       call C_F_PROCPOINTER(io_relay_fn,p)          ! associate procedure pointer with caller supplied address
 
       ! call user supplied relay code
-      call p(model, modelio, allio, nodeio, serverio, nodecom)    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
+!       call p(model, modelio, allio, nodeio, serverio, nodecom)    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
+      call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
       call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
       write(6,*)'FINAL:, relay PE',relayrank
