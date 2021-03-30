@@ -1,7 +1,6 @@
 module helpers
   use ISO_C_BINDING
   use ioserver_functions
-!   include 'io-server/ioserver.inc'
 
  contains
 
@@ -29,15 +28,15 @@ subroutine print_comm(is_null, name)
   endif
 end subroutine print_comm
 
-subroutine print_comms(model, modelio, allio, nodeio, serverio, nodecom)
+subroutine print_comms(model, modelio, allio, relay, server, nodecom)
   implicit none
-  integer, intent(IN) :: model, allio, nodeio, serverio, modelio, nodecom
-!   include 'io-server/ioserver.inc'
+  integer, intent(IN) :: model, allio, relay, server, modelio, nodecom
+
   call print_comm(IOSERVER_Commisnull(model),    'model')
   call print_comm(IOSERVER_Commisnull(modelio),  'modelio')
   call print_comm(IOSERVER_Commisnull(allio),    'allio')
-  call print_comm(IOSERVER_Commisnull(nodeio),   'nodeio')
-  call print_comm(IOSERVER_Commisnull(serverio), 'serverio')
+  call print_comm(IOSERVER_Commisnull(relay),    'relay')
+  call print_comm(IOSERVER_Commisnull(server),   'server')
   call print_comm(IOSERVER_Commisnull(nodecom),  'nodecom')
 end subroutine print_comms
 
@@ -67,7 +66,7 @@ program pseudomodelandserver
   implicit none
   external io_relay_fn
   integer :: status
-  integer :: model, allio, nodeio, serverio, nio_node, modelio, nodecom, me
+  integer :: model, allio, relay, server, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, nserv, ierr, noops, noderank, nodesize
   logical :: error
   character(len=128) :: arg
@@ -76,8 +75,8 @@ program pseudomodelandserver
   integer :: sz32
   type(memory_arena) :: ma
   character(len=8) :: blockname
-  type(comm_rank_size) :: local_crs, model_crs, nodeio_crs
-  type(comm_rank_size) :: modelio_crs, allio_crs, serverio_crs, nodecom_crs
+  type(comm_rank_size) :: local_crs, model_crs, relay_crs, fullnode_crs
+  type(comm_rank_size) :: modelio_crs, allio_crs, server_crs, nodecom_crs
 
   call mpi_init(status)
   local_crs = COMM_RANK_SIZE_NULL
@@ -95,68 +94,52 @@ program pseudomodelandserver
   if(COMMAND_ARGUMENT_COUNT() >= 2) call GET_COMMAND_ARGUMENT(2, arg)
 
   call get_local_world(comm, rank, size)
-  me = ma%setid(rank)
+  me = ma % setid(rank)
   error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
   if(error) then
     write(6,*)'ERROR: bad window sizes'
     goto 777
   endif
 
-  if(rank >= nserv) then                    ! compute or IO relay Processes
+  if(rank >= nserv) then
+    ! =============================================================================================
+    !                                 compute or IO relay Processes
+    ! =============================================================================================
     read(arg,*) nio_node                    ! number of relay processes per node
     call set_IOSERVER_relay(io_relay_fn)
-    !  no return from ioserver_int_init in the case of IO relay processes
+    !  no return from ioserver_int_init in the case of IO relay processes when io_relay_fn is defined
     !  compute processes will return from call
-!     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'M')
     status = ioserver_init(nio_node, 'M')
+    ! =============================================================================================
+    !                                 compute Processes
+    ! =============================================================================================
     !  from this point on, this is a model compute process
 
     model_crs    = IOserver_get_crs(MODEL_COLOR)
     modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)
     allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)
-    nodeio_crs   = IOserver_get_crs(RELAY_COLOR)
-    serverio_crs = IOserver_get_crs(SERVER_COLOR)
+    relay_crs    = IOserver_get_crs(RELAY_COLOR)
+    server_crs   = IOserver_get_crs(SERVER_COLOR)
     nodecom_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
+    fullnode_crs = IOserver_get_crs(NODE_COLOR)
 
-!     call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
-
-!   call check_comm(model, IOserver_get_crs(MODEL_COLOR), 'model')
-!   call check_comm(model, model_crs, 'model')
-    model = model_crs % comm
-  
-!   call check_comm(modelio, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR), 'modelio')
-!   call check_comm(modelio, modelio_crs, 'modelio')
+    model   = model_crs % comm
     modelio = modelio_crs % comm
-
-!   call check_comm(allio, IOserver_get_crs(RELAY_COLOR + SERVER_COLOR), 'allio')
-!   call check_comm(allio, allio_crs, 'allio')
-    allio = allio_crs % comm
-
-!   call check_comm(nodeio, IOserver_get_crs(RELAY_COLOR), 'nodeio')
-!   call check_comm(nodeio, nodeio_crs, 'nodeio')
-    nodeio = nodeio_crs % comm
-
-!   call check_comm(serverio, IOserver_get_crs(SERVER_COLOR), 'serverio')
-!   call check_comm(serverio, serverio_crs, 'serverio')
-    serverio = serverio_crs % comm
-
-!   call check_comm(nodecom, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR), 'nodecom')
-!   call check_comm(nodecom, nodecom_crs, 'nodecom')
+    allio   = allio_crs % comm
+    relay   = relay_crs % comm
+    server  = server_crs % comm
     nodecom = nodecom_crs % comm
+    call print_comms(model, modelio, allio, relay, server, nodecom)
 
-    call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
-
-    call MPI_Comm_rank(model, rank, ierr)
-    call MPI_Comm_size(model, size, ierr)
-    call MPI_Comm_rank(nodecom, noderank, ierr)
-    call MPI_Comm_size(nodecom, nodesize, ierr)
-    write(6,*)'in pseudo model, PE',rank+1,' of',size
-    write(6,*)'            node PE',noderank+1,' of', nodesize
+    rank = model_crs % rank
+    size = model_crs % size
+    noderank = nodecom_crs % rank
+    nodesize = nodecom_crs % size
+    write(6,*)'START: compute PE',rank+1,' of',size
+    write(6,*)' model+io node PE',noderank+1,' of', nodesize
 
     call IOSERVER_get_winmem(p_base, p_relay, p_server)
     call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)  ! of interest is sz_relay
-    sz_relay = sz_relay / 4       ! convert to 32 bit units
-    sz_relay = sz_relay / (size + nio_node)
 
     temp = ma%clone(p_relay)
 
@@ -165,154 +148,125 @@ program pseudomodelandserver
     call MPI_Barrier(modelio, ierr)                      ! barrier 2 compute/relay
     call flush(6)
     call ma%dump()
-    write(6,*)'END: pseudo compute, PE',noderank
+    write(6,*)'END: compute, PE',rank+1,' of',size
 
-  else            ! ranks 0, 1,..., nserv-1 : server and no-op processes
-
+  else            ! ranks 0, 1,..., nserv-1 : 
+    ! =============================================================================================
+    !                                server and no-op processes
+    ! =============================================================================================
     nio_node = -1
     if(rank < noops) then          ! ranks below noops are NO-OP processes
+      ! =============================================================================================
+      !                                no-op processes
+      ! =============================================================================================
       ! no return from ioserver_int_init in the case of NO-OP processes
-      status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'Z')
-    else                           ! server processes (normally on another node)
-      status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, 'O')
-      ! io_server_out will return from call
-!       call io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
+      status = ioserver_init(nio_node, 'Z')
+    else
+      ! =============================================================================================
+      !                                server processes (usually on another node)
+      ! =============================================================================================
+      call set_IOserver_server(io_server_out)
+      status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
+      ! io_server_out may or may not return from call
       call io_server_out()
+      noderank = server_crs % rank
+      nodesize = server_crs % size
     endif
 
   endif
 777 continue
   call ioserver_set_time_to_quit()
-  write(6,*)'FINAL:, PE',noderank
+  write(6,*)'FINAL:      node PE',noderank+1,' of',nodesize
+  write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
   call mpi_finalize(status)
 end program
 
-! subroutine io_relay_fn(model, modelio, allio, nodeio, serverio, nodecom)
+! =============================================================================================
+!                      RELAY     ( skeleton code, interim API )
+! =============================================================================================
 subroutine io_relay_fn()
   use ISO_C_BINDING
   use helpers
-  use memory_arena_mod
-!   use ioserver_functions
+  use io_relay_mod
   implicit none
-!   integer, intent(IN) :: model, allio, nodeio, serverio, nodecom, modelio
-  integer :: model, allio, nodeio, serverio, nodecom, modelio
-!   include 'io-server/ioserver.inc'
+  integer :: model, allio, relay, server, nodecom, modelio, old, new
   integer :: rank, size, ierr, noderank, nodesize
-  type(C_PTR) :: p_base, p_relay, p_server, temp
-  type(memory_arena) :: ma
-  integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
-!   integer(C_INT64_T) :: shmsz64
-  type(comm_rank_size) :: local_crs, model_crs, nodeio_crs
-  type(comm_rank_size) :: modelio_crs, allio_crs, serverio_crs, nodecom_crs
+  type(C_PTR) :: temp
 
-  model_crs    = IOserver_get_crs(MODEL_COLOR)
-  modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)
-  allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)
-  nodeio_crs   = IOserver_get_crs(RELAY_COLOR)
-  serverio_crs = IOserver_get_crs(SERVER_COLOR)
-  nodecom_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
+  call io_relay_mod_init()
 
-  model = model_crs % comm
-  modelio = modelio_crs % comm
-  allio = allio_crs % comm
-  nodeio = nodeio_crs % comm
-  serverio = serverio_crs % comm
-  nodecom = nodecom_crs % comm
+  model    = model_crs % comm
+  modelio  = modelio_crs % comm
+  allio    = allio_crs % comm
+  relay    = relay_crs % comm
+  server   = server_crs % comm
+  nodecom  = nodecom_crs % comm
   
-  rank = nodeio_crs % rank
-  size = nodeio_crs % size
-  write(6,*)'in pseudo io-relay, PE',rank+1,' of',size
-  call flush(6)
-  call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
-
-!   call check_comm(model, IOserver_get_crs(MODEL_COLOR), 'model')
-!   call check_comm(model, model_crs, 'model')
-  
-!   call check_comm(modelio, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR), 'modelio')
-!   call check_comm(modelio, modelio_crs, 'modelio')
-
-!   call check_comm(allio, IOserver_get_crs(RELAY_COLOR + SERVER_COLOR), 'allio')
-!   call check_comm(allio, allio_crs, 'allio')
-
-!   call check_comm(nodeio, IOserver_get_crs(RELAY_COLOR), 'nodeio')
-!   call check_comm(nodeio, nodeio_crs, 'nodeio')
-
-!   call check_comm(serverio, IOserver_get_crs(SERVER_COLOR), 'serverio')
-!   call check_comm(serverio, serverio_crs, 'serverio')
-
-!   call check_comm(nodecom, IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR), 'nodecom')
-!   call check_comm(nodecom, nodecom_crs, 'nodecom')
-
-  call MPI_Comm_rank(nodeio, rank, ierr)
-  call MPI_Comm_size(nodeio, size, ierr)
-  call MPI_Comm_rank(nodecom, noderank, ierr)
-  call MPI_Comm_size(nodecom, nodesize, ierr)
-  write(6,*)'               node PE',noderank+1,' of', nodesize
-  call flush(6)
-
-  call IOSERVER_get_winmem(p_base, p_relay, p_server)
-  call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
-
-  call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
-
-  temp = ma%clone(p_relay)
+  rank = relay_crs % rank
+  new = 0
+  if(rank == 0) new = 1        ! debug mode on rank 0 in 
+  old = io_relay_debug(new)
+  size = relay_crs % size
+  write(6,*)'in pseudo io-relay, PE',rank+1,' of',size,' debug mode (old,new) =',old, new
+  if(relay_debug) write(6,*)'      model+io node PE',nodecom_crs % rank + 1, ' of', nodecom_crs % size
+  if(relay_debug) write(6,*)'          full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
+  if(relay_debug) call print_comms(model, modelio, allio, relay, server, nodecom)
 
   call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
   ! compute -> relay traffic
+
+  ! actual relay code goes here
+
   call MPI_Barrier(modelio, ierr)        ! barrier 2 compute/relay
 
-  call flush(6)
-  call ma%dump()
-  write(6,*)'END: pseudo relay, PE',noderank
+  if(relay_debug) then
+    call flush(6)
+    call ma%dump()
+  endif
+  write(6,*)'END: pseudo relay PE',relay_crs % rank+1,' of',relay_crs % size
+  call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
+  write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
+  call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
+  stop
 end subroutine io_relay_fn
 
-! subroutine io_server_out(model, modelio, allio, nodeio, serverio, nodecom)
+! =============================================================================================
+!                      SERVER  ( skeleton code, interim API )
+! =============================================================================================
+
 subroutine io_server_out()
   use ISO_C_BINDING
   use helpers
-  use memory_arena_mod
+  use io_server_mod
   implicit none
-!   integer, intent(IN) :: model, allio, nodeio, serverio, modelio, nodecom
-  integer :: model, allio, nodeio, serverio, modelio, nodecom
-!   include 'io-server/ioserver.inc'
+  integer :: model, allio, relay, server, modelio, nodecom
 
-  type(C_PTR) :: p_base, p_relay, p_server
-  integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
   integer :: rank, size, ierr, noderank, nodesize
-  type(comm_rank_size) :: local_crs, model_crs, nodeio_crs, fullnode_crs
-  type(comm_rank_size) :: modelio_crs, allio_crs, serverio_crs, nodecom_crs
 
-  model_crs    = IOserver_get_crs(MODEL_COLOR)
-  modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)
-  allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)
-  nodeio_crs   = IOserver_get_crs(RELAY_COLOR)
-  serverio_crs = IOserver_get_crs(SERVER_COLOR)
-  nodecom_crs  = IOserver_get_crs(SERVER_COLOR + NODE_COLOR)
-  fullnode_crs = IOserver_get_crs(NODE_COLOR)
+  call io_server_mod_init()
 
-  model = model_crs % comm
-  modelio = modelio_crs % comm
-  allio = allio_crs % comm
-  nodeio = nodeio_crs % comm
-  serverio = serverio_crs % comm
-  nodecom = nodecom_crs % comm
+  model    = model_crs % comm
+  modelio  = modelio_crs % comm
+  allio    = allio_crs % comm
+  relay    = relay_crs % comm
+  server   = server_crs % comm
+  nodecom  = nodecom_crs % comm
 
-  call MPI_Comm_rank(serverio, rank, ierr)
-  call MPI_Comm_size(serverio, size, ierr)
-  call MPI_Comm_rank(nodecom, noderank, ierr)
-  call MPI_Comm_size(nodecom, nodesize, ierr)
+  write(6,*)'in pseudo IO server, PE',server_crs % rank + 1  ,' of', server_crs % size
+  write(6,*)'         server node PE',nodecom_crs % rank + 1 ,' of', nodecom_crs % size
+  write(6,*)'           full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
+  call print_comms(model, modelio, allio, relay, server, nodecom)
 
-  write(6,*)'in pseudo IO server, PE',rank+1,' of',size
-  write(6,*)'         server node PE',noderank+1,' of', nodesize
-  write(6,*)'           full node PE',fullnode_crs%rank + 1,' of', fullnode_crs%size
-  call print_comms(model, modelio, allio, nodeio, serverio, nodecom)
-!   call print_comms(model_crs % comm, modelio_crs % comm, allio_crs % comm, nodeio_crs % comm, serverio_crs % comm, nodecom_crs % comm)
+  write(6,*)'END: pseudo IO server, PE',server_crs % rank + 1  ,' of', server_crs % size
+  call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
+  write(6,*)'FINAL:       full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
 
-  call IOSERVER_get_winmem(p_base, p_relay, p_server)
-  call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
-  write(6,*)'END: pseudo IO server, PE'
-
+  call mpi_finalize(ierr)
+  stop
 end subroutine io_server_out
+
+
+! extra code , to avoid including mpif.h when not wanted
 
 subroutine get_local_world(comm, rank, size)
   use ISO_C_BINDING

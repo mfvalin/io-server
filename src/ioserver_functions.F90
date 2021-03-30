@@ -271,6 +271,72 @@ endif
   end function ioserver_read
 
 end module
+!
+! =============================================================================================
+!                                               IO RELAY
+! =============================================================================================
+!                                 ( data and initialization module )
+! =============================================================================================
+! general information useful to io relay processes
+module io_relay_mod
+  use ISO_C_BINDING
+  use memory_arena_mod
+  use ioserver_functions
+  implicit none
+  include 'mpif.h'
+
+  save
+  type(comm_rank_size) :: modelio_crs, allio_crs, nodecom_crs, relay_crs
+  type(comm_rank_size) :: model_crs, server_crs, fullnode_crs
+
+  logical :: initialized = .false.
+  logical :: relay_debug = .false.
+
+  type(C_PTR) :: p_base   = C_NULL_PTR
+  integer(C_INTPTR_T) :: sz_base = 0
+
+  type(C_PTR) :: p_relay  = C_NULL_PTR
+  integer(C_INTPTR_T) :: sz_relay = 0
+
+  type(C_PTR) :: p_server = C_NULL_PTR
+  integer(C_INTPTR_T) :: sz_server = 0
+
+  type(memory_arena) :: ma
+
+  contains
+
+  function io_relay_debug(new) result(old) BIND(C,name='IoRelayDebug')
+    implicit none
+    integer(C_INT), intent(IN), value :: new
+    integer(C_INT) :: old
+
+    old = 0
+    if(relay_debug) old = 0
+    relay_debug = (new .ne. 0)
+  end function io_relay_debug
+
+  subroutine io_relay_mod_init()
+    implicit none
+    type(C_PTR) :: temp
+
+    if(initialized) return
+
+    model_crs    = comm_rank_size(MPI_COMM_NULL, -1, 0)          ! only useful on compute nodes
+    server_crs   = comm_rank_size(MPI_COMM_NULL, -1, 0)          ! only useful on server nodes
+    modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)   ! compute and relay PEs
+    allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)  ! relay and server PEs
+    relay_crs    = IOserver_get_crs(RELAY_COLOR)                  ! relay PEs only
+    nodecom_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)   ! compute and relay PEs on THIS SMP NODE
+    fullnode_crs = IOserver_get_crs(NODE_COLOR)
+
+    call IOSERVER_get_winmem(p_base, p_relay, p_server)
+    call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
+
+    temp = ma%clone(p_relay)
+
+    initialized = .true.
+  end subroutine io_relay_mod_init
+end module io_relay_mod
 
 subroutine ioserver_functions_demo
   use ioserver_functions
@@ -290,3 +356,69 @@ subroutine ioserver_functions_demo
   status = f % close()
   status = ioserver_finalize()
 end subroutine ioserver_functions_demo
+!
+! =============================================================================================
+!                                               IO SERVER
+! =============================================================================================
+!                                 ( data and initialization module )
+! =============================================================================================
+! general information useful to io server processes
+module io_server_mod
+  use ISO_C_BINDING
+  use memory_arena_mod
+  use ioserver_functions
+  implicit none
+  include 'mpif.h'
+
+  save
+  type(comm_rank_size) :: modelio_crs, allio_crs, nodecom_crs, relay_crs
+  type(comm_rank_size) :: model_crs, server_crs, fullnode_crs
+
+  logical :: initialized = .false.
+  logical :: relay_debug = .false.
+
+  type(C_PTR) :: p_base   = C_NULL_PTR
+  integer(C_INTPTR_T) :: sz_base = 0
+
+  type(C_PTR) :: p_relay  = C_NULL_PTR
+  integer(C_INTPTR_T) :: sz_relay = 0
+
+  type(C_PTR) :: p_server = C_NULL_PTR
+  integer(C_INTPTR_T) :: sz_server = 0
+
+  type(memory_arena) :: ma
+
+  contains
+
+  function io_server_debug(new) result(old) BIND(C,name='IoServerDebug')
+    implicit none
+    integer(C_INT), intent(IN), value :: new
+    integer(C_INT) :: old
+
+    old = 0
+    if(relay_debug) old = 0
+    relay_debug = (new .ne. 0)
+  end function io_server_debug
+
+  subroutine io_server_mod_init()
+    implicit none
+    type(C_PTR) :: temp
+
+    if(initialized) return
+
+    model_crs    = comm_rank_size(MPI_COMM_NULL, -1, 0)          ! only useful on compute PEs
+    modelio_crs  = comm_rank_size(MPI_COMM_NULL, -1, 0)          ! only useful on compute and relay PEs
+    allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)  ! relay and server PEs
+    relay_crs    = comm_rank_size(MPI_COMM_NULL, -1, 0)          ! only useful on compute nodes
+    server_crs   = IOserver_get_crs(SERVER_COLOR)                ! server PEs
+    nodecom_crs  = IOserver_get_crs(SERVER_COLOR + NODE_COLOR)   ! server PEs on THIS SMP NODE
+    fullnode_crs = IOserver_get_crs(NODE_COLOR)
+
+    call IOSERVER_get_winmem(p_base, p_relay, p_server)
+    call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
+
+    temp = ma%clone(p_relay)
+
+    initialized = .true.
+  end subroutine io_server_mod_init
+end module io_server_mod

@@ -161,6 +161,11 @@ implicit none
 external :: fn
 end subroutine set_IOserver_relay
 
+subroutine set_IOserver_server(fn)  ! set server function to call to fn
+implicit none
+external :: fn
+end subroutine set_IOserver_server
+
 function IOserver_int_finalize() result(status)
 integer :: status
 end function IOserver_int_finalize

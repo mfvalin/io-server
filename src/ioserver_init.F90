@@ -155,7 +155,8 @@ module ioserver_internal_mod
   type(circular_buffer)  :: local_cio_in         ! inbound circular buffer  (located in memory arena)
   type(circular_buffer)  :: local_cio_out        ! outbound circular buffer  (located in memory arena)
 
-  type(C_FUNPTR) :: io_relay_fn = C_NULL_FUNPTR  !  procedure to call on relay processes (if not NULL)
+  type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR !  procedure to call on relay processes (if not NULL)
+  type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR !  procedure to call on server processes (if not NULL)
 
   contains
 
@@ -631,6 +632,21 @@ end subroutine set_IOserver_relay
 !!
 !! F_EnD
 
+!! F_StArT
+subroutine set_IOserver_server(fn)  ! set server function to call to fn
+!! F_EnD
+  use ioserver_internal_mod
+!! F_StArT
+  implicit none
+  external :: fn
+!! F_EnD
+  io_server_fn = C_FUNLOC(fn)
+  return
+!! F_StArT
+end subroutine set_IOserver_server
+!!
+!! F_EnD
+
 subroutine IOserver_noop()  !  NO OP loop to park processes with minimal CPU consumption
   use ioserver_internal_mod
   implicit none
@@ -997,18 +1013,40 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 
   endif
 
+  ! ===================================================================================
+  !                     SERVER processes
+  ! ===================================================================================
+  if(server_comm .ne. MPI_COMM_NULL) then
+
+    if(C_ASSOCIATED(io_server_fn)) then
+      if(debug_mode) print *,'INFO: io_server_fn is associated'
+      call C_F_PROCPOINTER(io_server_fn,p)    ! associate procedure pointer with caller supplied address
+      ! call user supplied server code that may or may not return
+      write(6,*)'INFO: expecting no return from io_server_fn'
+      call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
+    else
+      if(debug_mode) print *,'INFO: io_server_fn is not associated, calling default function'
+      call io_server_out()                      ! not expected to return, but ...
+    endif
+
+    call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
+    write(6,*)'FINAL: SMP node PE',smp_rank+1,' of',smp_size
+    call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
+    stop
+  endif
+
   if(iorelay_comm .ne. MPI_COMM_NULL) then       ! IO relay process, check if caller supplied relay routine
 
     if(C_ASSOCIATED(io_relay_fn)) then             ! caller supplied subroutine to be called on relay PEs
       if(debug_mode) print *,'INFO: io_relay_fn is associated'
       call C_F_PROCPOINTER(io_relay_fn,p)          ! associate procedure pointer with caller supplied address
 
-      ! call user supplied relay code
-!       call p(model, modelio, allio, nodeio, serverio, nodecom)    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
+      ! call user supplied relay code that may or may not return
+      write(6,*)'INFO: no return from io_relay_fn'
       call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
-      call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
-      write(6,*)'FINAL: node PE',relayrank+1,' of',relaysize
+      call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
+      write(6,*)'FINAL: model+io node PE',relayrank+1,' of',relaysize
       call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
       stop
 
