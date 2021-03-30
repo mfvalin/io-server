@@ -290,8 +290,8 @@ void memory_arena_print_status(
   block_tail *bt;
 
   fprintf(stdout,"\n==============================================\n");
-  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me, ma);
-  fprintf(stdout,"owner       = %8.8x\n",ma->owner);
+  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me - 1 , ma);  // me -1 is the id
+  fprintf(stdout,"owner       = %8.8x\n",ma->owner - 1);                 // id + 1 was stored, print id
   fprintf(stdout,"max entries = %d\n",ma->max_entries);
   fprintf(stdout,"max size    = %d\n",ma->arena_size);
   fprintf(stdout,"entries     = %d\n",ma->n_entries);
@@ -360,7 +360,8 @@ uint32_t memory_arena_init(
     fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner);
     return ma->owner;                           // area already initialized, return id of initializer
   }else{
-    fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
+//     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
+    fprintf(stderr," DEBUG: ma init %p, not owned, ", ma);
   }
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory arena
@@ -384,7 +385,8 @@ uint32_t memory_arena_init(
   ma->owner = me;  // flag area as initialized by me
 
   i = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
-fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
+// fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
+fprintf(stderr," UNlocked and owned now by id = %d\n", me - 1);
   return i ;
 }
 
