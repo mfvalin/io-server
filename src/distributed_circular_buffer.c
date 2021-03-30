@@ -32,6 +32,8 @@
 #include "io-server/circular_buffer.h"
 //C_EnD
 
+#include "io-server/timer.h"
+
 static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INTEGER
                                                 : sizeof(data_element) == sizeof(int64_t) ? MPI_LONG_LONG_INT
                                                                                           : MPI_DATATYPE_NULL;
@@ -53,7 +55,11 @@ static const int DCB_ROOT_ID = 0;
 typedef struct {
   uint64_t num_transfers;
   uint64_t num_elem;
+  uint64_t max_fill;
   double   total_wait_time_ms;
+  double   total_read_time_ms;
+  double   total_write_time_ms;
+  double dummy_stat[4];
 } DCB_stats;
 
 /**
@@ -183,6 +189,11 @@ static inline data_index num_elem_from_bytes(const size_t num_bytes) {
 static inline data_index num_elem_from_bytes_aligned64(const size_t num_bytes) {
   const data_index num_elem_init = num_elem_from_bytes(num_bytes);
   return num_elem_init % 2 == 0 ? num_elem_init : num_elem_init + 1;
+}
+
+//! Compute the space in kilobytes taken by the given number of elements
+static inline double num_elem_to_kb(const size_t num_elements) {
+  return num_elements * sizeof(data_element) / 1024.0;
 }
 
 //! Compute the number of #data_element taken by the circular_buffer_instance struct
@@ -630,9 +641,12 @@ static inline int init_circular_buffer_instance(
 
 //! Initialize the DCB_stats struct to all 0
 static void DCB_init_stats(DCB_stats* stats) {
-  stats->num_transfers      = 0;
-  stats->num_elem           = 0;
-  stats->total_wait_time_ms = 0.0;
+  stats->num_transfers       = 0;
+  stats->num_elem            = 0;
+  stats->max_fill            = 0;
+  stats->total_wait_time_ms  = 0.0;
+  stats->total_read_time_ms  = 0.0;
+  stats->total_write_time_ms = 0.0;
 }
 
 //! Print the collected stats for a single buffer instance
@@ -640,24 +654,38 @@ static void print_instance_stats(
     const DCB_stats* producer_stats, //!< Stats from the producer side of the buffer
     const DCB_stats* consumer_stats, //!< Stats from the consumer side of the buffer
     const int        id,             //!< ID of the buffer (to prefix the stats)
-    const int        with_header     //!< Whether to print a header to name the columns
+    const int        with_header,    //!< Whether to print a header to name the columns
+    const int        capacity        //!< Max number of elements the buffer can hold
 ) {
   const uint64_t num_puts = producer_stats->num_transfers;
   const uint64_t num_gets = consumer_stats->num_transfers;
 
-  const double avg_in     = num_puts > 0 ? (double)producer_stats->num_elem / num_puts : 0.0;
-  const double avg_out    = num_gets > 0 ? (double)consumer_stats->num_elem / num_gets : 0.0;
-  const double avg_wait_w = num_puts > 0 ? (double)producer_stats->total_wait_time_ms / num_puts : 0.0;
-  const double avg_wait_r = num_gets > 0 ? (double)consumer_stats->total_wait_time_ms / num_gets : 0.0;
+  const double avg_in           = num_puts > 0 ? (double)producer_stats->num_elem / num_puts : 0.0;
+  const double avg_out          = num_gets > 0 ? (double)consumer_stats->num_elem / num_gets : 0.0;
+  const double avg_wait_w       = num_puts > 0 ? (double)producer_stats->total_wait_time_ms / num_puts : 0.0;
+  const double avg_wait_r       = num_gets > 0 ? (double)consumer_stats->total_wait_time_ms / num_gets : 0.0;
+  const double total_read_time  = consumer_stats->total_read_time_ms;
+  const double avg_read_time    = num_gets > 0 ? total_read_time / num_elem_to_kb(consumer_stats->num_elem) : 0.0;
+  const double total_write_time = producer_stats->total_write_time_ms;
+  const double avg_write_time   = num_puts > 0 ? total_write_time / num_elem_to_kb(producer_stats->num_elem) : 0.0;
 
   if (with_header) {
-    printf("rank: #elem put (avg/call) -- #elem got (avg/call) -- write wait (avg/call) --  read wait (avg/call)\n");
+    printf("rank: #elem put (avg/call) -- #elem got (avg/call) -- "
+           "write wait (avg/call) --  read wait (avg/call) -- "
+           "write time (avg/kB) --  read time (avg/kB) -- "
+           "max fill (%%)"
+           "\n");
   }
 
   printf(
-      " %03d:  %8ld (%8.1f) --  %8ld (%8.1f) -- %7.3f ms (%8.5f) -- %7.3f ms (%8.5f)\n", id, producer_stats->num_elem,
-      avg_in, consumer_stats->num_elem, avg_out, producer_stats->total_wait_time_ms, avg_wait_w,
-      consumer_stats->total_wait_time_ms, avg_wait_r);
+      " %03d:  %8ld (%8.1f) --  %8ld (%8.1f) -- "
+      "%7.1f ms (%8.5f) -- %7.1f ms (%8.5f) -- "
+      "%7.1f ms (%6.3f) -- %7.1f ms (%6.3f) -- "
+      "%8ld (%3d)"
+      "\n",
+      id, producer_stats->num_elem, avg_in, consumer_stats->num_elem, avg_out, producer_stats->total_wait_time_ms,
+      avg_wait_w, consumer_stats->total_wait_time_ms, avg_wait_r, total_write_time, avg_write_time, total_read_time,
+      avg_read_time, consumer_stats->max_fill, (int)(consumer_stats->max_fill * 100.0 / capacity));
 }
 
 static inline void print_instance(const circular_buffer_instance_p instance) {
@@ -962,10 +990,11 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
     send_channel_signal(buffer, RSIG_STOP); // Tell channels to stop any activity
     const data_element* producer_ranks = get_producer_ranks(buffer);
     for (int i = 0; i < buffer->num_producers; ++i) {
-      DCB_stats  producer_stats;
-      MPI_Status status;
+      const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i);
+      DCB_stats                        producer_stats;
+      MPI_Status                       status;
       MPI_Recv(&producer_stats, sizeof(DCB_stats), MPI_BYTE, producer_ranks[i], i, buffer->communicator, &status);
-      print_instance_stats(&producer_stats, &buffer->consumer_stats[i], i, i == 0);
+      print_instance_stats(&producer_stats, &buffer->consumer_stats[i], i, i == 0, instance->capacity);
     }
   }
 
@@ -1205,6 +1234,9 @@ data_index DCB_put(
   if (DCB_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
+  io_timer_t timer = {0, 0};
+  io_timer_start(&timer);
+
   const int target_rank = buffer->local_header.target_rank;
 
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
@@ -1247,8 +1279,11 @@ data_index DCB_put(
 
   MPI_Win_unlock(target_rank, buffer->window);
 
+  io_timer_stop(&timer);
+
   buffer->producer_stats.num_elem += (uint64_t)num_elements;
   buffer->producer_stats.num_transfers++;
+  buffer->producer_stats.total_write_time_ms += io_time_ms(&timer);
 
   return get_available_space(&buffer->local_header);
 }
@@ -1272,8 +1307,15 @@ int DCB_get(
     const int                     num_elements, //!< [in] How many elements to read
     const int                     operation     //!< [in] What operation to perform: extract, read or just peek
 ) {
-  if (DCB_wait_data_available(buffer, buffer_id, num_elements) < 0)
+  const int num_available_elem = DCB_wait_data_available(buffer, buffer_id, num_elements);
+  if (num_available_elem < 0)
     return -1;
+
+  if (buffer->consumer_stats[buffer_id].max_fill < (uint64_t)num_available_elem)
+    buffer->consumer_stats[buffer_id].max_fill = num_available_elem;
+
+  io_timer_t timer = {0, 0};
+  io_timer_start(&timer);
 
   circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
 
@@ -1311,6 +1353,8 @@ int DCB_get(
     *d_out                     = out_index; // Update actual extraction pointer
   }
 
+  io_timer_stop(&timer);
+  buffer->consumer_stats[buffer_id].total_read_time_ms += io_time_ms(&timer);
   if (operation != CB_PEEK) {
     buffer->consumer_stats[buffer_id].num_elem += (uint64_t)num_elements;
     buffer->consumer_stats[buffer_id].num_transfers++;

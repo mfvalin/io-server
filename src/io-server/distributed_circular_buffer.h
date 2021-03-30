@@ -33,7 +33,11 @@
 typedef struct {
   uint64_t num_transfers;
   uint64_t num_elem;
+  uint64_t max_fill;
   double   total_wait_time_ms;
+  double   total_read_time_ms;
+  double   total_write_time_ms;
+  double dummy_stat[4];
 } DCB_stats;
 
 /**
