@@ -944,8 +944,9 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       ok = local_cio_out % create(temp_ptr, sz32)
       mem % pe(relayrank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
     endif
+
     if(debug_mode) write(6,*)'DEBUG: allocating '//heap_name//' '//cioin_name//' '//cioout_name
-    if(debug_mode) write(6,'(A,3Z18.16)') 'displacements =', &
+    if(debug_mode) write(6,'(A,3Z18.16)') ' DEBUG: displacements =', &
                      mem % pe(relayrank) % heap, mem % pe(relayrank) % cio_in, mem % pe(relayrank) % cio_out
     call flush(6)
   endif   ! (color == SERVER_COLOR)
@@ -1007,7 +1008,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
       call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
-      write(6,*)'FINAL:, relay PE',relayrank
+      write(6,*)'FINAL: node PE',relayrank+1,' of',relaysize
       call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
       stop
 
