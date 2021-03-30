@@ -108,7 +108,6 @@
 #include "io-server/circular_buffer_defines.h"
 #include "io-server/common.h"
 
-#if !defined(FIOL_VERSION)
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
@@ -118,13 +117,11 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
-  data_element version;     //!< version marker
-  data_index   first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index   in;          //!< Start inserting data at data[in]
-  data_index   partial_in;  //!< Temporary store start index, before 'committing' a store (insert)
-  data_index   out;         //!< Start reading data at data[out]
-  data_index   partial_out; //!< Temporary read start index, before 'committing' a read (extract)
-  data_index   limit;       //!< size of data buffer (last available index + 1)
+  data_element version; //!< version marker
+  data_index   first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_index   in[2];   //!< Start inserting data at data[in]
+  data_index   out[2];  //!< Start reading data at data[out]
+  data_index   limit;   //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -133,21 +130,11 @@ typedef fiol_management* fiol_management_p;
 //! skeleton for circular buffer
 typedef struct {
   fiol_management m;      //!< management structure
-  data_element    data[]; //!< data buffer (contains at most limit -1 useful data elements)
+  data_element    data[]; //!< data buffer (contains at most limit - 1 useful data elements)
 } circular_buffer;
 
 //! pointer to circular buffer
 typedef circular_buffer* circular_buffer_p;
-
-//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
-//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline data_index available_space(
-    const data_index in,   //!< [in] Index of insertion location in the buffer
-    const data_index out,  //!< [in] Index of extraction location in the buffer
-    const data_index limit //!< [in] Number of elements that the buffer can hold
-) {
-  return (in < out) ? out - in - 1 : limit - in + out - 1;
-}
 
 //! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
@@ -159,7 +146,22 @@ static inline data_index available_data(
   return (in >= out) ? in - out : limit - out + in;
 }
 
-#endif
+//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline data_index available_space(
+    const data_index in,   //!< [in] Index of insertion location in the buffer
+    const data_index out,  //!< [in] Index of extraction location in the buffer
+    const data_index limit //!< [in] Number of elements that the buffer can hold
+) {
+  return limit - available_data(in, out, limit) - 1;
+}
+
+enum
+{
+  CB_FULL    = 0, //!< Array index corresponding to the circular buffer _full_ index (in or out)
+  CB_PARTIAL = 1  //!< Array index corresponding to the circular buffer _partial_ index (in or out)
+};
+
 //! Print buffer header (to help debugging)
 void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to print
 );

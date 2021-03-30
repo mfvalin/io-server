@@ -26,8 +26,7 @@
 
 #include <mpi.h>
 
-#include "io-server/circular_buffer_defines.h"
-#include "io-server/common.h"
+#include "io-server/circular_buffer.h"
 /**
  * @brief Needs to be aligned to size of #data_element
  */
@@ -37,12 +36,6 @@ typedef struct {
   double   total_wait_time_ms;
 } DCB_stats;
 
-enum
-{
-  DCB_FULL    = 0,
-  DCB_PARTIAL = 1
-};
-
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
  * distributed circular buffers.
@@ -50,15 +43,10 @@ enum
  * Please don't change the order of data members (unless you know what the consequences are).
  */
 typedef struct {
-  int target_rank; //!< With which process this instance should communicate for data transfers
-
-  void* dummy; //!< Force 64-bit alignment of the rest of the struct
-
-  data_index capacity; //!< How many elements can fit in the buffer
-  data_index out[2];   //!< Start reading data at data[out]
-  data_index in[2];    //!< Start inserting data at data[in]
-
-  data_element data[]; //!< The buffer's content
+  int             target_rank; //!< With which process this instance should communicate for data transfers
+  int64_t         capacity;    //!< How many elements can fit in this instance
+  void*           dummy;       //!< Force 64-bit alignment of the rest of the struct
+  circular_buffer circ_buffer; //!< The buffer contained in this instance
 } circular_buffer_instance;
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
@@ -126,6 +114,7 @@ typedef distributed_circular_buffer* distributed_circular_buffer_p;
 void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p);
 void DCB_full_barrier(distributed_circular_buffer_p buffer);
+int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
 distributed_circular_buffer_p DCB_create(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
