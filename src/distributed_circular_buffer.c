@@ -527,16 +527,30 @@ static void retrieve_window_offset_from_remote(
 //! @brief Copy from the consumer process the header associated with this circular buffer instance
 static inline void update_local_header_from_remote(
     distributed_circular_buffer_p buffer, //!< [in] Buffer set from which we want to update a single instance
-    const int                     full    //!< [in] Whether to perform a full update or only a partial one
+    const int                     full    //!< [in] Whether to perform a full update (if =1) or only a partial one
 ) {
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
-  const int target_rank = buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : DCB_ROOT_ID;
-  const int num_elem    = instance_header_size() - (full == 1 ? 0 : 2); // Skip last 2 if partial (IN indices)
+  const int      target_rank  = buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : DCB_ROOT_ID;
+  const int      num_elem     = instance_header_size();
+  const MPI_Aint displacement = remote_header_displacement(buffer);
+
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
+  circular_buffer_instance header_copy;
   MPI_Get(
-      &buffer->local_header, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, remote_header_displacement(buffer), num_elem,
-      CB_MPI_ELEMENT_TYPE, buffer->window);
+      &header_copy, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, displacement, num_elem, CB_MPI_ELEMENT_TYPE,
+      buffer->window);
   MPI_Win_unlock(target_rank, buffer->window);
+
+  if (full == 1) // Keep everything
+  {
+    memcpy(&buffer->local_header, &header_copy, sizeof(header_copy));
+  }
+  else // Only take the necessary values
+  {
+    buffer->local_header.target_rank      = header_copy.target_rank;
+    buffer->local_header.out[DCB_FULL]    = header_copy.out[DCB_FULL];
+    buffer->local_header.out[DCB_PARTIAL] = header_copy.out[DCB_PARTIAL];
+  }
 }
 
 //! Set the value of this process' rank in the server shared data area, at the right location in the MPI window.
