@@ -37,7 +37,6 @@ typedef struct {
   double   total_wait_time_ms;
   double   total_read_time_ms;
   double   total_write_time_ms;
-  double   dummy_stat[4];
 } DCB_stats;
 
 /**

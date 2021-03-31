@@ -662,8 +662,16 @@ static void print_instance_stats(
   const uint64_t num_puts = producer_stats->num_transfers;
   const uint64_t num_gets = consumer_stats->num_transfers;
 
-  const double avg_in           = num_puts > 0 ? (double)producer_stats->num_elem / num_puts : 0.0;
-  const double avg_out          = num_gets > 0 ? (double)consumer_stats->num_elem / num_gets : 0.0;
+  char total_in_s[8], avg_in_s[8], total_out_s[8], avg_out_s[8], max_fill_s[8];
+
+  const double avg_in  = num_puts > 0 ? (double)producer_stats->num_elem / num_puts : 0.0;
+  const double avg_out = num_gets > 0 ? (double)consumer_stats->num_elem / num_gets : 0.0;
+
+  readable_element_count(producer_stats->num_elem, total_in_s);
+  readable_element_count(avg_in, avg_in_s);
+  readable_element_count(consumer_stats->num_elem, total_out_s);
+  readable_element_count(avg_out, avg_out_s);
+
   const double avg_wait_w       = num_puts > 0 ? (double)producer_stats->total_wait_time_ms / num_puts : 0.0;
   const double avg_wait_r       = num_gets > 0 ? (double)consumer_stats->total_wait_time_ms / num_gets : 0.0;
   const double total_read_time  = consumer_stats->total_read_time_ms;
@@ -671,23 +679,24 @@ static void print_instance_stats(
   const double total_write_time = producer_stats->total_write_time_ms;
   const double avg_write_time   = num_puts > 0 ? total_write_time / num_elem_to_kb(producer_stats->num_elem) : 0.0;
 
+  readable_element_count(consumer_stats->max_fill, max_fill_s);
+  const int max_fill_percent = (int)(consumer_stats->max_fill * 100.0 / capacity);
+
   if (with_header) {
-    printf("rank: #elem put (avg/call) -- #elem got (avg/call) -- "
-           "write wait (avg/call) --  read wait (avg/call) -- "
-           "write time (avg/kB) --  read time (avg/kB) -- "
-           "max fill (%%)"
-           "\n");
+    printf("     "
+           "                      Write (ms)                       |"
+           "                      Read (ms)                        |\n"
+           "rank "
+           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) |"
+           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) | "
+           "max fill (%%)\n");
   }
 
   printf(
-      " %03d:  %8ld (%8.1f) --  %8ld (%8.1f) -- "
-      "%7.1f ms (%8.5f) -- %7.1f ms (%8.5f) -- "
-      "%7.1f ms (%6.3f) -- %7.1f ms (%6.3f) -- "
-      "%8ld (%3d)"
-      "\n",
-      id, producer_stats->num_elem, avg_in, consumer_stats->num_elem, avg_out, producer_stats->total_wait_time_ms,
-      avg_wait_w, consumer_stats->total_wait_time_ms, avg_wait_r, total_write_time, avg_write_time, total_read_time,
-      avg_read_time, consumer_stats->max_fill, (int)(consumer_stats->max_fill * 100.0 / capacity));
+      "%04d: %s (%s) : %7.1f (%5.2f) : %7.1f (%5.2f) | %s (%s) ; %7.1f (%5.1f) : %7.1f (%5.1f) | %s (%3d)\n", id,
+      total_in_s, avg_in_s, total_write_time, avg_write_time, producer_stats->total_wait_time_ms, avg_wait_w,
+      total_out_s, avg_out_s, total_read_time, avg_read_time, consumer_stats->total_wait_time_ms, avg_wait_r,
+      max_fill_s, max_fill_percent);
 }
 
 static inline void print_instance(const circular_buffer_instance_p instance) {
@@ -1243,11 +1252,11 @@ data_index DCB_put(
     )
 //C_EnD
 {
-  if (DCB_wait_space_available(buffer, num_elements) < 0)
-    return -1;
-
   io_timer_t timer = {0, 0};
   io_timer_start(&timer);
+
+  if (DCB_wait_space_available(buffer, num_elements) < 0)
+    return -1;
 
   const int target_rank = buffer->local_header.target_rank;
 
@@ -1319,15 +1328,15 @@ int DCB_get(
     const int                     num_elements, //!< [in] How many elements to read
     const int                     operation     //!< [in] What operation to perform: extract, read or just peek
 ) {
+  io_timer_t timer = {0, 0};
+  io_timer_start(&timer);
+
   const int num_available_elem = DCB_wait_data_available(buffer, buffer_id, num_elements);
   if (num_available_elem < 0)
     return -1;
 
   if (buffer->consumer_stats[buffer_id].max_fill < (uint64_t)num_available_elem)
     buffer->consumer_stats[buffer_id].max_fill = num_available_elem;
-
-  io_timer_t timer = {0, 0};
-  io_timer_start(&timer);
 
   circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
 

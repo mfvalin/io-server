@@ -26,6 +26,7 @@
 
 
 #include <immintrin.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,6 +73,11 @@ static inline void copy_elements(
 }
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
+);
+//! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
+void readable_element_count(
+    const double num_elements, //!< [in]  Number we want to represent
+    char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
 );
 
 #endif // IO_SERVER_common_GEN_H

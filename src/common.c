@@ -24,6 +24,7 @@
 //C_StArT
 
 #include <immintrin.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,6 +111,35 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 void free_c_ptr(void** ptr) {
   free(*ptr);
   *ptr = NULL;
+}
+
+//C_StArT
+//! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
+void readable_element_count(
+    const double num_elements, //!< [in]  Number we want to represent
+    char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
+    )
+//C_EnD
+{
+  double amount = num_elements;
+  int    unit   = 0;
+
+  const char UNITS[] = {'\0', 'k', 'M', 'G'};
+
+  while (amount > 1900.0 && unit < 3) {
+    amount /= 1000.0;
+    unit++;
+  }
+
+  if (unit == 0) {
+    if (ceil(amount) == amount)
+      sprintf(buffer, "%7.0f", amount);
+    else
+      sprintf(buffer, "%7.2f", amount);
+  }
+  else {
+    sprintf(buffer, "%6.1f%c", amount, UNITS[unit]);
+  }
 }
 
 //F_StArT
