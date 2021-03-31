@@ -39,28 +39,16 @@ static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(i
                                                                                           : MPI_DATATYPE_NULL;
 
 //! How long to wait between checks for free space in a buffer (microseconds)
-static const int SPACE_CHECK_DELAY_US = 100;
+static const int DCB_SPACE_CHECK_DELAY_US = 100;
 //! How long to wait between checks for data in a buffer (microseconds)
-static const int DATA_CHECK_DELAY_US = 20;
+static const int DCB_DATA_CHECK_DELAY_US = 20;
 //! How long to wait between each window sync from a channel process
-static const int WINDOW_SYNC_DELAY_US = 10;
+static const int DCB_WINDOW_SYNC_DELAY_US = 10;
 
 //! ID of the server process that is considered the root of a DCB
 static const int DCB_ROOT_ID = 0;
 
 //C_StArT
-/**
- * @brief Needs to be aligned to size of #data_element
- */
-typedef struct {
-  uint64_t num_transfers;
-  uint64_t num_elem;
-  uint64_t max_fill;
-  double   total_wait_time_ms;
-  double   total_read_time_ms;
-  double   total_write_time_ms;
-} DCB_stats;
-
 /**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
  * distributed circular buffers.
@@ -69,6 +57,7 @@ typedef struct {
  */
 typedef struct {
   int             target_rank; //!< With which process this instance should communicate for data transfers
+  int             id;
   int64_t         capacity;    //!< How many elements can fit in this instance
   void*           dummy;       //!< Force 64-bit alignment of the rest of the struct
   circular_buffer circ_buffer; //!< The buffer contained in this instance
@@ -122,10 +111,6 @@ typedef struct {
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
   data_element* raw_data;
-
-  DCB_stats  producer_stats;
-  MPI_Win    consumer_stats_window;
-  DCB_stats* consumer_stats;
 
   //! Header of the circular buffer instance (only valid for producers)
   //! This is the local copy and will be synchronized with the remote one, located in the shared memory region of the
@@ -187,11 +172,6 @@ static inline data_index num_elem_from_bytes(const size_t num_bytes) {
 static inline data_index num_elem_from_bytes_aligned64(const size_t num_bytes) {
   const data_index num_elem_init = num_elem_from_bytes(num_bytes);
   return num_elem_init % 2 == 0 ? num_elem_init : num_elem_init + 1;
-}
-
-//! Compute the space in kilobytes taken by the given number of elements
-static inline double num_elem_to_kb(const size_t num_elements) {
-  return num_elements * sizeof(data_element) / 1024.0;
 }
 
 static inline data_index circular_buffer_header_size() {
@@ -259,6 +239,9 @@ static inline int check_instance_consistency(const circular_buffer_instance_p in
     return -1;
 
   if (instance->target_rank < 0)
+    return -1;
+
+  if (instance->id < 0)
     return -1;
 
   if (CB_check_integrity(&instance->circ_buffer) < 0)
@@ -587,10 +570,10 @@ static data_index DCB_wait_space_available(
   // Then get info from remote location, until there is enough
   while ((void)(num_available = get_available_space_from_remote(buffer)), num_available < num_requested) {
     num_waits++;
-    sleep_us(SPACE_CHECK_DELAY_US);
+    sleep_us(DCB_SPACE_CHECK_DELAY_US);
   }
 
-  buffer->producer_stats.total_wait_time_ms += num_waits * SPACE_CHECK_DELAY_US / 1000.0;
+  buffer->local_header.circ_buffer.stats.total_write_wait_time_ms += num_waits * DCB_SPACE_CHECK_DELAY_US / 1000.0;
 
   return num_available;
 }
@@ -616,10 +599,10 @@ static data_index DCB_wait_data_available(
   int        num_waits     = 0;
   while ((void)(num_available = get_available_data(instance)), num_available < num_requested) {
     num_waits++;
-    sleep_us(DATA_CHECK_DELAY_US);
+    sleep_us(DCB_DATA_CHECK_DELAY_US);
   }
 
-  buffer->consumer_stats[buffer_id].total_wait_time_ms += num_waits * DATA_CHECK_DELAY_US / 1000.0;
+  instance->circ_buffer.stats.total_read_wait_time_ms += num_waits * DCB_DATA_CHECK_DELAY_US / 1000.0;
 
   return num_available;
 }
@@ -627,9 +610,11 @@ static data_index DCB_wait_data_available(
 //! Initialize the given circular buffer instance, including the circular_buffer it contains
 static inline int init_circular_buffer_instance(
     circular_buffer_instance_p instance, //!< Buffer instance we want to init
+    const int                  id,       //!< ID of the buffer instance
     const int                  num_elem  //!< How many #data_element are taken by the circular buffer
 ) {
   instance->target_rank = -1;
+  instance->id          = id;
   instance->dummy       = NULL;
   instance->capacity    = -1;
 
@@ -641,62 +626,12 @@ static inline int init_circular_buffer_instance(
   return 0;
 }
 
-//! Initialize the DCB_stats struct to all 0
-static void DCB_init_stats(DCB_stats* stats) {
-  stats->num_transfers       = 0;
-  stats->num_elem            = 0;
-  stats->max_fill            = 0;
-  stats->total_wait_time_ms  = 0.0;
-  stats->total_read_time_ms  = 0.0;
-  stats->total_write_time_ms = 0.0;
-}
-
 //! Print the collected stats for a single buffer instance
 static void print_instance_stats(
-    const DCB_stats* producer_stats, //!< Stats from the producer side of the buffer
-    const DCB_stats* consumer_stats, //!< Stats from the consumer side of the buffer
-    const int        id,             //!< ID of the buffer (to prefix the stats)
-    const int        with_header,    //!< Whether to print a header to name the columns
-    const int        capacity        //!< Max number of elements the buffer can hold
+    circular_buffer_instance_p instance,
+    const int                  with_header //!< Whether to print a header to name the columns
 ) {
-  const uint64_t num_puts = producer_stats->num_transfers;
-  const uint64_t num_gets = consumer_stats->num_transfers;
-
-  char total_in_s[8], avg_in_s[8], total_out_s[8], avg_out_s[8], max_fill_s[8];
-
-  const double avg_in  = num_puts > 0 ? (double)producer_stats->num_elem / num_puts : 0.0;
-  const double avg_out = num_gets > 0 ? (double)consumer_stats->num_elem / num_gets : 0.0;
-
-  readable_element_count(producer_stats->num_elem, total_in_s);
-  readable_element_count(avg_in, avg_in_s);
-  readable_element_count(consumer_stats->num_elem, total_out_s);
-  readable_element_count(avg_out, avg_out_s);
-
-  const double avg_wait_w       = num_puts > 0 ? (double)producer_stats->total_wait_time_ms / num_puts : 0.0;
-  const double avg_wait_r       = num_gets > 0 ? (double)consumer_stats->total_wait_time_ms / num_gets : 0.0;
-  const double total_read_time  = consumer_stats->total_read_time_ms;
-  const double avg_read_time    = num_gets > 0 ? total_read_time / num_elem_to_kb(consumer_stats->num_elem) : 0.0;
-  const double total_write_time = producer_stats->total_write_time_ms;
-  const double avg_write_time   = num_puts > 0 ? total_write_time / num_elem_to_kb(producer_stats->num_elem) : 0.0;
-
-  readable_element_count(consumer_stats->max_fill, max_fill_s);
-  const int max_fill_percent = (int)(consumer_stats->max_fill * 100.0 / capacity);
-
-  if (with_header) {
-    printf("     "
-           "                      Write (ms)                       |"
-           "                      Read (ms)                        |\n"
-           "rank "
-           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) |"
-           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) | "
-           "max fill (%%)\n");
-  }
-
-  printf(
-      "%04d: %s (%s) : %7.1f (%5.2f) : %7.1f (%5.2f) | %s (%s) ; %7.1f (%5.1f) : %7.1f (%5.1f) | %s (%3d)\n", id,
-      total_in_s, avg_in_s, total_write_time, avg_write_time, producer_stats->total_wait_time_ms, avg_wait_w,
-      total_out_s, avg_out_s, total_read_time, avg_read_time, consumer_stats->total_wait_time_ms, avg_wait_r,
-      max_fill_s, max_fill_percent);
+  CB_print_stats(&instance->circ_buffer, instance->id, with_header);
 }
 
 static inline void print_instance(const circular_buffer_instance_p instance) {
@@ -839,12 +774,6 @@ distributed_circular_buffer_p DCB_create(
     MPI_Win_allocate_shared(
         shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->server_communicator, &buffer->raw_data,
         &buffer->window_mem_dummy);
-
-    // This window is only used to allocate shared memory, so that everyone on the server can update stats
-    const MPI_Aint consumer_stats_size = is_root(buffer) ? buffer->num_producers * sizeof(DCB_stats) : 0;
-    MPI_Win_allocate_shared(
-        consumer_stats_size, 1, MPI_INFO_NULL, buffer->server_communicator, &buffer->consumer_stats,
-        &buffer->consumer_stats_window);
   }
 
   MPI_Barrier(buffer->communicator);
@@ -865,9 +794,8 @@ distributed_circular_buffer_p DCB_create(
     // Initialize the individual buffers
     for (int i = 0; i < num_producers; i++) {
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
-      init_circular_buffer_instance(buffer_instance, num_elem_in_circ_buffer);
+      init_circular_buffer_instance(buffer_instance, i, num_elem_in_circ_buffer);
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
-      DCB_init_stats(&buffer->consumer_stats[i]);
     }
   }
   else if (is_consumer(buffer) || is_channel(buffer)) {
@@ -879,7 +807,6 @@ distributed_circular_buffer_p DCB_create(
     MPI_Aint size;
     int      disp_unit;
     MPI_Win_shared_query(buffer->window_mem_dummy, DCB_ROOT_ID, &size, &disp_unit, &buffer->raw_data);
-    MPI_Win_shared_query(buffer->consumer_stats_window, DCB_ROOT_ID, &size, &disp_unit, &buffer->consumer_stats);
 
     if (is_channel(buffer)) {
       int full_rank;
@@ -896,8 +823,6 @@ distributed_circular_buffer_p DCB_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
 
   if (is_producer(buffer)) {
-    DCB_init_stats(&buffer->producer_stats);
-
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
     update_local_header_from_remote(buffer, 1); // Get the header to sync the instance locally
 
@@ -987,18 +912,27 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   if (is_producer(buffer)) {
     MPI_Send(
-        &buffer->producer_stats, sizeof(DCB_stats), MPI_BYTE, DCB_ROOT_ID, buffer->producer_id, buffer->communicator);
+        &buffer->local_header.circ_buffer.stats, sizeof(cb_stats), MPI_BYTE, DCB_ROOT_ID, buffer->producer_id,
+        buffer->communicator);
   }
 
   if (is_root(buffer)) {
     send_channel_signal(buffer, RSIG_STOP); // Tell channels to stop any activity
     const data_element* producer_ranks = get_producer_ranks(buffer);
     for (int i = 0; i < buffer->num_producers; ++i) {
-      const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i);
-      DCB_stats                        producer_stats;
-      MPI_Status                       status;
-      MPI_Recv(&producer_stats, sizeof(DCB_stats), MPI_BYTE, producer_ranks[i], i, buffer->communicator, &status);
-      print_instance_stats(&producer_stats, &buffer->consumer_stats[i], i, i == 0, instance->capacity);
+      const circular_buffer_instance_p instance   = get_circular_buffer_instance(buffer, i);
+      cb_stats_p                       full_stats = &instance->circ_buffer.stats;
+
+      // Combine the stats from remote and server
+      MPI_Status status;
+      cb_stats   remote_stats;
+      MPI_Recv(&remote_stats, sizeof(cb_stats), MPI_BYTE, producer_ranks[i], i, buffer->communicator, &status);
+      full_stats->num_writes               = remote_stats.num_writes;
+      full_stats->num_write_elems          = remote_stats.num_write_elems;
+      full_stats->total_write_time_ms      = remote_stats.total_write_time_ms;
+      full_stats->total_write_wait_time_ms = remote_stats.total_write_wait_time_ms;
+
+      print_instance_stats(instance, i == 0);
     }
   }
 
@@ -1006,7 +940,6 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   if (is_consumer(buffer) || is_channel(buffer)) {
     MPI_Win_free(&buffer->window_mem_dummy);
-    MPI_Win_free(&buffer->consumer_stats_window);
   }
 
   free(buffer);
@@ -1171,7 +1104,7 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer) {
   volatile channel_signal_t* signal = get_channel_signal_ptr(buffer, buffer->channel_id);
 
   while (1) {
-    sleep_us(WINDOW_SYNC_DELAY_US);
+    sleep_us(DCB_WINDOW_SYNC_DELAY_US);
     MPI_Win_sync(buffer->window);
 
     switch (*signal) {
@@ -1302,9 +1235,9 @@ data_index DCB_put(
 
   io_timer_stop(&timer);
 
-  buffer->producer_stats.num_elem += (uint64_t)num_elements;
-  buffer->producer_stats.num_transfers++;
-  buffer->producer_stats.total_write_time_ms += io_time_ms(&timer);
+  buffer->local_header.circ_buffer.stats.num_write_elems += num_elements;
+  buffer->local_header.circ_buffer.stats.num_writes++;
+  buffer->local_header.circ_buffer.stats.total_write_time_ms += io_time_ms(&timer);
 
   return get_available_space(&buffer->local_header);
 }
@@ -1335,14 +1268,15 @@ int DCB_get(
   if (num_available_elem < 0)
     return -1;
 
-  if (buffer->consumer_stats[buffer_id].max_fill < (uint64_t)num_available_elem)
-    buffer->consumer_stats[buffer_id].max_fill = num_available_elem;
-
   circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
 
-  int32_t       out_index = instance->circ_buffer.m.out[CB_PARTIAL];
-  const int32_t capacity  = instance->capacity;
+  // Update "max fill" metric
+  if (instance->circ_buffer.stats.max_fill < (uint64_t)num_available_elem)
+    instance->circ_buffer.stats.max_fill = num_available_elem;
 
+  // Retrieve indices/pointers
+  int32_t                   out_index   = instance->circ_buffer.m.out[CB_PARTIAL];
+  const int32_t             capacity    = instance->capacity;
   const data_element* const buffer_data = instance->circ_buffer.data;
 
   // 1st segment
@@ -1367,6 +1301,7 @@ int DCB_get(
     instance->circ_buffer.m.out[CB_PARTIAL] = out_index;
   }
 
+  // Update full extraction pointer if needed
   if (operation == CB_COMMIT) {
     memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
@@ -1375,10 +1310,10 @@ int DCB_get(
   }
 
   io_timer_stop(&timer);
-  buffer->consumer_stats[buffer_id].total_read_time_ms += io_time_ms(&timer);
+  instance->circ_buffer.stats.total_read_time_ms += io_time_ms(&timer);
   if (operation != CB_PEEK) {
-    buffer->consumer_stats[buffer_id].num_elem += (uint64_t)num_elements;
-    buffer->consumer_stats[buffer_id].num_transfers++;
+    instance->circ_buffer.stats.num_read_elems += (uint64_t)num_elements;
+    instance->circ_buffer.stats.num_reads++;
   }
 
   return get_available_data(instance);

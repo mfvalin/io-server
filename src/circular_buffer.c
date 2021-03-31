@@ -126,6 +126,7 @@
 
 #include "io-server/circular_buffer_defines.h"
 #include "io-server/common.h"
+#include "io-server/timer.h"
 
 //!> version marker
 #define FIOL_VERSION 0x1BAD
@@ -146,10 +147,27 @@ typedef struct {
 //! pointer to circular buffer management part
 typedef fiol_management* fiol_management_p;
 
+//! Set of statistics we want to record as a circular buffer is used
+typedef struct {
+  uint64_t num_reads;
+  uint64_t num_read_elems;
+  double   total_read_wait_time_ms;
+  double   total_read_time_ms;
+  uint64_t max_fill;
+
+  uint64_t num_writes;
+  uint64_t num_write_elems;
+  double   total_write_wait_time_ms;
+  double   total_write_time_ms;
+} cb_stats;
+
+typedef cb_stats* cb_stats_p;
+
 //! skeleton for circular buffer
 typedef struct {
-  fiol_management m;      //!< management structure
-  data_element    data[]; //!< data buffer (contains at most limit - 1 useful data elements)
+  fiol_management m;      //!< Management structure
+  cb_stats        stats;  //!< Set of recorded statistics
+  data_element    data[]; //!< Data buffer (contains at most limit - 1 useful data elements)
 } circular_buffer;
 
 //! pointer to circular buffer
@@ -184,9 +202,9 @@ enum
 //C_EnD
 
 //! Number of microseconds to wait between reads of the IN/OUT indices of a buffer when waiting for data to arrive
-static const int DATA_READ_WAIT_TIME_US = 10;
+static const int CB_DATA_CHECK_DELAY_US = 10;
 //! Number of microseconds to wait between reads of the IN/OUT indices of a buffer when waiting for space to be freed
-static const int SPACE_READ_WAIT_TIME_US = 10;
+static const int CB_SPACE_CHECK_DELAY_US = 10;
 
 int CB_check_integrity(const circular_buffer_p buffer);
 
@@ -244,9 +262,20 @@ circular_buffer_p CB_init(
 
   // Header size in number of elements
   const data_index header_size =
-      sizeof(fiol_management) / sizeof(data_element) + (sizeof(fiol_management) % sizeof(data_element) > 0);
+      sizeof(circular_buffer) / sizeof(data_element) + (sizeof(circular_buffer) % sizeof(data_element) > 0);
 
   p->m.limit = nwords - header_size;
+
+  p->stats.num_reads               = 0;
+  p->stats.num_read_elems          = 0;
+  p->stats.total_read_time_ms      = 0.0;
+  p->stats.total_read_wait_time_ms = 0.0;
+  p->stats.max_fill                = 0;
+
+  p->stats.num_writes               = 0;
+  p->stats.num_write_elems          = 0;
+  p->stats.total_write_time_ms      = 0.0;
+  p->stats.total_write_wait_time_ms = 0.0;
 
   return p;
 }
@@ -467,10 +496,14 @@ int32_t CB_wait_space_available(
     return -1;
 
   data_index num_available = CB_get_available_space(p);
+  int        num_waits     = 0;
   while (num_available < n) {
-    sleep_us(SPACE_READ_WAIT_TIME_US);
+    sleep_us(CB_SPACE_CHECK_DELAY_US);
     num_available = CB_get_available_space(p);
+    num_waits++;
   }
+
+  p->stats.total_write_wait_time_ms += num_waits * CB_SPACE_CHECK_DELAY_US / 1000.0;
 
   return num_available;
 }
@@ -503,10 +536,14 @@ int32_t CB_wait_data_available(
     return -1;
 
   data_index num_available = CB_get_available_data(p);
+  int        num_waits     = 0;
   while (num_available < n) {
-    sleep_us(DATA_READ_WAIT_TIME_US);
+    sleep_us(CB_DATA_CHECK_DELAY_US);
     num_available = CB_get_available_data(p);
+    num_waits++;
   }
+
+  p->stats.total_read_wait_time_ms += num_waits * CB_DATA_CHECK_DELAY_US / 1000.0;
 
   return num_available;
 }
@@ -529,44 +566,59 @@ int32_t CB_wait_data_available(
 //! <br> = CB_atomic_get(p, dst, n)
 //! @return number of data tokens available after this operation, -1 if error
 int32_t CB_atomic_get(
-    circular_buffer_p p,   //!< [in]  Pointer to a circular buffer
-    data_element*     dst, //!< [out] Destination array for data extraction
-    int               n,   //!< [in]  Number of #data_element data items to extract
-    int operation          //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
+    circular_buffer_p buffer,       //!< [in]  Pointer to a circular buffer
+    data_element*     dst,          //!< [out] Destination array for data extraction
+    int               num_elements, //!< [in]  Number of #data_element data items to extract
+    int operation //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
     )
 //C_EnD
 {
-  if (CB_wait_data_available(p, n) < 0)
+  io_timer_t timer = {0, 0};
+  io_timer_start(&timer);
+
+  const int num_available = CB_wait_data_available(buffer, num_elements);
+  if (num_available < 0)
     return -1;
 
-  data_index       out   = p->m.out[CB_PARTIAL];
-  const data_index limit = p->m.limit;
-  data_element*    buf   = p->data;
+  // Update "max fill" metric
+  if (buffer->stats.max_fill < (uint64_t)num_available)
+    buffer->stats.max_fill = num_available;
 
-  const int num_elem_1 = n > (limit - out) ? (limit - out) : n;
+  data_index       out   = buffer->m.out[CB_PARTIAL];
+  const data_index limit = buffer->m.limit;
+  data_element*    buf   = buffer->data;
+
+  const int num_elem_1 = num_elements > (limit - out) ? (limit - out) : num_elements;
   copy_elements(dst, buf + out, num_elem_1);
   out += num_elem_1;
 
   if (out >= limit)
-    out = p->m.first;
+    out = buffer->m.first;
 
-  if (num_elem_1 < n) {
-    const int num_elem_2 = n - num_elem_1;
+  if (num_elem_1 < num_elements) {
+    const int num_elem_2 = num_elements - num_elem_1;
     copy_elements(dst + num_elem_1, buf + out, num_elem_2);
     out += num_elem_2;
   }
 
   if (operation != CB_PEEK) {
-    p->m.out[CB_PARTIAL] = out;
+    buffer->m.out[CB_PARTIAL] = out;
   }
 
   if (operation == CB_COMMIT) {
     memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
-    data_index volatile* outp = &(p->m.out[CB_FULL]);
+    data_index volatile* outp = &(buffer->m.out[CB_FULL]);
     *outp                     = out;
   }
 
-  return CB_get_available_data(p);
+  io_timer_stop(&timer);
+  buffer->stats.total_read_time_ms += io_time_ms(&timer);
+  if (operation != CB_PEEK) {
+    buffer->stats.num_read_elems += (uint64_t)num_elements;
+    buffer->stats.num_reads++;
+  }
+
+  return CB_get_available_data(buffer);
 }
 
 //F_StArT
@@ -587,42 +639,51 @@ int32_t CB_atomic_get(
 //! <br> = CB_atomic_put(p, src, n, commit_transaction)
 //! @return number of free slots available after this operation, -1 upon error
 int32_t CB_atomic_put(
-    circular_buffer_p p,   //!< [in] Pointer to a circular buffer
-    data_element*     src, //!< [in] Source array for data insertion
-    int               n,   //!< [in] Number of #data_element data items to insert
+    circular_buffer_p buffer,       //!< [in] Pointer to a circular buffer
+    data_element*     src,          //!< [in] Source array for data insertion
+    int               num_elements, //!< [in] Number of #data_element data items to insert
     int operation //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
     )
 //C_EnD
 {
-  if (CB_wait_space_available(p, n) < 0)
+  io_timer_t timer = {0, 0};
+  io_timer_start(&timer);
+
+  if (CB_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
-  data_element*    buf        = p->data;
-  data_index       current_in = p->m.in[CB_PARTIAL];
-  const data_index limit      = p->m.limit;
+  data_element*    buf        = buffer->data;
+  data_index       current_in = buffer->m.in[CB_PARTIAL];
+  const data_index limit      = buffer->m.limit;
 
-  const int num_elem_1 = n > (limit - current_in) ? (limit - current_in) : n;
+  const int num_elem_1 = num_elements > (limit - current_in) ? (limit - current_in) : num_elements;
   copy_elements(buf + current_in, src, num_elem_1);
   current_in += num_elem_1;
 
   if (current_in >= limit)
-    current_in = p->m.first;
+    current_in = buffer->m.first;
 
-  if (n > num_elem_1) {
-    const int num_elem_2 = n - num_elem_1;
+  if (num_elements > num_elem_1) {
+    const int num_elem_2 = num_elements - num_elem_1;
     copy_elements(buf, src + num_elem_1, num_elem_2);
     current_in += num_elem_2;
   }
 
-  p->m.in[CB_PARTIAL] = current_in;
+  buffer->m.in[CB_PARTIAL] = current_in;
 
   if (operation == CB_COMMIT) {
     write_fence(); // make sure everything is in memory before adjusting the "in" pointer
-    data_index volatile* inp = &(p->m.in[CB_FULL]);
+    data_index volatile* inp = &(buffer->m.in[CB_FULL]);
     *inp                     = current_in;
   }
 
-  return CB_get_available_space(p);
+  io_timer_stop(&timer);
+
+  buffer->stats.num_write_elems += num_elements;
+  buffer->stats.num_writes++;
+  buffer->stats.total_write_time_ms += io_time_ms(&timer);
+
+  return CB_get_available_space(buffer);
 }
 
 //  F_StArT
@@ -678,6 +739,59 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
   }
 
   return 0;
+}
+
+//C_StArT
+void CB_print_stats(
+    const circular_buffer_p buffer,     //!< [in] Buffer whose stats we want to print
+    int                     buffer_id,  //!< [in] ID of the buffer (displayed at beginning of line)
+    int                     with_header //!< [in] Whether to print a header for the values
+    )
+//C_EnD
+{
+  if (CB_check_integrity(buffer) < 0)
+    return;
+
+  const cb_stats_p stats = &buffer->stats;
+
+  const uint64_t num_writes = stats->num_writes;
+  const uint64_t num_reads  = stats->num_reads;
+
+  char total_in_s[8], avg_in_s[8], total_out_s[8], avg_out_s[8], max_fill_s[8];
+
+  const double avg_in  = num_writes > 0 ? (double)stats->num_write_elems / num_writes : 0.0;
+  const double avg_out = num_reads > 0 ? (double)stats->num_read_elems / num_reads : 0.0;
+
+  readable_element_count(stats->num_write_elems, total_in_s);
+  readable_element_count(avg_in, avg_in_s);
+  readable_element_count(stats->num_read_elems, total_out_s);
+  readable_element_count(avg_out, avg_out_s);
+
+  const double avg_wait_w       = num_writes > 0 ? (double)stats->total_write_wait_time_ms / num_writes : 0.0;
+  const double avg_wait_r       = num_reads > 0 ? (double)stats->total_read_wait_time_ms / num_reads : 0.0;
+  const double total_read_time  = stats->total_read_time_ms;
+  const double avg_read_time    = num_reads > 0 ? total_read_time / num_elem_to_kb(stats->num_read_elems) : 0.0;
+  const double total_write_time = stats->total_write_time_ms;
+  const double avg_write_time   = num_writes > 0 ? total_write_time / num_elem_to_kb(stats->num_write_elems) : 0.0;
+
+  readable_element_count(stats->max_fill, max_fill_s);
+  const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity(buffer));
+
+  if (with_header) {
+    printf("     "
+           "                      Write (ms)                       |"
+           "                      Read (ms)                        |\n"
+           "rank "
+           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) |"
+           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) | "
+           "max fill (%%)\n");
+  }
+
+  printf(
+      "%04d: %s (%s) : %7.1f (%5.2f) : %7.1f (%5.2f) | %s (%s) ; %7.1f (%5.1f) : %7.1f (%5.1f) | %s (%3d)\n", buffer_id,
+      total_in_s, avg_in_s, total_write_time, avg_write_time, stats->total_write_wait_time_ms, avg_wait_w, total_out_s,
+      avg_out_s, total_read_time, avg_read_time, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,
+      max_fill_percent);
 }
 
 //F_StArT

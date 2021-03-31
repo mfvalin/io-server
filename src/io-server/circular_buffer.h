@@ -107,6 +107,7 @@
 
 #include "io-server/circular_buffer_defines.h"
 #include "io-server/common.h"
+#include "io-server/timer.h"
 
 //!> version marker
 #define FIOL_VERSION 0x1BAD
@@ -127,10 +128,27 @@ typedef struct {
 //! pointer to circular buffer management part
 typedef fiol_management* fiol_management_p;
 
+//! Set of statistics we want to record as a circular buffer is used
+typedef struct {
+  uint64_t num_reads;
+  uint64_t num_read_elems;
+  double   total_read_wait_time_ms;
+  double   total_read_time_ms;
+  uint64_t max_fill;
+
+  uint64_t num_writes;
+  uint64_t num_write_elems;
+  double   total_write_wait_time_ms;
+  double   total_write_time_ms;
+} cb_stats;
+
+typedef cb_stats* cb_stats_p;
+
 //! skeleton for circular buffer
 typedef struct {
-  fiol_management m;      //!< management structure
-  data_element    data[]; //!< data buffer (contains at most limit - 1 useful data elements)
+  fiol_management m;      //!< Management structure
+  cb_stats        stats;  //!< Set of recorded statistics
+  data_element    data[]; //!< Data buffer (contains at most limit - 1 useful data elements)
 } circular_buffer;
 
 //! pointer to circular buffer
@@ -228,21 +246,26 @@ int32_t CB_wait_data_available(
 //! <br> = CB_atomic_get(p, dst, n)
 //! @return number of data tokens available after this operation, -1 if error
 int32_t CB_atomic_get(
-    circular_buffer_p p,   //!< [in]  Pointer to a circular buffer
-    data_element*     dst, //!< [out] Destination array for data extraction
-    int               n,   //!< [in]  Number of #data_element data items to extract
-    int operation          //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
+    circular_buffer_p buffer,       //!< [in]  Pointer to a circular buffer
+    data_element*     dst,          //!< [out] Destination array for data extraction
+    int               num_elements, //!< [in]  Number of #data_element data items to extract
+    int operation //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
 );
 //! wait until nsrc free slots are available then insert from src array
 //! <br> = CB_atomic_put(p, src, n, commit_transaction)
 //! @return number of free slots available after this operation, -1 upon error
 int32_t CB_atomic_put(
-    circular_buffer_p p,   //!< [in] Pointer to a circular buffer
-    data_element*     src, //!< [in] Source array for data insertion
-    int               n,   //!< [in] Number of #data_element data items to insert
+    circular_buffer_p buffer,       //!< [in] Pointer to a circular buffer
+    data_element*     src,          //!< [in] Source array for data insertion
+    int               num_elements, //!< [in] Number of #data_element data items to insert
     int operation //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
 );
 int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
+);
+void CB_print_stats(
+    const circular_buffer_p buffer,     //!< [in] Buffer whose stats we want to print
+    int                     buffer_id,  //!< [in] ID of the buffer (displayed at beginning of line)
+    int                     with_header //!< [in] Whether to print a header for the values
 );
 
 #endif // IO_SERVER_circular_buffer_GEN_H

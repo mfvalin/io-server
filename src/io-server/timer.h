@@ -44,15 +44,15 @@ static inline uint64_t get_current_time_us() {
   return now_us;
 }
 
-void io_timer_start(io_timer_t* timer) {
+static inline void io_timer_start(io_timer_t* timer) {
   timer->start = get_current_time_us();
 }
 
-void io_timer_stop(io_timer_t* timer) {
+static inline void io_timer_stop(io_timer_t* timer) {
   timer->total_time += get_current_time_us() - timer->start;
 }
 
-double io_time_ms(const io_timer_t* timer) {
+static inline double io_time_ms(const io_timer_t* timer) {
   // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
   return timer->total_time / 1000.0;
 }

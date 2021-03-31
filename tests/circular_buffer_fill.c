@@ -185,6 +185,10 @@ int fill_test(int argc, char** argv) {
   MPI_Reduce(&tmp_errors, &num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD);
 
   if (my_rank == 0) {
+    for (int i = 1; i < num_procs; ++i) {
+      CB_print_stats(all_buffers[i], i, i == 1);
+    }
+
     free(all_buffers);
 
     if (num_errors > 0) {

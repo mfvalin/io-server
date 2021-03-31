@@ -114,6 +114,13 @@ void free_c_ptr(void** ptr) {
 }
 
 //C_StArT
+//! Compute the space in kilobytes taken by the given number of elements
+static inline double num_elem_to_kb(const size_t num_elements) {
+  return num_elements * sizeof(data_element) / 1024.0;
+}
+//C_EnD
+
+//C_StArT
 //! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
 void readable_element_count(
     const double num_elements, //!< [in]  Number we want to represent

@@ -74,6 +74,10 @@ static inline void copy_elements(
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );
+//! Compute the space in kilobytes taken by the given number of elements
+static inline double num_elem_to_kb(const size_t num_elements) {
+  return num_elements * sizeof(data_element) / 1024.0;
+}
 //! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
 void readable_element_count(
     const double num_elements, //!< [in]  Number we want to represent

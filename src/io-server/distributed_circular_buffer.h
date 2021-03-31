@@ -28,18 +28,6 @@
 
 #include "io-server/circular_buffer.h"
 /**
- * @brief Needs to be aligned to size of #data_element
- */
-typedef struct {
-  uint64_t num_transfers;
-  uint64_t num_elem;
-  uint64_t max_fill;
-  double   total_wait_time_ms;
-  double   total_read_time_ms;
-  double   total_write_time_ms;
-} DCB_stats;
-
-/**
  * @brief Wrapper struct around a regular circular buffer. It adds some information for management within a set of
  * distributed circular buffers.
  *
@@ -47,6 +35,7 @@ typedef struct {
  */
 typedef struct {
   int             target_rank; //!< With which process this instance should communicate for data transfers
+  int             id;
   int64_t         capacity;    //!< How many elements can fit in this instance
   void*           dummy;       //!< Force 64-bit alignment of the rest of the struct
   circular_buffer circ_buffer; //!< The buffer contained in this instance
@@ -100,10 +89,6 @@ typedef struct {
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
   data_element* raw_data;
-
-  DCB_stats  producer_stats;
-  MPI_Win    consumer_stats_window;
-  DCB_stats* consumer_stats;
 
   //! Header of the circular buffer instance (only valid for producers)
   //! This is the local copy and will be synchronized with the remote one, located in the shared memory region of the
