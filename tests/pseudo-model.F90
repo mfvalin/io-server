@@ -208,8 +208,8 @@ subroutine io_relay_fn()
   implicit none
   integer :: model, allio, relay, server, nodecom, modelio, old, new
   integer :: rank, size, ierr, noderank, nodesize, ncompute, i, bsize, bflags
-  type(C_PTR) :: temp
-  integer(C_INTPTR_T) :: itemp
+  type(C_PTR) :: temp, arena
+  integer(C_INTPTR_T) :: itemp, iarena
   character(len=8) :: cio_name
 
   call io_relay_mod_init()
@@ -234,15 +234,17 @@ subroutine io_relay_fn()
   call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
   ! compute -> relay traffic
   ncompute = modelio_crs % size - relay_crs % size
+  arena = ma % addr()
   write(6,*) 'INFO: number of compute processes found on node =',ncompute
-  do i = 0, ncompute-1 ! now locate the circular buffers
+  do i = 0, ncompute ! now locate the circular buffers
     write(cio_name,'(A4,I4.4)') "MCIO",i
     temp = ma % getblock(bsize, bflags, cio_name) 
-    itemp = transfer(temp, itemp)
     if( C_ASSOCIATED(temp) ) then
-      write(6,1) 'INFO: block '//cio_name//' found, size =', bsize, ', flags =', bflags,' address =', itemp
+      itemp = transfer(temp, itemp)
+      iarena = ptr_diff(arena, temp)   ! find offset in arena
+      write(6,1) ' NOTE: block '//cio_name//' found, size =', bsize, ', flags =', bflags,' address =', itemp,', arena offset =', iarena
     else
-      write(6,*) 'INFO: block '//cio_name//'NOT FOUND'
+      write(6,1) ' ERROR: block '//cio_name//' NOT FOUND'
     endif
   enddo
   ! actual relay code goes here
@@ -258,7 +260,7 @@ subroutine io_relay_fn()
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
   call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
   stop
-1 format(A,I10,A,Z18.8,A,Z18.16)
+1 format(A,I10,A,Z10.8,A,Z18.16,A,I10)
 end subroutine io_relay_fn
 
 ! =============================================================================================
