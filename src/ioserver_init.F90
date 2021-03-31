@@ -155,9 +155,10 @@ module ioserver_internal_mod
   type(circular_buffer)  :: local_cio_in         ! inbound circular buffer  (located in memory arena)
   type(circular_buffer)  :: local_cio_out        ! outbound circular buffer  (located in memory arena)
 
-  type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR !  procedure to call on relay processes (if not NULL)
-  type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR !  procedure to call on server processes (if not NULL)
+  type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR ! procedure to call on relay processes (if not NULL)
+  type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR ! procedure to call on server processes (if not NULL)
 
+  integer, dimension(:), pointer :: iocolors     ! color table for io server and relay processes
   contains
 
 !! F_StArT
@@ -813,8 +814,8 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
     else
       print *,"ERROR: IO server processes failed to allocate shared memory"
       servermem = C_NULL_PTR
-      errors = errors + 1
-      goto 2
+!       errors = errors + 1
+      goto 2                ! go immediately to error processing
     endif
     ! serverwin will never be used after this point, all we are interested in is the shared memory
 
@@ -842,21 +843,15 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
     else
       print *,"ERROR: relay processes failed to allocate shared memory"
       relaymem = C_NULL_PTR
-      errors = errors + 1
+!       errors = errors + 1
       goto 2                ! go immediately to error processing
     endif
     ! relaywin will not be used after this point (especially as RPN_MPI_Win_allocate_shared sets it to MPI_COMM_NULL)
 
     if(relayrank == 0) then        ! PE with rank on node == 0 creates the memory arena
-!       if(debug_mode) write(6,*)'DEBUG: allocating MEMORY ARENA'
-!       call flush(6)
       shmsz64 = relaysiz
       temp_ptr = local_arena % create(relaymem, 128, shmsz64)
-!       if(debug_mode) write(6,*)'DEBUG: initialized MEMORY ARENA'
-!       call flush(6)
     else
-!       if(debug_mode) write(6,*)'DEBUG: cloning MEMORY ARENA'
-!       call flush(6)
       temp_ptr = local_arena % clone(relaymem)   !  cloning is O.K. even if arena is not initialized
     endif
     local_arena_ptr = local_arena % addr()
@@ -873,9 +868,10 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       ! not much memory is needed on the relay PEs for the remote IO window, allocate it
       winsize = alliosiz           ! 1 sided window size for relay <-> server PEs on relay PEs
       call MPI_Alloc_mem(winsize, MPI_INFO_NULL, win_base, ierr)     ! allocate memory through MPI library for 1 sided get/put with server PEs
-!       if(debug_mode) print *,'DEBUG: after MPI_Alloc_mem, rank, ierr, base =',smp_rank,ierr, win_base
+      if(ierr .ne. MPI_SUCCESS) errors = errors + 1                  ! flag error (it will be intercepted later)
     endif
-    mem % pe(relayrank) % color = color
+
+    mem % pe(relayrank) % color = color                                   ! store color of this PE in shared memory table
     call MPI_Comm_split(relaycom, color, relayrank, temp_comm, ierr)      ! split into compute and IO relay
     if(color == RELAY_COLOR) then
       relay_smp_comm = temp_comm    ! relay PEs on same SMP node
@@ -889,8 +885,6 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 
     ! wait for memory arena to be initialized by rank 0 before allocating heap and circular buffer(s)
     call MPI_Barrier(relaycom, ierr)
-!     if(debug_mode) write(6,*) 'DEBUG: after barrier'
-!     call flush(6)
 
     if(color == RELAY_COLOR) then                            ! io relay processes
     ! =========================================================================
@@ -906,7 +900,8 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       write(heap_name  ,'(A5,I3.3)') "RHEAP",mem % pe(relayrank)%rank
       sz32 = shmsz64 * 0.85
       temp_ptr = local_arena % newblock(sz32, heap_name)
-      temp_ptr = local_heap % create(temp_ptr, sz32)      ! allocate local heap
+      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
+      temp_ptr = local_heap % create(temp_ptr, sz32)         ! allocate local heap
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
       mem % pe(relayrank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
@@ -915,20 +910,24 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(relayrank)%rank
       sz32 = shmsz64 * 0.04
       temp_ptr = local_arena % newblock(sz32, cioin_name)
+      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_in % create(temp_ptr, sz32)
+      if( .not. ok ) goto 2                                  ! cio creation failed
       mem % pe(relayrank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
 
       !  10%  of per PE size for outbound circular buffer
       write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(relayrank)%rank + 1000
       sz32 = shmsz64 * 0.1
       temp_ptr = local_arena % newblock(sz32, cioout_name)
+      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_out % create(temp_ptr, sz32)
+      if( .not. ok ) goto 2                                  ! cio creation failed
       mem % pe(relayrank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
 
     else                                                     ! compute processes
-  ! =========================================================================
-  ! ============================ model compute process ======================
-  ! =========================================================================
+    ! =========================================================================
+    ! ============================ model compute process ======================
+    ! =========================================================================
       model_comm = temp_comm                                 ! for internal module
       model      = model_comm                                ! output argument
       shmsz64 = relaysiz / 4                                 ! size in 32 bit units of relay shared memory area
@@ -938,6 +937,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(relayrank)%rank
       sz32 = shmsz64 * 0.85
       temp_ptr = local_arena % newblock(sz32, heap_name)
+      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, heap_name, sz32)
       temp_ptr = local_heap % create(temp_ptr, sz32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
@@ -948,34 +948,41 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(relayrank)%rank
       sz32 = shmsz64 * 0.04
       temp_ptr = local_arena % newblock(sz32, cioin_name)
+      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, cioin_name, sz32)
       ok = local_cio_in % create(temp_ptr, sz32)
+      if( .not. ok ) goto 2                                  ! cio creation failed
       mem % pe(relayrank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
 
       ! 10%  of per PE size for compute -> relay circular buffer
       write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(relayrank)%rank + 1000
       sz32 = shmsz64 * 0.1           ! 10% for outbound circular buffer
       temp_ptr = local_arena % newblock(sz32, cioout_name)
+      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
       ok = local_cio_out % create(temp_ptr, sz32)
+      if( .not. ok ) goto 2                                  ! cio creation failed
       mem % pe(relayrank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
     endif
 
-    if(debug_mode) write(6,*)'DEBUG: allocating '//heap_name//' '//cioin_name//' '//cioout_name
+    if(debug_mode) write(6,*)'DEBUG: allocated '//heap_name//' '//cioin_name//' '//cioout_name
     if(debug_mode) write(6,'(A,3Z18.16)') ' DEBUG: displacements =', &
                      mem % pe(relayrank) % heap, mem % pe(relayrank) % cio_in, mem % pe(relayrank) % cio_out
     call flush(6)
   endif   ! (color == SERVER_COLOR)
-2 continue     ! go here upon error 
+  goto 3       ! no error, bypass
+2 continue     ! go here upon error in memory allocation
+  errors = errors + 1
+3 continue     ! no error
 ! ===================================================================================
 !                              GLOBAL ERROR CHECK 
 ! ===================================================================================
   call MPI_Allreduce(errors, total_errors, 1, MPI_INTEGER, MPI_SUM, all_comm, ierr)
-  if(debug_mode) print *,'INFO: collecting errors'
+  if(debug_mode) print *,'INFO: allocation error(s) detected =',total_errors
   call flush(6)
 !   total_errors = 1
   if(total_errors > 0) then
-    print *,'FATAL:',total_errors,' error(s) detected while allocating shared memory'
+    print *,'FATAL:',total_errors,' error(s) detected while allocating memory'
     call IOserver_set_time_to_quit()      ! tell NO-OP PEs to quit
     call MPI_Finalize(ierr)
     stop
@@ -996,25 +1003,30 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
   else                                          ! IO relay or IO server
 
     alliocom  = temp_comm                       ! all IO processes
+    call mpi_comm_size(alliocom, alliosize, ierr)
     allio     = alliocom
-    if(server_comm .ne. MPI_COMM_NULL) then   ! IO server process on separate node(s)
-      status = SERVER_COLOR                     ! IO server
+    if(server_comm .ne. MPI_COMM_NULL) then     ! IO server process on separate node(s)
+      status = SERVER_COLOR                     ! IO server PE
+    else
+      status = RELAY_COLOR                      ! IO relay PE
     endif
 
+    allocate(iocolors(0:alliosize))             ! collect colors for IO PEs, index in array is rank in alliocom
+    color = status
+    call MPI_Allgather(color, 1, MPI_INTEGER, iocolors, 1, MPI_INTEGER, alliocom, ierr)
+    if(debug_mode) write(6,'(A,10I8,(/19X,10I8))') ' DEBUG: IO colors =',iocolors(0:alliosize-1)
+
     ! winsize and win_base have been obtained previously, allocate 1 sided window for relay and server PEs
-    call MPI_Barrier(alliocom, ierr)
-!     if(debug_mode) print *,'DEBUG: before MPI_Win_create, rank , base, size, ierr', smp_rank,win_base,winsize, ierr
     c_win_base = transfer(win_base, c_win_base)
-    call C_F_POINTER(c_win_base, f_win_base, [winsize/4])   !  make honest Fortran pointer for call to MPI_Win_create
+    call C_F_POINTER(c_win_base, f_win_base, [winsize/4])   !  make honest Fortran pointer (f_win_base) for call to MPI_Win_create
     call MPI_Win_create(f_win_base, winsize, disp_unit, MPI_INFO_NULL, alliocom, alliowin, ierr)
-!     if(debug_mode) print *,'DEBUG: after MPI_Win_create, rank, ierr, base = smp_rank', smp_rank, ierr, win_base
     alliomem = transfer(win_base, C_NULL_PTR)    ! base address of local window (address in integer -> C pointer)
     alliosiz = winsize                           ! alliomem same as servermem for server PEs
 
   endif
 
   ! ===================================================================================
-  !                     SERVER processes
+  !                     SERVER processes (no return to caller)
   ! ===================================================================================
   if(server_comm .ne. MPI_COMM_NULL) then
 
@@ -1035,6 +1047,9 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
     stop
   endif
 
+  ! ===================================================================================
+  !                     RELAY processes (no return to caller if io_relay_fn is defined)
+  ! ===================================================================================
   if(iorelay_comm .ne. MPI_COMM_NULL) then       ! IO relay process, check if caller supplied relay routine
 
     if(C_ASSOCIATED(io_relay_fn)) then             ! caller supplied subroutine to be called on relay PEs
