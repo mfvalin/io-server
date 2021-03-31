@@ -52,7 +52,9 @@ module distributed_circular_buffer_module
     procedure :: get_consumer_id
     procedure :: get_num_producers
     procedure :: get_num_consumers
-    procedure :: get_capacity
+    GENERIC :: get_capacity => get_capacity_local, get_capacity_server
+    procedure :: get_capacity_local
+    procedure :: get_capacity_server
     procedure :: start_listening
     procedure :: server_barrier
     procedure :: full_barrier
@@ -214,12 +216,20 @@ contains
     num_consumers = DCB_get_num_consumers(this % c_buffer)
   end function get_num_consumers
 
-  function get_capacity(this) result(num_elements)
+  function get_capacity_local(this) result(num_elements)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT) :: num_elements
-    num_elements = DCB_max_num_element_per_instance(this % c_buffer)
-  end function get_capacity
+    num_elements = DCB_get_capacity_local(this % c_buffer)
+  end function get_capacity_local
+
+  function get_capacity_server(this, buffer_id) result(num_elements)
+    implicit none
+    class(distributed_circular_buffer), intent(inout) :: this
+    integer(C_INT),                     intent(in)    :: buffer_id
+    integer(C_INT) :: num_elements
+    num_elements = DCB_get_capacity_server(this % c_buffer, buffer_id)
+  end function get_capacity_server
 
   function start_listening(this) result(return_value)
     implicit none

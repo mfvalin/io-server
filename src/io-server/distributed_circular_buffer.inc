@@ -91,12 +91,19 @@ implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) :: num_consumers
 end function DCB_get_num_consumers
-function DCB_max_num_element_per_instance(buffer) result(num_elements) BIND(C, name = 'DCB_max_num_element_per_instance')
+function DCB_get_capacity_local(buffer) result(capacity) BIND(C, name = 'DCB_get_capacity_local')
 import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
-integer(C_INT) :: num_elements
-end function DCB_max_num_element_per_instance
+integer(C_INT) :: capacity
+end function DCB_get_capacity_local
+function DCB_get_capacity_server(buffer, buffer_id) result(capacity) BIND(C, name = 'DCB_get_capacity_server')
+import :: C_PTR, C_INT
+implicit none
+type(C_PTR),    intent(in), value :: buffer
+integer(C_INT), intent(in), value :: buffer_id
+integer(C_INT) :: capacity
+end function DCB_get_capacity_server
 function DCB_channel_start_listening(buffer) result(return_value) BIND(C, name = 'DCB_channel_start_listening')
 import :: C_PTR, C_INT
 implicit none

@@ -77,7 +77,6 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   num_errors = 0
   num_producers = buffer % get_num_producers()
   consumer_id   = buffer % get_consumer_id()
-  capacity      = buffer % get_capacity()
 
   num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
   first_prod     = consumer_id * num_prod_local
@@ -233,6 +232,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
   do i_prod = first_prod, last_prod
+    capacity = buffer % get_capacity(i_prod)
     num_elements = buffer % get_num_elements(i_prod)
     if (num_elements .ne. capacity) then
       print *, 'Buffer should be completely full!', num_elements, capacity

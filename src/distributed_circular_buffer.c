@@ -59,7 +59,6 @@ typedef struct {
   double   total_wait_time_ms;
   double   total_read_time_ms;
   double   total_write_time_ms;
-  double dummy_stat[4];
 } DCB_stats;
 
 /**
@@ -107,7 +106,6 @@ typedef struct {
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
   int32_t    num_consumers; //!< How many server processes will read from the individual buffers
-  int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t channel_id;
@@ -194,6 +192,10 @@ static inline data_index num_elem_from_bytes_aligned64(const size_t num_bytes) {
 //! Compute the space in kilobytes taken by the given number of elements
 static inline double num_elem_to_kb(const size_t num_elements) {
   return num_elements * sizeof(data_element) / 1024.0;
+}
+
+static inline data_index circular_buffer_header_size() {
+  return num_elem_from_bytes_aligned64(sizeof(circular_buffer));
 }
 
 //! Compute the number of #data_element taken by the circular_buffer_instance struct
@@ -768,7 +770,6 @@ distributed_circular_buffer_p DCB_create(
   buffer->server_communicator      = server_communicator;
   buffer->num_producers            = num_producers;
   buffer->num_channels             = num_channels;
-  buffer->num_element_per_instance = num_elements;
   buffer->local_header.target_rank = -1;
 
   buffer->channel_id  = -1;
@@ -822,8 +823,7 @@ distributed_circular_buffer_p DCB_create(
   }
 
   const MPI_Aint win_total_size =
-      total_window_num_elem(buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance) *
-      (MPI_Aint)sizeof(data_element);
+      total_window_num_elem(buffer->num_producers, buffer->num_channels, num_elements) * (MPI_Aint)sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
   if (is_consumer(buffer) || is_channel(buffer)) {
@@ -844,15 +844,14 @@ distributed_circular_buffer_p DCB_create(
     // The root initializes every circular buffer, then sends to the corresponding node the offset where
     // that buffer is located in the window. The offset is in number of #data_element.
 
-    init_offset_header(
-        get_offset_header(buffer), buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance);
+    init_offset_header(get_offset_header(buffer), buffer->num_producers, buffer->num_channels, num_elements);
 
     MPI_Barrier(buffer->server_communicator); // Let the channels set their rank
     MPI_Barrier(buffer->server_communicator); // Wait until the channels have set their rank
 
     // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
     const int num_elem_in_circ_buffer =
-        total_circular_buffer_instance_size(buffer->num_element_per_instance) - instance_header_size();
+        total_circular_buffer_instance_size(num_elements) - instance_header_size() + circular_buffer_header_size();
 
     // Initialize the individual buffers
     for (int i = 0; i < num_producers; i++) {
@@ -861,8 +860,6 @@ distributed_circular_buffer_p DCB_create(
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
       DCB_init_stats(&buffer->consumer_stats[i]);
     }
-
-    buffer->num_element_per_instance = get_circular_buffer_instance(buffer, 0)->capacity;
   }
   else if (is_consumer(buffer) || is_channel(buffer)) {
     // Consumer nodes that are _not_ the first one (the "root") need to get the proper address in shared memory
@@ -888,8 +885,6 @@ distributed_circular_buffer_p DCB_create(
   const MPI_Aint final_win_size = is_producer(buffer) ? 0 : win_total_size; // Size used for actual window creation
   MPI_Win_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
-
-  MPI_Bcast(&buffer->num_element_per_instance, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
 
   if (is_producer(buffer)) {
     DCB_init_stats(&buffer->producer_stats);
@@ -951,13 +946,13 @@ distributed_circular_buffer_p DCB_create_f(
 void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which to print data
 ) {
   printf(
-      "Printing distributed circ buf: num producers %d, num channels %d, buf sizes %d, window offset = %d\n"
+      "Printing distributed circ buf: num producers %d, num channels %d, window offset = %d\n"
       "Consumer ID: %d\n"
       "Producer ID: %d\n"
       "Channel ID:  %d\n"
       "Server rank: %d\n",
-      buffer->num_producers, buffer->num_channels, buffer->num_element_per_instance, buffer->window_offset,
-      buffer->consumer_id, buffer->producer_id, buffer->channel_id, buffer->server_rank);
+      buffer->num_producers, buffer->num_channels, buffer->window_offset, buffer->consumer_id, buffer->producer_id,
+      buffer->channel_id, buffer->server_rank);
   if (is_producer(buffer)) {
     print_instance(&buffer->local_header);
   }
@@ -1118,15 +1113,32 @@ int32_t DCB_get_num_consumers(const distributed_circular_buffer_p buffer) {
 }
 
 //F_StArT
-//  function DCB_max_num_element_per_instance(buffer) result(num_elements) BIND(C, name = 'DCB_max_num_element_per_instance')
+//  function DCB_get_capacity_local(buffer) result(capacity) BIND(C, name = 'DCB_get_capacity_local')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
-//    integer(C_INT) :: num_elements
-//  end function DCB_max_num_element_per_instance
+//    integer(C_INT) :: capacity
+//  end function DCB_get_capacity_local
 //F_EnD
-int32_t DCB_max_num_element_per_instance(const distributed_circular_buffer_p buffer) {
-  return buffer->num_element_per_instance;
+int32_t DCB_get_capacity_local(const distributed_circular_buffer_p buffer) {
+  if (is_producer(buffer))
+    return buffer->local_header.capacity;
+  return -1;
+}
+
+//F_StArT
+//  function DCB_get_capacity_server(buffer, buffer_id) result(capacity) BIND(C, name = 'DCB_get_capacity_server')
+//    import :: C_PTR, C_INT
+//    implicit none
+//    type(C_PTR),    intent(in), value :: buffer
+//    integer(C_INT), intent(in), value :: buffer_id
+//    integer(C_INT) :: capacity
+//  end function DCB_get_capacity_server
+//F_EnD
+int32_t DCB_get_capacity_server(const distributed_circular_buffer_p buffer, int buffer_id) {
+  if (is_consumer(buffer))
+    return get_circular_buffer_instance(buffer, buffer_id)->capacity;
+  return -1;
 }
 
 //F_StArT
@@ -1407,8 +1419,6 @@ int DCB_check_integrity(
   }
 
   if (is_producer(buffer)) {
-    const int total_num_elem = buffer->num_element_per_instance;
-
     if (check_instance_consistency(&buffer->local_header) != 0) {
       printf("Local instance failed integrity check!\n");
       return -1;

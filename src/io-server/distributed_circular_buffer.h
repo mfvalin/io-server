@@ -37,7 +37,7 @@ typedef struct {
   double   total_wait_time_ms;
   double   total_read_time_ms;
   double   total_write_time_ms;
-  double dummy_stat[4];
+  double   dummy_stat[4];
 } DCB_stats;
 
 /**
@@ -85,7 +85,6 @@ typedef struct {
   int32_t    num_producers; //!< How many producer processes share this distributed buffer set
   int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
   int32_t    num_consumers; //!< How many server processes will read from the individual buffers
-  int32_t    num_element_per_instance; //!< How many elements form a single circular buffer instance in this buffer set
   data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t channel_id;
