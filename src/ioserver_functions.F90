@@ -270,15 +270,34 @@ endif
     status = 0
   end function ioserver_read
 
-end module
+end module ioserver_functions
+
+subroutine ioserver_functions_demo
+  use ioserver_functions
+  implicit none
+  type(server_file) :: f
+  integer :: status
+  type(heap) :: h
+
+#if defined(WITH_ERRORS)
+  print *, fd_seq               ! this line must not compile successfully (private reference)
+  print *, f % fd               ! this line must not compile successfully (private reference)
+  call bump_ioserver_tag(f)
+#endif
+  status = ioserver_init(0, 'M')
+  h = ioserver_heap(0)
+  status = f % open('my/file/path')
+  status = f % close()
+  status = ioserver_finalize()
+end subroutine ioserver_functions_demo
 !
 ! =============================================================================================
-!                                               IO RELAY
+!                                               IO COMMON
 ! =============================================================================================
-!                                 ( data and initialization module )
+!                                 ( data common to server and relay PEs )
 ! =============================================================================================
 ! general information useful to io relay processes
-module io_relay_mod
+module io_common_mod
   use ISO_C_BINDING
   use memory_arena_mod
   use ioserver_functions
@@ -286,22 +305,39 @@ module io_relay_mod
   include 'mpif.h'
 
   save
-  type(comm_rank_size) :: modelio_crs, allio_crs, nodecom_crs, relay_crs
-  type(comm_rank_size) :: model_crs, server_crs, fullnode_crs
+  type(comm_rank_size) :: model_crs        ! compute PEs
+  type(comm_rank_size) :: modelio_crs      ! compute and relay PEs
+  type(comm_rank_size) :: allio_crs        ! relay and server PEs
+  type(comm_rank_size) :: nodecom_crs      ! compute and relay PEs on THIS SMP NODE
+  type(comm_rank_size) :: relay_crs        ! relay PEs
+  type(comm_rank_size) :: server_crs       ! server PEs
+  type(comm_rank_size) :: fullnode_crs     ! all PEs on this SMP node
+
+  type(C_PTR) :: p_base   = C_NULL_PTR     ! base shared memory address for this PE, used for control tables
+  integer(C_INTPTR_T) :: sz_base = 0       ! size in bytes of above 
+
+  type(C_PTR) :: p_relay  = C_NULL_PTR     ! memory shared between relay and compute PEs
+  integer(C_INTPTR_T) :: sz_relay = 0      ! size in bytes of above 
+
+  type(C_PTR) :: p_server = C_NULL_PTR     ! memory shared between server PEs
+  integer(C_INTPTR_T) :: sz_server = 0     ! size in bytes of above 
+
+  type(memory_arena) :: ma                 ! local memory arena, contains heaps and circular buffers (relay+compute)
+
+end module io_common_mod
+!
+! =============================================================================================
+!                                               IO RELAY
+! =============================================================================================
+!                                 ( local data and initialization module )
+! =============================================================================================
+! general information useful to io relay processes
+module io_relay_mod
+  use io_common_mod
+  implicit none
 
   logical :: initialized = .false.
   logical :: relay_debug = .false.
-
-  type(C_PTR) :: p_base   = C_NULL_PTR
-  integer(C_INTPTR_T) :: sz_base = 0
-
-  type(C_PTR) :: p_relay  = C_NULL_PTR
-  integer(C_INTPTR_T) :: sz_relay = 0
-
-  type(C_PTR) :: p_server = C_NULL_PTR
-  integer(C_INTPTR_T) :: sz_server = 0
-
-  type(memory_arena) :: ma
 
   contains
 
@@ -325,9 +361,9 @@ module io_relay_mod
     server_crs   = comm_rank_size(MPI_COMM_NULL, -1, 0)          ! only useful on server nodes
     modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)   ! compute and relay PEs
     allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)  ! relay and server PEs
-    relay_crs    = IOserver_get_crs(RELAY_COLOR)                  ! relay PEs only
+    relay_crs    = IOserver_get_crs(RELAY_COLOR)                 ! relay PEs only
     nodecom_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)   ! compute and relay PEs on THIS SMP NODE
-    fullnode_crs = IOserver_get_crs(NODE_COLOR)
+    fullnode_crs = IOserver_get_crs(NODE_COLOR)                  ! all PEs on this SMP node
 
     call IOSERVER_get_winmem(p_base, p_relay, p_server)
     call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
@@ -337,56 +373,19 @@ module io_relay_mod
     initialized = .true.
   end subroutine io_relay_mod_init
 end module io_relay_mod
-
-subroutine ioserver_functions_demo
-  use ioserver_functions
-  implicit none
-  type(server_file) :: f
-  integer :: status
-  type(heap) :: h
-
-#if defined(WITH_ERRORS)
-  print *, fd_seq               ! this line must not compile successfully (private reference)
-  print *, f % fd               ! this line must not compile successfully (private reference)
-  call bump_ioserver_tag(f)
-#endif
-  status = ioserver_init(0, 'M')
-  h = ioserver_heap(0)
-  status = f % open('my/file/path')
-  status = f % close()
-  status = ioserver_finalize()
-end subroutine ioserver_functions_demo
 !
 ! =============================================================================================
 !                                               IO SERVER
 ! =============================================================================================
-!                                 ( data and initialization module )
+!                                 ( local data and initialization module )
 ! =============================================================================================
 ! general information useful to io server processes
 module io_server_mod
-  use ISO_C_BINDING
-  use memory_arena_mod
-  use ioserver_functions
+  use io_common_mod
   implicit none
-  include 'mpif.h'
-
-  save
-  type(comm_rank_size) :: modelio_crs, allio_crs, nodecom_crs, relay_crs
-  type(comm_rank_size) :: model_crs, server_crs, fullnode_crs
 
   logical :: initialized = .false.
-  logical :: relay_debug = .false.
-
-  type(C_PTR) :: p_base   = C_NULL_PTR
-  integer(C_INTPTR_T) :: sz_base = 0
-
-  type(C_PTR) :: p_relay  = C_NULL_PTR
-  integer(C_INTPTR_T) :: sz_relay = 0
-
-  type(C_PTR) :: p_server = C_NULL_PTR
-  integer(C_INTPTR_T) :: sz_server = 0
-
-  type(memory_arena) :: ma
+  logical :: server_debug = .false.
 
   contains
 
@@ -396,8 +395,8 @@ module io_server_mod
     integer(C_INT) :: old
 
     old = 0
-    if(relay_debug) old = 0
-    relay_debug = (new .ne. 0)
+    if(server_debug) old = 0
+    server_debug = (new .ne. 0)
   end function io_server_debug
 
   subroutine io_server_mod_init()
