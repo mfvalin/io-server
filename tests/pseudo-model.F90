@@ -64,7 +64,7 @@ program pseudomodelandserver
   use ioserver_functions
   use memory_arena_mod
   implicit none
-  external io_relay_fn, io_server_out
+  external io_relay_fn, io_server_out, compute_fn
   integer :: status
   integer :: model, allio, relay, server, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, nserv, ierr, noops, noderank, nodesize
