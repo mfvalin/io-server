@@ -127,7 +127,6 @@
 #include "io-server/circular_buffer_defines.h"
 #include "io-server/common.h"
 
-#if !defined(FIOL_VERSION)
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
@@ -137,13 +136,11 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> <br>in == out means buffer is empty
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
-  data_element version;     //!< version marker
-  data_index   first;       //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index   in;          //!< Start inserting data at data[in]
-  data_index   partial_in;  //!< Temporary store start index, before 'committing' a store (insert)
-  data_index   out;         //!< Start reading data at data[out]
-  data_index   partial_out; //!< Temporary read start index, before 'committing' a read (extract)
-  data_index   limit;       //!< size of data buffer (last available index + 1)
+  data_element version; //!< version marker
+  data_index   first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_index   in[2];   //!< Start inserting data at data[in]
+  data_index   out[2];  //!< Start reading data at data[out]
+  data_index   limit;   //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -152,21 +149,11 @@ typedef fiol_management* fiol_management_p;
 //! skeleton for circular buffer
 typedef struct {
   fiol_management m;      //!< management structure
-  data_element    data[]; //!< data buffer (contains at most limit -1 useful data elements)
+  data_element    data[]; //!< data buffer (contains at most limit - 1 useful data elements)
 } circular_buffer;
 
 //! pointer to circular buffer
 typedef circular_buffer* circular_buffer_p;
-
-//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
-//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline data_index available_space(
-    const data_index in,   //!< [in] Index of insertion location in the buffer
-    const data_index out,  //!< [in] Index of extraction location in the buffer
-    const data_index limit //!< [in] Number of elements that the buffer can hold
-) {
-  return (in < out) ? out - in - 1 : limit - in + out - 1;
-}
 
 //! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
@@ -178,7 +165,22 @@ static inline data_index available_data(
   return (in >= out) ? in - out : limit - out + in;
 }
 
-#endif
+//! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
+//! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
+static inline data_index available_space(
+    const data_index in,   //!< [in] Index of insertion location in the buffer
+    const data_index out,  //!< [in] Index of extraction location in the buffer
+    const data_index limit //!< [in] Number of elements that the buffer can hold
+) {
+  return limit - available_data(in, out, limit) - 1;
+}
+
+enum
+{
+  CB_FULL    = 0, //!< Array index corresponding to the circular buffer _full_ index (in or out)
+  CB_PARTIAL = 1  //!< Array index corresponding to the circular buffer _partial_ index (in or out)
+};
+
 //C_EnD
 
 //! Number of microseconds to wait between reads of the IN/OUT indices of a buffer when waiting for data to arrive
@@ -202,8 +204,9 @@ void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to prin
 //C_EnD
 {
   printf(
-      "version %ld, first %ld, in %ld, out %ld, limit %ld\n", (long)b->m.version, (long)b->m.first, (long)b->m.in,
-      (long)b->m.out, (long)b->m.limit);
+      "version %ld, first %ld, in %ld, in partial %ld, out %ld, out partial %ld, limit %ld\n", (long)b->m.version,
+      (long)b->m.first, (long)b->m.in[CB_FULL], (long)b->m.in[CB_PARTIAL], (long)b->m.out[CB_FULL],
+      (long)b->m.out[CB_PARTIAL], (long)b->m.limit);
 }
 
 //F_StArT
@@ -232,12 +235,12 @@ circular_buffer_p CB_init(
   if (nwords < MIN_CIRC_BUFFER_SIZE)
     return NULL; // area is too small
 
-  p->m.version     = FIOL_VERSION;
-  p->m.first       = 0;
-  p->m.in          = 0;
-  p->m.partial_in  = 0;
-  p->m.out         = 0;
-  p->m.partial_out = 0;
+  p->m.version         = FIOL_VERSION;
+  p->m.first           = 0;
+  p->m.in[CB_FULL]     = 0;
+  p->m.in[CB_PARTIAL]  = 0;
+  p->m.out[CB_FULL]    = 0;
+  p->m.out[CB_PARTIAL] = 0;
 
   // Header size in number of elements
   const data_index header_size =
@@ -393,8 +396,8 @@ data_index CB_get_available_space(const circular_buffer_p buffer //!< [in] The b
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.partial_in;
-  volatile data_index* out = &buffer->m.out;
+  volatile data_index* in  = &buffer->m.in[CB_PARTIAL];
+  volatile data_index* out = &buffer->m.out[CB_FULL];
   return available_space(*in, *out, buffer->m.limit);
 }
 
@@ -414,8 +417,8 @@ data_index CB_get_available_data(const circular_buffer_p buffer //!< [in] The bu
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.in;
-  volatile data_index* out = &buffer->m.partial_out;
+  volatile data_index* in  = &buffer->m.in[CB_FULL];
+  volatile data_index* out = &buffer->m.out[CB_PARTIAL];
   return available_data(*in, *out, buffer->m.limit);
 }
 
@@ -536,7 +539,7 @@ int32_t CB_atomic_get(
   if (CB_wait_data_available(p, n) < 0)
     return -1;
 
-  data_index       out   = p->m.partial_out;
+  data_index       out   = p->m.out[CB_PARTIAL];
   const data_index limit = p->m.limit;
   data_element*    buf   = p->data;
 
@@ -554,12 +557,12 @@ int32_t CB_atomic_get(
   }
 
   if (operation != CB_PEEK) {
-    p->m.partial_out = out;
+    p->m.out[CB_PARTIAL] = out;
   }
 
   if (operation == CB_COMMIT) {
     memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
-    data_index volatile* outp = &(p->m.out);
+    data_index volatile* outp = &(p->m.out[CB_FULL]);
     *outp                     = out;
   }
 
@@ -595,7 +598,7 @@ int32_t CB_atomic_put(
     return -1;
 
   data_element*    buf        = p->data;
-  data_index       current_in = p->m.partial_in;
+  data_index       current_in = p->m.in[CB_PARTIAL];
   const data_index limit      = p->m.limit;
 
   const int num_elem_1 = n > (limit - current_in) ? (limit - current_in) : n;
@@ -611,11 +614,11 @@ int32_t CB_atomic_put(
     current_in += num_elem_2;
   }
 
-  p->m.partial_in = current_in;
+  p->m.in[CB_PARTIAL] = current_in;
 
   if (operation == CB_COMMIT) {
     write_fence(); // make sure everything is in memory before adjusting the "in" pointer
-    data_index volatile* inp = &(p->m.in);
+    data_index volatile* inp = &(p->m.in[CB_FULL]);
     *inp                     = current_in;
   }
 
@@ -654,12 +657,22 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
     return -1;
   }
 
-  if (buffer->m.in < buffer->m.first || buffer->m.in >= buffer->m.limit) {
+  if (buffer->m.in[CB_FULL] < buffer->m.first || buffer->m.in[CB_FULL] >= buffer->m.limit) {
     // printf("INVALID b/c \"in\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in, buffer->m.version);
     return -1;
   }
 
-  if (buffer->m.out < buffer->m.first || buffer->m.out >= buffer->m.limit) {
+  if (buffer->m.out[CB_FULL] < buffer->m.first || buffer->m.out[CB_FULL] >= buffer->m.limit) {
+    // printf("INVALID b/c \"out\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out, buffer->m.limit);
+    return -1;
+  }
+
+  if (buffer->m.in[CB_PARTIAL] < buffer->m.first || buffer->m.in[CB_PARTIAL] >= buffer->m.limit) {
+    // printf("INVALID b/c \"in\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in, buffer->m.version);
+    return -1;
+  }
+
+  if (buffer->m.out[CB_PARTIAL] < buffer->m.first || buffer->m.out[CB_PARTIAL] >= buffer->m.limit) {
     // printf("INVALID b/c \"out\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out, buffer->m.limit);
     return -1;
   }

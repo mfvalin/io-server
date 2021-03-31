@@ -218,7 +218,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
     num_elements = buffer % get_num_elements(i_prod)
     if (num_elements .ne. 0) then
-      print *, 'Buffer is not empty!!!'
+      print *, 'Buffer is not empty after doing all the reads!!!', num_elements
       num_errors = num_errors + 1
     end if
   end do
@@ -248,7 +248,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
     num_elements = buffer % get(i_prod, data_large, capacity, .true.)
     if (num_elements .ne. 0) then
-      print *, 'Buffer is not empty!!!'
+      print *, 'Buffer is not empty after reading its entire content in one call!!!', num_elements
       num_errors = num_errors + 1
     end if
   end do

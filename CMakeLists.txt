@@ -41,7 +41,7 @@ endif()
 
 option(BUILD_DOC "Build the Doxygen documentation" FALSE)
 if (BUILD_DOC)
-  include(doxygen)
+  include(ec_doxygen)
 endif()
 
 add_subdirectory(src)
