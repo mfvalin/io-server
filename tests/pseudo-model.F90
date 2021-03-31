@@ -64,7 +64,7 @@ program pseudomodelandserver
   use ioserver_functions
   use memory_arena_mod
   implicit none
-  external io_relay_fn
+  external io_relay_fn, io_server_out
   integer :: status
   integer :: model, allio, relay, server, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, nserv, ierr, noops, noderank, nodesize
@@ -114,6 +114,8 @@ program pseudomodelandserver
     !                                 compute Processes
     ! =============================================================================================
     !  from this point on, this is a model compute process
+    !  mettre ce qui suit dans un sous-programme pseudo-modele
+    !  subroutine compute_fn()
 
     model_crs    = IOserver_get_crs(MODEL_COLOR)
     modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)
@@ -181,6 +183,14 @@ program pseudomodelandserver
   call mpi_finalize(status)
 end program
 
+! =============================================================================================
+!                      COMPUTE     ( skeleton demo code, interim API )
+! =============================================================================================
+subroutine compute_fn()
+  use ISO_C_BINDING
+  use helpers
+  implicit none
+end subroutine compute_fn
 ! =============================================================================================
 !                      RELAY     ( skeleton code, interim API )
 ! =============================================================================================
