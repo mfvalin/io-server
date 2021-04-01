@@ -71,7 +71,7 @@ program pseudomodelandserver
   logical :: error
   character(len=128) :: arg
   type(memory_arena) :: ma
-  type(comm_rank_size) :: server_crs, fullnode_crs
+  type(comm_rank_size) :: server_crs, fullnode_crs, model_crs
 
   call mpi_init(status)
 
@@ -110,7 +110,9 @@ program pseudomodelandserver
     !  from this point on, this is a model compute process
     !  mettre ce qui suit dans un sous-programme pseudo-modele
     call compute_fn()
-
+    model_crs = IOserver_get_crs(MODEL_COLOR)
+    noderank = model_crs % rank
+    nodesize = model_crs % size
 
   else            ! ranks 0, 1,..., nserv-1 : 
     ! =============================================================================================
@@ -195,6 +197,7 @@ subroutine compute_fn()
   call MPI_Barrier(modelio, ierr)                      ! barrier 2 compute/relay
   call flush(6)
   call ma%dump()
+  call print_io_colors()
   write(6,*)'END: compute, PE',rank+1,' of',size
 
 end subroutine compute_fn
@@ -205,6 +208,7 @@ subroutine io_relay_fn()
   use ISO_C_BINDING
   use helpers
   use io_relay_mod
+  use ioserver_memory_mod
   implicit none
   integer :: model, allio, relay, server, nodecom, modelio, old, new
   integer :: rank, size, ierr, noderank, nodesize, ncompute, i, bsize, bflags
@@ -257,6 +261,7 @@ subroutine io_relay_fn()
   endif
   write(6,*)'END: pseudo relay PE',relay_crs % rank+1,' of',relay_crs % size
   call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
+  write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
   call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
   stop
@@ -271,6 +276,7 @@ subroutine io_server_out()
   use ISO_C_BINDING
   use helpers
   use io_server_mod
+  use ioserver_memory_mod
   implicit none
   integer :: model, allio, relay, server, modelio, nodecom
 
@@ -292,6 +298,7 @@ subroutine io_server_out()
 
   write(6,*)'END: pseudo IO server, PE',server_crs % rank + 1  ,' of', server_crs % size
   call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
+  write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'FINAL:       full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
 
   call mpi_finalize(ierr)

@@ -12,13 +12,9 @@
 !  Lesser General Public License for more details.
 !
 !! F_EnD
-module ioserver_internal_mod
+module ioserver_constants
   use ISO_C_BINDING
-  use shmem_heap
-  use memory_arena_mod
-  use circular_buffer_module
   implicit none
-  include 'mpif.h'
 !! F_StArT
 !!
   integer(C_SIZE_T), parameter :: KBYTE = 1024
@@ -39,7 +35,123 @@ module ioserver_internal_mod
   integer, parameter :: IO_BASE      = 1001
   integer, parameter :: IO_RELAY     = 1002
   integer, parameter :: IO_SERVER    = 1003
+!!
+!! F_EnD
+end module ioserver_constants
 
+module ioserver_memory_mod
+  use ISO_C_BINDING
+  use ioserver_constants
+  implicit none
+
+  save
+
+  integer, parameter :: MAX_PES_PER_NODE = 128
+  type, bind(C) :: pe_info 
+    type(C_PTR)         :: ctrl_ra                  ! local address of control shared memory segment
+    type(C_PTR)         :: io_ra                    ! local address of relay or server shared memory segment
+    integer(C_INTPTR_T) :: heap                     ! offset into shared memory arena
+    integer(C_INTPTR_T) :: cio_in                   ! offset into shared memory arena
+    integer(C_INTPTR_T) :: cio_out                  ! offset into shared memory arena
+    integer(C_INT)      :: color                    ! PE type (compute/relay/server/...)
+    integer(C_INT)      :: rank                     ! rank on node
+    integer(C_INT), dimension(4) :: pad             ! pad to a size of 64 bytes
+  end type
+
+!   integer, parameter :: MAX_RESERVED = 128
+  type, bind(C) :: shared_memory
+    integer(C_INT) :: version      = 10000                 ! version 1.0.0
+    integer(C_INT) :: time_to_quit = 0
+    ! NO-OP PEs do not use anything beyond this point
+    integer(C_INT), dimension(14) :: pad                   ! next item should be aligned on a 64 byte boundary
+    ! pe MUST be the last element of this structure
+    type(pe_info), dimension(0:MAX_PES_PER_NODE-1) :: pe   ! origin 0, indexed by rank
+  end type
+
+  type(shared_memory), pointer, volatile :: mem       => NULL()      !  will point to start of control shared memory
+  integer :: max_smp_pe = 0
+  integer, dimension(:), pointer :: relay_index       => NULL()      ! sm_rank of relay PEs
+  integer :: max_relay_index = -1
+  integer, dimension(:), pointer :: compute_index     => NULL()      ! sm_rank of compute PEs
+  integer :: max_compute_index = -1
+
+  private :: initialized
+  logical :: initialized = .false.
+
+  contains
+
+  subroutine ioserver_memory_mod_init(address, n_pe)
+    implicit none
+    type(C_PTR), intent(IN), value     :: address
+    integer, intent(IN), value :: n_pe
+
+    if(initialized) return
+
+    call C_F_POINTER(address, mem)             ! main control structure points to shared memory at ctrlmem
+    max_smp_pe = n_pe-1
+    mem % pe(0:max_smp_pe) = pe_info(C_NULL_PTR, C_NULL_PTR, 0, 0, 0, 0, 0, [0, 0, 0, 0])
+
+    allocate(relay_index(0:max_smp_pe))        ! size is overkill but it is easier
+    relay_index = -1
+    allocate(compute_index(0:max_smp_pe))      ! size is overkill but it is easier
+    compute_index = -1
+
+    initialized = .true.
+  end subroutine ioserver_memory_mod_init
+
+  subroutine build_print_model_index()
+    implicit none
+    type(C_PTR) :: listr(0:max_relay_index)
+    integer(C_INTPTR_T) :: listr2(0:max_relay_index)
+    type(C_PTR) :: listc(0:max_compute_index)
+     integer(C_INTPTR_T) :: listc2(0:max_compute_index)
+    integer :: i
+
+    do i = 0, max_relay_index
+      listr(i) = mem % pe(relay_index(i)) % io_ra
+      listr2(i) = transfer(listr(i), listr2(i))
+    enddo
+    do i = 0, max_compute_index
+      listc(i) = mem % pe(compute_index(i)) % io_ra
+      listc2(i) = transfer(listc(i), listc2(i))
+    enddo
+    print *,'DEBUG: relay   =',relay_index(0:max_relay_index)
+    print 1, listr2(0:max_relay_index)
+    print *,'DEBUG: compute =',compute_index(0:max_compute_index)
+    print 1, listc2(0:max_compute_index)
+1   format(10X, 8Z18.16)
+  end subroutine build_print_model_index
+
+
+  subroutine build_relay_model_index()  ! translate node color table into relay and compute index tables
+    implicit none
+    integer :: i
+
+    do i = 0, max_smp_pe
+      if(mem % pe(i) % color == MODEL_COLOR) then
+        compute_index(mem % pe(i) % rank) = i
+        max_compute_index = max(max_compute_index, mem % pe(i) % rank)
+      endif
+      if(mem % pe(i) %color == RELAY_COLOR) then
+        relay_index(mem % pe(i) % rank) = i
+        max_relay_index = max(max_relay_index, mem % pe(i) % rank)
+      endif
+    enddo
+  end subroutine build_relay_model_index
+
+end module ioserver_memory_mod
+
+module ioserver_internal_mod
+  use ISO_C_BINDING
+  use ioserver_constants
+  use shmem_heap
+  use memory_arena_mod
+  use circular_buffer_module
+  use ioserver_memory_mod
+  implicit none
+  include 'mpif.h'
+!! F_StArT
+!!
   type :: comm_rank_size
     integer :: comm = -1
     integer :: rank = -1
@@ -51,24 +163,6 @@ module ioserver_internal_mod
 
   save
 
-  integer, parameter :: MAX_PES_PER_NODE = 128
-  type, bind(C) :: pe_info 
-    integer(C_INTPTR_T) :: heap                     ! offset into shared memory arena
-    integer(C_INTPTR_T) :: cio_in                   ! offset into shared memory arena
-    integer(C_INTPTR_T) :: cio_out                  ! offset into shared memory arena
-    integer(C_INT)      :: color                    ! PE type (compute/relay/server/...)
-    integer(C_INT)      :: rank                     ! rank on node
-  end type
-
-  integer, parameter :: MAX_RESERVED = 128
-  type, bind(C) :: shared_memory
-    integer(C_INT) :: time_to_quit = 0
-    integer(C_INT) :: version      = 10000                 ! version 1.0.0
-    type(pe_info), dimension(0:MAX_PES_PER_NODE-1) :: pe   ! origin 0, indexed by rank
-    integer(C_INT), dimension(MAX_RESERVED) :: reserved    ! reserved space 
-    integer(C_INT), dimension(1)            :: arena       ! base of managed memory arena
-  end type
-  type(shared_memory), pointer, volatile :: mem => NULL()
   !  ==========================================================================================
   !                        shared memory areas , addresses, communicators, windows
   !  ==========================================================================================
@@ -165,6 +259,39 @@ module ioserver_internal_mod
 !! interface
 !!
 !! F_EnD
+
+!!  translate my address in shared memory arena into a valid address for RELAY_COLOR|MODEL_COLOR of rank N
+function ptr_translate(from, to_color, to_rank) result(to) BIND(C,name='Ptr_translate')
+!! import :: C_PTR, C_INT
+  implicit none
+  type(C_PTR), intent(IN), value :: from
+  integer(C_INT), intent(IN), value :: to_color
+  integer(C_INT), intent(IN), value :: to_rank
+  type(C_PTR) :: to
+
+  integer :: rank
+  integer(C_INTPTR_T) :: offset, new
+  type(C_PTR) :: my_base, new_base
+
+  to = C_NULL_PTR
+  my_base = mem % pe(smp_rank) % io_ra   ! local address of memory arena
+  offset = ptr_diff(my_base, from)       ! offset in local space
+  if(offset < 0) return                  ! not in shared memory arena
+
+  new_base = C_NULL_PTR                  ! find new base
+  if(to_color == MODEL_COLOR) then
+    new_base = mem % pe(compute_index(to_rank)) % io_ra
+  endif
+  if(to_color == RELAY_COLOR) then
+    new_base = mem % pe(relay_index(to_rank)) % io_ra
+  endif
+  if(.not. C_ASSOCIATED(new_base)) return
+
+  new = transfer(new_base, new)          ! make large integer from C pointer
+  new = new + offset                     ! add offset to new base
+  to  = transfer(new, to)                ! honest C pointer
+
+end function ptr_translate
 
 !! F_StArT
 function ptr_diff(pref, p) result(diff) BIND(C,name='Ptr_diff')  !  address difference (in bytes)
@@ -310,6 +437,17 @@ end module ioserver_internal_mod
 !  ==========================================================================================
 !                                           END OF MODULE
 !  ==========================================================================================
+
+!! F_StArT
+subroutine print_io_colors()
+!! F_EnD
+    use ioserver_internal_mod
+    implicit none
+    if(debug_mode) write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
+!! F_StArT
+end subroutine print_io_colors
+!!
+!! F_EnD
 
 !! F_StArT
   function IOserver_get_crs(color) result(crs)
@@ -667,10 +805,10 @@ subroutine IOserver_noop()  !  NO OP loop to park processes with minimal CPU con
     if(debug_mode) print *,'MSG: SLEEP LOOP'
     ierr = sleep(1)
   enddo
+  write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'FINAL:, NO-OP',global_rank
   call MPI_Finalize(ierr)
   stop
-
 end subroutine IOserver_noop
 
 !! F_StArT
@@ -757,9 +895,10 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
   call RPN_MPI_Win_allocate_shared(ctrlsiz, disp_unit, MPI_INFO_NULL, smp_comm, win_base, ctrlwin, ierr)
 
 !   if(debug_mode) print *,'DEBUG: ctrlsiz, smp_rank, ierr =',ctrlsiz, smp_rank, ierr
-  ! ctrlwin is no longer used after this query
-  ctrlmem = transfer(win_base, C_NULL_PTR)
-  call C_F_POINTER(ctrlmem, mem)             ! main control structure points to shared memory at ctrlmem
+  ! ctrlwin is no longer used after this point
+  ctrlmem = transfer(win_base, C_NULL_PTR)   ! ctrlmem points to control shared memory segment
+  call ioserver_memory_mod_init(ctrlmem, smp_size)     ! main control structure will point to shared memory at ctrlmem
+  mem % pe(smp_rank) % ctrl_ra = ctrlmem               ! local address of control memory segment
 
   if(smp_rank == 0) mem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
   call MPI_barrier(global_comm, ierr)               ! wait until control area initialization is done everywhere
@@ -771,6 +910,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 
 
   if(color == NO_OP_COLOR) then       ! this is a NO-OP process, enter wait loop for finalize
+    mem % pe(smp_rank) % color = NO_OP_COLOR
     call IOserver_noop()              ! this subroutine will never return and call finalize
     call MPI_Finalize(ierr)           ! IOserver_noop should never return, but ... in case it does
     stop
@@ -855,6 +995,7 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       temp_ptr = local_arena % clone(relaymem)   !  cloning is O.K. even if arena is not initialized
     endif
     local_arena_ptr = local_arena % addr()
+    mem % pe(smp_rank) % io_ra = local_arena_ptr               ! local address of arena segment
 
     ! spread the nio_node relay PEs across the node (lowest and highest node ranks)
     if(relayrank >= (nio_node/2) .and. relayrank < (relaysize - ((nio_node+1)/2))) then   ! model compute process
@@ -871,15 +1012,15 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       if(ierr .ne. MPI_SUCCESS) errors = errors + 1                  ! flag error (it will be intercepted later)
     endif
 
-    mem % pe(relayrank) % color = color                                   ! store color of this PE in shared memory table
+    mem % pe(smp_rank) % color = color                                   ! store color of this PE in shared memory table
     call MPI_Comm_split(relaycom, color, relayrank, temp_comm, ierr)      ! split into compute and IO relay
     if(color == RELAY_COLOR) then
       relay_smp_comm = temp_comm    ! relay PEs on same SMP node
     else
       model_smp_comm = temp_comm    ! compute PEs on same SMP node
     endif
-    call MPI_Comm_rank(temp_comm, mem % pe(relayrank)%rank, ierr)  ! rank on node in my color
-    if(debug_mode) print *,'DEBUG: rank',mem % pe(relayrank)%rank,' in color',color
+    call MPI_Comm_rank(temp_comm, mem % pe(smp_rank)%rank, ierr)  ! rank on node in my color
+    if(debug_mode) print *,'DEBUG: rank',mem % pe(smp_rank)%rank,' in color',color
 
     call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm, ierr)    ! split into model compute and IO relay processes
 
@@ -897,32 +1038,32 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
 
       !  allocate nominal heap and circular buffers (8K elements)
       ! 85%  of per PE size for the heap
-      write(heap_name  ,'(A5,I3.3)') "RHEAP",mem % pe(relayrank)%rank
+      write(heap_name  ,'(A5,I3.3)') "RHEAP",mem % pe(smp_rank)%rank
       sz32 = shmsz64 * 0.85
       temp_ptr = local_arena % newblock(sz32, heap_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       temp_ptr = local_heap % create(temp_ptr, sz32)         ! allocate local heap
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
-      mem % pe(relayrank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
+      mem % pe(smp_rank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
 
       !  4%  of per PE size for inbound circular buffer
-      write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(relayrank)%rank
+      write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(smp_rank)%rank
       sz32 = shmsz64 * 0.04
       temp_ptr = local_arena % newblock(sz32, cioin_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_in % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(relayrank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
+      mem % pe(smp_rank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
 
       !  10%  of per PE size for outbound circular buffer
-      write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(relayrank)%rank + 1000
+      write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(smp_rank)%rank + 1000
       sz32 = shmsz64 * 0.1
       temp_ptr = local_arena % newblock(sz32, cioout_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_out % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(relayrank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
+      mem % pe(smp_rank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
 
     else                                                     ! compute processes
     ! =========================================================================
@@ -933,8 +1074,11 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       shmsz64 = relaysiz / 4                                 ! size in 32 bit units of relay shared memory area
       shmsz64 = shmsz64 / relaysize                          ! available size per PE on SMP node
 
+      ! will also need rank on node for compute in rat table
+      !  pe() % relay_ra = local_arena % addr()
+
       ! 85%  of per PE size for the heap
-      write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(relayrank)%rank
+      write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(smp_rank)%rank
       sz32 = shmsz64 * 0.85
       temp_ptr = local_arena % newblock(sz32, heap_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
@@ -942,32 +1086,32 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
       temp_ptr = local_heap % create(temp_ptr, sz32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
-      mem % pe(relayrank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
+      mem % pe(smp_rank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
 
       !  4%  of per PE size for relay -> compute circular buffer
-      write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(relayrank)%rank
+      write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(smp_rank)%rank
       sz32 = shmsz64 * 0.04
       temp_ptr = local_arena % newblock(sz32, cioin_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, cioin_name, sz32)
       ok = local_cio_in % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(relayrank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
+      mem % pe(smp_rank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
 
       ! 10%  of per PE size for compute -> relay circular buffer
-      write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(relayrank)%rank + 1000
+      write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(smp_rank)%rank + 1000
       sz32 = shmsz64 * 0.1           ! 10% for outbound circular buffer
       temp_ptr = local_arena % newblock(sz32, cioout_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
       ok = local_cio_out % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(relayrank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
+      mem % pe(smp_rank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
     endif
 
     if(debug_mode) write(6,*)'DEBUG: allocated '//heap_name//' '//cioin_name//' '//cioout_name
     if(debug_mode) write(6,'(A,3Z18.16)') ' DEBUG: displacements =', &
-                     mem % pe(relayrank) % heap, mem % pe(relayrank) % cio_in, mem % pe(relayrank) % cio_out
+                     mem % pe(smp_rank) % heap, mem % pe(smp_rank) % cio_in, mem % pe(smp_rank) % cio_out
     call flush(6)
   endif   ! (color == SERVER_COLOR)
   goto 3       ! no error, bypass
@@ -987,6 +1131,8 @@ function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio
     call MPI_Finalize(ierr)
     stop
   endif
+  call build_relay_model_index()
+  if(debug_mode .and. (color == RELAY_COLOR .or. color == MODEL_COLOR)) call build_print_model_index()
 ! split IO PEs into server and relay PEs, create 1 sided communication window
 ! set return code to appropriate value or call supplied relay subroutine
 ! ===================================================================================

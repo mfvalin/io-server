@@ -19,7 +19,7 @@ module ioserver_functions
 #define VERSION 10000
 #endif
   include 'io-server/ioserver.inc'
-!   private :: ioserver_int_init
+  private :: ioserver_int_init
 
   save
 
@@ -105,7 +105,7 @@ module ioserver_functions
   private :: bump_ioserver_tag
 
  contains
-
+  
   function set_io_debug(dbg) result(status)
     implicit none
     logical, intent(IN) :: dbg

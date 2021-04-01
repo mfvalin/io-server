@@ -40,6 +40,7 @@ integer, parameter :: IO_BASE      = 1001
 integer, parameter :: IO_RELAY     = 1002
 integer, parameter :: IO_SERVER    = 1003
 
+
 type :: comm_rank_size
 integer :: comm = -1
 integer :: rank = -1
@@ -64,6 +65,9 @@ import :: C_INT
 implicit none
 integer(C_INT) :: status   ! .true. if time to quit
 end function IOserver_is_time_to_quit
+
+subroutine print_io_colors()
+end subroutine print_io_colors
 
 function IOserver_get_crs(color) result(crs)
 import :: comm_rank_size
