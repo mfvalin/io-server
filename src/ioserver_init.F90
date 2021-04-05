@@ -36,6 +36,14 @@ module ioserver_constants
   integer, parameter :: IO_RELAY     = 1002
   integer, parameter :: IO_SERVER    = 1003
 !!
+  type :: comm_rank_size
+    integer :: comm = -1
+    integer :: rank = -1
+    integer :: size = 0
+  end type
+  type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
+!!
+!!
 !! F_EnD
 end module ioserver_constants
 
@@ -58,15 +66,28 @@ module ioserver_memory_mod
     integer(C_INT), dimension(4) :: pad             ! pad to a size of 64 bytes
   end type
 
-!   integer, parameter :: MAX_RESERVED = 128
+  type, bind(C) :: qualified_address
+    type(C_PTR)    :: p                   ! address (C pointer)
+    integer(C_INT) :: color               ! PE color (MODEL_COLOR | RELAY_COLOR | NODE_COLOR)
+    integer(C_INT) :: rank                ! pe rank in above color
+  end type
+
+  integer, parameter :: MAX_SMS = 255
   type, bind(C) :: shared_memory
     integer(C_INT) :: version      = 10000                 ! version 1.0.0
     integer(C_INT) :: time_to_quit = 0
     ! NO-OP PEs do not use anything beyond this point
-    integer(C_INT), dimension(14) :: pad                   ! next item should be aligned on a 64 byte boundary
+    type(C_PTR)         :: relay_out_ra = C_NULL_PTR       ! arena address for outbound relay process
+    type(C_PTR)         :: relay_in_ra  = C_NULL_PTR       ! arena address for inbound relay process
+    integer(C_INT), dimension(10) :: pad                   ! next item to be aligned on a 64 byte boundary
+    type(qualified_address), dimension(0:MAX_SMS) :: sms   ! message pointer area
     ! pe MUST be the last element of this structure
     type(pe_info), dimension(0:MAX_PES_PER_NODE-1) :: pe   ! origin 0, indexed by rank
   end type
+
+  ! offsets with respect to local address for shared memory arena (add to local address to get correct target address)
+  integer(C_INTPTR_T) :: relay_out_offset = 0               ! offset for outbound relay PE arena address
+  integer(C_INTPTR_T) :: relay_in_offset  = 0               ! offset for inbound relay PE arena address
 
   type(shared_memory), pointer, volatile :: mem       => NULL()      !  will point to start of control shared memory
   integer :: max_smp_pe = 0
@@ -74,6 +95,9 @@ module ioserver_memory_mod
   integer :: max_relay_index = -1
   integer, dimension(:), pointer :: compute_index     => NULL()      ! sm_rank of compute PEs
   integer :: max_compute_index = -1
+
+  integer :: relay_out_rank = -1                            ! rank in pe_info table of outbound relay process
+  integer :: relay_in_rank  = -1                            ! rank in pe_info table of inbound relay process
 
   private :: initialized
   logical :: initialized = .false.
@@ -150,16 +174,6 @@ module ioserver_internal_mod
   use ioserver_memory_mod
   implicit none
   include 'mpif.h'
-!! F_StArT
-!!
-  type :: comm_rank_size
-    integer :: comm = -1
-    integer :: rank = -1
-    integer :: size = 0
-  end type
-  type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
-!!
-!! F_EnD
 
   save
 
@@ -260,14 +274,64 @@ module ioserver_internal_mod
 !!
 !! F_EnD
 
-!!  translate my address in shared memory arena into a valid address for RELAY_COLOR|MODEL_COLOR of rank N
-function ptr_translate(from, to_color, to_rank) result(to) BIND(C,name='Ptr_translate')
-!! import :: C_PTR, C_INT
+!! from OTHER PE space address ==> LOCAL space address (in shared memory arena)
+!! get my address in shared memory arena from a valid address for RELAY_COLOR|MODEL_COLOR|NODE_COLOR of rank N
+!! F_StArT
+function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,name='Ptr_translate_from')
+!! F_EnD
   implicit none
+!! F_StArT
+!! import :: C_PTR, C_INT
+  type(C_PTR), intent(IN), value :: from
+  integer(C_INT), intent(IN), value :: from_color
+  integer(C_INT), intent(IN), value :: from_rank
+  type(C_PTR) :: local
+!! F_EnD
+
+  integer :: rank
+  integer(C_INTPTR_T) :: offset, new
+  type(C_PTR) :: my_base, new_base
+
+  local = C_NULL_PTR
+  my_base = mem % pe(smp_rank) % io_ra   ! local address of memory arena
+
+  new_base = C_NULL_PTR                  ! find new base
+  if(from_color == NODE_COLOR) then      ! translate from address of PE of rank from_rank in SMP node
+    new_base = mem % pe(from_rank) % io_ra
+  endif
+  if(from_color == MODEL_COLOR) then     ! translate from address of compute PE of rank from_rank
+    new_base = mem % pe(compute_index(from_rank)) % io_ra
+  endif
+  if(from_color == RELAY_COLOR) then     ! translate from address of relay PE of rank from_rank
+    new_base = mem % pe(relay_index(from_rank)) % io_ra
+  endif
+  if(.not. C_ASSOCIATED(new_base)) return   ! invalid color
+
+  offset = ptr_diff(new_base, from)      ! offset in other PE space
+  if(offset < 0) return                  ! not in shared memory arena
+
+  new   = transfer(my_base, new)         ! make large integer from C pointer
+  new   = new + offset                   ! add offset to my base
+  local = transfer(new, local)           ! honest C pointer
+
+!! F_StArT
+end function ptr_translate_from
+!!
+!! F_EnD
+
+!! from LOCAL space address ==> OTHER PE space address (in shared memory arena)
+!! translate my address in shared memory arena into a valid address for RELAY_COLOR|MODEL_COLOR|NODE_COLOR of rank N
+!! F_StArT
+function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_translate_to')
+!! F_EnD
+  implicit none
+!! F_StArT
+!! import :: C_PTR, C_INT
   type(C_PTR), intent(IN), value :: from
   integer(C_INT), intent(IN), value :: to_color
   integer(C_INT), intent(IN), value :: to_rank
   type(C_PTR) :: to
+!! F_EnD
 
   integer :: rank
   integer(C_INTPTR_T) :: offset, new
@@ -279,19 +343,25 @@ function ptr_translate(from, to_color, to_rank) result(to) BIND(C,name='Ptr_tran
   if(offset < 0) return                  ! not in shared memory arena
 
   new_base = C_NULL_PTR                  ! find new base
-  if(to_color == MODEL_COLOR) then
+  if(to_color == NODE_COLOR) then        ! translate to address of PE of rank to_rank in SMP node
+    new_base = mem % pe(to_rank) % io_ra
+  endif
+  if(to_color == MODEL_COLOR) then       ! translate to address of compute PE of rank to_rank
     new_base = mem % pe(compute_index(to_rank)) % io_ra
   endif
-  if(to_color == RELAY_COLOR) then
+  if(to_color == RELAY_COLOR) then       ! translate to address of relay PE of rank to_rank
     new_base = mem % pe(relay_index(to_rank)) % io_ra
   endif
-  if(.not. C_ASSOCIATED(new_base)) return
+  if(.not. C_ASSOCIATED(new_base)) return   ! invalid color
 
   new = transfer(new_base, new)          ! make large integer from C pointer
   new = new + offset                     ! add offset to new base
   to  = transfer(new, to)                ! honest C pointer
 
-end function ptr_translate
+!! F_StArT
+end function ptr_translate_to
+!!
+!! F_EnD
 
 !! F_StArT
 function ptr_diff(pref, p) result(diff) BIND(C,name='Ptr_diff')  !  address difference (in bytes)
@@ -308,13 +378,7 @@ function ptr_diff(pref, p) result(diff) BIND(C,name='Ptr_diff')  !  address diff
 ! call flush(6)
   p0 = transfer(pref, p0)   !  translate C pointer pref into large enough integer
   p1 = transfer(p,    p1)   !  translate C pointer p into large enough integer
-  if(p1 < p0) then
-    diff = -1         ! error
-  else
-    diff = p1 - p0    ! p - pref
-  endif
-! write(6,*)'diff =',diff
-! call flush(6)
+  diff = p1 - p0    ! p - pref
 !! F_StArT
 end function ptr_diff
 !!
@@ -825,19 +889,26 @@ end function IOserver_int_finalize
 !!
 !! F_EnD
 
+! function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class) result(status)
+!   integer, intent(OUT) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
+!   integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
+!   integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
+!   integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
+!   integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+!   integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
 !! F_StArT
-function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class) result(status)
+function IOserver_int_init(nio_node, app_class) result(status)
 !! F_EnD
   use ioserver_internal_mod
 !! F_StArT
 !!import :: C_FUNPTR
   implicit none
-  integer, intent(OUT) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-  integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-  integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-  integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-  integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-  integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
+  integer :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
+  integer :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
+  integer :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
+  integer :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
+  integer :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+  integer :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
   integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
   character(len=*), intent(IN) :: app_class
   integer :: status

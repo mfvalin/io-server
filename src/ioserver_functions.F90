@@ -91,13 +91,13 @@ module ioserver_functions
   integer, parameter     :: ioserver_version = VERSION
   logical                :: debug = .false.
 
-  private :: model, modelio, allio, nodeio, serverio, nodecom
-  integer :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-  integer :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-  integer :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-  integer :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-  integer :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-  integer :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
+!   private :: model, modelio, allio, nodeio, serverio, nodecom
+!   integer :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
+!   integer :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
+!   integer :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
+!   integer :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
+!   integer :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+!   integer :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
 
 !   integer, parameter :: MAXGRIDS = 1024
 !   type(grid), dimension(MAXGRIDS) :: gdt   ! grid description table
@@ -151,9 +151,11 @@ module ioserver_functions
     implicit none
     class(server_file), intent(IN) :: this
     integer :: ierr
+    type(comm_rank_size), save :: model_crs = COMM_RANK_SIZE_NULL
 
     if(debug .or. this % debug) then
-      call MPI_Barrier(model, ierr)    ! in debug mode, enforce collective mode
+      if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
+      call MPI_Barrier(model_crs % comm, ierr)    ! in debug mode, enforce collective mode
     endif
     fd_seq = fd_seq + 1
   end subroutine bump_ioserver_tag
@@ -181,7 +183,8 @@ module ioserver_functions
     integer :: status
     type(comm_rank_size) :: crs 
 
-    status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class)
+!     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class)
+    status = ioserver_int_init(nio_node, app_class)
     if(.not. initialized) then
       local_heap  = IOserver_get_heap()
       cio_in      = IOserver_get_cio_in()
@@ -190,8 +193,8 @@ module ioserver_functions
       print *,'initializing io heap and circular buffers'
     endif
     crs = IOserver_get_crs(MODEL_COLOR)
-    if(model .ne. crs % comm) print *,'ERROR : model .ne. crs % comm'
-    if(model .eq. crs % comm) print *,'INFO : model .eq. crs % comm'
+!     if(model .ne. crs % comm) print *,'ERROR : model .ne. crs % comm'
+!     if(model .eq. crs % comm) print *,'INFO : model .eq. crs % comm'
   end function ioserver_init
 
   function ioserver_finalize() result(status)

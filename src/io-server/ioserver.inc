@@ -40,7 +40,6 @@ integer, parameter :: IO_BASE      = 1001
 integer, parameter :: IO_RELAY     = 1002
 integer, parameter :: IO_SERVER    = 1003
 
-
 type :: comm_rank_size
 integer :: comm = -1
 integer :: rank = -1
@@ -48,7 +47,24 @@ integer :: size = 0
 end type
 type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
 
+
 interface
+
+function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,name='Ptr_translate_from')
+import :: C_PTR, C_INT
+type(C_PTR), intent(IN), value :: from
+integer(C_INT), intent(IN), value :: from_color
+integer(C_INT), intent(IN), value :: from_rank
+type(C_PTR) :: local
+end function ptr_translate_from
+
+function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_translate_to')
+import :: C_PTR, C_INT
+type(C_PTR), intent(IN), value :: from
+integer(C_INT), intent(IN), value :: to_color
+integer(C_INT), intent(IN), value :: to_rank
+type(C_PTR) :: to
+end function ptr_translate_to
 
 function ptr_diff(pref, p) result(diff) BIND(C,name='Ptr_diff')  !  address difference (in bytes)
 import :: C_PTR, C_INTPTR_T
@@ -174,15 +190,15 @@ function IOserver_int_finalize() result(status)
 integer :: status
 end function IOserver_int_finalize
 
-function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class) result(status)
+function IOserver_int_init(nio_node, app_class) result(status)
 import :: C_FUNPTR
 implicit none
-integer, intent(OUT) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
+integer :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
+integer :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
+integer :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
+integer :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
+integer :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
+integer :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
 integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
 character(len=*), intent(IN) :: app_class
 integer :: status
