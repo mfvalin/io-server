@@ -248,10 +248,15 @@ circular_buffer_p CB_init(
     )
 //C_EnD
 {
-  if (p == NULL)
+  if (p == NULL) {
+    printf("ERROR: Given null pointer for initializing a circular_buffer\n");
     return NULL;
-  if (nwords < MIN_CIRC_BUFFER_SIZE)
+  }
+
+  if (nwords < MIN_CIRC_BUFFER_SIZE) {
+    printf("ERROR: not requesting enough elements for circular_buffer initialization!\n");
     return NULL; // area is too small
+  }
 
   p->m.version         = FIOL_VERSION;
   p->m.first           = 0;
@@ -403,8 +408,10 @@ circular_buffer_p CB_from_pointer(
   circular_buffer_p t;
   size_t            sz = nwords * sizeof(data_element);
 
-  if (sz < MIN_CIRC_BUFFER_SIZE)
+  if (sz < MIN_CIRC_BUFFER_SIZE) {
+    printf("NOT ENOUGH ELEMENTS\n");
     return NULL;
+  }
   t = (circular_buffer_p)p;
   return CB_init(t, nwords);
 }
@@ -704,37 +711,45 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
 //  C_EnD
 {
   if (buffer == NULL) {
-    // printf("Invalid b/c NULL pointer\n");
+    printf("Invalid b/c NULL pointer\n");
     return -1;
   }
 
   if (buffer->m.version != FIOL_VERSION) {
-    // printf("INVALID b/c wrong version (%d, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
+    printf("INVALID b/c wrong version (%d, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
     return -1;
   }
 
   if (buffer->m.first != 0) {
-    // printf("INVALID b/c m.first is NOT 0 (%d)\n", buffer->m.first);
+    printf("INVALID b/c m.first is NOT 0 (%d)\n", buffer->m.first);
     return -1;
   }
 
   if (buffer->m.in[CB_FULL] < buffer->m.first || buffer->m.in[CB_FULL] >= buffer->m.limit) {
-    // printf("INVALID b/c \"in\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in, buffer->m.version);
+    printf(
+        "INVALID b/c \"in\" full pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in[CB_FULL],
+        buffer->m.version);
     return -1;
   }
 
   if (buffer->m.out[CB_FULL] < buffer->m.first || buffer->m.out[CB_FULL] >= buffer->m.limit) {
-    // printf("INVALID b/c \"out\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out, buffer->m.limit);
+    printf(
+        "INVALID b/c \"out\" full pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out[CB_FULL],
+        buffer->m.limit);
     return -1;
   }
 
   if (buffer->m.in[CB_PARTIAL] < buffer->m.first || buffer->m.in[CB_PARTIAL] >= buffer->m.limit) {
-    // printf("INVALID b/c \"in\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.in, buffer->m.version);
+    printf(
+        "INVALID b/c \"in\" partial pointer is not between first and limit (%d, limit = %d)\n",
+        buffer->m.in[CB_PARTIAL], buffer->m.version);
     return -1;
   }
 
   if (buffer->m.out[CB_PARTIAL] < buffer->m.first || buffer->m.out[CB_PARTIAL] >= buffer->m.limit) {
-    // printf("INVALID b/c \"out\" pointer is not between first and limit (%d, limit = %d)\n", buffer->m.out, buffer->m.limit);
+    printf(
+        "INVALID b/c \"out\" partial pointer is not between first and limit (%d, limit = %d)\n",
+        buffer->m.out[CB_PARTIAL], buffer->m.limit);
     return -1;
   }
 
