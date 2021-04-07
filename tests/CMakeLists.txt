@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(TEST_SOURCES
-#   cb_plus_dcb.F90
+   cb_plus_dcb.F90
    circular_buffer.F90
    circular_buffer_fill.c
    circular_buffer_single_thread.F90
