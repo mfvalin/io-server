@@ -294,14 +294,13 @@ function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,na
   new_base = C_NULL_PTR                  ! find new base
   if(from_color == NODE_COLOR) then      ! translate from address of PE of rank from_rank in SMP node
     new_base = mem % pe(from_rank) % io_ra
-  endif
-  if(from_color == MODEL_COLOR) then     ! translate from address of compute PE of rank from_rank
+  else if(from_color == MODEL_COLOR) then     ! translate from address of compute PE of rank from_rank
     new_base = mem % pe(compute_index(from_rank)) % io_ra
-  endif
-  if(from_color == RELAY_COLOR) then     ! translate from address of relay PE of rank from_rank
+  else if(from_color == RELAY_COLOR) then     ! translate from address of relay PE of rank from_rank
     new_base = mem % pe(relay_index(from_rank)) % io_ra
+  else
+    return   ! invalid color
   endif
-  if(.not. C_ASSOCIATED(new_base)) return   ! invalid color
 
   offset = Pointer_offset(new_base, from, 1)      ! offset in other PE space
   if(offset < 0) return                  ! not in shared memory arena
@@ -341,14 +340,13 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
   new_base = C_NULL_PTR                  ! find new base
   if(to_color == NODE_COLOR) then        ! translate to address of PE of rank to_rank in SMP node
     new_base = mem % pe(to_rank) % io_ra
-  endif
-  if(to_color == MODEL_COLOR) then       ! translate to address of compute PE of rank to_rank
+  else if(to_color == MODEL_COLOR) then       ! translate to address of compute PE of rank to_rank
     new_base = mem % pe(compute_index(to_rank)) % io_ra
-  endif
-  if(to_color == RELAY_COLOR) then       ! translate to address of relay PE of rank to_rank
+  else if(to_color == RELAY_COLOR) then       ! translate to address of relay PE of rank to_rank
     new_base = mem % pe(relay_index(to_rank)) % io_ra
+  else
+    return   ! invalid color
   endif
-  if(.not. C_ASSOCIATED(new_base)) return   ! invalid color
 
   new = transfer(new_base, new)          ! make large integer from C pointer
   new = new + offset                     ! add offset to new base

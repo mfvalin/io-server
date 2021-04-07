@@ -156,11 +156,13 @@ subroutine verify_translations()
   type(shared_memory), pointer :: mem
   type(C_PTR) :: p_base, p_relay, temp
   integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
+  integer(C_INTPTR_T) :: iora0
   type(comm_rank_size) :: fullnode_crs
   integer :: i, errors
   
   fullnode_crs = IOserver_get_crs(NODE_COLOR)   ! smp node information
   p_relay = IOserver_get_win_ptr(IO_RELAY)      ! memory arena address
+  iora0 = transfer(p_relay, iora0)
   p_base  = IOserver_get_win_ptr(IO_CONTROL)    ! control memory adddress
   call C_F_POINTER(p_base, mem)                 ! Fortran control memory description
 
@@ -180,9 +182,24 @@ subroutine verify_translations()
     endif
   enddo
   if(errors == 0) then
-    write(6,*) 'INFO: address translations are coherent'
+    write(6,*) 'INFO: address translations_to are coherent'
   else
-    write(6,*) 'INFO: number of errors in address translations =',errors
+    write(6,*) 'INFO: number of errors in address translations_to =',errors
+  endif
+  do i = 0, fullnode_crs % size -1
+    iora2(i) = transfer(ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i), iora2(i))
+  enddo
+  errors = 0
+  do i = 0, fullnode_crs % size -1
+    if(iora0 .ne. iora2(i) ) then
+      errors = errors + 1
+      write(6,'(A,/(5Z18.16))') 'ERROR: bad address translation, expected , found',iora0, iora2(i)
+    endif
+  enddo
+  if(errors == 0) then
+    write(6,*) 'INFO: address translations_from are coherent'
+  else
+    write(6,*) 'INFO: number of errors in address translations_from =',errors
   endif
 
 end subroutine verify_translations
