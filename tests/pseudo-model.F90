@@ -147,6 +147,45 @@ program pseudomodelandserver
   call mpi_finalize(status)
 end program
 
+subroutine verify_translations()
+  use ISO_C_BINDING
+  use helpers
+  use ioserver_functions
+  use memory_arena_mod
+  implicit none
+  type(shared_memory), pointer :: mem
+  type(C_PTR) :: p_base, p_relay, temp
+  integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
+  type(comm_rank_size) :: fullnode_crs
+  integer :: i, errors
+  
+  fullnode_crs = IOserver_get_crs(NODE_COLOR)   ! smp node information
+  p_relay = IOserver_get_win_ptr(IO_RELAY)      ! memory arena address
+  p_base  = IOserver_get_win_ptr(IO_CONTROL)    ! control memory adddress
+  call C_F_POINTER(p_base, mem)                 ! Fortran control memory description
+
+  do i = 0, fullnode_crs % size -1              ! p_relay for all PEs for which it makes sense
+    iora1(i) = transfer(mem % pe(i) % io_ra , iora1(i))
+  enddo
+!   write(6,'(A,/(5Z18.16))') 'IO-RA :', iora1(0:fullnode_crs % size -1)
+  do i = 0, fullnode_crs % size -1              ! translate local address into other PE address
+    iora2(i) = transfer(ptr_translate_to(p_relay, NODE_COLOR, i), iora2(i))
+  enddo
+!   write(6,'(A,/(5Z18.16))') '      :', iora2(0:fullnode_crs % size -1)
+  errors = 0
+  do i = 0, fullnode_crs % size -1
+    if(iora1(i) .ne. iora2(i) ) then
+      errors = errors + 1
+      write(6,'(A,/(5Z18.16))') 'ERROR: bad address translation, expected , found',iora1(i), iora2(i)
+    endif
+  enddo
+  if(errors == 0) then
+    write(6,*) 'INFO: address translations are coherent'
+  else
+    write(6,*) 'INFO: number of errors in address translations =',errors
+  endif
+
+end subroutine verify_translations
 ! =============================================================================================
 !                      COMPUTE     ( skeleton demo code, interim API )
 ! =============================================================================================
@@ -159,10 +198,11 @@ subroutine compute_fn()
   integer :: model, allio, relay, server, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, ierr, noderank, nodesize
   type(memory_arena) :: ma
-  type(comm_rank_size) :: local_crs, model_crs, relay_crs, fullnode_crs
+  type(comm_rank_size) :: local_crs, model_crs, relay_crs
   type(comm_rank_size) :: modelio_crs, allio_crs, server_crs, nodecom_crs
-  type(C_PTR) :: p_base, p_relay, p_server, temp
-  integer(C_INTPTR_T) :: sz_base, sz_relay, sz_server
+  type(C_PTR) :: p_relay, temp
+
+  call verify_translations()
 
   model_crs    = IOserver_get_crs(MODEL_COLOR)
   modelio_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR)
@@ -170,7 +210,6 @@ subroutine compute_fn()
   relay_crs    = IOserver_get_crs(RELAY_COLOR)
   server_crs   = IOserver_get_crs(SERVER_COLOR)
   nodecom_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
-  fullnode_crs = IOserver_get_crs(NODE_COLOR)
 
   model   = model_crs % comm
   modelio = modelio_crs % comm
@@ -187,8 +226,7 @@ subroutine compute_fn()
   write(6,*)'START: compute PE',rank+1,' of',size
   write(6,*)' model+io node PE',noderank+1,' of', nodesize
 
-  call IOSERVER_get_winmem(p_base, p_relay, p_server)
-  call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)  ! of interest is sz_relay
+  p_relay = IOserver_get_win_ptr(IO_RELAY)
 
   temp = ma%clone(p_relay)
 
@@ -217,6 +255,10 @@ subroutine io_relay_fn()
   character(len=8) :: cio_name
 
   call io_relay_mod_init()
+relay_debug = .true.
+  if(relay_debug) then   ! mem % pe() % io_ra
+    call verify_translations()
+  endif
 
   model    = model_crs % comm
   modelio  = modelio_crs % comm

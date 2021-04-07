@@ -14,6 +14,7 @@
 module ioserver_functions
   use shmem_heap
   use circular_buffer_module
+  use ioserver_constants
   implicit none
 #if ! defined(VERSION)
 #define VERSION 10000

@@ -20,40 +20,6 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 ! This file has been generated from ioserver_init.F90
-
-integer(C_SIZE_T), parameter :: KBYTE = 1024
-integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
-integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
-
-integer, parameter :: NO_COLOR     = 0
-integer, parameter :: MODEL_COLOR  = 1
-integer, parameter :: RELAY_COLOR  = 2
-integer, parameter :: SERVER_COLOR = 4
-integer, parameter :: OUTPUT_COLOR = 8
-integer, parameter :: INPUT_COLOR  = 16
-integer, parameter :: INOUT_COLOR  = INPUT_COLOR + OUTPUT_COLOR
-integer, parameter :: NODE_COLOR   = 4096
-integer, parameter :: NO_OP_COLOR  = 8192   ! MUST BE THE HIGHEST VALUE
-
-integer, parameter :: IO_CONTROL   = 1000
-integer, parameter :: IO_BASE      = 1001
-integer, parameter :: IO_RELAY     = 1002
-integer, parameter :: IO_SERVER    = 1003
-
-type :: comm_rank_size
-integer :: comm = -1
-integer :: rank = -1
-integer :: size = 0
-end type
-type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
-
-type, bind(C) :: qualified_address
-type(C_PTR)    :: p                   ! address (C pointer)
-integer(C_INT) :: color               ! PE color (MODEL_COLOR | RELAY_COLOR | NODE_COLOR)
-integer(C_INT) :: rank                ! pe rank in above color
-end type
-
-
 interface
 
 function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,name='Ptr_translate_from')

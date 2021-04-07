@@ -15,8 +15,6 @@
 module ioserver_constants
   use ISO_C_BINDING
   implicit none
-!! F_StArT
-!!
   integer(C_SIZE_T), parameter :: KBYTE = 1024
   integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
   integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
@@ -35,7 +33,7 @@ module ioserver_constants
   integer, parameter :: IO_BASE      = 1001
   integer, parameter :: IO_RELAY     = 1002
   integer, parameter :: IO_SERVER    = 1003
-!!
+
   type :: comm_rank_size
     integer :: comm = -1
     integer :: rank = -1
@@ -48,17 +46,6 @@ module ioserver_constants
     integer(C_INT) :: color               ! PE color (MODEL_COLOR | RELAY_COLOR | NODE_COLOR)
     integer(C_INT) :: rank                ! pe rank in above color
   end type
-!!
-!!
-!! F_EnD
-end module ioserver_constants
-
-module ioserver_memory_mod
-  use ISO_C_BINDING
-  use ioserver_constants
-  implicit none
-
-  save
 
   integer, parameter :: MAX_PES_PER_NODE = 128
   type, bind(C) :: pe_info 
@@ -84,6 +71,15 @@ module ioserver_memory_mod
     ! pe MUST be the last element of this structure
     type(pe_info), dimension(0:MAX_PES_PER_NODE-1) :: pe   ! origin 0, indexed by rank
   end type
+
+end module ioserver_constants
+
+module ioserver_memory_mod
+  use ISO_C_BINDING
+  use ioserver_constants
+  implicit none
+
+  save
 
   ! offsets with respect to local address for shared memory arena (add to local address to get correct target address)
   integer(C_INTPTR_T) :: relay_out_offset = 0               ! offset for outbound relay PE arena address
