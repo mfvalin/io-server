@@ -307,7 +307,7 @@ function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,na
   endif
   if(.not. C_ASSOCIATED(new_base)) return   ! invalid color
 
-  offset = ptr_diff(new_base, from)      ! offset in other PE space
+  offset = Pointer_offset(new_base, from, 1)      ! offset in other PE space
   if(offset < 0) return                  ! not in shared memory arena
 
   new   = transfer(my_base, new)         ! make large integer from C pointer
@@ -339,7 +339,7 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
 
   to = C_NULL_PTR
   my_base = mem % pe(smp_rank) % io_ra   ! local address of memory arena
-  offset = ptr_diff(my_base, from)       ! offset in local space
+  offset = Pointer_offset(my_base, from, 1)       ! offset in local space
   if(offset < 0) return                  ! not in shared memory arena
 
   new_base = C_NULL_PTR                  ! find new base
@@ -360,27 +360,6 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
 
 !! F_StArT
 end function ptr_translate_to
-!!
-!! F_EnD
-
-!! F_StArT
-function ptr_diff(pref, p) result(diff) BIND(C,name='Ptr_diff')  !  address difference (in bytes)
-!! import :: C_PTR, C_INTPTR_T
-!! F_EnD
-  implicit none
-!! F_StArT
-  type(C_PTR), intent(IN), value :: pref    ! reference address
-  type(C_PTR), intent(IN), value :: p       ! address for which an offset (displacement) is needed
-  integer(C_INTPTR_T)            :: diff
-!! F_EnD
-  integer(C_INTPTR_T) :: p0, p1
-! write(6,*)'ptr_diff'
-! call flush(6)
-  p0 = transfer(pref, p0)   !  translate C pointer pref into large enough integer
-  p1 = transfer(p,    p1)   !  translate C pointer p into large enough integer
-  diff = p1 - p0    ! p - pref
-!! F_StArT
-end function ptr_diff
 !!
 !! F_EnD
 
@@ -1116,7 +1095,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       temp_ptr = local_heap % create(temp_ptr, sz32)         ! allocate local heap
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
-      mem % pe(smp_rank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
+      mem % pe(smp_rank) % heap = Pointer_offset(local_arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
 
       !  4%  of per PE size for inbound circular buffer
       write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(smp_rank)%rank
@@ -1125,7 +1104,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_in % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(smp_rank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
+      mem % pe(smp_rank) % cio_in = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
 
       !  10%  of per PE size for outbound circular buffer
       write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(smp_rank)%rank + 1000
@@ -1134,7 +1113,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_out % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(smp_rank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
+      mem % pe(smp_rank) % cio_out = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
 
     else                                                     ! compute processes
     ! =========================================================================
@@ -1157,7 +1136,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       temp_ptr = local_heap % create(temp_ptr, sz32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
-      mem % pe(smp_rank) % heap = ptr_diff(local_arena % addr() , temp_ptr)    ! offset of my heap in memory arena
+      mem % pe(smp_rank) % heap = Pointer_offset(local_arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
 
       !  4%  of per PE size for relay -> compute circular buffer
       write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(smp_rank)%rank
@@ -1167,7 +1146,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       if(debug_mode) call print_created(temp_ptr, cioin_name, sz32)
       ok = local_cio_in % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(smp_rank) % cio_in = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my inbound CIO in memory arena
+      mem % pe(smp_rank) % cio_in = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
 
       ! 10%  of per PE size for compute -> relay circular buffer
       write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(smp_rank)%rank + 1000
@@ -1177,7 +1156,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
       ok = local_cio_out % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
-      mem % pe(smp_rank) % cio_out = ptr_diff(local_arena % addr() , temp_ptr)  ! offset of my outbound CIO in memory arena
+      mem % pe(smp_rank) % cio_out = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
     endif
 
     if(debug_mode) write(6,*)'DEBUG: allocated '//heap_name//' '//cioin_name//' '//cioout_name

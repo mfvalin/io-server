@@ -158,6 +158,7 @@ intptr_t Pointer_offset(
 //  C_EnD
   intptr_t offset = (char *)to - (char *)ref;
   while(szeof > 1) { offset >>= 1 ; szeof >>= 1 ; }
+  return offset;
 }
 
 
