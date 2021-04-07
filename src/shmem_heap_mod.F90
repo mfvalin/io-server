@@ -341,6 +341,24 @@ module shmem_heap
     subroutine ShmemHeapDumpInfo() bind(C,name='ShmemHeapDumpInfo')
     end subroutine ShmemHeapDumpInfo
 
+    function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset')
+      import :: C_INTPTR_T, C_PTR, C_INT
+      implicit none
+      type(C_PTR), intent(IN), value    :: ref
+      type(C_PTR), intent(IN), value    :: to
+      integer(C_INT), intent(IN), value :: szeof
+      integer(C_INTPTR_T)               :: offset
+    end function Pointer_offset
+
+    function Pointer_add_offset(ref, offset, szeof) result(to) bind(C,name='Pointer_add_offset')
+      import :: C_INTPTR_T, C_PTR, C_INT
+      implicit none
+      type(C_PTR), intent(IN), value          :: ref
+      integer(C_INTPTR_T), intent(IN), value  :: offset
+      integer(C_INT), intent(IN), value       :: szeof
+      type(C_PTR)                             :: to
+    end function Pointer_add_offset
+
   end interface
 
 !> \endcond

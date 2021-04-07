@@ -47,6 +47,12 @@ integer :: size = 0
 end type
 type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
 
+type, bind(C) :: qualified_address
+type(C_PTR)    :: p                   ! address (C pointer)
+integer(C_INT) :: color               ! PE color (MODEL_COLOR | RELAY_COLOR | NODE_COLOR)
+integer(C_INT) :: rank                ! pe rank in above color
+end type
+
 
 interface
 

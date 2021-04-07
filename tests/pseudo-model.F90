@@ -245,7 +245,8 @@ subroutine io_relay_fn()
     temp = ma % getblock(bsize, bflags, cio_name) 
     if( C_ASSOCIATED(temp) ) then
       itemp = transfer(temp, itemp)
-      iarena = ptr_diff(arena, temp)   ! find offset in arena
+!       iarena = ptr_diff(arena, temp)   ! find offset in arena
+      iarena = Pointer_offset(arena, temp, 1)  ! find offset in arena (in bytes)
       write(6,1) ' NOTE: block '//cio_name//' found, size =', bsize, ', flags =', bflags,' address =', itemp,', arena offset =', iarena
     else
       write(6,1) ' ERROR: block '//cio_name//' NOT FOUND'

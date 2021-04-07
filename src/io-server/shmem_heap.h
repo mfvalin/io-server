@@ -70,6 +70,20 @@ typedef  struct {
     int d[5];             //!< the 5 allowed dimensions     (private information, DO NOT USE)
     int tkr ;             //!< type, kind, rank information (private information, DO NOT USE)
   } meta_c;
+//! get offset between 2 pointers in specified units (1/2/4/8/16 bytes)
+//! @return offset between 2 pointers in specified units (1/2/4/8/16 bytes)
+intptr_t Pointer_offset(
+  void *ref,                //!< [in]  reference address
+  void *to,                 //!< [in]  pointer for whic a difference with ref is sought
+  uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
+  );
+//! add offset to pointer in specified units (1/2/4/8/16 bytes)
+//! @return pointer after adding offset in specified units (1/2/4/8/16 bytes)
+void *Pointer_add_offset(
+  void *ref,                //!< [in]  reference address
+  intptr_t offset,          //!< [in]  offset to apply
+  uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
+  );
 //! print heap statistics
 //! @return none
 void ShmemHeapDumpInfo(

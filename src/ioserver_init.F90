@@ -42,6 +42,12 @@ module ioserver_constants
     integer :: size = 0
   end type
   type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(-1, -1, 0)
+
+  type, bind(C) :: qualified_address
+    type(C_PTR)    :: p                   ! address (C pointer)
+    integer(C_INT) :: color               ! PE color (MODEL_COLOR | RELAY_COLOR | NODE_COLOR)
+    integer(C_INT) :: rank                ! pe rank in above color
+  end type
 !!
 !!
 !! F_EnD
@@ -64,12 +70,6 @@ module ioserver_memory_mod
     integer(C_INT)      :: color                    ! PE type (compute/relay/server/...)
     integer(C_INT)      :: rank                     ! rank on node
     integer(C_INT), dimension(4) :: pad             ! pad to a size of 64 bytes
-  end type
-
-  type, bind(C) :: qualified_address
-    type(C_PTR)    :: p                   ! address (C pointer)
-    integer(C_INT) :: color               ! PE color (MODEL_COLOR | RELAY_COLOR | NODE_COLOR)
-    integer(C_INT) :: rank                ! pe rank in above color
   end type
 
   integer, parameter :: MAX_SMS = 255
