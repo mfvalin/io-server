@@ -24,15 +24,15 @@ module cb_plus_dcb_parameters
   implicit none
 
   ! integer(kind = MPI_ADDRESS_KIND), parameter :: CB_WINDOW_SIZE  = 10000
-  integer, parameter :: NUM_CB_ELEMENTS = 128
+  integer, parameter :: NUM_CB_ELEMENTS = 300
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
-  integer, parameter :: CB_MESSAGE_SIZE = 100
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 100000
-  integer, parameter :: MAX_DCB_MESSAGE_SIZE = CB_MESSAGE_SIZE * 21
+  integer, parameter :: CB_MESSAGE_SIZE = 200
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 2000
+  integer, parameter :: MAX_DCB_MESSAGE_SIZE = CB_MESSAGE_SIZE * 11
   integer, parameter :: NUM_DCB_ELEMENTS = MAX_DCB_MESSAGE_SIZE * 5
   ! integer, parameter :: NUM_DCB_ELEMENTS = 200
 
-  logical, parameter :: CHECK_CB_MESSAGES = .false.
+  logical, parameter :: CHECK_CB_MESSAGES = .true.
 
 contains
 
@@ -225,11 +225,13 @@ subroutine consumer_process(data_buffer)
   do while (.not. finished)
     finished = .true.
     do i_producer = consumer_id, num_producers - 1, num_consumers
-      num_elements = data_buffer % get(i_producer, message, 1, .true.)
+      write (6, *) 'Peeking into DCB -> #', i_producer
+      num_elements = data_buffer % peek(i_producer, message, 1)
 
+      write (6, *) 'Gotta read # from DCB -> #', message(1), i_producer
       if (message(1) > 0)  then
         finished = .false.
-        num_elements = data_buffer % get(i_producer, message(2:), message(1) * (CB_MESSAGE_SIZE + 1), .true.)
+        num_elements = data_buffer % get(i_producer, message, message(1), .true.)
       else
         write (6, *) 'Message(1): ', message(1)
       end if
@@ -293,14 +295,19 @@ subroutine model_process()
   message(1) = global_rank
   num_spaces = data_buffer % atomic_put(message, 1, .true.)
 
+  message(1) = CB_MESSAGE_SIZE
+  message(2) = global_rank
   block
     integer :: i, j
-    do i = 1, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE
-      do j = 1, CB_MESSAGE_SIZE
-        message(j) = compute_data_point(global_rank, i + j)
+    do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
+      message(3) = i
+      do j = 1, CB_MESSAGE_SIZE - 3
+        message(j + 3) = compute_data_point(global_rank, i + j)
       end do
       num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
     end do
+    message(1) = 0
+    num_spaces = data_buffer % atomic_put(message, 1, .true.)
   end block
 
   if (num_errors > 0) then
@@ -374,11 +381,12 @@ subroutine io_relay_process()
 
   block
     
-    integer :: i_data_outer, i_worker_local, i_data_check
+    integer :: i_data_check
     integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: cb_message, expected_message
     integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: dcb_message
-    integer :: dcb_message_size, msg_start
+    integer :: current_message_size
     integer :: num_elements, num_spaces
+    logical :: finished = .false.
 
     do i_compute = local_relay_id + 1, num_local_compute, num_local_relays
       cb_message(:) = -1
@@ -394,50 +402,56 @@ subroutine io_relay_process()
     dcb_message(2) = global_rank
     num_spaces = data_buffer % put(dcb_message, 2, .true.)
 
-    ! Set up message header
-    dcb_message_size = 1 + num_local_compute + num_local_compute * CB_MESSAGE_SIZE
-
-    if (dcb_message_size > MAX_DCB_MESSAGE_SIZE) then
-      write(6, *) 'DCB message size is larger than MAX_DCB_MESSAGE_SIZE !!!'
-    end if
-
-    dcb_message(1) = num_local_compute
-
-    do i_data_outer = 1, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE
-      i_worker_local = 1
+    expected_message(:) = -1
+    current_message_size = 0
+    do while (.not. finished)
+      finished = .true.
       do i_compute = local_relay_id + 1, num_local_compute, num_local_relays
-        dcb_message(i_worker_local + 1) = worker_global_ranks(i_compute)
-        num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, CB_MESSAGE_SIZE, .true.)
+        ! First check if that compute process put something in its CB
+        num_elements = local_data_buffers(i_compute) % peek(cb_message, 1)
+        write (6, *) 'Gotta read # from compute #', cb_message(1), i_compute
+        if (cb_message(1) > 0) then
+          finished = .false.
 
+          ! Read the content of the CB
+          num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, cb_message(1), .true.)
 
-        msg_start = 1 + num_local_compute + (i_worker_local - 1) * CB_MESSAGE_SIZE
-        dcb_message(msg_start:msg_start + CB_MESSAGE_SIZE - 1) = cb_message(:)
+          ! If the DCB message buffer is too full to contain that new package, flush it now
+          if (current_message_size + cb_message(1) > MAX_DCB_MESSAGE_SIZE) then
+            write(6, *) 'Putting # in DCB', current_message_size
+            num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
+            write(6, *) 'Put # in DCB', current_message_size
+            current_message_size = 0
+          end if
 
-        if (CHECK_CB_MESSAGES) then
-          do i_data_check = 1, CB_MESSAGE_SIZE
-            expected_message(i_data_check) = compute_data_point(worker_global_ranks(i_compute), i_data_outer + i_data_check)
-          end do
-          if (.not. all(expected_message == cb_message)) then
-            num_errors = num_errors + 1
-   !         if (i_compute < 5) then
-   !           write(6, *) 'GOT WRONG MESSAGE FROM WORKER # with global rank #', i_compute, worker_global_ranks(i_compute)
-   !           write(6, *) cb_message
-   !           write(6, *) 'Expected'
-   !           write(6, *) expected_message
-   !         end if
+          ! Copy the CB message to the DCB message buffer
+          dcb_message(current_message_size + 1: current_message_size + cb_message(1)) = cb_message(1:cb_message(1))
+          current_message_size = current_message_size + cb_message(1)
+
+          if (CHECK_CB_MESSAGES) then
+            expected_message(1:3) = cb_message(1:3)
+            do i_data_check = 1, cb_message(1) - 3
+               expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
+            end do
+            if (.not. all(expected_message(1:cb_message(1)) == cb_message(1:cb_message(1)))) then
+              num_errors = num_errors + 1
+      !        if (i_compute < 5) then
+      !          write(6, *) 'GOT WRONG MESSAGE FROM WORKER # with global rank #', i_compute, worker_global_ranks(i_compute)
+      !          write(6, *) cb_message
+      !          write(6, *) 'Expected'
+      !          write(6, *) expected_message
+      !        end if
+             end if
           end if
         end if
-
-        i_worker_local = i_worker_local + 1
       end do
-
-      write (6, *) 'Sending: ', dcb_message(1:4), dcb_message_size
-      num_spaces = data_buffer % put(dcb_message, dcb_message_size, .true.)
     end do
 
-    dcb_message(1:11) = 0
-    num_spaces = data_buffer % put(dcb_message, 10, .true.)
+    dcb_message(current_message_size + 1) = 0 ! Put a 'stop' signal at the end of the DCB message buffer
+    ! Send the stop signal along with the remaining data
+    num_spaces = data_buffer % put(dcb_message, current_message_size + 1, .true.)
 
+    write (6, *) 'Relay done sending'
   end block
 
   ! write (6,*) 'Relay, deleting DCB', local_relay_id

@@ -454,6 +454,10 @@ static inline int is_channel(const distributed_circular_buffer_p buffer) {
   return (buffer->channel_id >= 0);
 }
 
+static inline int is_on_server(const distributed_circular_buffer_p buffer) {
+  return (buffer->server_rank >= 0);
+}
+
 //! Set the process rank to be used for MPI communication for the given CB instance
 static inline void assign_target_channel(
     const circular_buffer_instance_p    instance,   //!< [in, out] Buffer instance whose target we want to set
@@ -497,6 +501,7 @@ static inline void update_local_header_from_remote(
 
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
   circular_buffer_instance header_copy;
+  printf("Get local header, displacement %ld\n", displacement);
   MPI_Get(
       &header_copy, num_elem, CB_MPI_ELEMENT_TYPE, target_rank, displacement, num_elem, CB_MPI_ELEMENT_TYPE,
       buffer->window);
@@ -600,6 +605,7 @@ static data_index DCB_wait_data_available(
   while ((void)(num_available = get_available_data(instance)), num_available < num_requested) {
     num_waits++;
     sleep_us(DCB_DATA_CHECK_DELAY_US);
+    //    printf("Waiting for data!\n");
   }
 
   instance->circ_buffer.stats.total_read_wait_time_ms += num_waits * DCB_DATA_CHECK_DELAY_US / 1000.0;
@@ -770,7 +776,7 @@ distributed_circular_buffer_p DCB_create(
       total_window_num_elem(buffer->num_producers, buffer->num_channels, num_elements) * (MPI_Aint)sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
-  if (is_consumer(buffer) || is_channel(buffer)) {
+  if (is_on_server(buffer)) {
     MPI_Win_allocate_shared(
         shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->server_communicator, &buffer->raw_data,
         &buffer->window_mem_dummy);
@@ -798,7 +804,7 @@ distributed_circular_buffer_p DCB_create(
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
     }
   }
-  else if (is_consumer(buffer) || is_channel(buffer)) {
+  else if (is_on_server(buffer)) {
     // Consumer nodes that are _not_ the first one (the "root") need to get the proper address in shared memory
     // in order to create the window with it
 
@@ -938,7 +944,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   MPI_Win_free(&buffer->window);
 
-  if (is_consumer(buffer) || is_channel(buffer)) {
+  if (is_on_server(buffer)) {
     MPI_Win_free(&buffer->window_mem_dummy);
   }
 
@@ -1097,15 +1103,22 @@ int32_t DCB_get_capacity_server(const distributed_circular_buffer_p buffer, int 
 //! received data is actually seen (yeah, that's not passive for real...)
 //! It also checks at every iteration for a signal indicating that it needs to do something else, like returning, or
 //! calling MPI_Barrier()
-int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer) {
+//C_StArT
+int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [in]
+                                    )
+//C_EnD
+{
   if (!is_channel(buffer))
     return -1;
 
   volatile channel_signal_t* signal = get_channel_signal_ptr(buffer, buffer->channel_id);
 
+  //  static int64_t num_syncs = 0;
+
   while (1) {
     sleep_us(DCB_WINDOW_SYNC_DELAY_US);
     MPI_Win_sync(buffer->window);
+    //    printf("Sync'd %ld times\n", ++num_syncs);
 
     switch (*signal) {
     case RSIG_SERVER_BARRIER:
@@ -1188,21 +1201,29 @@ data_index DCB_put(
   io_timer_t timer = {0, 0};
   io_timer_start(&timer);
 
-  if (DCB_wait_space_available(buffer, num_elements) < 0)
+  printf("PUT %d into buffer %d\n", num_elements, buffer->producer_id);
+  const int num_spaces = DCB_wait_space_available(buffer, num_elements);
+  if (num_spaces < 0)
     return -1;
+  printf("PUT There are %d spaces available\n", num_spaces);
 
   const int target_rank = buffer->local_header.target_rank;
 
-  MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
+  printf("PUT Target channel = %d\n", target_rank);
+  MPI_Win_lock(MPI_LOCK_SHARED, target_rank, 0, buffer->window);
+  printf("PUT Window locked\n");
 
   data_index       in_index = buffer->local_header.circ_buffer.m.in[CB_PARTIAL];
   const data_index capacity = buffer->local_header.capacity;
 
   // First segment
   const int num_elem_segment_1 = num_elements >= (capacity - in_index) ? (capacity - in_index + 1) : num_elements;
+  printf(
+      "PUT Accumulate %d (1st segment), disp %ld\n", num_elem_segment_1, buffer_element_displacement(buffer, in_index));
   MPI_Accumulate(
       src_data, num_elem_segment_1, CB_MPI_ELEMENT_TYPE, target_rank, buffer_element_displacement(buffer, in_index),
       num_elem_segment_1, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
+  printf("PUT 1st segment done\n");
 
   // Update temporary insertion pointer
   in_index += num_elem_segment_1;
@@ -1212,6 +1233,7 @@ data_index DCB_put(
   // Second segment (if there is one)
   const int num_elem_segment_2 = num_elements - num_elem_segment_1;
   if (num_elem_segment_2 > 0) {
+    printf("PUT Accumulate %d (2nd segment)\n", num_elem_segment_2);
     MPI_Accumulate(
         src_data + num_elem_segment_1, num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank,
         buffer_element_displacement(buffer, in_index), num_elem_segment_2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE,
@@ -1226,18 +1248,23 @@ data_index DCB_put(
   // Update insertion index remotely and locally
   if (operation == CB_COMMIT) {
     buffer->local_header.circ_buffer.m.in[CB_FULL] = in_index;
+    printf("PUT Accumulate index update\n");
     MPI_Accumulate(
         buffer->local_header.circ_buffer.m.in, 1, CB_MPI_ELEMENT_TYPE, target_rank,
         insertion_index_displacement(buffer), 2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
   }
 
+  printf("PUT waiting to unlock window\n");
   MPI_Win_unlock(target_rank, buffer->window);
+  printf("PUT window unlocked\n");
 
   io_timer_stop(&timer);
 
   buffer->local_header.circ_buffer.stats.num_write_elems += num_elements;
   buffer->local_header.circ_buffer.stats.num_writes++;
   buffer->local_header.circ_buffer.stats.total_write_time_ms += io_time_ms(&timer);
+
+  printf("PUT done\n");
 
   return get_available_space(&buffer->local_header);
 }
@@ -1254,13 +1281,16 @@ data_index DCB_put(
 //    integer(C_INT) :: num_available
 //  end function DCB_get
 //F_EnD
+//C_StArT
 int DCB_get(
     distributed_circular_buffer_p buffer,       //!< [in,out] DCB from which we want to read
     const int                     buffer_id,    //!< [in] Specific buffer in the DCB
     int32_t*                      dest_data,    //!< [in] Where to put the data from the buffer
     const int                     num_elements, //!< [in] How many elements to read
     const int                     operation     //!< [in] What operation to perform: extract, read or just peek
-) {
+    )
+//C_EnD
+{
   io_timer_t timer = {0, 0};
   io_timer_start(&timer);
 

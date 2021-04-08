@@ -23,9 +23,9 @@ module parameters
   implicit none
   public
 
-  integer, parameter :: NUM_BUFFER_ELEMENTS = 200
+  integer, parameter :: NUM_BUFFER_ELEMENTS = 2044
   integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
-  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = 5000
+  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = NUM_BUFFER_ELEMENTS * 2
   integer, parameter :: STEP_SIZE = 5
   integer, parameter :: NUM_CONSUMERS = 2
 
