@@ -47,6 +47,9 @@ implicit none
 integer(C_INT) :: status   ! .true. if time to quit
 end function IOserver_is_time_to_quit
 
+subroutine verify_translations()  ! chech that address translations are coherent local <--> remote
+end subroutine verify_translations
+
 subroutine print_io_colors()
 end subroutine print_io_colors
 

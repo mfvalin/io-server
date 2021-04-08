@@ -476,6 +476,60 @@ end module ioserver_internal_mod
 !  ==========================================================================================
 
 !! F_StArT
+subroutine verify_translations()  ! chech that address translations are coherent local <--> remote
+!! F_EnD
+  use ioserver_internal_mod
+  implicit none
+  integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
+  integer(C_INTPTR_T) :: iora0
+  integer :: i, errors
+  
+  iora0 = transfer(relaymem, iora0)  ! local address of relay shared memory (shared between relay and compute PEs)
+
+  do i = 0, smp_size -1              ! relaymem for all PEs for which it makes sense (put into long integer for later comparison)
+    iora1(i) = transfer(mem % pe(i) % io_ra , iora1(i))
+  enddo
+!   write(6,'(A,/(5Z18.16))') 'IO-RA :', iora1(0:smp_size -1)
+  do i = 0, smp_size -1              ! translate local address into other PE address (put into long integer for later comparison)
+    iora2(i) = transfer(ptr_translate_to(relaymem, NODE_COLOR, i), iora2(i))
+  enddo
+!   write(6,'(A,/(5Z18.16))') '      :', iora2(0:smp_size -1)
+  errors = 0
+! iora2(0) = 1  ! force error to test detection
+  do i = 0, smp_size -1              ! check that local --> remote translation is correct
+    if(iora1(i) .ne. iora2(i) ) then
+      errors = errors + 1
+      write(6,'(A,Z18.16,A,Z18.16)') 'ERROR: bad local -> remote address translation, expected',iora1(i) , ' found', iora2(i)
+    endif
+  enddo
+  if(errors == 0) then
+    write(6,*) 'INFO: local -> remote address translations are coherent'
+  else
+    write(6,*) 'INFO: number of errors in local -> remote address translations =',errors
+  endif
+  do i = 0, smp_size -1     ! translate other PE adddress into local address (put into long integer for later comparison)
+    iora2(i) = transfer(ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i), iora2(i))
+  enddo
+  errors = 0
+! iora2(0) = 0  ! force error to test detection
+  do i = 0, smp_size -1              ! check that remote --> local translation is correct
+    if(iora0 .ne. iora2(i) ) then
+      errors = errors + 1
+      write(6,'(A,Z18.16,A,Z18.16)') 'ERROR: bad remote -> local address translation, expected',iora0 , ' found', iora2(i)
+    endif
+  enddo
+  if(errors == 0) then
+    write(6,*) 'INFO: remote -> local address translations are coherent'
+  else
+    write(6,*) 'INFO: number of errors in remote -> local address translations =',errors
+  endif
+
+!! F_StArT
+end subroutine verify_translations
+!!
+!! F_EnD
+
+!! F_StArT
 subroutine print_io_colors()
 !! F_EnD
     use ioserver_internal_mod

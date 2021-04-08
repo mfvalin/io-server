@@ -147,11 +147,8 @@ program pseudomodelandserver
   call mpi_finalize(status)
 end program
 
-subroutine verify_translations()
-  use ISO_C_BINDING
-  use helpers
+subroutine verify_translations_old()  ! old version, migrated to ioserver_init.F90
   use ioserver_functions
-  use memory_arena_mod
   implicit none
   type(shared_memory), pointer :: mem
   type(C_PTR) :: p_base, p_relay, temp
@@ -186,7 +183,7 @@ subroutine verify_translations()
   else
     write(6,*) 'INFO: number of errors in address translations_to =',errors
   endif
-  do i = 0, fullnode_crs % size -1
+  do i = 0, fullnode_crs % size -1     ! translate other PE adddress into local address
     iora2(i) = transfer(ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i), iora2(i))
   enddo
   errors = 0
@@ -202,7 +199,7 @@ subroutine verify_translations()
     write(6,*) 'INFO: number of errors in address translations_from =',errors
   endif
 
-end subroutine verify_translations
+end subroutine verify_translations_old
 ! =============================================================================================
 !                      COMPUTE     ( skeleton demo code, interim API )
 ! =============================================================================================
