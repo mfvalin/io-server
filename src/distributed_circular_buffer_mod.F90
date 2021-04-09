@@ -44,7 +44,6 @@ module distributed_circular_buffer_module
     procedure :: peek     !< distributed_circular_buffer_module::peek
     procedure :: get_num_elements
     procedure :: get_num_spaces
-!    procedure :: get_num_spaces
     procedure :: sync_window
     procedure :: get_producer_id
     procedure :: get_channel_id

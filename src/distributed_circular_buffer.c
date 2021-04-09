@@ -1183,6 +1183,9 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 //! We use the MPI_Accumulate function along with the MPI_REPLACE operation, rather than MPI_Put, to ensure the order
 //! in which the memory transfers are done. We need to have finished the transfer of the data itself before updating
 //! the insertion pointer on the root node (otherwise it might try to read data that has not yet arrived).
+//! An operation must be specified. The options for now are either COMMIT or NO_COMMIT. COMMIT will make the data
+//! available for the consumer to read, whereas NO_COMMIT will _send_ the data but _not_ make it available.
+//! _With NO_COMMIT, the data is still sent through MPI_.
 //!
 //! @return How many elements can still fit after the insertion, if everything went smoothly, -1 otherwise
 //C_StArT

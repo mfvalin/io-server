@@ -61,27 +61,27 @@ subroutine basic_test()
     return
   end if
 
-  buffer_limit = circ_buffer % get_available_space()
+  buffer_limit = circ_buffer % get_num_spaces()
 
 !  call circ_buffer % print_header()
 
   do i = 1, NUM_ELEM, STEP_SIZE
     num_elem_free = circ_buffer % atomic_put(local(i), STEP_SIZE, .true.)
-    num_elem_in = circ_buffer % get_available_data()
+    num_elem_in = circ_buffer % get_num_elements()
 
     if (num_elem_in .ne. STEP_SIZE) then
       num_error = num_error + 1
       print *, 'Wrong number of elements in buffer after adding data'
     end if
 
-    num_elem_free = circ_buffer % get_available_space()
+    num_elem_free = circ_buffer % get_num_spaces()
     if (num_elem_free .ne. buffer_limit - STEP_SIZE) then
       num_error = num_error + 1
       print *, 'Wrong space available in buffer after adding data', num_elem_free, buffer_limit - STEP_SIZE
     end if
 
     num_elem_in = circ_buffer % atomic_get(local_out(i), STEP_SIZE, .true.)
-    num_elem_free = circ_buffer % get_available_space()
+    num_elem_free = circ_buffer % get_num_spaces()
 
     if (num_elem_in .ne. 0) then
       num_error = num_error + 1

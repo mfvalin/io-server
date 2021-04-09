@@ -111,13 +111,13 @@ subroutine shared_mem_test()
     errors = errors + 1
   end if
 
-  if ((buffer_a % get_available_data() .ne. 0) .or. (buffer_b % get_available_data() .ne. 0)) then
+  if ((buffer_a % get_num_elements() .ne. 0) .or. (buffer_b % get_num_elements() .ne. 0)) then
     print *, 'GOT ERROR 0'
     errors = errors + 1
   end if
 
-  if (buffer_a % get_available_space() .ne. buffer_b % get_available_space()) then
-    print *, 'GOT ERROR: buffer spaces are ', buffer_a % get_available_space(), buffer_b % get_available_space()
+  if (buffer_a % get_num_spaces() .ne. buffer_b % get_num_spaces()) then
+    print *, 'GOT ERROR: buffer spaces are ', buffer_a % get_num_spaces(), buffer_b % get_num_spaces()
     errors = errors + 1
   end if
 
@@ -132,7 +132,7 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if (buffer_a % get_available_data() .ne. 0) then
+  if (buffer_a % get_num_elements() .ne. 0) then
     print *, 'GOT ERROR. We did not commit the transaction, but there is data in the buffer!'
     errors = errors + 1
   end if
@@ -147,31 +147,31 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if (buffer_a % get_available_data() .ne. STEP_SIZE) then
+  if (buffer_a % get_num_elements() .ne. STEP_SIZE) then
     print *, 'GOT ERROR. We just committed the previous transaction, so there should be exactly that many elements: ', STEP_SIZE
     errors = errors + 1
   end if
 
   n = buffer_a % peek(received_data, STEP_SIZE)
 
-  if ((buffer_a % get_available_data() .ne. STEP_SIZE) .or. (n .ne. STEP_SIZE)) then
+  if ((buffer_a % get_num_elements() .ne. STEP_SIZE) .or. (n .ne. STEP_SIZE)) then
     print *, 'GOT ERROR. We just peeked at the buffer, but the resulting number of elements is wrong!', n, STEP_SIZE
     errors = errors + 1
   end if
 
   n = buffer_a % atomic_get(received_data, STEP_SIZE, .false.)
-  if (buffer_a % get_available_data() .ne. 0) then
+  if (buffer_a % get_num_elements() .ne. 0) then
     print *, 'GOT ERROR. We just read the data, but it looks like the buffer is *not* empty', n
     errors = errors + 1
   end if
 
-  if (buffer_a % get_available_space() .ne. capacity - STEP_SIZE) then
+  if (buffer_a % get_num_spaces() .ne. capacity - STEP_SIZE) then
     print *, 'GOT ERROR. We only read the data without extracting it. The space should not be available'
     errors = errors + 1
   end if
 
   n = buffer_a % atomic_get(received_data, 0, .true.)
-  if ((buffer_a % get_available_data() .ne. 0) .or. (buffer_a % get_available_space() .ne. capacity)) then
+  if ((buffer_a % get_num_elements() .ne. 0) .or. (buffer_a % get_num_spaces() .ne. capacity)) then
     print *, 'GOT ERROR. Buffer should be completely empty'
     errors = errors + 1
   end if
@@ -226,7 +226,7 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if ((buffer_a % get_available_data() .ne. 0) .or. (buffer_b % get_available_data() .ne. 0)) then
+  if ((buffer_a % get_num_elements() .ne. 0) .or. (buffer_b % get_num_elements() .ne. 0)) then
     print *, 'GOT ERROR, there is some data left after the entire ring transmission is over'
     errors = errors + 1
   end if

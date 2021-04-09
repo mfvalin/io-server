@@ -450,7 +450,7 @@ subroutine io_relay_process()
       do i_compute = local_relay_id + 1, num_local_compute, num_local_relays
 
         ! The buffer is empty, so it has not finished sending stuff. Move on to the next CB
-        if (local_data_buffers(i_compute) % get_available_data() == 0) then
+        if (local_data_buffers(i_compute) % get_num_elements() == 0) then
           finished = .false.
           cycle
         end if
