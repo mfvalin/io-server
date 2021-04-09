@@ -1117,7 +1117,8 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [i
 
   while (1) {
     sleep_us(DCB_WINDOW_SYNC_DELAY_US);
-    MPI_Win_sync(buffer->window);
+    MPI_Win_lock(MPI_LOCK_SHARED, buffer->server_rank, 0, buffer->window);
+    MPI_Win_unlock(buffer->server_rank, buffer->window);
     //    printf("Sync'd %ld times\n", ++num_syncs);
 
     switch (*signal) {
@@ -1210,6 +1211,7 @@ data_index DCB_put(
   const int target_rank = buffer->local_header.target_rank;
 
   printf("PUT Target channel = %d\n", target_rank);
+  // NOTE: We could in theory use the MPI_MODE_NOCHECK, but it does not work with OpenMPI 4.0.5
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, 0, buffer->window);
   printf("PUT Window locked\n");
 
