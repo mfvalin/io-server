@@ -173,6 +173,8 @@ subroutine io_server_process()
     error stop 1
   end if
 
+  call data_buffer % full_barrier() ! To allow to sync all relays
+
   call data_buffer % delete()
 
 end subroutine io_server_process
@@ -488,6 +490,14 @@ subroutine io_relay_process()
     ! Send the stop signal along with the remaining data
     num_spaces = data_buffer % put(dcb_message, current_message_size + 1, .true.)
   end block
+
+  call data_buffer % full_barrier()
+
+  if (local_relay_id == 0) then
+    do i_compute = 1, num_local_compute
+      call local_data_buffers(i_compute) % print_stats(data_buffer % get_producer_id() * 100 + i_compute - 1, i_compute == 1)
+    end do
+  end if
 
   call data_buffer % delete()
 

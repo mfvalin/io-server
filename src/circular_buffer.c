@@ -756,6 +756,15 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
   return 0;
 }
 
+//F_StArT
+//  subroutine CB_print_stats(buffer, buffer_id, with_header) BIND(C, name = 'CB_print_stats')
+//    import C_INT, C_PTR
+//    implicit none
+//    type(C_PTR),    intent(in), value :: buffer
+//    integer(C_INT), intent(in), value :: buffer_id
+//    integer(C_INT), intent(in), value :: with_header
+//  end subroutine CB_print_stats
+//F_EnD
 //C_StArT
 void CB_print_stats(
     const circular_buffer_p buffer,     //!< [in] Buffer whose stats we want to print
@@ -797,8 +806,8 @@ void CB_print_stats(
            "                      Write (ms)                       |"
            "                      Read (ms)                        |\n"
            "rank "
-           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) |"
-           "   #elem  (#/call) : tot. time (/kB) :   wait  (/call) | "
+           "   #elem  (#/call) : tot. time (/kB) : wait ms (/call) |"
+           "   #elem  (#/call) : tot. time (/kB) : wait ms (/call) | "
            "max fill (%%)\n");
   }
 

@@ -210,4 +210,11 @@ implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) is_valid
 end function CB_check_integrity
+subroutine CB_print_stats(buffer, buffer_id, with_header) BIND(C, name = 'CB_print_stats')
+import C_INT, C_PTR
+implicit none
+type(C_PTR),    intent(in), value :: buffer
+integer(C_INT), intent(in), value :: buffer_id
+integer(C_INT), intent(in), value :: with_header
+end subroutine CB_print_stats
 end interface

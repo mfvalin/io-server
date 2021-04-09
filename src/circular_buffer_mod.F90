@@ -55,6 +55,7 @@ module circular_buffer_module
 
     procedure :: is_valid !< Check whether the circular buffer is properly created. \return Whether the C pointer is associated
     procedure :: print_header !< Print the buffer header (to help debugging)
+    procedure :: print_stats !< Print stats collected during the buffer's lifetime
 
   end type circular_buffer
 
@@ -225,5 +226,24 @@ contains
     end if
     cb % p = C_NULL_PTR
   end function delete
+
+  subroutine print_stats(this, buffer_id, with_header)
+    implicit none
+    class(circular_buffer), intent(INOUT) :: this !< The CB we want to print
+    integer(C_INT), intent(IN), value     :: buffer_id !< ID of the buffer (will be printed at the start of the data line)
+    logical,        intent(IN), value     :: with_header !< Whether to print a line describing the data
+
+    integer(C_INT) :: with_header_c = -1
+
+    if (with_header) then
+      with_header_c = 1
+    else
+      with_header_c = 0
+    end if
+
+    !print *, 'with_header = ', with_header, 'with_header_c = ', with_header_c
+
+    if (this % is_valid()) call CB_print_stats(this % p, buffer_id, with_header_c)
+  end subroutine print_stats
 
 end module circular_buffer_module
