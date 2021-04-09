@@ -42,8 +42,7 @@ module distributed_circular_buffer_module
     procedure :: put      !< distributed_circular_buffer_module::put
     procedure :: get      !< distributed_circular_buffer_module::get
     procedure :: peek     !< distributed_circular_buffer_module::peek
-    GENERIC :: get_num_elements => get_num_elements_local
-    procedure :: get_num_elements_local
+    procedure :: get_num_elements
     procedure :: get_num_spaces
 !    procedure :: get_num_spaces
     procedure :: sync_window
@@ -155,14 +154,14 @@ contains
     num_data_available = DCB_get(this % c_buffer, buffer_id, dest_data, num_elements, CB_PEEK)
   end function peek
 
-  function get_num_elements_local(this, buffer_id) result(num_elements)
+  function get_num_elements(this, buffer_id) result(num_elements)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT), intent(in)                        :: buffer_id
     integer(C_INT) :: num_elements
 
     num_elements = DCB_get_num_elements(this % c_buffer, buffer_id)
-  end function get_num_elements_local
+  end function get_num_elements
 
   function get_num_spaces(this, update_from_remote) result(num_spaces)
     implicit none
