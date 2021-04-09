@@ -454,6 +454,10 @@ static inline int is_channel(const distributed_circular_buffer_p buffer) {
   return (buffer->channel_id >= 0);
 }
 
+static inline int is_on_server(const distributed_circular_buffer_p buffer) {
+  return (buffer->server_rank >= 0);
+}
+
 //! Set the process rank to be used for MPI communication for the given CB instance
 static inline void assign_target_channel(
     const circular_buffer_instance_p    instance,   //!< [in, out] Buffer instance whose target we want to set
@@ -770,7 +774,7 @@ distributed_circular_buffer_p DCB_create(
       total_window_num_elem(buffer->num_producers, buffer->num_channels, num_elements) * (MPI_Aint)sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
-  if (is_consumer(buffer) || is_channel(buffer)) {
+  if (is_on_server(buffer)) {
     MPI_Win_allocate_shared(
         shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->server_communicator, &buffer->raw_data,
         &buffer->window_mem_dummy);
@@ -798,7 +802,7 @@ distributed_circular_buffer_p DCB_create(
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
     }
   }
-  else if (is_consumer(buffer) || is_channel(buffer)) {
+  else if (is_on_server(buffer)) {
     // Consumer nodes that are _not_ the first one (the "root") need to get the proper address in shared memory
     // in order to create the window with it
 
@@ -938,7 +942,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   MPI_Win_free(&buffer->window);
 
-  if (is_consumer(buffer) || is_channel(buffer)) {
+  if (is_on_server(buffer)) {
     MPI_Win_free(&buffer->window_mem_dummy);
   }
 
@@ -1097,7 +1101,11 @@ int32_t DCB_get_capacity_server(const distributed_circular_buffer_p buffer, int 
 //! received data is actually seen (yeah, that's not passive for real...)
 //! It also checks at every iteration for a signal indicating that it needs to do something else, like returning, or
 //! calling MPI_Barrier()
-int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer) {
+//C_StArT
+int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [in]
+                                    )
+//C_EnD
+{
   if (!is_channel(buffer))
     return -1;
 
@@ -1105,7 +1113,8 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer) {
 
   while (1) {
     sleep_us(DCB_WINDOW_SYNC_DELAY_US);
-    MPI_Win_sync(buffer->window);
+    MPI_Win_lock(MPI_LOCK_SHARED, buffer->server_rank, 0, buffer->window);
+    MPI_Win_unlock(buffer->server_rank, buffer->window);
 
     switch (*signal) {
     case RSIG_SERVER_BARRIER:
@@ -1188,12 +1197,14 @@ data_index DCB_put(
   io_timer_t timer = {0, 0};
   io_timer_start(&timer);
 
-  if (DCB_wait_space_available(buffer, num_elements) < 0)
+  const int num_spaces = DCB_wait_space_available(buffer, num_elements);
+  if (num_spaces < 0)
     return -1;
 
   const int target_rank = buffer->local_header.target_rank;
 
-  MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
+  // NOTE: We could in theory use the MPI_MODE_NOCHECK, but it does not work with OpenMPI 4.0.5
+  MPI_Win_lock(MPI_LOCK_SHARED, target_rank, 0, buffer->window);
 
   data_index       in_index = buffer->local_header.circ_buffer.m.in[CB_PARTIAL];
   const data_index capacity = buffer->local_header.capacity;
@@ -1254,13 +1265,16 @@ data_index DCB_put(
 //    integer(C_INT) :: num_available
 //  end function DCB_get
 //F_EnD
+//C_StArT
 int DCB_get(
     distributed_circular_buffer_p buffer,       //!< [in,out] DCB from which we want to read
     const int                     buffer_id,    //!< [in] Specific buffer in the DCB
     int32_t*                      dest_data,    //!< [in] Where to put the data from the buffer
     const int                     num_elements, //!< [in] How many elements to read
     const int                     operation     //!< [in] What operation to perform: extract, read or just peek
-) {
+    )
+//C_EnD
+{
   io_timer_t timer = {0, 0};
   io_timer_start(&timer);
 
