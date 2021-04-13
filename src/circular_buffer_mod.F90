@@ -24,6 +24,7 @@
 !> \brief circular buffer Fortran module (object oriented)
 module circular_buffer_module
   use ISO_C_BINDING
+  use common_module, only: DATA_ELEMENT, free_c_ptr
   implicit none
   include 'io-server/circular_buffer.inc'
 

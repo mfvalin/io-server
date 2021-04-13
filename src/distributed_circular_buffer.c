@@ -923,6 +923,10 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
   if (is_root(buffer)) {
     send_channel_signal(buffer, RSIG_STOP); // Tell channels to stop any activity
     const data_element* producer_ranks = get_producer_ranks(buffer);
+    printf("DCB STATS\n");
+    printf("Num server processes: %d\nNum consumers: %d\nNum channels: %d\nNum producers (=buffers): %d\n",
+        buffer->num_channels + buffer->num_consumers, buffer->num_consumers, buffer->num_channels,
+        buffer->num_producers);
     for (int i = 0; i < buffer->num_producers; ++i) {
       const circular_buffer_instance_p instance   = get_circular_buffer_instance(buffer, i);
       cb_stats_p                       full_stats = &instance->circ_buffer.stats;

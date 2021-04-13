@@ -116,7 +116,6 @@
 #include <unistd.h>
 
 //F_StArT
-//  include 'io-server/common.inc'
 //  interface
 //F_EnD
 
@@ -794,25 +793,25 @@ void CB_print_stats(
   const double avg_wait_w       = num_writes > 0 ? (double)stats->total_write_wait_time_ms / num_writes : 0.0;
   const double avg_wait_r       = num_reads > 0 ? (double)stats->total_read_wait_time_ms / num_reads : 0.0;
   const double total_read_time  = stats->total_read_time_ms;
-  const double avg_read_time    = num_reads > 0 ? total_read_time / num_elem_to_kb(stats->num_read_elems) : 0.0;
+  const double avg_read_time    = num_reads > 0 ? total_read_time / num_elem_to_mb(stats->num_read_elems) : 0.0;
   const double total_write_time = stats->total_write_time_ms;
-  const double avg_write_time   = num_writes > 0 ? total_write_time / num_elem_to_kb(stats->num_write_elems) : 0.0;
+  const double avg_write_time   = num_writes > 0 ? total_write_time / num_elem_to_mb(stats->num_write_elems) : 0.0;
 
   readable_element_count(stats->max_fill, max_fill_s);
-  const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity(buffer));
+  const float max_fill_percent = stats->max_fill * 100.0 / CB_get_capacity(buffer);
 
   if (with_header) {
     printf("     "
            "                      Write (ms)                       |"
            "                      Read (ms)                        |\n"
            "rank "
-           "   #elem  (#/call) : tot. time (/kB) : wait ms (/call) |"
-           "   #elem  (#/call) : tot. time (/kB) : wait ms (/call) | "
+           "   #elem  (#/call) : tot. time (/MB) : wait ms (/call) |"
+           "   #elem  (#/call) : tot. time (/MB) : wait ms (/call) | "
            "max fill (%%)\n");
   }
 
   printf(
-      "%04d: %s (%s) : %7.1f (%5.2f) : %7.1f (%5.2f) | %s (%s) ; %7.1f (%5.1f) : %7.1f (%5.1f) | %s (%3d)\n", buffer_id,
+      "%04d: %s (%s) : %7.1f (%5.2f) : %7.1f (%5.2f) | %s (%s) ; %7.1f (%5.1f) : %7.1f (%5.1f) | %s (%3.0f)\n", buffer_id,
       total_in_s, avg_in_s, total_write_time, avg_write_time, stats->total_write_wait_time_ms, avg_wait_w, total_out_s,
       avg_out_s, total_read_time, avg_read_time, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,
       max_fill_percent);

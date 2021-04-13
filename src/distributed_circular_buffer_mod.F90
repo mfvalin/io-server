@@ -23,6 +23,7 @@
 !> \brief distributed circular buffer object Fortran module
 module distributed_circular_buffer_module
   use ISO_C_BINDING
+  use common_module, only: DATA_ELEMENT
   implicit none
   include 'io-server/distributed_circular_buffer.inc'
 

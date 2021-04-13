@@ -96,7 +96,6 @@
 !>   . = free space     ; = partially extracted data
 !>
 !> \endverbatim
-include 'io-server/common.inc'
 interface
 subroutine CB_print_header(buffer) bind(C, name = 'CB_print_header')
 import :: C_PTR

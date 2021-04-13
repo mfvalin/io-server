@@ -25,14 +25,16 @@ module cb_plus_dcb_parameters
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
-  integer, parameter :: NUM_CB_ELEMENTS       = 300                      ! Number of elements in each CB
+  integer, parameter :: NUM_CB_ELEMENTS       = 1040                      ! Number of elements in each CB
   integer, parameter :: CB_MESSAGE_SIZE       = 100                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 100000                   ! How much total data to send (for each CB)
-  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 21     ! Size of each data batch put in the DCB
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 1000000                  ! How much total data to send (for each CB)
+  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 20     ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
 
-  logical, parameter :: CHECK_CB_MESSAGES  = .true.
-  logical, parameter :: CHECK_DCB_MESSAGES = .true.
+  logical, parameter :: CHECK_CB_MESSAGES  = .false.
+  logical, parameter :: CHECK_DCB_MESSAGES = .false.
+
+  integer :: num_channels
 
 contains
 
@@ -52,16 +54,19 @@ program pseudomodelandserver
   use ISO_C_BINDING
   use ioserver_functions
   use memory_arena_mod
+  use cb_plus_dcb_parameters, only: num_channels
   implicit none
   external io_relay_process
   external io_server_process
   integer :: status
   integer :: me, nio_node
-  integer :: comm, rank, size, nserv, noops
+  integer :: comm, rank, size, nserv, nchannels, noops
   logical :: error
   character(len=128) :: arg
   type(memory_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
+
+  INTEGER, PARAMETER :: NUM_NODES = 7
 
   call mpi_init(status)
   local_crs = COMM_RANK_SIZE_NULL
@@ -69,7 +74,7 @@ program pseudomodelandserver
 !  call IOSERVER_debug(1)            ! activate debug mode
 
   arg = '0'
-  if(COMMAND_ARGUMENT_COUNT() >= 3) call GET_COMMAND_ARGUMENT(3, arg)
+  if(COMMAND_ARGUMENT_COUNT() >= 4) call GET_COMMAND_ARGUMENT(4, arg)
   read(arg,*)noops
 
   arg = '3'
@@ -77,8 +82,14 @@ program pseudomodelandserver
   read(arg,*) nserv
   nserv = nserv + noops
 
-  arg = '2'
+  arg = '1'
   if(COMMAND_ARGUMENT_COUNT() >= 2) call GET_COMMAND_ARGUMENT(2, arg)
+  read(arg,*) nchannels
+  nserv = nserv + nchannels
+  num_channels = nchannels
+
+  arg = '2'
+  if(COMMAND_ARGUMENT_COUNT() >= 3) call GET_COMMAND_ARGUMENT(3, arg)
 
   call get_local_world(comm, rank, size)
   me = ma % setid(rank)
@@ -88,7 +99,7 @@ program pseudomodelandserver
     goto 777
   endif
 
-  if(rank >= nserv) then
+  if(mod(rank, NUM_NODES) .ne. 0) then
     ! =============================================================================================
     !                                 compute or IO relay Processes
     ! =============================================================================================
@@ -110,7 +121,7 @@ program pseudomodelandserver
     !                                server and no-op processes
     ! =============================================================================================
     nio_node = -1
-    if(rank < noops) then          ! ranks below noops are NO-OP processes
+    if(rank/NUM_NODES >= nserv) then          ! ranks below noops are NO-OP processes
       ! =============================================================================================
       !                                no-op processes
       ! =============================================================================================
@@ -140,23 +151,24 @@ end program
 subroutine io_server_process()
   use cb_plus_dcb_parameters
   use distributed_circular_buffer_module, only : distributed_circular_buffer
-  use ioserver_functions
+  use io_server_mod
   implicit none
 
-  type(comm_rank_size) :: server_crs, allio_crs
+  ! type(comm_rank_size) :: server_crs, allio_crs
   integer :: global_comm, global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
   logical :: success
+  integer :: ierr, num_producers
 
   call get_local_world(global_comm, global_rank, global_size)
 
-  allio_crs    = IOserver_get_crs(RELAY_COLOR + SERVER_COLOR)
-  server_crs   = IOserver_get_crs(SERVER_COLOR)
+  call io_server_mod_init()
 
-  write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
-  success = data_buffer % create(allio_crs % comm, server_crs % comm, allio_crs % size - server_crs % size, server_crs % size / 2, NUM_DCB_ELEMENTS)
+  num_producers = allio_crs % size - server_crs % size
+  success = data_buffer % create(allio_crs % comm, server_crs % comm, num_producers, num_channels, NUM_DCB_ELEMENTS)
 
   if (.not. success) then
     write(6, *) 'Unable to create DCB (from SERVER process)'
@@ -222,7 +234,7 @@ subroutine consumer_process(data_buffer)
   ! Should receive one test signal
   do i_producer = consumer_id, num_producers - 1, num_consumers
     num_elements = data_buffer % get(i_producer, message, 2, .true.)
-    write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
+    ! write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
   end do
 
   ! Now, we repeatedly loop through all buffers this consumer is responsible for
@@ -278,7 +290,7 @@ subroutine consumer_process(data_buffer)
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from SERVER (consumer) process'
-    error stop num_errors
+    error stop 1
   end if
 
 end subroutine consumer_process
@@ -289,7 +301,10 @@ subroutine model_process()
   use cb_plus_dcb_parameters
   use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
   use io_common_mod
+  use common_module, only: sleep_us
   implicit none
+
+  ! include 'io-server/common.inc'
 
   integer               :: global_comm, global_rank, global_size
   type(comm_rank_size)  :: node_crs, local_compute_crs
@@ -314,7 +329,7 @@ subroutine model_process()
   call IOSERVER_get_winmem(p_base, p_relay, p_server)
   tmp_ptr = ma % clone(p_relay)
 
-  write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Model process! PE', local_compute_id, node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
 
   ! Create a single CB in our allocated space in shared memory
   write(compute_name,'(A4,I4.4)') "MCIO", local_compute_id
@@ -349,6 +364,7 @@ subroutine model_process()
       end do
       ! Do the sending
       num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
+      call sleep_us(100)
     end do
     ! We done. Send the stop signal
     message(1) = 0
@@ -357,7 +373,7 @@ subroutine model_process()
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from MODEL process'
-    error stop num_errors
+    error stop 1
   end if
 
 end subroutine model_process
@@ -372,7 +388,7 @@ subroutine io_relay_process()
   implicit none
 
   integer              :: global_comm, global_rank, global_size
-  type(comm_rank_size) :: local_relay_crs
+  type(comm_rank_size) :: local_relay_crs, local_model_crs
   integer              :: num_local_compute, local_relay_id, num_local_relays
   integer              :: ierr, i_compute, index, num_errors
   character(len=8)     :: compute_name
@@ -387,13 +403,16 @@ subroutine io_relay_process()
   call io_relay_mod_init()
   call get_local_world(global_comm, global_rank, global_size)
 
-  local_relay_crs   = IOserver_get_crs(RELAY_COLOR + NODE_COLOR)
+  local_relay_crs = IOserver_get_crs(RELAY_COLOR + NODE_COLOR)
+  local_model_crs = IOserver_get_crs(MODEL_COLOR + NODE_COLOR)
+
   local_relay_id    = local_relay_crs % rank
   num_local_relays  = local_relay_crs % size
-  num_local_compute = modelio_crs % size - relay_crs % size
+  num_local_compute = nodecom_crs % size - local_relay_crs % size
   num_errors        = 0
 
-  write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Num local compute: ', num_local_compute
 
   ! Create the DCB used to communicate with the server
   success = data_buffer % create(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1)
@@ -417,7 +436,7 @@ subroutine io_relay_process()
       index = index + 1
     else
       num_errors = num_errors + 1
-      print *, 'AAAAhhhh invalid buffer given...', i_compute
+      print *, 'AAAAhhhh invalid buffer given... Model #, Relay #, Relay global', i_compute, local_relay_id, global_rank + 1
       error stop 1
     end if
   end do
@@ -503,7 +522,7 @@ subroutine io_relay_process()
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from RELAY process'
-    error stop num_errors
+    error stop 1
   end if
 
 end subroutine io_relay_process

@@ -23,10 +23,10 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
+  use common_module, only: DATA_ELEMENT
   implicit none
 
   private :: DATA_ELEMENT   ! prevent ambiguous definition if made available by another module
-  include 'io-server/common.inc'
 
   !> \brief maximum number of allowed dimensions
   integer, parameter :: MAX_ARRAY_RANK = 5
