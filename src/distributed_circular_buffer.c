@@ -108,6 +108,8 @@ typedef struct {
   MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
   MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
 
+  io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
+
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
   data_element* raw_data;
@@ -724,6 +726,9 @@ distributed_circular_buffer_p DCB_create(
   buffer->producer_id = -1;
   buffer->server_rank = -1;
 
+  buffer->existence_timer.start      = 0;
+  buffer->existence_timer.total_time = 0.0;
+
   int dcb_rank;
   MPI_Comm_rank(buffer->communicator, &dcb_rank);
 
@@ -845,6 +850,8 @@ distributed_circular_buffer_p DCB_create(
     return NULL;
   }
 
+  io_timer_start(&buffer->existence_timer);
+
   return buffer;
 }
 
@@ -913,6 +920,8 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 ) {
   DCB_full_barrier(buffer); // Make sure all transfers are done before we start the deletion process
 
+  io_timer_stop(&buffer->existence_timer);
+
   if (is_producer(buffer)) {
     MPI_Send(
         &buffer->local_header.circ_buffer.stats, sizeof(cb_stats), MPI_BYTE, DCB_ROOT_ID, buffer->producer_id,
@@ -921,7 +930,17 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
   if (is_root(buffer)) {
     send_channel_signal(buffer, RSIG_STOP); // Tell channels to stop any activity
-    const data_element* producer_ranks = get_producer_ranks(buffer);
+    const data_element* producer_ranks     = get_producer_ranks(buffer);
+    uint64_t            total_data_written = 0;
+    printf(
+        "------------------------------------------------------------------------------------\n"
+        "DCB STATS\n"
+        "Num server processes: %d\n"
+        "Num consumers: %d\n"
+        "Num channels: %d\n"
+        "Num producers (=buffers): %d\n",
+        buffer->num_channels + buffer->num_consumers, buffer->num_consumers, buffer->num_channels,
+        buffer->num_producers);
     for (int i = 0; i < buffer->num_producers; ++i) {
       const circular_buffer_instance_p instance   = get_circular_buffer_instance(buffer, i);
       cb_stats_p                       full_stats = &instance->circ_buffer.stats;
@@ -936,7 +955,16 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
       full_stats->total_write_wait_time_ms = remote_stats.total_write_wait_time_ms;
 
       print_instance_stats(instance, i == 0);
+
+      total_data_written += remote_stats.num_write_elems;
     }
+
+    const double existence_time = io_time_ms(&buffer->existence_timer);
+    char         total_data_s[8], dps_s[8];
+    readable_element_count((double)total_data_written * sizeof(data_element), total_data_s);
+    readable_element_count(total_data_written / existence_time * 1000.0 * sizeof(data_element), dps_s);
+    printf("Total data written: %sB (%sB/s)\n", total_data_s, dps_s);
+    printf("------------------------------------------------------------------------------------\n");
   }
 
   MPI_Win_free(&buffer->window);

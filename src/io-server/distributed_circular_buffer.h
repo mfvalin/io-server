@@ -133,6 +133,8 @@ typedef struct {
   MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
   MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
 
+  io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
+
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
   //! Will have some metadata at the beginning
   data_element* raw_data;

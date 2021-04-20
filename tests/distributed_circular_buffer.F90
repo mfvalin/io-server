@@ -428,7 +428,6 @@ program test_distributed_circular_buffer
   implicit none
 
   include 'mpif.h'
-  include 'test_common.inc'
 
   interface
   subroutine init_array(array, rank)
@@ -555,7 +554,7 @@ program test_distributed_circular_buffer
 
   call MPI_finalize(error)
 
-  if (num_errors > 0) call exit(num_errors)
+  if (num_errors > 0) error stop 1
 
 end program test_distributed_circular_buffer
 

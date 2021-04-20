@@ -773,10 +773,13 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
 }
 
 //! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
+//C_StArT
 void readable_element_count(
     const double num_elements, //!< [in]  Number we want to represent
     char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
-) {
+    )
+//C_EnD
+{
   double amount = num_elements;
   int    unit   = 0;
 
@@ -823,7 +826,7 @@ void CB_print_stats(
   const uint64_t num_writes = stats->num_writes;
   const uint64_t num_reads  = stats->num_reads;
 
-  char total_in_s[8], avg_in_s[8], total_out_s[8], avg_out_s[8], max_fill_s[8];
+  char total_in_s[8], avg_in_s[8], total_out_s[8], avg_out_s[8], read_per_sec_s[8], write_per_sec_s[8], max_fill_s[8];
 
   const double avg_in  = num_writes > 0 ? (double)stats->num_write_elems / num_writes : 0.0;
   const double avg_out = num_reads > 0 ? (double)stats->num_read_elems / num_reads : 0.0;
@@ -835,28 +838,31 @@ void CB_print_stats(
 
   const double avg_wait_w       = num_writes > 0 ? (double)stats->total_write_wait_time_ms / num_writes : 0.0;
   const double avg_wait_r       = num_reads > 0 ? (double)stats->total_read_wait_time_ms / num_reads : 0.0;
-  const double total_read_time  = stats->total_read_time_ms;
-  const double avg_read_time    = num_reads > 0 ? total_read_time / num_elem_to_kb(stats->num_read_elems) : 0.0;
   const double total_write_time = stats->total_write_time_ms;
-  const double avg_write_time   = num_writes > 0 ? total_write_time / num_elem_to_kb(stats->num_write_elems) : 0.0;
+  const double total_read_time  = stats->total_read_time_ms;
+  readable_element_count(num_writes / total_write_time * 1000.0, write_per_sec_s);
+  readable_element_count(num_reads / total_read_time * 1000.0, read_per_sec_s);
 
   readable_element_count(stats->max_fill, max_fill_s);
   const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity(buffer));
 
   if (with_header) {
     printf("     "
-           "                      Write (ms)                       |"
-           "                      Read (ms)                        |\n"
+           "                       Write (ms)                        |"
+           "                       Read (ms)                         |\n"
            "rank "
-           "   #elem  (#/call) : tot. time (/kB) : wait ms (/call) |"
-           "   #elem  (#/call) : tot. time (/kB) : wait ms (/call) | "
+           "   #elem  (#/call) : tot. time (#/sec) : wait ms (/call) |"
+           "   #elem  (#/call) : tot. time (#/sec) : wait ms (/call) | "
            "max fill (%%)\n");
   }
 
   printf(
-      "%04d: %s (%s) : %7.1f (%5.2f) : %7.1f (%5.2f) | %s (%s) ; %7.1f (%5.1f) : %7.1f (%5.1f) | %s (%3d)\n", buffer_id,
-      total_in_s, avg_in_s, total_write_time, avg_write_time, stats->total_write_wait_time_ms, avg_wait_w, total_out_s,
-      avg_out_s, total_read_time, avg_read_time, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,
+      "%04d: "
+      "%s (%s) : %7.1f (%s) : %7.1f (%5.2f) | "
+      "%s (%s) ; %7.1f (%s) : %7.1f (%5.1f) | "
+      "%s (%3d)\n",
+      buffer_id, total_in_s, avg_in_s, total_write_time, write_per_sec_s, stats->total_write_wait_time_ms, avg_wait_w,
+      total_out_s, avg_out_s, total_read_time, read_per_sec_s, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,
       max_fill_percent);
 }
 

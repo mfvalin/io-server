@@ -325,6 +325,10 @@ int32_t CB_atomic_put(
 );
 int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
 );
+void readable_element_count(
+    const double num_elements, //!< [in]  Number we want to represent
+    char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
+);
 void CB_print_stats(
     const circular_buffer_p buffer,     //!< [in] Buffer whose stats we want to print
     int                     buffer_id,  //!< [in] ID of the buffer (displayed at beginning of line)
