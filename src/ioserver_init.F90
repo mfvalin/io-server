@@ -948,7 +948,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
   integer, dimension(:), pointer :: f_win_base
   type(C_PTR) :: c_win_base, temp_ptr
   integer(C_INT64_T) :: shmsz64
-  integer :: sz32
+  integer :: sz32, nfree
   logical :: ok
 #include <io-server/iso_c_binding_extras.hf>
 
@@ -1096,7 +1096,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
     mem % pe(smp_rank) % io_ra = local_arena_ptr               ! local address of arena segment
 
     ! spread the nio_node relay PEs across the node (lowest and highest node ranks)
-    if(relayrank >= (nio_node/2) .and. relayrank < (relaysize - ((nio_node+1)/2))) then   ! model compute process
+    if(relayrank >= ((nio_node+1)/2) .and. relayrank < (relaysize - ((nio_node)/2))) then   ! model compute process
       color  = MODEL_COLOR
       if(debug_mode) &
           print *,'DEBUG: model compute process, node rank =', &
@@ -1204,6 +1204,8 @@ function IOserver_int_init(nio_node, app_class) result(status)
       if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
       ok = local_cio_out % create(temp_ptr, sz32)
       if( .not. ok ) goto 2                                  ! cio creation failed
+      ! inject signature data into outbound buffer to prime the pump
+!       nfree = local_cio_out % atomic_put( [mem % pe(smp_rank) % rank + 10000], 1, .true.)
       mem % pe(smp_rank) % cio_out = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
     endif
 
