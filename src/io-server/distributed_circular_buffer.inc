@@ -20,7 +20,6 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 ! This file has been generated from distributed_circular_buffer.c
-include 'io-server/circular_buffer.inc'
 interface
 subroutine DCB_sync_window(buffer) BIND(C, name = 'DCB_sync_window')
 import :: C_PTR, C_INT

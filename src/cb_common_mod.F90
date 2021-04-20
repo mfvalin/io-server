@@ -19,5 +19,11 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020/2021
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
-#define IN_FORTRAN_CODE
-#include "io-server/circular_buffer_defines.h"
+module cb_common_module
+  use ISO_C_BINDING
+  implicit none
+
+!  public :: DATA_ELEMENT
+#include "io-server/cb_data.hf"
+
+end module cb_common_module

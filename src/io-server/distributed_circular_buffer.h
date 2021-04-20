@@ -70,10 +70,10 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * _The channel processes must be located on the same physical node as the consumers._
  */
 typedef struct {
-  int32_t    num_producers; //!< How many producer processes share this distributed buffer set
-  int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
-  int32_t    num_consumers; //!< How many server processes will read from the individual buffers
-  data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
+  int32_t      num_producers; //!< How many producer processes share this distributed buffer set
+  int32_t      num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
+  int32_t      num_consumers; //!< How many server processes will read from the individual buffers
+  data_element window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t channel_id;
   int32_t consumer_id;
@@ -119,7 +119,7 @@ int32_t DCB_get_num_spaces(
 );
 int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [in]
 );
-data_index DCB_put(
+data_element DCB_put(
     distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
     data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
     const int                     num_elements, //!< [in] How many #data_element tokens we want to insert

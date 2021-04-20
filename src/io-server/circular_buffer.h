@@ -105,8 +105,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "io-server/cb_data.h"
 #include "io-server/circular_buffer_defines.h"
-#include "io-server/common.h"
+#include "io-server/rpn_extra.h"
 #include "io-server/timer.h"
 
 //!> version marker
@@ -119,10 +120,10 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
   data_element version; //!< version marker
-  data_index   first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index   in[2];   //!< Start inserting data at data[in]
-  data_index   out[2];  //!< Start reading data at data[out]
-  data_index   limit;   //!< size of data buffer (last available index + 1)
+  data_element first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_element in[2];   //!< Start inserting data at data[in]
+  data_element out[2];  //!< Start reading data at data[out]
+  data_element limit;   //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -156,20 +157,20 @@ typedef circular_buffer* circular_buffer_p;
 
 //! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline data_index available_data(
-    const data_index in,   //!< [in] Index of insertion location in the buffer
-    const data_index out,  //!< [in] Index of extraction location in the buffer
-    const data_index limit //!< [in] Number of elements that the buffer can hold
+static inline data_element available_data(
+    const data_element in,   //!< [in] Index of insertion location in the buffer
+    const data_element out,  //!< [in] Index of extraction location in the buffer
+    const data_element limit //!< [in] Number of elements that the buffer can hold
 ) {
   return (in >= out) ? in - out : limit - out + in;
 }
 
 //! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline data_index available_space(
-    const data_index in,   //!< [in] Index of insertion location in the buffer
-    const data_index out,  //!< [in] Index of extraction location in the buffer
-    const data_index limit //!< [in] Number of elements that the buffer can hold
+static inline data_element available_space(
+    const data_element in,   //!< [in] Index of insertion location in the buffer
+    const data_element out,  //!< [in] Index of extraction location in the buffer
+    const data_element limit //!< [in] Number of elements that the buffer can hold
 ) {
   return limit - available_data(in, out, limit) - 1;
 }
@@ -179,6 +180,22 @@ enum
   CB_FULL    = 0, //!< Array index corresponding to the circular buffer _full_ index (in or out)
   CB_PARTIAL = 1  //!< Array index corresponding to the circular buffer _partial_ index (in or out)
 };
+
+/**
+ * @brief Copy buffer elements into another array (either into or out of the buffer)
+ */
+static inline void copy_elements(
+    data_element*       dst, //!< [out] Where to copy the elements
+    const data_element* src, //!< [in]  The elements to copy
+    int                 n    //!< [in] How many we want to copy
+) {
+  memcpy(dst, src, sizeof(data_element) * (size_t)n);
+}
+
+//! Compute the space in kilobytes taken by the given number of elements
+static inline double num_elem_to_kb(const size_t num_elements) {
+  return num_elements * sizeof(data_element) / 1024.0;
+}
 
 //! Print buffer header (to help debugging)
 void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to print
@@ -219,14 +236,14 @@ circular_buffer_p CB_from_pointer(
 );
 //! Compute how much space (in number of #data_element) is available in a given circular buffer
 //! @return How many elements can still be added
-data_index CB_get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
+data_element CB_get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
 );
 //! Compute how much data (in number of #data_element) is stored in a given circular buffer
 //! @return How many elements are stored in the buffer
-data_index CB_get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
+data_element CB_get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
 );
 //! Compute the maximum number of elements the buffer can hold
-data_index CB_get_capacity(const circular_buffer_p buffer //!< [in] The buffer we want to query
+data_element CB_get_capacity(const circular_buffer_p buffer //!< [in] The buffer we want to query
 );
 //! wait until at least na empty slots are available for inserting data
 //! <br> = CB_wait_space_available(p, n)

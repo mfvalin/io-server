@@ -1,4 +1,4 @@
-! Copyright (C) 2021  Environnement Canada
+! Copyright (C) 2021  Environnement et Changement climatique Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -423,12 +423,11 @@ end function test_dcb_producer
 
 program test_distributed_circular_buffer
   use ISO_C_BINDING
-  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use distributed_circular_buffer_module
   use parameters
   implicit none
 
   include 'mpif.h'
-  include 'io-server/common.inc'
   include 'test_common.inc'
 
   interface

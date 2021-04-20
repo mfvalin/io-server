@@ -29,7 +29,7 @@
  io-server/shmem_heap.h include file is needed to use shared memory heap functions<br>
  (extracted from file memory_arena.c)
 */
-#include <io-server/common.h>
+#include <io-server/cb_data.h>
 
 // remain consistent with io-server package
 

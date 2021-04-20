@@ -1,4 +1,4 @@
-! Copyright (C) 2021  Environnement Canada
+! Copyright (C) 2021  Environnement et Changement climatique Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -23,10 +23,8 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
+  use cb_common_module
   implicit none
-
-  private :: DATA_ELEMENT   ! prevent ambiguous definition if made available by another module
-  include 'io-server/common.inc'
 
   !> \brief maximum number of allowed dimensions
   integer, parameter :: MAX_ARRAY_RANK = 5

@@ -20,4 +20,4 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 #define IN_FORTRAN_CODE
-#include "io-server/circular_buffer_defines.h"
+#include "io-server/cb_data.h"

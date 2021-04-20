@@ -6,17 +6,17 @@ file(GLOB PROJECT_F_FILES *.F90 *.F *.f *.f90)
 
 # Headers to generate
 set(C_TO_INC_FILES
-  common.c
   circular_buffer.c
   distributed_circular_buffer.c
   memory_arena.c
+  rpn_extra.c
 )
 
 set(C_TO_H_FILES
-  common.c
   circular_buffer.c
   distributed_circular_buffer.c
   memory_arena.c
+  rpn_extra.c
   shmem_heap.c
 )
 
