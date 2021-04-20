@@ -125,7 +125,6 @@
 #include <string.h>
 
 #include "io-server/cb_data.h"
-#include "io-server/circular_buffer_defines.h"
 #include "io-server/rpn_extra.h"
 #include "io-server/timer.h"
 

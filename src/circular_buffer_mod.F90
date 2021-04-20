@@ -28,7 +28,6 @@ module circular_buffer_module
   use rpn_extra_module, only: free_c_ptr
   implicit none
   include 'io-server/circular_buffer.inc'
-#include "io-server/circular_buffer_defines.hf"
 
   public :: DATA_ELEMENT
   private

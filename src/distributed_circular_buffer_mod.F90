@@ -27,8 +27,6 @@ module distributed_circular_buffer_module
   implicit none
   include 'io-server/distributed_circular_buffer.inc'
 
-#include <io-server/circular_buffer_defines.hf>
-
   public :: DATA_ELEMENT
   private
 
