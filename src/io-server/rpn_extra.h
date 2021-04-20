@@ -20,10 +20,56 @@
  *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
  *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
-// This file has been generated from common.c
-#ifndef IO_SERVER_common_GEN_H
-#define IO_SERVER_common_GEN_H
+// This file has been generated from rpn_extra.c
+#ifndef IO_SERVER_rpn_extra_GEN_H
+#define IO_SERVER_rpn_extra_GEN_H
 
+/******************************************************************************
+         INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A .C FILE
+   --------------------------------------------------------------------------
+ We use the '//C_StArT' and '//C_EnD' tags to indicate the beginning and end of
+ extraction.
+ To extract the entire function (for inline functions, for example), you must
+ put the begin/end tags around the entire function code, and **MAKE SURE TO
+ LEAVE A SPACE** between the closing parenthesis of the function header and the
+ opening bracket of the function body. They have to be on the same line.
+
+ For example:
+     //C_StArT
+     inline int my_function(type1 arg1, type2* arg2) {
+         [function body]
+     }
+     //C_EnD
+
+ or also:
+     //C_StArT
+     inline int my_function(type1 arg1, //!< Doxygen doc
+                            type2* arg2 //!< More doc
+       ) {
+         [function body]
+     }
+     //C_EnD
+
+
+ To extract the function interface only, you must put the begin/end tags around
+ the header. The placement of the closing parenthesis/opening bracket does not
+ matter, as long as they are not on the same line with a space between them
+
+ For example:
+     //C_StArT
+     int my_function(type1 arg1, type2* arg2)
+     //C_EnD
+     {
+         [function body]
+     }
+
+ or also:
+     //C_StArT
+     int my_function(type1 arg1, type2* arg2){
+     //C_EnD
+         [function body]
+     }
+ ******************************************************************************/
 
 #include <immintrin.h>
 #include <math.h>
@@ -58,31 +104,8 @@ static inline void lock_set(int* location) {
 static inline void lock_reset(int* location) {
   *(volatile int*)location = 0;
 }
-//! Type of individual elements stored in a container
-typedef int32_t data_element;
-//! Type of index for computing offsets in a container (must be at least the same size as #data_element)
-typedef int32_t data_index;
-/**
- * @brief Copy buffer elements into another array (either into or out of the buffer)
- */
-static inline void copy_elements(
-    data_element*       dst, //!< [out] Where to copy the elements
-    const data_element* src, //!< [in]  The elements to copy
-    int                 n    //!< [in] How many we want to copy
-) {
-  memcpy(dst, src, sizeof(data_element) * (size_t)n);
-}
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );
-//! Compute the space in kilobytes taken by the given number of elements
-static inline double num_elem_to_kb(const size_t num_elements) {
-  return num_elements * sizeof(data_element) / 1024.0;
-}
-//! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
-void readable_element_count(
-    const double num_elements, //!< [in]  Number we want to represent
-    char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
-);
 
-#endif // IO_SERVER_common_GEN_H
+#endif // IO_SERVER_rpn_extra_GEN_H

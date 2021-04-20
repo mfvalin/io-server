@@ -20,6 +20,15 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 ! This file has been generated from circular_buffer.c
+
+!******************************************************************************
+!        INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A .C FILE
+!  --------------------------------------------------------------------------
+! We use the '//F_StArT' and '//F_EnD' tags to indicate the beginning and end
+! of extraction. Anything that happens to be between these tags will be
+! included in the output, with the leading '//' and trailing spaces removed.
+!******************************************************************************
+
 !> \file
 !> \brief circular buffer package (C and Fortran)
 !>
@@ -96,7 +105,6 @@
 !>   . = free space     ; = partially extracted data
 !>
 !> \endverbatim
-include 'io-server/common.inc'
 interface
 subroutine CB_print_header(buffer) bind(C, name = 'CB_print_header')
 import :: C_PTR

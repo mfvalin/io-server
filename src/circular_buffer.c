@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021  Environnement Canada
+ * Copyright (C) 2021  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -109,6 +109,7 @@
 */
 //C_EnD
 
+#include <math.h>
 #include <stdio.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
@@ -116,7 +117,6 @@
 #include <unistd.h>
 
 //F_StArT
-//  include 'io-server/common.inc'
 //  interface
 //F_EnD
 
@@ -124,8 +124,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "io-server/circular_buffer_defines.h"
-#include "io-server/common.h"
+#include "io-server/cb_data.h"
+#include "io-server/rpn_extra.h"
 #include "io-server/timer.h"
 
 //!> version marker
@@ -138,10 +138,10 @@ static const int MIN_CIRC_BUFFER_SIZE = 128; //!> Minimum size of a circular buf
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
   data_element version; //!< version marker
-  data_index   first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
-  data_index   in[2];   //!< Start inserting data at data[in]
-  data_index   out[2];  //!< Start reading data at data[out]
-  data_index   limit;   //!< size of data buffer (last available index + 1)
+  data_element first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  data_element in[2];   //!< Start inserting data at data[in]
+  data_element out[2];  //!< Start reading data at data[out]
+  data_element limit;   //!< size of data buffer (last available index + 1)
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -175,20 +175,20 @@ typedef circular_buffer* circular_buffer_p;
 
 //! @brief Compute how much data is stored in a circular buffer, given of set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline data_index available_data(
-    const data_index in,   //!< [in] Index of insertion location in the buffer
-    const data_index out,  //!< [in] Index of extraction location in the buffer
-    const data_index limit //!< [in] Number of elements that the buffer can hold
+static inline data_element available_data(
+    const data_element in,   //!< [in] Index of insertion location in the buffer
+    const data_element out,  //!< [in] Index of extraction location in the buffer
+    const data_element limit //!< [in] Number of elements that the buffer can hold
 ) {
   return (in >= out) ? in - out : limit - out + in;
 }
 
 //! @brief Compute how much space is available in a circular buffer, given a set of indices and a limit.
 //! The caller is responsible for making sure that the inputs have been properly read (i.e. not cached by the compiler)
-static inline data_index available_space(
-    const data_index in,   //!< [in] Index of insertion location in the buffer
-    const data_index out,  //!< [in] Index of extraction location in the buffer
-    const data_index limit //!< [in] Number of elements that the buffer can hold
+static inline data_element available_space(
+    const data_element in,   //!< [in] Index of insertion location in the buffer
+    const data_element out,  //!< [in] Index of extraction location in the buffer
+    const data_element limit //!< [in] Number of elements that the buffer can hold
 ) {
   return limit - available_data(in, out, limit) - 1;
 }
@@ -198,6 +198,22 @@ enum
   CB_FULL    = 0, //!< Array index corresponding to the circular buffer _full_ index (in or out)
   CB_PARTIAL = 1  //!< Array index corresponding to the circular buffer _partial_ index (in or out)
 };
+
+/**
+ * @brief Copy buffer elements into another array (either into or out of the buffer)
+ */
+static inline void copy_elements(
+    data_element*       dst, //!< [out] Where to copy the elements
+    const data_element* src, //!< [in]  The elements to copy
+    int                 n    //!< [in] How many we want to copy
+) {
+  memcpy(dst, src, sizeof(data_element) * (size_t)n);
+}
+
+//! Compute the space in kilobytes taken by the given number of elements
+static inline double num_elem_to_kb(const size_t num_elements) {
+  return num_elements * sizeof(data_element) / 1024.0;
+}
 
 //C_EnD
 
@@ -266,7 +282,7 @@ circular_buffer_p CB_init(
   p->m.out[CB_PARTIAL] = 0;
 
   // Header size in number of elements
-  const data_index header_size =
+  const data_element header_size =
       sizeof(circular_buffer) / sizeof(data_element) + (sizeof(circular_buffer) % sizeof(data_element) > 0);
 
   p->m.limit = nwords - header_size;
@@ -427,13 +443,13 @@ circular_buffer_p CB_from_pointer(
 //C_StArT
 //! Compute how much space (in number of #data_element) is available in a given circular buffer
 //! @return How many elements can still be added
-data_index CB_get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
-                                  )
+data_element CB_get_available_space(const circular_buffer_p buffer //!< [in] The buffer we want to query
+                                    )
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.in[CB_PARTIAL];
-  volatile data_index* out = &buffer->m.out[CB_FULL];
+  volatile data_element* in  = &buffer->m.in[CB_PARTIAL];
+  volatile data_element* out = &buffer->m.out[CB_FULL];
   return available_space(*in, *out, buffer->m.limit);
 }
 
@@ -448,13 +464,13 @@ data_index CB_get_available_space(const circular_buffer_p buffer //!< [in] The b
 //C_StArT
 //! Compute how much data (in number of #data_element) is stored in a given circular buffer
 //! @return How many elements are stored in the buffer
-data_index CB_get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
-                                 )
+data_element CB_get_available_data(const circular_buffer_p buffer //!< [in] The buffer we want to query
+                                   )
 //C_EnD
 {
   // Make sure that the values are really read by accessing them through a volatile pointer
-  volatile data_index* in  = &buffer->m.in[CB_FULL];
-  volatile data_index* out = &buffer->m.out[CB_PARTIAL];
+  volatile data_element* in  = &buffer->m.in[CB_FULL];
+  volatile data_element* out = &buffer->m.out[CB_PARTIAL];
   return available_data(*in, *out, buffer->m.limit);
 }
 
@@ -468,8 +484,8 @@ data_index CB_get_available_data(const circular_buffer_p buffer //!< [in] The bu
 //F_EnD
 //C_StArT
 //! Compute the maximum number of elements the buffer can hold
-data_index CB_get_capacity(const circular_buffer_p buffer //!< [in] The buffer we want to query
-                           )
+data_element CB_get_capacity(const circular_buffer_p buffer //!< [in] The buffer we want to query
+                             )
 //C_EnD
 {
   return buffer->m.limit - buffer->m.first - 1;
@@ -502,8 +518,8 @@ int32_t CB_wait_space_available(
   if (n < 0 || n >= p->m.limit)
     return -1;
 
-  data_index num_available = CB_get_available_space(p);
-  int        num_waits     = 0;
+  data_element num_available = CB_get_available_space(p);
+  int          num_waits     = 0;
   while (num_available < n) {
     sleep_us(CB_SPACE_CHECK_DELAY_US);
     num_available = CB_get_available_space(p);
@@ -542,8 +558,8 @@ int32_t CB_wait_data_available(
   if (n < 0 || n >= p->m.limit)
     return -1;
 
-  data_index num_available = CB_get_available_data(p);
-  int        num_waits     = 0;
+  data_element num_available = CB_get_available_data(p);
+  int          num_waits     = 0;
   while (num_available < n) {
     sleep_us(CB_DATA_CHECK_DELAY_US);
     num_available = CB_get_available_data(p);
@@ -591,9 +607,9 @@ int32_t CB_atomic_get(
   if (buffer->stats.max_fill < (uint64_t)num_available)
     buffer->stats.max_fill = num_available;
 
-  data_index       out   = buffer->m.out[CB_PARTIAL];
-  const data_index limit = buffer->m.limit;
-  data_element*    buf   = buffer->data;
+  data_element       out   = buffer->m.out[CB_PARTIAL];
+  const data_element limit = buffer->m.limit;
+  data_element*      buf   = buffer->data;
 
   const int num_elem_1 = num_elements > (limit - out) ? (limit - out) : num_elements;
   copy_elements(dst, buf + out, num_elem_1);
@@ -614,8 +630,8 @@ int32_t CB_atomic_get(
 
   if (operation == CB_COMMIT) {
     memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
-    data_index volatile* outp = &(buffer->m.out[CB_FULL]);
-    *outp                     = out;
+    data_element volatile* outp = &(buffer->m.out[CB_FULL]);
+    *outp                       = out;
   }
 
   io_timer_stop(&timer);
@@ -659,9 +675,9 @@ int32_t CB_atomic_put(
   if (CB_wait_space_available(buffer, num_elements) < 0)
     return -1;
 
-  data_element*    buf        = buffer->data;
-  data_index       current_in = buffer->m.in[CB_PARTIAL];
-  const data_index limit      = buffer->m.limit;
+  data_element*      buf        = buffer->data;
+  data_element       current_in = buffer->m.in[CB_PARTIAL];
+  const data_element limit      = buffer->m.limit;
 
   const int num_elem_1 = num_elements > (limit - current_in) ? (limit - current_in) : num_elements;
   copy_elements(buf + current_in, src, num_elem_1);
@@ -680,8 +696,8 @@ int32_t CB_atomic_put(
 
   if (operation == CB_COMMIT) {
     write_fence(); // make sure everything is in memory before adjusting the "in" pointer
-    data_index volatile* inp = &(buffer->m.in[CB_FULL]);
-    *inp                     = current_in;
+    data_element volatile* inp = &(buffer->m.in[CB_FULL]);
+    *inp                       = current_in;
   }
 
   io_timer_stop(&timer);
@@ -756,6 +772,32 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
   return 0;
 }
 
+//! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
+void readable_element_count(
+    const double num_elements, //!< [in]  Number we want to represent
+    char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
+) {
+  double amount = num_elements;
+  int    unit   = 0;
+
+  const char UNITS[] = {'\0', 'k', 'M', 'G'};
+
+  while (amount > 1900.0 && unit < 3) {
+    amount /= 1000.0;
+    unit++;
+  }
+
+  if (unit == 0) {
+    if (ceil(amount) == amount)
+      sprintf(buffer, "%7.0f", amount);
+    else
+      sprintf(buffer, "%7.2f", amount);
+  }
+  else {
+    sprintf(buffer, "%6.1f%c", amount, UNITS[unit]);
+  }
+}
+
 //F_StArT
 //  subroutine CB_print_stats(buffer, buffer_id, with_header) BIND(C, name = 'CB_print_stats')
 //    import C_INT, C_PTR
@@ -821,4 +863,4 @@ void CB_print_stats(
 //F_StArT
 //  end interface
 //F_EnD
-#endif
+#endif // DOXYGEN_SHOULD_SKIP_THIS

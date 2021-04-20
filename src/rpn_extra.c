@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021  Environnement Canada
+ * Copyright (C) 2021  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -21,8 +21,11 @@
  *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
  */
 
-//C_StArT
+//F_StArT
+//  interface
+//F_EnD
 
+//C_StArT
 #include <immintrin.h>
 #include <math.h>
 #include <stdint.h>
@@ -58,31 +61,6 @@ static inline void lock_reset(int* location) {
 }
 //C_EnD
 
-//C_StArT
-//! Type of individual elements stored in a container
-typedef int32_t data_element;
-//! Type of index for computing offsets in a container (must be at least the same size as #data_element)
-typedef int32_t data_index;
-//C_EnD
-
-//F_StArT
-//  integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element
-//  interface
-//F_EnD
-
-//C_StArT
-/**
- * @brief Copy buffer elements into another array (either into or out of the buffer)
- */
-static inline void copy_elements(
-    data_element*       dst, //!< [out] Where to copy the elements
-    const data_element* src, //!< [in]  The elements to copy
-    int                 n    //!< [in] How many we want to copy
-) {
-  memcpy(dst, src, sizeof(data_element) * (size_t)n);
-}
-//C_EnD
-
 //F_StArT
 //  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 //    import :: C_INT
@@ -112,42 +90,6 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 void free_c_ptr(void** ptr) {
   free(*ptr);
   *ptr = NULL;
-}
-
-//C_StArT
-//! Compute the space in kilobytes taken by the given number of elements
-static inline double num_elem_to_kb(const size_t num_elements) {
-  return num_elements * sizeof(data_element) / 1024.0;
-}
-//C_EnD
-
-//C_StArT
-//! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
-void readable_element_count(
-    const double num_elements, //!< [in]  Number we want to represent
-    char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
-    )
-//C_EnD
-{
-  double amount = num_elements;
-  int    unit   = 0;
-
-  const char UNITS[] = {'\0', 'k', 'M', 'G'};
-
-  while (amount > 1900.0 && unit < 3) {
-    amount /= 1000.0;
-    unit++;
-  }
-
-  if (unit == 0) {
-    if (ceil(amount) == amount)
-      sprintf(buffer, "%7.0f", amount);
-    else
-      sprintf(buffer, "%7.2f", amount);
-  }
-  else {
-    sprintf(buffer, "%6.1f%c", amount, UNITS[unit]);
-  }
 }
 
 //F_StArT

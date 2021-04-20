@@ -1,4 +1,4 @@
-! Copyright (C) 2021  Environnement Canada
+! Copyright (C) 2021  Environnement et Changement climatique Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -24,10 +24,13 @@
 !> \brief circular buffer Fortran module (object oriented)
 module circular_buffer_module
   use ISO_C_BINDING
+  use cb_common_module
+  use rpn_extra_module, only: free_c_ptr
   implicit none
   include 'io-server/circular_buffer.inc'
 
-#include "io-server/circular_buffer_defines.hf"
+  public :: DATA_ELEMENT
+  private
 
   !> \brief circular_buffer user defined type
   type, public :: circular_buffer

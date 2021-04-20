@@ -24,6 +24,53 @@
 #ifndef IO_SERVER_distributed_circular_buffer_GEN_H
 #define IO_SERVER_distributed_circular_buffer_GEN_H
 
+/******************************************************************************
+         INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A .C FILE
+   --------------------------------------------------------------------------
+ We use the '//C_StArT' and '//C_EnD' tags to indicate the beginning and end of
+ extraction.
+ To extract the entire function (for inline functions, for example), you must
+ put the begin/end tags around the entire function code, and **MAKE SURE TO
+ LEAVE A SPACE** between the closing parenthesis of the function header and the
+ opening bracket of the function body. They have to be on the same line.
+
+ For example:
+     //C_StArT
+     inline int my_function(type1 arg1, type2* arg2) {
+         [function body]
+     }
+     //C_EnD
+
+ or also:
+     //C_StArT
+     inline int my_function(type1 arg1, //!< Doxygen doc
+                            type2* arg2 //!< More doc
+       ) {
+         [function body]
+     }
+     //C_EnD
+
+
+ To extract the function interface only, you must put the begin/end tags around
+ the header. The placement of the closing parenthesis/opening bracket does not
+ matter, as long as they are not on the same line with a space between them
+
+ For example:
+     //C_StArT
+     int my_function(type1 arg1, type2* arg2)
+     //C_EnD
+     {
+         [function body]
+     }
+
+ or also:
+     //C_StArT
+     int my_function(type1 arg1, type2* arg2){
+     //C_EnD
+         [function body]
+     }
+ ******************************************************************************/
+
 #include <mpi.h>
 
 #include "io-server/circular_buffer.h"
@@ -70,10 +117,10 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * _The channel processes must be located on the same physical node as the consumers._
  */
 typedef struct {
-  int32_t    num_producers; //!< How many producer processes share this distributed buffer set
-  int32_t    num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
-  int32_t    num_consumers; //!< How many server processes will read from the individual buffers
-  data_index window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
+  int32_t      num_producers; //!< How many producer processes share this distributed buffer set
+  int32_t      num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
+  int32_t      num_consumers; //!< How many server processes will read from the individual buffers
+  data_element window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
   int32_t channel_id;
   int32_t consumer_id;
@@ -119,7 +166,7 @@ int32_t DCB_get_num_spaces(
 );
 int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [in]
 );
-data_index DCB_put(
+data_element DCB_put(
     distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
     data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
     const int                     num_elements, //!< [in] How many #data_element tokens we want to insert

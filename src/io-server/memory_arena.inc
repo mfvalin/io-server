@@ -20,6 +20,15 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 ! This file has been generated from memory_arena.c
+
+!******************************************************************************
+!        INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A .C FILE
+!  --------------------------------------------------------------------------
+! We use the '//F_StArT' and '//F_EnD' tags to indicate the beginning and end
+! of extraction. Anything that happens to be between these tags will be
+! included in the output, with the leading '//' and trailing spaces removed.
+!******************************************************************************
+
 !> \file
 !> \brief memory arena management package (C and Fortran)
 !>

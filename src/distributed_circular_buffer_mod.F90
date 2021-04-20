@@ -1,4 +1,4 @@
-! Copyright (C) 2021  Environnement Canada
+! Copyright (C) 2021  Environnement et Changement climatique Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -23,11 +23,11 @@
 !> \brief distributed circular buffer object Fortran module
 module distributed_circular_buffer_module
   use ISO_C_BINDING
+  use cb_common_module
   implicit none
   include 'io-server/distributed_circular_buffer.inc'
 
-#include <io-server/circular_buffer_defines.hf>
-
+  public :: DATA_ELEMENT
   private
 
   !> A set of FIFO queues used by multiple pairs of processes, with their data stored on a single one of these processes

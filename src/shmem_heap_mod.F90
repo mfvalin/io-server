@@ -1,4 +1,4 @@
-! Copyright (C) 2021  Environnement Canada
+! Copyright (C) 2021  Environnement et Changement climatique Canada
 !
 ! This is free software; you can redistribute it and/or
 ! modify it under the terms of the GNU Lesser General Public
@@ -23,19 +23,14 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
+  use cb_common_module
   implicit none
-
-!   private :: DATA_ELEMENT   ! prevent ambiguous definition if made available by another module
-!   include 'io-server/common.inc'
-
-#define CB_ELEMENT 4
-! the above line is temporary (waiting for module defining CB_ELEMENT)
 
   !> \brief maximum number of allowed dimensions for an array in this heap type
   integer, parameter :: MAX_ARRAY_RANK = 5
 
 ! type of a heap element (must be consistent with io-server definition)
-  integer, parameter :: HEAP_ELEMENT =  CB_ELEMENT  !<  type of a heap element (must be consistent with C code)
+  integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
 
   !> \brief C compatible data block metadata
   type, public, bind(C) :: block_meta_c
