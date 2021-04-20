@@ -147,59 +147,59 @@ program pseudomodelandserver
   call mpi_finalize(status)
 end program
 
-subroutine verify_translations_old()  ! old version, migrated to ioserver_init.F90
-  use ioserver_functions
-  implicit none
-  type(shared_memory), pointer :: mem
-  type(C_PTR) :: p_base, p_relay, temp
-  integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
-  integer(C_INTPTR_T) :: iora0
-  type(comm_rank_size) :: fullnode_crs
-  integer :: i, errors
-  
-  fullnode_crs = IOserver_get_crs(NODE_COLOR)   ! smp node information
-  p_relay = IOserver_get_win_ptr(IO_RELAY)      ! memory arena address
-  iora0 = transfer(p_relay, iora0)
-  p_base  = IOserver_get_win_ptr(IO_CONTROL)    ! control memory adddress
-  call C_F_POINTER(p_base, mem)                 ! Fortran control memory description
-
-  do i = 0, fullnode_crs % size -1              ! p_relay for all PEs for which it makes sense
-    iora1(i) = transfer(mem % pe(i) % io_ra , iora1(i))
-  enddo
-!   write(6,'(A,/(5Z18.16))') 'IO-RA :', iora1(0:fullnode_crs % size -1)
-  do i = 0, fullnode_crs % size -1              ! translate local address into other PE address
-    iora2(i) = transfer(ptr_translate_to(p_relay, NODE_COLOR, i), iora2(i))
-  enddo
-!   write(6,'(A,/(5Z18.16))') '      :', iora2(0:fullnode_crs % size -1)
-  errors = 0
-  do i = 0, fullnode_crs % size -1
-    if(iora1(i) .ne. iora2(i) ) then
-      errors = errors + 1
-      write(6,'(A,/(5Z18.16))') 'ERROR: bad address translation, expected , found',iora1(i), iora2(i)
-    endif
-  enddo
-  if(errors == 0) then
-    write(6,*) 'INFO: address translations_to are coherent'
-  else
-    write(6,*) 'INFO: number of errors in address translations_to =',errors
-  endif
-  do i = 0, fullnode_crs % size -1     ! translate other PE adddress into local address
-    iora2(i) = transfer(ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i), iora2(i))
-  enddo
-  errors = 0
-  do i = 0, fullnode_crs % size -1
-    if(iora0 .ne. iora2(i) ) then
-      errors = errors + 1
-      write(6,'(A,/(5Z18.16))') 'ERROR: bad address translation, expected , found',iora0, iora2(i)
-    endif
-  enddo
-  if(errors == 0) then
-    write(6,*) 'INFO: address translations_from are coherent'
-  else
-    write(6,*) 'INFO: number of errors in address translations_from =',errors
-  endif
-
-end subroutine verify_translations_old
+! subroutine verify_translations_old()  ! old version, migrated to ioserver_init.F90
+!   use ioserver_functions
+!   implicit none
+!   type(shared_memory), pointer :: mem
+!   type(C_PTR) :: p_base, p_relay, temp
+!   integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
+!   integer(C_INTPTR_T) :: iora0
+!   type(comm_rank_size) :: fullnode_crs
+!   integer :: i, errors
+!   
+!   fullnode_crs = IOserver_get_crs(NODE_COLOR)   ! smp node information
+!   p_relay = IOserver_get_win_ptr(IO_RELAY)      ! memory arena address
+!   iora0 = transfer(p_relay, iora0)
+!   p_base  = IOserver_get_win_ptr(IO_CONTROL)    ! control memory adddress
+!   call C_F_POINTER(p_base, mem)                 ! Fortran control memory description
+! 
+!   do i = 0, fullnode_crs % size -1              ! p_relay for all PEs for which it makes sense
+!     iora1(i) = transfer(mem % pe(i) % io_ra , iora1(i))
+!   enddo
+! !   write(6,'(A,/(5Z18.16))') 'IO-RA :', iora1(0:fullnode_crs % size -1)
+!   do i = 0, fullnode_crs % size -1              ! translate local address into other PE address
+!     iora2(i) = transfer(ptr_translate_to(p_relay, NODE_COLOR, i), iora2(i))
+!   enddo
+! !   write(6,'(A,/(5Z18.16))') '      :', iora2(0:fullnode_crs % size -1)
+!   errors = 0
+!   do i = 0, fullnode_crs % size -1
+!     if(iora1(i) .ne. iora2(i) ) then
+!       errors = errors + 1
+!       write(6,'(A,/(5Z18.16))') 'ERROR: bad address translation, expected , found',iora1(i), iora2(i)
+!     endif
+!   enddo
+!   if(errors == 0) then
+!     write(6,*) 'INFO: address translations_to are coherent'
+!   else
+!     write(6,*) 'INFO: number of errors in address translations_to =',errors
+!   endif
+!   do i = 0, fullnode_crs % size -1     ! translate other PE adddress into local address
+!     iora2(i) = transfer(ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i), iora2(i))
+!   enddo
+!   errors = 0
+!   do i = 0, fullnode_crs % size -1
+!     if(iora0 .ne. iora2(i) ) then
+!       errors = errors + 1
+!       write(6,'(A,/(5Z18.16))') 'ERROR: bad address translation, expected , found',iora0, iora2(i)
+!     endif
+!   enddo
+!   if(errors == 0) then
+!     write(6,*) 'INFO: address translations_from are coherent'
+!   else
+!     write(6,*) 'INFO: number of errors in address translations_from =',errors
+!   endif
+! 
+! end subroutine verify_translations_old
 ! =============================================================================================
 !                      COMPUTE     ( skeleton demo code, interim API )
 ! =============================================================================================

@@ -12,8 +12,9 @@
 !  Lesser General Public License for more details.
 !
 module ioserver_functions
+  use ISO_C_BINDING
   use shmem_heap
-  use circular_buffer_module
+  use circular_buffer_module, only : circular_buffer
   use ioserver_constants
   implicit none
 #if ! defined(VERSION)

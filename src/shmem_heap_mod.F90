@@ -25,14 +25,17 @@ module shmem_heap
   use ISO_C_BINDING
   implicit none
 
-  private :: DATA_ELEMENT   ! prevent ambiguous definition if made available by another module
-  include 'io-server/common.inc'
+!   private :: DATA_ELEMENT   ! prevent ambiguous definition if made available by another module
+!   include 'io-server/common.inc'
 
-  !> \brief maximum number of allowed dimensions
+#define CB_ELEMENT 4
+! the above line is temporary (waiting for module defining CB_ELEMENT)
+
+  !> \brief maximum number of allowed dimensions for an array in this heap type
   integer, parameter :: MAX_ARRAY_RANK = 5
 
 ! type of a heap element (must be consistent with io-server definition)
-  integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
+  integer, parameter :: HEAP_ELEMENT =  CB_ELEMENT  !<  type of a heap element (must be consistent with C code)
 
   !> \brief C compatible data block metadata
   type, public, bind(C) :: block_meta_c

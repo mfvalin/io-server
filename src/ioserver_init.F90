@@ -47,6 +47,13 @@ module ioserver_constants
     integer(C_INT) :: rank                ! pe rank in above color
   end type
 
+end module ioserver_constants
+
+module ioserver_memory_mod
+  use ISO_C_BINDING
+  use ioserver_constants
+  implicit none
+
   integer, parameter :: MAX_PES_PER_NODE = 128
   type, bind(C) :: pe_info 
     type(C_PTR)         :: ctrl_ra                  ! local address of control shared memory segment
@@ -71,13 +78,6 @@ module ioserver_constants
     ! pe MUST be the last element of this structure
     type(pe_info), dimension(0:MAX_PES_PER_NODE-1) :: pe   ! origin 0, indexed by rank
   end type
-
-end module ioserver_constants
-
-module ioserver_memory_mod
-  use ISO_C_BINDING
-  use ioserver_constants
-  implicit none
 
   save
 

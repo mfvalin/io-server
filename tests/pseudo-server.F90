@@ -1,7 +1,13 @@
 program pseudoserver
   use ISO_C_BINDING
   implicit none
-  include 'io-server/ioserver.inc'
+  interface
+    function IOserver_Commisnull(comm) result(status)   !  is this communicator the NULL communicator ?
+    implicit none
+    integer, intent(IN) :: comm
+    logical :: status
+    end function IOserver_Commisnull
+  end interface
   integer :: status
   integer :: model, allio, nodeio, serverio, nio_node
 
