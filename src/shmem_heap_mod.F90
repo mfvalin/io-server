@@ -162,6 +162,12 @@ module shmem_heap
     !> \return                           0 if O.K., nonzero if error
     procedure, NOPASS :: GetInfoReg      !< get heap statistics using index in registered teable
 
+    !> \return                           NONE
+    procedure, NOPASS :: dump => ShmemHeapDumpInfo  !> dump information about all known heaps
+
+    !> \return                           0 if O.K., nonzero if error
+    procedure, NOPASS :: info => ShmemHeapGetInfo  !> get information about all known heaps
+
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
     !> \return                           a fortran pointer
     procedure   ::            &  !< specific procedures needed for generic type associated allocate
