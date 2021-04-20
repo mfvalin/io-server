@@ -30,10 +30,8 @@ end program test_circular_buffer_single_thread
 subroutine basic_test()
 
   use iso_c_binding
-  use circular_buffer_module, only: DATA_ELEMENT, circular_buffer
+  use circular_buffer_module
   implicit none
-
-  include 'test_common.inc'
 
   integer, parameter :: BUFFER_SIZE = 5001;
 
@@ -101,10 +99,9 @@ subroutine basic_test()
 
   if (num_error > 0) then
     print *, 'AAAAAhhhhh we found errors when running the test!!', num_error
-    call exit(num_error)
+    error stop 1
   else
     print *, 'All good for basic test (create, put, get, data, space)'
-    call exit(0)
   end if
 
 end subroutine basic_test
