@@ -773,10 +773,13 @@ int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we wa
 }
 
 //! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
+//C_StArT
 void readable_element_count(
     const double num_elements, //!< [in]  Number we want to represent
     char*        buffer        //!< [out] Buffer where the string will be stored. Must contain at least 8 bytes
-) {
+    )
+//C_EnD
+{
   double amount = num_elements;
   int    unit   = 0;
 
@@ -837,8 +840,8 @@ void CB_print_stats(
   const double avg_wait_r       = num_reads > 0 ? (double)stats->total_read_wait_time_ms / num_reads : 0.0;
   const double total_write_time = stats->total_write_time_ms;
   const double total_read_time  = stats->total_read_time_ms;
-  readable_element_count(num_writes / total_write_time, write_per_sec_s);
-  readable_element_count(num_reads / total_read_time, read_per_sec_s);
+  readable_element_count(num_writes / total_write_time * 1000.0, write_per_sec_s);
+  readable_element_count(num_reads / total_read_time * 1000.0, read_per_sec_s);
 
   readable_element_count(stats->max_fill, max_fill_s);
   const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity(buffer));
