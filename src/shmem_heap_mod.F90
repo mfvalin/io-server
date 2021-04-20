@@ -196,7 +196,7 @@ module shmem_heap
                      R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
   end interface
   
-  interface
+  interface  ! to functions in shmem_heap.c
 
     function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
       import :: C_PTR, C_SIZE_T
@@ -360,7 +360,7 @@ module shmem_heap
       type(C_PTR)                             :: to
     end function Pointer_add_offset
 
-  end interface
+  end interface   ! to functions in shmem_heap.c
 
 !> \endcond
   contains
