@@ -218,7 +218,6 @@ subroutine mpi_split_by_node(oldcomm, newcomm, rank, isiz, err)
       integer(C_LONG) :: id
     end function gethostid
   end interface
-!   include 'RPN_COMM_constants.inc'
 
   integer, parameter :: MAX_CACHE=16
   integer :: myhost, myhost0, myhost1, tmpcomm, i

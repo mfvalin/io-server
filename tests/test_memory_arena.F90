@@ -11,7 +11,6 @@ program test_memory_arena
 
   include 'mpif.h'
   include 'test_common.inc'
-!   include 'io-server/memory_arena.inc'
   interface
     function shmat(shmid, ptr, opt) result(p) BIND(C,name='shmat')
       import :: C_PTR, C_INT
