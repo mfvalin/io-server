@@ -230,7 +230,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   if(myrank > 0 .and. myrank < nprocs-1) then         ! "model" PE
     do i = 0, 8
 !       status = ShmemHeapGetInfo(i, sz64, max64, nblk64, nbyt64)
-      status = h % info(i, sz64, max64, nblk64, nbyt64)
+      status = h % GetInfoReg(i, sz64, max64, nblk64, nbyt64)
       if(status == 0) print 8,"INFO: heap stats(1)",i, sz64, max64, nblk64, nbyt64
       status = h%GetInfoReg(i, sz64, max64, nblk64, nbyt64)
       if(status == 0) print 8,"INFO: heap stats(2)",i, sz64, max64, nblk64, nbyt64

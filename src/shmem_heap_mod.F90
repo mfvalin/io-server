@@ -160,13 +160,10 @@ module shmem_heap
     procedure :: GetInfo                 !< get heap statistics using heap address
 
     !> \return                           0 if O.K., nonzero if error
-    procedure, NOPASS :: GetInfoReg      !< get heap statistics using index in registered teable
+    procedure, NOPASS :: GetInfoReg      !< get heap statistics using index in registered table
 
     !> \return                           NONE
     procedure, NOPASS :: dump => ShmemHeapDumpInfo  !> dump information about all known heaps
-
-    !> \return                           0 if O.K., nonzero if error
-    procedure, NOPASS :: info => ShmemHeapGetInfo  !> get information about all known heaps
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
     !> \return                           a fortran pointer
