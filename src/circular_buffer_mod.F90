@@ -211,7 +211,8 @@ contains
     logical, intent(IN), value                      :: commit_transaction !< Whether to make the inserted data immediately available
     integer(C_INT) :: n                                    !< number of free slots available after this operation, -1 if error
 
-    integer(C_INT) :: operation = CB_NO_COMMIT
+    integer(C_INT) :: operation
+    operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
     n = CB_atomic_put(this % p, src, nsrc, operation)
   end function atomic_put
@@ -236,15 +237,9 @@ contains
     integer(C_INT), intent(IN), value     :: buffer_id !< ID of the buffer (will be printed at the start of the data line)
     logical,        intent(IN), value     :: with_header !< Whether to print a line describing the data
 
-    integer(C_INT) :: with_header_c = -1
-
-    if (with_header) then
-      with_header_c = 1
-    else
-      with_header_c = 0
-    end if
-
-    !print *, 'with_header = ', with_header, 'with_header_c = ', with_header_c
+    integer(C_INT) :: with_header_c
+    with_header_c = 0
+    if (with_header) with_header_c = 1
 
     if (this % is_valid()) call CB_print_stats(this % p, buffer_id, with_header_c)
   end subroutine print_stats

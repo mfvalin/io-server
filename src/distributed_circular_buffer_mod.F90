@@ -122,8 +122,10 @@ contains
     logical, intent(in)                                 :: commit_transaction
     integer(C_INT) :: num_space_available !< The return value of DCB_put (number of available spaces, if successful)
 
-    integer(C_INT) :: operation = CB_NO_COMMIT
+    integer(C_INT) :: operation
+    operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
+
     num_space_available = DCB_put(this % c_buffer, src_data, num_elements, operation)
   end function put
 
@@ -168,7 +170,8 @@ contains
     logical, intent(in)                               :: update_from_remote
     integer(C_INT) :: num_spaces
 
-    integer(C_INT) :: c_update = 0
+    integer(C_INT) :: c_update
+    c_update = 0
     if (update_from_remote) c_update = 1
     num_spaces = DCB_get_num_spaces(this % c_buffer, c_update)
   end function get_num_spaces
