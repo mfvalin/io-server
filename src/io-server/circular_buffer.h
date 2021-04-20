@@ -24,6 +24,53 @@
 #ifndef IO_SERVER_circular_buffer_GEN_H
 #define IO_SERVER_circular_buffer_GEN_H
 
+/******************************************************************************
+         INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A .C FILE
+   --------------------------------------------------------------------------
+ We use the '//C_StArT' and '//C_EnD' tags to indicate the beginning and end of
+ extraction.
+ To extract the entire function (for inline functions, for example), you must
+ put the begin/end tags around the entire function code, and **MAKE SURE TO
+ LEAVE A SPACE** between the closing parenthesis of the function header and the
+ opening bracket of the function body. They have to be on the same line.
+
+ For example:
+     //C_StArT
+     inline int my_function(type1 arg1, type2* arg2) {
+         [function body]
+     }
+     //C_EnD
+
+ or also:
+     //C_StArT
+     inline int my_function(type1 arg1, //!< Doxygen doc
+                            type2* arg2 //!< More doc
+       ) {
+         [function body]
+     }
+     //C_EnD
+
+
+ To extract the function interface only, you must put the begin/end tags around
+ the header. The placement of the closing parenthesis/opening bracket does not
+ matter, as long as they are not on the same line with a space between them
+
+ For example:
+     //C_StArT
+     int my_function(type1 arg1, type2* arg2)
+     //C_EnD
+     {
+         [function body]
+     }
+
+ or also:
+     //C_StArT
+     int my_function(type1 arg1, type2* arg2){
+     //C_EnD
+         [function body]
+     }
+ ******************************************************************************/
+
 /**
  \file
  \brief circular buffer package (C and Fortran)

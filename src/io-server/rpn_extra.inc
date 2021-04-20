@@ -20,6 +20,15 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 ! This file has been generated from rpn_extra.c
+
+!******************************************************************************
+!        INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A .C FILE
+!  --------------------------------------------------------------------------
+! We use the '//F_StArT' and '//F_EnD' tags to indicate the beginning and end
+! of extraction. Anything that happens to be between these tags will be
+! included in the output, with the leading '//' and trailing spaces removed.
+!******************************************************************************
+
 interface
 subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 import :: C_INT
