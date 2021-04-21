@@ -153,7 +153,7 @@ module ioserver_functions
     implicit none
     class(server_file), intent(IN) :: this
     integer :: ierr
-    type(comm_rank_size), save :: model_crs != COMM_RANK_SIZE_NULL
+    type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
 
     if(debug .or. this % debug) then
       if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
@@ -182,7 +182,7 @@ module ioserver_functions
     implicit none
     integer :: navail, nfree
     type(comm_rank_size)  :: crs 
-    type(comm_rank_size), save :: model_crs != COMM_RANK_SIZE_NULL
+    type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
     integer, dimension(1) :: tag
 
     if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
@@ -195,10 +195,11 @@ module ioserver_functions
     ! check that inboind cio is primed
     tag = -1
     navail = cio_in%atomic_get(tag, 1, .true.)
-    write(6,*) 'INFO: inbound buffer PE, size, free, avail, tag, expected', &
+    write(6,2) 'INFO: inbound buffer PE, size, free, avail, tag, expected', &
                model_crs%rank, cio_in%get_capacity(), cio_in%get_num_spaces(), &
                navail, tag, model_crs%rank+20000
 
+2   format(1X,A,10I8)
   end subroutine ioserver_start
 
   function ioserver_init(nio_node, app_class) result(status)

@@ -324,7 +324,7 @@ relay_debug = .true.
           tag = -1
           n     = c_cio_out(i) % atomic_get(tag, 1, .true.)   ! get priming tag
           nleft = c_cio_out(i) % get_num_elements()
-          write(6,*) 'INFO: compute oubound buffer PE, size, free, avail, tag, expected',i,c_cio_out(i) % get_capacity(), &
+          write(6,2) 'INFO: compute oubound buffer PE, size, free, avail, tag, expected',i,c_cio_out(i) % get_capacity(), &
                       c_cio_out(i) % get_num_spaces(),nleft,tag,10000+i
         else
           write(6,*) 'ERROR: failed to connect to outbound buffer of compute PE',i
@@ -358,7 +358,7 @@ relay_debug = .true.
           ! prime the pump by injecting tag
           n  = c_cio_in(i) % atomic_put(tag, 1, .true.)   ! put priming tag
           navail = c_cio_in(i) % get_num_elements()
-          if(ok) write(6,*) 'INFO: compute inbound buffer PE, size, free, avail, tag',i,c_cio_in(i) % get_capacity(), &
+          if(ok) write(6,2) 'INFO: compute inbound buffer PE, size, free, avail, tag',i,c_cio_in(i) % get_capacity(), &
                             c_cio_in(i) % get_num_spaces(),navail, tag
         else
           write(6,*) 'ERROR: failed to connect to inbound buffer of compute PE',i
@@ -388,6 +388,7 @@ relay_debug = .true.
   call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
   stop
 1 format(A,I10,A,Z10.8,A,Z18.16,A,I10)
+2 format(1X,A,10I8)
 end subroutine io_relay_fn
 
 ! =============================================================================================
