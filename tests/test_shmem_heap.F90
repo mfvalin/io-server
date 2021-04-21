@@ -54,7 +54,7 @@ end program
 subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE traffic
   use ISO_C_BINDING
   ! heap and block management functions
-  use shmem_heap, only : heap, HEAP_ELEMENT, MAX_ARRAY_RANK, block_meta_f08
+  use shmem_heap, only : heap, HEAP_ELEMENT, MAX_ARRAY_RANK, block_meta_f08, block_meta
   implicit none
   include 'mpif.h'
   integer, intent(IN) :: myrank, nprocs
@@ -80,6 +80,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
+  type(block_meta)     :: meta
   type(block_meta_f08) :: blk_meta                     ! metadata for allocated block (Fortran style with bound procedures)
   type(block_meta_f08), dimension(128) :: metas
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
@@ -138,7 +139,11 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     lastblock = 0                                     ! no block successfully allocated
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
       blk_meta = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
+!       meta     = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
+!       blk_meta = transfer(meta, blk_meta)
+!       blk_meta = meta
       metas(i) = blk_meta
+!       metas(i) = meta
       if((.not. (metas(i) == blk_meta)) .or. (metas(i) .ne. blk_meta)) print 6,'FAIL: failed equality check for block',i
       print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta%k(), blk_meta%r(), metas(i)%dims()
       if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
@@ -149,7 +154,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
       print 7,'INFO: block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
       call blk_meta%reset()                           ! nullify blk_meta
-      status = blk_meta%meta(blocks(i))               ! get metadata for allocated array
+      status = blk_meta%metadata(blocks(i))           ! get metadata for allocated array
       array_rank = blk_meta%r()                       ! get rank of array
       ad = blk_meta%dims()                            ! get all MAX_ARRAY_RANK potential dimensions
       print 6,'INFO: array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
@@ -222,7 +227,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
 
-  call h % dump()                                     ! dump info for all known heaps
+  call h % dumpinfo()                                 ! dump info for all known heaps
 !   call ShmemHeapDumpInfo()
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
@@ -277,6 +282,7 @@ subroutine base_test(nprocs, myrank)
   logical, parameter :: bugged = .false.
   integer(C_INT), dimension(:), pointer :: demo
   type(block_meta_f08) :: blk_meta
+  type(block_meta)     :: meta
 
   print 3,'==================== BASIC TEST ===================='
   winsize = 1024*1024
@@ -310,7 +316,8 @@ subroutine base_test(nprocs, myrank)
     do i = 1, 10
 !       blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
 !       blk_meta = sm_allocate(h, demo, [1022+i])
-      blk_meta = h % allocate(demo, [1022+i])
+      meta     = h % allocate(demo, [1022+i])
+      blk_meta = transfer(meta, blk_meta)
       blocks(i) = C_LOC(demo(1))
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i

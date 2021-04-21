@@ -153,7 +153,7 @@ module ioserver_functions
     implicit none
     class(server_file), intent(IN) :: this
     integer :: ierr
-    type(comm_rank_size), save :: model_crs = COMM_RANK_SIZE_NULL
+    type(comm_rank_size), save :: model_crs != COMM_RANK_SIZE_NULL
 
     if(debug .or. this % debug) then
       if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
@@ -182,7 +182,7 @@ module ioserver_functions
     implicit none
     integer :: navail, nfree
     type(comm_rank_size)  :: crs 
-    type(comm_rank_size), save :: model_crs = COMM_RANK_SIZE_NULL
+    type(comm_rank_size), save :: model_crs != COMM_RANK_SIZE_NULL
     integer, dimension(1) :: tag
 
     if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
