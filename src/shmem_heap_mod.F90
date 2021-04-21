@@ -23,16 +23,16 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
-  use cb_common_module
+  use cb_common_module, only : DATA_ELEMENT
   implicit none
 
   !> \brief maximum number of allowed dimensions for an array in this heap type
   integer, parameter :: MAX_ARRAY_RANK = 5
 
-! type of a heap element (must be consistent with io-server definition)
+! type of a heap element (must be consistent with circular buffer and io-server definition)
   integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
-
-  !> \brief C compatible data block metadata
+!   ===========================  metadata types and type bound procedures ===========================
+  !> \brief C interoperable data block metadata
   type, public, bind(C) :: block_meta_c
     private
     !> \private
@@ -88,6 +88,7 @@ module shmem_heap
     GENERIC :: operator(/=) => unequal_meta !< non equality operator
   end type block_meta_f08
 
+!   ===========================  heap type and type bound procedures ===========================
   !> \brief heap user defined type
   type, public :: heap
     private
@@ -177,8 +178,9 @@ module shmem_heap
     procedure, NOPASS :: dumpinfo        !> dump information about all known heaps
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
+!   ===========================  interfaces to script generated functions  ===========================
     !> \return                           a fortran pointer
-    procedure   ::            &  !< specific procedures needed for generic type associated allocate
+    procedure   ::            &  !< specific procedures needed for generic type bound allocator
                               I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
                               I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
@@ -187,26 +189,27 @@ module shmem_heap
                               R8_5D, R8_4D, R8_3D, R8_2D, R8_1D 
 !> \endcond
     !> \return     a fortran pointer to integer and real arrays of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
-    GENERIC   :: allocate =>  &
+    GENERIC   :: allocate =>  &  !< generic Fortran array type bound allocator
                               I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
                               I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
                               I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
                               R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D       !< generic Fortran array type associated allocatior
+                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
   end type heap
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
-  interface sm_allocate   ! generic procedure
-    module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
-                     I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
-                     I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
-                     I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
-                     R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                     R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
+  interface sm_allocate   ! generic non type bound procedure
+    module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &   !  8 bit integer functions
+                     I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &   ! 16 bit integer functions
+                     I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &   ! 32 bit integer functions
+                     I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &   ! 64 bit integer functions
+                     R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &   ! 32 bit real functions, 
+                     R8_5D, R8_4D, R8_3D, R8_2D, R8_1D      ! 64 bit real functions
   end interface
   
+!   ===========================  interfaces to shmem_heap.c functions  ===========================
   interface  ! to functions in shmem_heap.c
 
     function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
@@ -374,6 +377,7 @@ module shmem_heap
 
   end interface   ! to functions in shmem_heap.c
 
+!   ===========================  type bound procedures used by heap user type ===========================
 !> \endcond
   contains
 
