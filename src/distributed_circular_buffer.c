@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2021  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
@@ -1268,7 +1268,7 @@ data_element DCB_put(
   if (operation == CB_COMMIT) {
     buffer->local_header.circ_buffer.m.in[CB_FULL] = in_index;
     MPI_Accumulate(
-        buffer->local_header.circ_buffer.m.in, 1, CB_MPI_ELEMENT_TYPE, target_rank,
+        buffer->local_header.circ_buffer.m.in, 2, CB_MPI_ELEMENT_TYPE, target_rank,
         insertion_index_displacement(buffer), 2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
   }
 
