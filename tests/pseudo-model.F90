@@ -210,11 +210,13 @@ subroutine compute_fn()
   use memory_arena_mod
   implicit none
   integer :: model, allio, relay, server, nio_node, modelio, nodecom, me
-  integer :: comm, rank, size, ierr, noderank, nodesize
+  integer :: comm, rank, size, ierr, noderank, nodesize, navail
   type(memory_arena) :: ma
   type(comm_rank_size) :: local_crs, model_crs, relay_crs
   type(comm_rank_size) :: modelio_crs, allio_crs, server_crs, nodecom_crs
   type(C_PTR) :: p_relay, temp
+  type(circular_buffer) :: cio_in
+  integer, dimension(1) :: tag
 
   call verify_translations()
 
@@ -241,12 +243,17 @@ subroutine compute_fn()
   write(6,*)' model+io node PE',noderank+1,' of', nodesize
 
   p_relay = IOserver_get_win_ptr(IO_RELAY)
+  temp = ma%clone(p_relay)         ! get memory arena address
 
-  temp = ma%clone(p_relay)
+!   call MPI_Barrier(modelio, ierr)                      ! barrier 1 compute/relay
 
-  call MPI_Barrier(modelio, ierr)                      ! barrier 1 compute/relay
+  call ioserver_start()                                ! inbound/outbound traffic priming
+
   ! compute -> relay traffic
-  call MPI_Barrier(modelio, ierr)                      ! barrier 2 compute/relay
+
+  ! relay -> compute traffic
+
+!   call MPI_Barrier(modelio, ierr)                      ! barrier 2 compute/relay
   call flush(6)
   call ma%dump()
   call print_io_colors()
@@ -263,10 +270,12 @@ subroutine io_relay_fn()
   use ioserver_memory_mod
   implicit none
   integer :: model, allio, relay, server, nodecom, modelio, old, new
-  integer :: rank, size, ierr, noderank, nodesize, ncompute, i, bsize, bflags
+  integer :: rank, size, ierr, noderank, nodesize, ncompute, i, bsize, bflags, nleft, n, navail
+  integer, dimension(1) :: tag
   type(C_PTR) :: temp, arena
   integer(C_INTPTR_T) :: itemp, iarena
   character(len=8) :: cio_name
+  logical :: ok
 
   call io_relay_mod_init()
 relay_debug = .true.
@@ -291,26 +300,82 @@ relay_debug = .true.
   if(relay_debug) write(6,*)'          full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
   if(relay_debug) call print_comms(model, modelio, allio, relay, server, nodecom)
 
-  call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
-  ! compute -> relay traffic
+!   call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
+
   ncompute = modelio_crs % size - relay_crs % size
   arena = ma % addr()
   write(6,*) 'INFO: number of compute processes found on node =',ncompute
-  do i = 0, ncompute ! now locate the circular buffers
-    write(cio_name,'(A4,I4.4)') "MCIO",i
-    temp = ma % getblock(bsize, bflags, cio_name) 
-    if( C_ASSOCIATED(temp) ) then
-      itemp = transfer(temp, itemp)
-!       iarena = ptr_diff(arena, temp)   ! find offset in arena
-      iarena = Pointer_offset(arena, temp, 1)  ! find offset in arena (in bytes)
-      write(6,1) ' NOTE: block '//cio_name//' found, size =', bsize, ', flags =', bflags,' address =', itemp,', arena offset =', iarena
-    else
-      write(6,1) ' ERROR: block '//cio_name//' NOT FOUND'
-    endif
-  enddo
-  ! actual relay code goes here
 
-  call MPI_Barrier(modelio, ierr)        ! barrier 2 compute/relay
+  if(rank == 0) then              ! outbound relay PR
+    ! compute -> relay traffic
+    ! get compute -> relay cio addresses, get and check priming tag
+    allocate(c_cio_out(0:ncompute-1))
+    do i = 0, ncompute ! now locate the circular buffers
+      write(cio_name,'(A4,I4.4)') "MCIO",i + 1000     ! target outbound buffer
+      temp = ma % getblock(bsize, bflags, cio_name)   ! address of outbound circular buffer of compute PE i
+      if( C_ASSOCIATED(temp) ) then
+        itemp = transfer(temp, itemp)
+  !       iarena = ptr_diff(arena, temp)   ! find offset in arena
+        iarena = Pointer_offset(arena, temp, 1)  ! find offset in arena (in bytes)
+        write(6,1) ' NOTE: block '//cio_name//' found, size =', bsize, ', flags =', bflags,' address =', itemp,', arena offset =', iarena
+        ok = c_cio_out(i) % create(temp)
+
+        if(ok) then
+          tag = -1
+          n     = c_cio_out(i) % atomic_get(tag, 1, .true.)   ! get priming tag
+          nleft = c_cio_out(i) % get_num_elements()
+          write(6,2) 'INFO: compute oubound buffer PE, size, free, avail, tag, expected',i,c_cio_out(i) % get_capacity(), &
+                      c_cio_out(i) % get_num_spaces(),nleft,tag,10000+i
+        else
+          write(6,*) 'ERROR: failed to connect to outbound buffer of compute PE',i
+        endif
+      else
+        write(6,1) ' ERROR: block '//cio_name//' NOT FOUND'
+      endif
+    enddo
+
+    ! will need to add priming for relay -> server traffic
+    ! will send my rank in server+relay communicator
+
+    ! actual outgoing relay code goes here
+
+  else              ! inbound relay PR
+
+    ! relay -> compute traffic
+    ! get relay -> compute cio addresses, put priming tags
+    allocate(c_cio_in(0:ncompute-1))
+    do i = 0, ncompute ! now locate the circular buffers
+      write(cio_name,'(A4,I4.4)') "MCIO",i + 0000     ! target inbound buffer
+      temp = ma % getblock(bsize, bflags, cio_name)   ! address of outbound circular buffer of compute PE i
+      if( C_ASSOCIATED(temp) ) then
+        itemp = transfer(temp, itemp)
+        iarena = Pointer_offset(arena, temp, 1)  ! find offset in arena (in bytes)
+        write(6,1) ' NOTE: block '//cio_name//' found, size =', bsize, ', flags =', bflags,' address =', itemp,', arena offset =', iarena
+        ok = c_cio_in(i) % create(temp)
+
+        if(ok) then
+          tag = i + 20000
+          ! prime the pump by injecting tag
+          n  = c_cio_in(i) % atomic_put(tag, 1, .true.)   ! put priming tag
+          navail = c_cio_in(i) % get_num_elements()
+          if(ok) write(6,2) 'INFO: compute inbound buffer PE, size, free, avail, tag',i,c_cio_in(i) % get_capacity(), &
+                            c_cio_in(i) % get_num_spaces(),navail, tag
+        else
+          write(6,*) 'ERROR: failed to connect to inbound buffer of compute PE',i
+        endif
+      else
+        write(6,1) ' ERROR: block '//cio_name//' NOT FOUND'
+      endif
+    enddo
+
+    ! will need to check that server -> relay traffic is primed
+    ! will receive my rank in server+relay communicator
+
+    ! actual incoming relay code goes here
+
+  endif
+
+!   call MPI_Barrier(modelio, ierr)        ! barrier 2 compute/relay
 
   if(relay_debug) then
     call flush(6)
@@ -323,6 +388,7 @@ relay_debug = .true.
   call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
   stop
 1 format(A,I10,A,Z10.8,A,Z18.16,A,I10)
+2 format(1X,A,10I8)
 end subroutine io_relay_fn
 
 ! =============================================================================================

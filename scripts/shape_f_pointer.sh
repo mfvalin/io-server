@@ -55,7 +55,7 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   class(heap), intent(INOUT) :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -65,7 +65,7 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
 

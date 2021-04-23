@@ -153,7 +153,7 @@ module ioserver_functions
     implicit none
     class(server_file), intent(IN) :: this
     integer :: ierr
-    type(comm_rank_size), save :: model_crs = COMM_RANK_SIZE_NULL
+    type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
 
     if(debug .or. this % debug) then
       if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
@@ -178,12 +178,36 @@ module ioserver_functions
     endif
   end function ioserver_heap
 
+  subroutine ioserver_start()
+    implicit none
+    integer :: navail, nfree
+    type(comm_rank_size)  :: crs 
+    type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
+    integer, dimension(1) :: tag
+
+    if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
+
+    ! prime outbound cio
+    tag = model_crs%rank + 10000
+    nfree = cio_out % atomic_put( tag, 1, .true.)
+    write(6,*) 'INFO: token written into outbound buffer =',tag
+
+    ! check that inboind cio is primed
+    tag = -1
+    navail = cio_in%atomic_get(tag, 1, .true.)
+    write(6,2) 'INFO: inbound buffer PE, size, free, avail, tag, expected', &
+               model_crs%rank, cio_in%get_capacity(), cio_in%get_num_spaces(), &
+               navail, tag, model_crs%rank+20000
+
+2   format(1X,A,10I8)
+  end subroutine ioserver_start
+
   function ioserver_init(nio_node, app_class) result(status)
     implicit none
     integer, intent(IN)  :: nio_node     ! number of relay processes per compute node
     character(len=*), intent(IN) :: app_class
     integer :: status
-    type(comm_rank_size) :: crs 
+    type(comm_rank_size)  :: crs 
 
 !     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class)
     status = ioserver_int_init(nio_node, app_class)
@@ -301,7 +325,7 @@ end subroutine ioserver_functions_demo
 ! =============================================================================================
 !                                 ( data common to server and relay PEs )
 ! =============================================================================================
-! general information useful to io relay processes
+! general information useful to io relay processes and server processes
 module io_common_mod
   use ISO_C_BINDING
   use memory_arena_mod
@@ -339,10 +363,14 @@ end module io_common_mod
 ! general information useful to io relay processes
 module io_relay_mod
   use io_common_mod
+  use circular_buffer_module
   implicit none
 
   logical :: initialized = .false.
   logical :: relay_debug = .false.
+
+  type(circular_buffer), dimension(:), pointer :: c_cio_out  ! compute PEs outbound circular buffers
+  type(circular_buffer), dimension(:), pointer :: c_cio_in   ! compute PEs inbound circular buffers
 
   contains
 

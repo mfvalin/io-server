@@ -23,16 +23,16 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
-  use cb_common_module
+  use cb_common_module, only : DATA_ELEMENT
   implicit none
 
   !> \brief maximum number of allowed dimensions for an array in this heap type
   integer, parameter :: MAX_ARRAY_RANK = 5
 
-! type of a heap element (must be consistent with io-server definition)
+! type of a heap element (must be consistent with circular buffer and io-server definition)
   integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
-
-  !> \brief C compatible data block metadata
+!   ===========================  metadata types and type bound procedures ===========================
+  !> \brief C interoperable data block metadata
   type, public, bind(C) :: block_meta_c
     private
     !> \private
@@ -41,6 +41,15 @@ module shmem_heap
     integer(C_INT)    :: tkr = 0           !< array type, kind, rank
     integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely)
   end type block_meta_c
+
+  !> \brief C interoperable version of block_meta_f08
+  type, public, bind(C) :: block_meta
+    private
+    !> \private
+    type(block_meta_c) :: a           !< array descriptor, C interoperable
+    !> \private
+    type(C_PTR) :: p   = C_NULL_PTR   !< array address
+  end type block_meta
 
   !> \brief Fortran 2008 data block metadata (using the C layout)
   type, public :: block_meta_f08
@@ -60,13 +69,15 @@ module shmem_heap
     !> \return array(MAX_ARRAY_RANK) containing dimensions
     procedure :: dims
     !> \return status, 0 if O.K. non zero otherwise
-    procedure :: meta
+    procedure :: metadata
     !> \return                              none
     procedure :: reset                      !< nullify operator
     !> \return                              none
-    procedure :: assign                     !< assignment operator
+    procedure :: assign                     !< assignment operator, block_meta_f08 = block_meta_f08
     !> \return                              none
-    GENERIC :: ASSIGNMENT(=) => assign      !< assignment operator
+    procedure :: assign_meta                !< assignment operator, block_meta_f08 = block_meta
+    !> \return                              none
+    GENERIC :: ASSIGNMENT(=) => assign, assign_meta      !< generic assignment operator
     !> \return                              .true. if equal, .false. if not equal
     procedure :: equal                      !< equality operator
     !> \return                              .true. if equal, .false. if not equal
@@ -77,6 +88,7 @@ module shmem_heap
     GENERIC :: operator(/=) => unequal_meta !< non equality operator
   end type block_meta_f08
 
+!   ===========================  heap type and type bound procedures ===========================
   !> \brief heap user defined type
   type, public :: heap
     private
@@ -163,11 +175,12 @@ module shmem_heap
     procedure, NOPASS :: GetInfoReg      !< get heap statistics using index in registered table
 
     !> \return                           NONE
-    procedure, NOPASS :: dump => ShmemHeapDumpInfo  !> dump information about all known heaps
+    procedure, NOPASS :: dumpinfo        !> dump information about all known heaps
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
+!   ===========================  interfaces to script generated functions  ===========================
     !> \return                           a fortran pointer
-    procedure   ::            &  !< specific procedures needed for generic type associated allocate
+    procedure   ::            &  !< specific procedures needed for generic type bound allocator
                               I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
                               I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
@@ -176,26 +189,27 @@ module shmem_heap
                               R8_5D, R8_4D, R8_3D, R8_2D, R8_1D 
 !> \endcond
     !> \return     a fortran pointer to integer and real arrays of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
-    GENERIC   :: allocate =>  &
+    GENERIC   :: allocate =>  &  !< generic Fortran array type bound allocator
                               I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
                               I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
                               I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
                               I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
                               R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D       !< generic Fortran array type associated allocatior
+                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
   end type heap
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
-  interface sm_allocate   ! generic procedure
-    module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
-                     I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
-                     I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
-                     I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
-                     R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                     R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
+  interface sm_allocate   ! generic non type bound procedure
+    module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &   !  8 bit integer functions
+                     I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &   ! 16 bit integer functions
+                     I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &   ! 32 bit integer functions
+                     I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &   ! 64 bit integer functions
+                     R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &   ! 32 bit real functions, 
+                     R8_5D, R8_4D, R8_3D, R8_2D, R8_1D      ! 64 bit real functions
   end interface
   
+!   ===========================  interfaces to shmem_heap.c functions  ===========================
   interface  ! to functions in shmem_heap.c
 
     function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
@@ -340,6 +354,7 @@ module shmem_heap
     end function ShmemHeapGetInfo
 
     subroutine ShmemHeapDumpInfo() bind(C,name='ShmemHeapDumpInfo')
+      implicit none
     end subroutine ShmemHeapDumpInfo
 
     function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset')
@@ -362,6 +377,7 @@ module shmem_heap
 
   end interface   ! to functions in shmem_heap.c
 
+!   ===========================  type bound procedures used by heap user type ===========================
 !> \endcond
   contains
 
@@ -415,8 +431,14 @@ module shmem_heap
     status = ShmemHeapGetInfo(ix, sz, max, nblk, nbyt)
   end function GetInfo
 
+  !> dump info about all known heaps
+  subroutine dumpinfo
+    implicit none
+    call ShmemHeapDumpInfo()
+  end subroutine dumpinfo
+
   !> \brief get array type from Fortran block metadata
-  function meta(this, block) result(status)
+  function metadata(this, block) result(status)
     implicit none
     class(block_meta_f08), intent(OUT) :: this         !< block object
     type(C_PTR), intent(IN), value :: block            !< address of block
@@ -425,7 +447,7 @@ module shmem_heap
     type(block_meta_c) :: t
     msz = C_SIZEOF(t)
     status = ShmemHeapGetBlockMeta(block, this%a, msz)
-  end function meta
+  end function metadata
 
   !> \brief get array type from Fortran block metadata
   function t(this) result(n)
@@ -501,10 +523,22 @@ module shmem_heap
     implicit none
     class(block_meta_f08), intent(INOUT) :: this              !< metadata object
     type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
-    this%p     = other%p
-    this%a%tkr = other%a%tkr
-    this%a%d   = other%a%d
+    this%p          = other%p
+    this%a%tkr      = other%a%tkr
+    this%a%d        = other%a%d
+    this%a%offset   = other%a%offset
   end subroutine assign
+
+  !> \brief assignment operator for type block_meta_f08
+  subroutine assign_meta(this, other)
+    implicit none
+    class(block_meta_f08), intent(INOUT) :: this              !< metadata object
+    type(block_meta), intent(IN)     :: other             !< metadata object assigned to this (this = other)
+    this%p          = other%p
+    this%a%tkr      = other%a%tkr
+    this%a%d        = other%a%d
+    this%a%offset   = other%a%offset
+  end subroutine assign_meta
 
   !> \brief equality operator for type block_meta_f08
   function equal(this, other) result(isequal)
@@ -534,6 +568,7 @@ module shmem_heap
     enddo
   end function unequal_meta
 
+  ! include code generated by script shape_f_pointer.sh (multiple versions of allocate)
   include 'io-server/f_alloc.inc'
 
   !> \brief create, initialize, and register a heap

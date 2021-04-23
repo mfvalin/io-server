@@ -38,7 +38,7 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -48,7 +48,7 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
 
@@ -84,7 +84,7 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -94,7 +94,7 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
 
@@ -130,7 +130,7 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -140,7 +140,7 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
 
@@ -176,7 +176,7 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -186,7 +186,7 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
 
@@ -222,7 +222,7 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -232,7 +232,7 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
 
@@ -268,7 +268,7 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -278,7 +278,7 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
 
@@ -314,7 +314,7 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -324,7 +324,7 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
 
@@ -360,7 +360,7 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -370,7 +370,7 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
 
@@ -406,7 +406,7 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -416,7 +416,7 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
 
@@ -452,7 +452,7 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -462,7 +462,7 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
 
@@ -498,7 +498,7 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -508,7 +508,7 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
 
@@ -544,7 +544,7 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -554,7 +554,7 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
 
@@ -590,7 +590,7 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -600,7 +600,7 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
 
@@ -636,7 +636,7 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -646,7 +646,7 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
 
@@ -682,7 +682,7 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_INT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -692,7 +692,7 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
 
@@ -728,7 +728,7 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -738,7 +738,7 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
 
@@ -774,7 +774,7 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -784,7 +784,7 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
 
@@ -820,7 +820,7 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -830,7 +830,7 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
 
@@ -866,7 +866,7 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -876,7 +876,7 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
 
@@ -912,7 +912,7 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -922,7 +922,7 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
 
@@ -958,7 +958,7 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -968,7 +968,7 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
 
@@ -1004,7 +1004,7 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1014,7 +1014,7 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
 
@@ -1050,7 +1050,7 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1060,7 +1060,7 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
 
@@ -1096,7 +1096,7 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1106,7 +1106,7 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
 
@@ -1142,7 +1142,7 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1152,7 +1152,7 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
 
@@ -1188,7 +1188,7 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1198,7 +1198,7 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
 
@@ -1234,7 +1234,7 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1244,7 +1244,7 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
 
@@ -1280,7 +1280,7 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1290,7 +1290,7 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
 
@@ -1326,7 +1326,7 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1336,7 +1336,7 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
 
@@ -1372,7 +1372,7 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   class(heap), intent(INOUT) :: h    !< heap object
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
-  type(block_meta_f08)              :: bmi !< metadata for allocated block
+  type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
   type(block_meta_c)   :: bmc
   type(C_PTR) :: cptr, ref
@@ -1382,7 +1382,7 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   integer, parameter :: R = 2
 
   nullify(p)                        ! in case of allocation failure
-  bmi = block_meta_f08( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
 
