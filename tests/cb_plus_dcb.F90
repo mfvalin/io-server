@@ -66,6 +66,8 @@ program pseudomodelandserver
   type(memory_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
 
+  integer, parameter :: NUM_NODES = 3
+
   call mpi_init(status)
   local_crs = COMM_RANK_SIZE_NULL
 
@@ -106,7 +108,8 @@ program pseudomodelandserver
     goto 777
   endif
 
-  if(rank >= nserv) then
+  ! if(rank >= nserv) then
+  if(mod(rank, NUM_NODES) .ne. 0) then
     ! =============================================================================================
     !                                 compute or IO relay Processes
     ! =============================================================================================
@@ -128,7 +131,8 @@ program pseudomodelandserver
     !                                server and no-op processes
     ! =============================================================================================
     nio_node = -1
-    if(rank < noops) then          ! ranks below noops are NO-OP processes
+    ! if(rank < noops) then          ! ranks below noops are NO-OP processes
+    if(rank/NUM_NODES >= nserv) then          ! ranks below noops are NO-OP processes
       ! =============================================================================================
       !                                no-op processes
       ! =============================================================================================
@@ -165,6 +169,7 @@ subroutine io_server_process()
   type(distributed_circular_buffer) :: data_buffer
   logical :: success
   integer :: num_producers
+  integer :: ierr
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
@@ -190,9 +195,10 @@ subroutine io_server_process()
     error stop 1
   end if
 
-  call data_buffer % full_barrier() ! To allow to sync all relays
-
   call data_buffer % delete()
+
+  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 
@@ -392,7 +398,7 @@ subroutine io_relay_process()
 
   integer              :: global_comm, global_rank, global_size
   type(comm_rank_size) :: local_relay_crs, local_model_crs
-  integer              :: num_local_compute, local_relay_id, num_local_relays
+  integer              :: num_local_compute, local_relay_id, num_local_relays, producer_id
   integer              :: ierr, i_compute, index, num_errors
   character(len=8)     :: compute_name
   integer              :: bsize, bflags
@@ -422,6 +428,8 @@ subroutine io_relay_process()
     write(6, *) 'Unable to create DCB from RELAY process'
     error stop 1
   end if
+
+  producer_id = data_buffer % get_producer_id()
 
   ! NODE barrier to allow MODEL processes to initialize their CBs
   call MPI_Barrier(nodecom_crs % comm, ierr)
@@ -512,15 +520,17 @@ subroutine io_relay_process()
     num_spaces = data_buffer % put(dcb_message, current_message_size + 1, .true.)
   end block
 
-  call data_buffer % full_barrier()
+  call data_buffer % delete()
+
+  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
 
   if (local_relay_id == 0) then
     do i_compute = 1, num_local_compute
-      call local_data_buffers(i_compute) % print_stats(data_buffer % get_producer_id() * 100 + i_compute - 1, i_compute == 1)
+      call local_data_buffers(i_compute) % print_stats(producer_id * 100 + i_compute - 1, i_compute == 1)
     end do
   end if
 
-  call data_buffer % delete()
+  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from RELAY process'

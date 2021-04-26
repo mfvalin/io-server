@@ -31,6 +31,8 @@ module parameters
 
   integer, parameter :: SECRET_TEST_VALUE = 123
 
+  integer, parameter :: MAX_NUM_PROCS = 20
+
 end module parameters
 
 
@@ -148,11 +150,15 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
 
-   if (consumer_id == 0) then
-     do i = 0, num_producers - 1
-       num_elements = buffer % get(i, data_small, 0, .true.)
-     end do
-   end if
+  if (consumer_id == 0) then
+    do i = 0, num_producers - 1
+      num_elements = buffer % get(i, data_small, 0, .true.)
+      if (num_elements < 0) then
+        print *, 'ERROR, buffer%get returned negative! 0'
+        error stop 1
+      end if
+    end do
+  end if
 
   !---------------------------
   call buffer % full_barrier()
@@ -206,6 +212,10 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
     do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
 
       num_elements = buffer % get(i_prod, data_large(i : i + STEP_SIZE - 1), STEP_SIZE, .true.)
+      if (num_elements < 0) then
+        print *, 'ERROR, buffer%get returned negative! 1'
+        error stop 1
+      end if
 
       if (.not. all(data_large(i:i + STEP_SIZE - 1) == expected_data_large(i : i + STEP_SIZE - 1))) then
         num_errors = num_errors + 1
@@ -219,6 +229,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
     if (num_elements .ne. 0) then
       print *, 'Buffer is not empty after doing all the reads!!!', num_elements
       num_errors = num_errors + 1
+      error stop 1
     end if
   end do
 
@@ -234,7 +245,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   do i_prod = first_prod, last_prod
     capacity = buffer % get_capacity(i_prod)
     num_elements = buffer % get_num_elements(i_prod)
-    if (num_elements .ne. capacity) then
+    if ((num_elements .ne. capacity) .or. (num_elements < 0)) then
       print *, 'Buffer should be completely full!', num_elements, capacity
       num_errors = num_errors + 1
     end if
@@ -317,6 +328,7 @@ function test_dcb_producer(buffer, rank) result(num_errors)
 
   print *, 'Fully committing buffer content'
   num_spaces = buffer % put(data_small, 0, .true.)
+  print *, 'Fully committed buffer content'
   if (num_spaces .ne. capacity - 1) then
     print *, 'Put something, but available space is wrong!', num_spaces, capacity - 1
     num_errors = num_errors + 1
@@ -356,6 +368,7 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   if (num_spaces < 0) then
     num_errors = num_errors + 1
     print *, 'Unable to insert stuff in the buffer!!!!!'
+    error stop 1
   end if
 
   !---------------------------
@@ -383,6 +396,10 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   call init_array(data_large, producer_id)
   do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
     num_spaces = buffer % put(data_large(i:i + STEP_SIZE - 1), STEP_SIZE, .true.)
+    if (num_spaces < 0) then
+      print *, 'Error using buffer%put'
+      error stop 1
+    end if
   end do
 
   !---------------------------
@@ -462,7 +479,8 @@ program test_distributed_circular_buffer
   integer :: rank, comm_size
   logical :: success
   integer :: num_errors, tmp_errors
-  integer :: server_comm, server_group, world_group
+  integer :: server_comm, server_group
+  integer :: dcb_comm, dcb_group
   integer, dimension(3, 1) :: incl_range
 
   type(distributed_circular_buffer) :: circ_buffer
@@ -482,22 +500,32 @@ program test_distributed_circular_buffer
     goto 777
   end if
 
+  if (rank < MAX_NUM_PROCS) then
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, rank, dcb_comm, error)
+  else
+    call MPI_Comm_split(MPI_COMM_WORLD, 1, rank, dcb_comm, error)
+    goto 777 ! Goto end of program
+  end if
+
+  call MPI_comm_rank(dcb_comm, rank, error)
+  call MPI_comm_size(dcb_comm, comm_size, error)
+
   num_producers = comm_size - 2*NUM_CONSUMERS;
 
   server_comm = MPI_COMM_NULL
-  call MPI_Comm_group(MPI_COMM_WORLD, world_group, error)
+  call MPI_Comm_group(dcb_comm, dcb_group, error)
 
   if (rank < NUM_CONSUMERS * 2) then
     incl_range(1, 1) = 0
     incl_range(2, 1) = 2 * NUM_CONSUMERS - 1;
     incl_range(3, 1) = 1
-    call MPI_Group_range_incl(world_group, 1, incl_range, server_group, error)
-    call MPI_Comm_create_group(MPI_COMM_WORLD, server_group, 0, server_comm, error)
+    call MPI_Group_range_incl(dcb_group, 1, incl_range, server_group, error)
+    call MPI_Comm_create_group(dcb_comm, server_group, 0, server_comm, error)
   end if
 
 
   ! Beginning of test
-  success = circ_buffer % create(MPI_COMM_WORLD, server_comm, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
+  success = circ_buffer % create(dcb_comm, server_comm, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
@@ -519,7 +547,7 @@ program test_distributed_circular_buffer
   end if
 
   !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD, error)
+  call MPI_Barrier(dcb_comm, error)
   !---------------------------------------
 
   if (consumer_id >= 0) then

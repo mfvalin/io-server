@@ -57,4 +57,9 @@ static inline double io_time_ms(const io_timer_t* timer) {
   return timer->total_time / 1000.0;
 }
 
+static inline double io_time_since_start(const io_timer_t* timer) {
+  // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
+  return (get_current_time_us() - timer->start) / 1000.0;
+}
+
 #endif // IO_SERVER_TIMER_H
