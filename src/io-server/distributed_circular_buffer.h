@@ -82,7 +82,7 @@
  */
 typedef struct {
   int             target_rank; //!< With which process this instance should communicate for data transfers
-  int             id;
+  int             id;          //!< ID number assigned to the buffer instance
   int64_t         capacity;    //!< How many elements can fit in this instance
   void*           dummy;       //!< Force 64-bit alignment of the rest of the struct
   circular_buffer circ_buffer; //!< The buffer contained in this instance
@@ -99,7 +99,8 @@ typedef circular_buffer_instance* circular_buffer_instance_p;
  * buffer "instances".
  * The processes that will read data from the buffer instance(s) are also called the "consumers" and share ownership
  * of the data of all the collectively created circular buffers in the distributed set.
- * _They must be located on the same physical node._
+ * _They must be located on the same physical node._ A set of "channel" processes also exist on the server as
+ * communication targets only (they don't do any actual work).
  * One of the consumer processes is considered the "root" process and is responsible for allocating/deallocating shared
  * memory and for initializing the buffer instances.
  * The processes that insert data into the buffer instances are the "producers" and each only hold a copy of the header
@@ -122,11 +123,11 @@ typedef struct {
   int32_t      num_consumers; //!< How many server processes will read from the individual buffers
   data_element window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
 
-  int32_t channel_id;
-  int32_t consumer_id;
-  int32_t producer_id;
+  int32_t channel_id;  //!< This provides an ID on channel processes (and -1 on other processes)
+  int32_t consumer_id; //!< This provides an ID on consumer processes (and -1 on other ones)
+  int32_t producer_id; //!< This provides an ID on producer processes (and -1 on other ones)
 
-  int32_t server_rank;
+  int32_t server_rank; //!< Rank of this process on the _server_ communicator. (-1 if somewhere else)
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
@@ -135,7 +136,7 @@ typedef struct {
   io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
 
   //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
-  //! Will have some metadata at the beginning
+  //! Will have some metadata in a _common header_ at the beginning
   data_element* raw_data;
 
   //! Header of the circular buffer instance (only valid for producers)
