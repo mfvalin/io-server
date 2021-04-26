@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2021  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
@@ -32,9 +32,10 @@
 #include "io-server/circular_buffer.h"
 //C_EnD
 
+#include "io-server/memory_arena.h"
 #include "io-server/timer.h"
 
-static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INTEGER
+static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INT
                                                 : sizeof(data_element) == sizeof(int64_t) ? MPI_LONG_LONG_INT
                                                                                           : MPI_DATATYPE_NULL;
 
@@ -105,7 +106,6 @@ typedef struct {
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
-  MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
   MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
 
   io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
@@ -778,22 +778,44 @@ distributed_circular_buffer_p DCB_create(
       total_window_num_elem(buffer->num_producers, buffer->num_channels, num_elements) * (MPI_Aint)sizeof(data_element);
   const MPI_Aint shared_win_size = is_root(buffer) ? win_total_size : 0; // Size used for shared memory allocation
 
-  if (is_on_server(buffer)) {
-    MPI_Win_allocate_shared(
-        shared_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->server_communicator, &buffer->raw_data,
-        &buffer->window_mem_dummy);
-  }
-
-  MPI_Barrier(buffer->communicator);
-
+  // Root only: allocate shared DCB memory on the server, initialize the common header and send memory info to other server processes
   if (is_root(buffer)) {
-    // The root initializes every circular buffer, then sends to the corresponding node the offset where
-    // that buffer is located in the window. The offset is in number of #data_element.
+    int id = -1;
+    buffer->raw_data = memory_allocate_shared(&id, shared_win_size);
+
+    if (buffer->raw_data == NULL)
+    {
+      printf("Error when allocating shared memory for DCB\n");
+      return NULL;
+    }
 
     init_offset_header(get_offset_header(buffer), buffer->num_producers, buffer->num_channels, num_elements);
 
-    MPI_Barrier(buffer->server_communicator); // Let the channels set their rank
-    MPI_Barrier(buffer->server_communicator); // Wait until the channels have set their rank
+    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator);
+  }
+
+  // Non-root server processes: retrieve shared memory info and set own rank (channels only) into common header
+  if (is_on_server(buffer) && !is_root(buffer))
+  {
+    int id;
+    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator);
+    buffer->raw_data = memory_address_from_id(id);
+
+    // Set channel ranks in common header
+    if (is_channel(buffer)) {
+      int full_rank;
+      MPI_Comm_rank(buffer->communicator, &full_rank);
+      get_channel_ranks(buffer)[buffer->channel_id] = full_rank;
+    }
+
+    // Let the root know it can initialize the buffers
+    MPI_Barrier(buffer->server_communicator);
+  }
+
+  // Root only: initialize the individual CB instances
+  if (is_root(buffer)) {
+    // Wait until everyone on the server has retrieved the shared mem info and the channels have set their rank
+    MPI_Barrier(buffer->server_communicator);
 
     // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
     const int num_elem_in_circ_buffer =
@@ -806,30 +828,13 @@ distributed_circular_buffer_p DCB_create(
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
     }
   }
-  else if (is_on_server(buffer)) {
-    // Consumer nodes that are _not_ the first one (the "root") need to get the proper address in shared memory
-    // in order to create the window with it
-
-    MPI_Barrier(buffer->server_communicator); // Wait until offset header is initialized
-
-    MPI_Aint size;
-    int      disp_unit;
-    MPI_Win_shared_query(buffer->window_mem_dummy, DCB_ROOT_ID, &size, &disp_unit, &buffer->raw_data);
-
-    if (is_channel(buffer)) {
-      int full_rank;
-      MPI_Comm_rank(buffer->communicator, &full_rank);
-      get_channel_ranks(buffer)[buffer->channel_id] = full_rank;
-    }
-
-    MPI_Barrier(buffer->server_communicator); // Let the root init the buffers
-  }
 
   // Create the actual window that will be used for data transmission, using a pointer to the same shared memory on the server
   const MPI_Aint final_win_size = is_producer(buffer) ? 0 : win_total_size; // Size used for actual window creation
   MPI_Win_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
 
+  // Producers: retrieve their assigned initialized CB instance and send their rank to the server
   if (is_producer(buffer)) {
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
     update_local_header_from_remote(buffer, 1); // Get the header to sync the instance locally
@@ -846,7 +851,7 @@ distributed_circular_buffer_p DCB_create(
     print_offset_header(get_offset_header(buffer));
 
   if (DCB_check_integrity(buffer, 1) < 0) {
-    printf("AAAHHHh couldn't create DCB!!!\n");
+    printf("AAAHHHh just-created DCB is not consistent!!!!\n");
     return NULL;
   }
 
@@ -894,9 +899,10 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
       "Consumer ID: %d\n"
       "Producer ID: %d\n"
       "Channel ID:  %d\n"
-      "Server rank: %d\n",
+      "Server rank: %d\n"
+      "Current time: %.2f ms\n",
       buffer->num_producers, buffer->num_channels, buffer->window_offset, buffer->consumer_id, buffer->producer_id,
-      buffer->channel_id, buffer->server_rank);
+      buffer->channel_id, buffer->server_rank, io_time_since_start(&buffer->existence_timer));
   if (is_producer(buffer)) {
     print_instance(&buffer->local_header);
   }
@@ -968,11 +974,6 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
   }
 
   MPI_Win_free(&buffer->window);
-
-  if (is_on_server(buffer)) {
-    MPI_Win_free(&buffer->window_mem_dummy);
-  }
-
   free(buffer);
 }
 

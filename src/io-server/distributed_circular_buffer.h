@@ -130,7 +130,6 @@ typedef struct {
 
   MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
   MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
-  MPI_Win  window_mem_dummy;    //!< MPI window used only to allocate and free shared memory
   MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
 
   io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
