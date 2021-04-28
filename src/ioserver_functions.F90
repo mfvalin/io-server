@@ -27,19 +27,19 @@ module ioserver_functions
 
   public :: cmeta, MAXPACK
   integer, parameter :: MAXPACK = 16
-  type :: cmeta
+  type :: cmeta                        ! information passed to compression software
     real(kind=8)    :: errabs_r = 0.0
     integer(kind=8) :: errabs_i = 0
     real(kind=4)    :: errrel_r = 0.0
     integer         :: errrel_i = 0
     integer         :: nbits    = 0
-    integer, dimension(MAXPACK) :: pack_type
+    integer, dimension(MAXPACK) :: pack_info
   end type
 
   public :: server_file
   type :: server_file
     private
-    integer    :: version = VERSION    ! version marker, used toi check verison consistency
+    integer    :: version = VERSION    ! version marker, used to check version coherence
     integer    :: fd = -1              ! file number for internal use
     character(len=1), dimension(:), pointer :: name => NULL()
     type(heap) :: h
@@ -275,9 +275,17 @@ endif
     status = 0
   end function ioserver_close
 
-  function ioserver_write(this) result(status)
+  ! cprs and meta only need to be supplied by one of the writing PEs
+  function ioserver_write(this, mydata , area ,grid_in ,grid_out, cprs , meta ,nm) result(status)
     implicit none
     class(server_file), intent(INOUT) :: this
+    type(block_meta), intent(IN)      :: mydata           ! array descriptor from h % allocate
+    type(subgrid), intent(IN)         :: area             ! area in global space
+    integer, intent(IN), optional     :: grid_in          ! input grid code (implies dimensions)
+    integer, intent(IN), optional     :: grid_out         ! output grid code (implies dimensions)
+    type(cmeta), intent(IN), optional :: cprs             ! compression related metadata
+    integer, intent(IN), dimension(*), optional :: meta  ! metadata associated with data (carried blindly, see pickling)
+    integer, intent(IN), optional     :: nm               ! dimension of metadata
     integer :: status
 
     status = -1
