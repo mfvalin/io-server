@@ -1340,17 +1340,35 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
   INTEGER, INTENT(OUT) :: win, ierror
   INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(OUT) :: baseptr
 
-  integer :: myrank, shmid
+  integer :: myrank, shmid, thesize, i, hostid
   integer(C_INT64_T) :: siz
   type(C_PTR) :: p
+  integer, dimension(:), allocatable :: hostids
+  interface
+    function c_get_hostid() result(id) bind(C,name='gethostid')
+      import :: C_LONG
+      implicit none
+      integer(C_LONG) :: id
+    end function c_get_hostid
+  end interface
 
   baseptr = 0
   win = MPI_WIN_NULL
-  ierror = MPI_ERROR
+  ierror = MPI_ERROR              ! precondition for failure
+  p = C_NULL_PTR
+  baseptr = transfer(p, baseptr)
   if(info .ne. MPI_INFO_NULL) return
   if(disp_unit_ == 0) return
 
   call MPI_Comm_rank(comm, myrank, ierror)
+  call MPI_Comm_size(comm, thesize, ierror)
+  allocate(hostids(thesize))
+  hostid = c_get_hostid()
+  call MPI_Allgather(hostid, 1, MPI_INTEGER, hostids, 1, MPI_INTEGER, comm, ierror)
+  do i = 1, thesize
+    if(hostids(i) .ne. hostid) return   ! ERROR, hostid MUST be the same everywhere
+  enddo
+
   if(myrank == 0) then
     siz = wsize
     p = memory_allocate_shared(shmid, siz)
