@@ -47,6 +47,7 @@ module data_serialize
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
     integer(JAR_ELEMENT) :: top  = 0             ! last posision "written" (cannot write beyond size)
     integer(JAR_ELEMENT) :: bot  = 0             ! last position "read" (cannot read beyond top)
+    integer(JAR_ELEMENT) :: opt  = 0             ! option flags
     type(C_PTR)          :: p = C_NULL_PTR       ! address of actual data
   end type
 
@@ -55,6 +56,7 @@ module data_serialize
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
     integer(JAR_ELEMENT) :: top  = 0             ! last posision "written" (cannot write beyond size)
     integer(JAR_ELEMENT) :: bot  = 0             ! last position "read" (cannot read beyond top)
+    integer(JAR_ELEMENT) :: opt  = 0             ! option flags
     type(C_PTR)          :: p = C_NULL_PTR       ! address of actual data
   contains
     procedure, PASS :: new     => new_jar        ! create a new data jar, allocate data storage
@@ -104,6 +106,7 @@ module data_serialize
 
     j % top  = 0                            ! data jar is empty (no data written)
     j % bot  = 0                            ! data jar is empty (no data to read)
+    j % opt  = 0                            ! options = 0, jar owns the memory storage
     j % size = data_size                    ! data jar capacity
 
   end function new_jar
@@ -126,6 +129,7 @@ module data_serialize
 
     j % top  = 0                            ! data jar is empty (no data written)
     j % bot  = 0                            ! data jar is empty (no data to read)
+    j % opt  = 1                            ! options = 1, jar is not the owner of the storage
     j % size = arraysize                    ! data jar capacity
 
   end function shape_as_jar
@@ -222,19 +226,21 @@ module data_serialize
 
   end function jar_contents
 
-  subroutine final_jar(j)                   ! deallocate a jar's data if not already done at finalize
+  subroutine final_jar(j)                    ! deallocate a jar's data if not already done at finalize
     implicit none
-    type(jar), intent(INOUT) :: j           ! the data jar
+    type(jar), intent(INOUT) :: j            ! the data jar
 
     if(C_ASSOCIATED(j % p)) then
-      if(debug_mode) print *,'DEBUG(jar finalize): freing jar, size =', j%size
-      call c_free(j % p)  ! release storage associated with jar
+      if(debug_mode .and. j%opt == 0) print *,'DEBUG(jar finalize): freing jar memory, size =', j%size
+      if(debug_mode .and. j%opt == 1) print *,'DEBUG(jar finalize): not owner, not freing jar memory, size =', j%size
+      if(j%opt == 0) call c_free(j % p)      ! release storage associated with jar if jar owns it
       j % p = C_NULL_PTR
     else
       if(debug_mode) print *,'DEBUG(jar finalize): nothing to free in jar'
     endif
     j % top  = 0                             ! data jar is now empty (no data written)
     j % bot  = 0                             ! data jar is now empty (no data to read)
+    j % opt  = 0                             ! reset ownership flag
     j % size  = 0                            ! data jar cannot store data
   end subroutine final_jar
 
@@ -245,10 +251,12 @@ module data_serialize
 
     j % top  = 0                             ! data jar is now empty (no data written)
     j % bot  = 0                             ! data jar is now empty (no data to read)
+    j % opt  = 0                             ! reset ownership flag
     j % size  = 0                            ! data jar cannot store data
     if(C_ASSOCIATED(j % p)) then
-      if(debug_mode) print *,'DEBUG(jar free): freing jar'
-      call c_free(j % p)                     ! release storage associated with jar
+      if(debug_mode .and. j%opt == 0) print *,'DEBUG(jar free): freing jar memory'
+      if(debug_mode .and. j%opt == 1) print *,'DEBUG(jar free): not owner, not freing jar memory'
+      if(j % opt == 0) call c_free(j % p)    ! release storage associated with jar if jar owns it
       j % p = C_NULL_PTR                     ! nullify data pointer to avoid accidents
       status = 0
     else
