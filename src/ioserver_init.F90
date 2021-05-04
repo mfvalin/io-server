@@ -941,7 +941,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
   integer :: status
 !! F_EnD
   character(len=8) :: heap_name, cioin_name, cioout_name
-  integer :: color, temp_comm, ierr, temp, iocolor, errors, total_errors
+  integer :: color, temp_comm, ierr, temp, iocolor, errors, total_errors, server_size
   integer(KIND=MPI_ADDRESS_KIND) :: winsize, win_base
   logical :: initialized
   procedure(), pointer :: p
@@ -1039,7 +1039,12 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
     call MPI_Comm_rank(servercom, serverrank, ierr)   ! rank on SMP node
     call MPI_Comm_size(servercom, serversize, ierr)   ! population of SMP node
-    ! for now, relaysize should be equal to serverio_size
+    call MPI_Comm_size(server_comm, server_size, ierr)   ! population of SMP node
+    ! for now, error if serversize is not equal to server_size
+    if(serversize .ne. server_size) then
+      errors = errors + 1
+      goto 2
+    endif
 
     ! allocate shared memory used for intra node communication between server PEs and 1 sided get/put with relay PEs
 !     if(debug_mode) print *,'DEBUG: before MPI_Win_allocate_shared serverwin, size, rank =',serversiz, serverrank
