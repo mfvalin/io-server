@@ -991,6 +991,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
   ! allocate shared memory segment used for control, communicator = smp_comm
   call RPN_MPI_Win_allocate_shared(ctrlsiz, disp_unit, MPI_INFO_NULL, smp_comm, win_base, ctrlwin, ierr)
+  if(ierr .ne. MPI_SUCCESS) goto 2
 
 !   if(debug_mode) print *,'DEBUG: ctrlsiz, smp_rank, ierr =',ctrlsiz, smp_rank, ierr
   ! ctrlwin is no longer used after this point
@@ -1057,7 +1058,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
     else
       print *,"ERROR: IO server processes failed to allocate shared memory"
       servermem = C_NULL_PTR
-!       errors = errors + 1
+      errors = errors + 1
       goto 2                ! go immediately to error processing
     endif
     ! serverwin will never be used after this point, all we are interested in is the shared memory
@@ -1086,7 +1087,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
     else
       print *,"ERROR: relay processes failed to allocate shared memory"
       relaymem = C_NULL_PTR
-!       errors = errors + 1
+      errors = errors + 1
       goto 2                ! go immediately to error processing
     endif
     ! relaywin will not be used after this point (especially as RPN_MPI_Win_allocate_shared sets it to MPI_COMM_NULL)
