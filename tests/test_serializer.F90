@@ -18,12 +18,7 @@ program test_jar
   call test_pickling
 end program
 
-subroutine test_pickling
-  use data_serialize
-  implicit none
-  logical :: old_debug
-  JAR_DECLARE(my_jar)
-  integer :: ok, ne, i
+module machins
   type :: machin1
     integer, dimension(3) :: ip
     integer               :: date
@@ -31,14 +26,24 @@ subroutine test_pickling
     character(len=2)      :: typ
     character(len=2)      :: tmp
   end type
-  type(machin1) :: a1, x1
-
   type :: machin2
     integer               :: l1
     integer               :: l2
     character(len=2)      :: unit
   end type
+end module
+
+subroutine test_pickling
+  use data_serialize
+  use machins
+  implicit none
+  logical :: old_debug
+  JAR_DECLARE(my_jar)
+  integer :: ok, ne, i
+  type(machin1) :: a1, x1
   type(machin2), dimension(4) :: a2, x2
+  integer, dimension(:), pointer :: blind_array
+  type(C_PTR) :: c_blind_array
 
   print *,'==========================================================='
 
@@ -66,19 +71,27 @@ subroutine test_pickling
 
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
   ne = JAR_GET_SINGLE(my_jar, x1)
-  print *,a1
-  print *,x1
+  print *,'       ',a1
+  print *,'x1    =',x1
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   x2 = machin2(-1, -1, '**')
   ne = JAR_GET_MULTI(my_jar, x2(1:2))
-  print *,a2(2)
-  print *,x2(1)
-  print *,a2(3)
-  print *,x2(2)
+  print *,'       ',a2(2)
+  print *,'x2(1) =',x2(1)
+  print *,'       ',a2(3)
+  print *,'x2(2) =',x2(2)
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(15)
 
   JAR_REWIND(my_jar)
+
+  ! disguise jar as integer array, test that it can be regenerated after pass-through
+  ! here -> pass_through -> level2
+  ! check that finalize does not release jas data space
+  blind_array => my_jar%array()     ! get Fortran pointer to jar contents
+  print *,'DIAG: before pass_through, blind_array size is',size(blind_array)
+  call pass_through(blind_array, size(blind_array))  ! send integer array and its dimension
+  print *,'DIAG: after pass_through'
 
   print *,''
   JAR_RESET(my_jar)
@@ -93,17 +106,17 @@ subroutine test_pickling
 
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
   ne = JAR_GET_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
-  print *,a1
-  print *,x1
+  print *,'         ',a1
+  print *,'x1      =',x1
   x2 = machin2(-1, -1, '**')
   ne = JAR_GET_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
-  print *,a2(2)
-  print *,x2(1)
-  print *,a2(3)
-  print *,x2(2)
+  print *,'       ',a2(2)
+  print *,'x2(1) =',x2(1)
+  print *,'       ',a2(3)
+  print *,'x2(2) =',x2(2)
   ne = JAR_GET_MULTI(my_jar, x2(3:3))
-  print *,a2(4)
-  print *,x2(3)
+  print *,'       ',a2(4)
+  print *,'x2(3) =',x2(3)
 
   ok = JAR_FREE(my_jar)
   if(.not. JAR_VALID(my_jar)) print *,'SUCCESS: jar is not valid after free'
@@ -111,6 +124,44 @@ subroutine test_pickling
 
 1 format(A,10I8)
 end subroutine test_pickling
+
+subroutine pass_through(blind_array, n)    !  integer array inbound, jar outbound
+  use data_serialize
+  implicit none
+  interface
+    subroutine level2(my_jar)
+    import :: jar
+    type(jar), intent(IN) :: my_jar
+    end subroutine level2
+  end interface
+  integer, intent(IN) :: n
+  integer, dimension(n), intent(IN) :: blind_array
+  type(jar) :: my_jar
+  integer :: ok
+  print *,'DIAG(pass_through) :blind_array size is',size(blind_array)
+  ok = my_jar%shape(blind_array,size(blind_array))      ! jar data pointing to incoming integer array
+  call level2(my_jar)                                   ! pass jar down
+end subroutine pass_through
+
+subroutine level2(my_jar)    ! receives jar, recreated from integer array by pass_through
+  use data_serialize
+  use machins
+  implicit none
+  type(jar), intent(INOUT) :: my_jar
+  type(machin1) :: x1
+  type(machin2), dimension(4) :: x2
+  integer :: ne
+
+  print *,'DIAG(level2) :'
+  call my_jar%print(20)
+  ne = JAR_GET_SINGLE(my_jar, x1)
+  print *,'x1    =',x1
+  ne = JAR_GET_MULTI(my_jar, x2(1:2))
+  print *,'x2(1) =',x2(1)
+  print *,'x2(2) =',x2(2)
+  print *,'DIAG(level2) exiting'
+
+end subroutine level2
 
 subroutine test_free
   use data_serialize

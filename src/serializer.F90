@@ -60,12 +60,13 @@ module data_serialize
     type(C_PTR)          :: p = C_NULL_PTR       ! address of actual data
   contains
     procedure, PASS :: new     => new_jar        ! create a new data jar, allocate data storage
+    procedure, PASS :: shape   => shape_as_jar   ! transform an integer array into a jar
     procedure, PASS :: valid   => valid_jar      ! is jar valid (is there is a valid data pointer ?)
     procedure, PASS :: free    => free_jar       ! free jar data
     procedure, PASS :: rewind  => rewind_jar     ! rewind jar for extraction
     procedure, PASS :: reset   => reset_jar      ! make jar empty, keep allocated space
     procedure, PASS :: data    => jar_pointer    ! get C pointer to actual jar data
-    procedure, PASS :: content => jar_contents   ! get Fortran pointer to actual jar data
+    procedure, PASS :: array   => jar_contents   ! get Fortran pointer to actual jar data
     procedure, PASS :: usable  => jar_size       ! maximum capacity of data jar
     procedure, PASS :: stored  => jar_top        ! current number of elements inserted
     procedure, PASS :: avail   => jar_avail      ! current number of elements available for extraction
@@ -127,8 +128,8 @@ module data_serialize
     j % p = transfer(temp, j % p)
     ok = 0
 
-    j % top  = 0                            ! data jar is empty (no data written)
-    j % bot  = 0                            ! data jar is empty (no data to read)
+    j % top  = arraysize                    ! data jar is full
+    j % bot  = 0                            ! no data has been read yet
     j % opt  = 1                            ! options = 1, jar is not the owner of the storage
     j % size = arraysize                    ! data jar capacity
 
@@ -241,7 +242,7 @@ module data_serialize
     j % top  = 0                             ! data jar is now empty (no data written)
     j % bot  = 0                             ! data jar is now empty (no data to read)
     j % opt  = 0                             ! reset ownership flag
-    j % size  = 0                            ! data jar cannot store data
+    j % size = 0                             ! data jar cannot store data
   end subroutine final_jar
 
   function free_jar(j) result(status)        ! deallocate a jar's data space
@@ -249,10 +250,6 @@ module data_serialize
     class(jar), intent(INOUT) :: j           ! the data jar
     integer :: status                        ! 0 if O.K., -1 if nothing to free
 
-    j % top  = 0                             ! data jar is now empty (no data written)
-    j % bot  = 0                             ! data jar is now empty (no data to read)
-    j % opt  = 0                             ! reset ownership flag
-    j % size  = 0                            ! data jar cannot store data
     if(C_ASSOCIATED(j % p)) then
       if(debug_mode .and. j%opt == 0) print *,'DEBUG(jar free): freing jar memory'
       if(debug_mode .and. j%opt == 1) print *,'DEBUG(jar free): not owner, not freing jar memory'
@@ -263,6 +260,10 @@ module data_serialize
       if(debug_mode) print *,'DEBUG(jar free): nothing to free in jar'
       status = -1                            ! already freed
     endif
+    j % top  = 0                             ! data jar is now empty (no data written)
+    j % bot  = 0                             ! data jar is now empty (no data to read)
+    j % opt  = 0                             ! reset ownership flag
+    j % size = 0                             ! data jar cannot store data
   end function free_jar
 
   function add_to_jar(j, what, size, where) result(sz)      ! insert data into data jar
@@ -335,177 +336,3 @@ module data_serialize
   end function get_from_jar
 
 end module
-
-#if defined(SELF_TEST)
-#include <serializer.hf>
-program test_jar
-  implicit none
-  call test_free
-  call test_pickling
-end program
-
-subroutine test_pickling
-  use data_serialize
-  implicit none
-  logical :: old_debug
-  JAR_DECLARE(my_jar)
-  integer :: ok, ne, i
-  type :: machin1
-    integer, dimension(3) :: ip
-    integer               :: date
-    character(len=4)      :: nom
-    character(len=2)      :: typ
-    character(len=2)      :: tmp
-  end type
-  type(machin1) :: a1, x1
-
-  type :: machin2
-    integer               :: l1
-    integer               :: l2
-    character(len=2)      :: unit
-  end type
-  type(machin2), dimension(4) :: a2, x2
-
-  print *,'==========================================================='
-
-  ne = JARSPACE_ITEM(a1)
-  print *,'each machin1 scalar item will use',ne,' cells in jar'
-  ne = JARSPACE_ITEM(a2)
-  print *,'a machin2 array / array section will use',ne,' cells per array element in jar'
-
-  old_debug = my_jar%debug(.true.)
-  if(.not. JAR_VALID(my_jar)) print *,'SUCCESS: jar not valid before creation'
-  if(JAR_VALID(my_jar))       print *,'ERROR:   jar is valid before creation'
-  ok = JAR_CREATE(my_jar, 4096)
-  if(JAR_VALID(my_jar)) print *,'jar created successfully'
-  print 1,'(test_pickling) my_jar : ok, size, avail =',ok, my_jar%usable(), my_jar%avail()
-
-  a1 = machin1([0,1,2],-123456,'xxxx','yy','zz')
-  ne = JAR_PUT_SINGLE(my_jar, a1)
-  print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-
-  do i = 1, size(a2)
-    a2(i) = machin2(500+i, 600+i, 'X_')
-  enddo
-  ne = JAR_PUT_MULTI(my_jar, a2(2:3))
-  print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-
-  x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-  ne = JAR_GET_SINGLE(my_jar, x1)
-  print *,a1
-  print *,x1
-  print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-  x2 = machin2(-1, -1, '**')
-  ne = JAR_GET_MULTI(my_jar, x2(1:2))
-  print *,a2(2)
-  print *,x2(1)
-  print *,a2(3)
-  print *,x2(2)
-  print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-  call my_jar%print(15)
-
-  JAR_REWIND(my_jar)
-
-  print *,''
-  JAR_RESET(my_jar)
-  call my_jar%print(20)
-  print 1,'(test_pickling) my_jar reset : size, avail =',my_jar%usable(), my_jar%avail()
-  ne = JAR_PUT_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
-  print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-  call my_jar%print(20)
-  ne = JAR_PUT_MULTI_AT(my_jar, a2(2:4), my_jar%stored()+2)    ! skip one position, start at top + 2
-  print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-  call my_jar%print(20)
-
-  x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-  ne = JAR_GET_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
-  print *,a1
-  print *,x1
-  x2 = machin2(-1, -1, '**')
-  ne = JAR_GET_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
-  print *,a2(2)
-  print *,x2(1)
-  print *,a2(3)
-  print *,x2(2)
-  ne = JAR_GET_MULTI(my_jar, x2(3:3))
-  print *,a2(4)
-  print *,x2(3)
-
-  ok = JAR_FREE(my_jar)
-  if(.not. JAR_VALID(my_jar)) print *,'SUCCESS: jar is not valid after free'
-  if(JAR_VALID(my_jar))       print *,'ERROR:   jar is valid after free'
-
-1 format(A,10I8)
-end subroutine test_pickling
-
-subroutine test_free
-  use data_serialize
-  implicit none
-  type(jar) :: myjar
-  logical :: old_debug, scrap
-  integer :: ok
-
-  old_debug = myjar%debug(.false.)
-  print *,'old debug mode =',old_debug
-  old_debug = myjar%debug(.true.)
-  print *,'old debug mode =',old_debug
-  scrap = myjar%debug(.true.)
-  print *,'old debug mode =',scrap
-  print *,''
-
-  ok = myjar%new(640)
-  print *,'(test_free) myjar%new() =',ok, myjar%usable()
-  ok = myjar%free()
-  if(ok .eq. 0) print *,'INFO: jar datafreed'
-  ok = myjar%free()
-  if(ok .ne. 0) print *,'WARNING: jar data already freed'
-  print *,''
-
-  call test_jar_1
-  print *,''
-  old_debug = myjar%debug(.false.)
-  print *,''
-  print *,'test_free: old debug mode =',old_debug
-  old_debug = myjar%debug(.false.)
-  print *,'test_free: old debug mode =',old_debug
-  
-end subroutine test_free
-
-subroutine test_jar_1
-  use data_serialize
-  implicit none
-  integer :: ok
-  type(jar) :: myjar
-
-  ok = myjar%new(1280)
-  call test_jar_finalize
-  print *,''
-
-  block
-    type(jar) :: myjar          ! overrrides myjar in main scope
-    ok = myjar%new(128)
-    print *,'myjar%new() =',ok, myjar%usable()
-!     ok = myjar%free()
-    print *,'jar going out of scope in block'
-  end block
-  print *,''
-
-!   print *,'freeing jar at end of test_jar_1, capacity =',myjar%usable()
-!   ok = myjar%free()
-!   if(ok .ne. 0) print *,'WARNING: jar data already freed'
-  print *,'myjar%new() test_jar_1 =',ok, myjar%usable()
-  print *,'jar going out of scope in test_jar_1'
-end subroutine test_jar_1
-
-subroutine test_jar_finalize
-  use data_serialize
-  implicit none
-  type(jar) :: myjar
-  integer :: ok
-
-  ok = myjar%new(1024)
-  print *,'myjar%new(1024) =',ok, myjar%usable()
-  if(myjar%usable() .ne. 1024) print *,'unexpected size'
-  print *,'jar going out of scope in subroutine test_jar_finalize'
-end subroutine test_jar_finalize
-#endif
