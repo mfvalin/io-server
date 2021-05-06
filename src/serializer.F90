@@ -25,6 +25,7 @@ module data_serialize
   public
 
   private :: c_malloc    ! DO NOT EXPORT
+  private :: c_free      ! DO NOT EXPORT
   interface
     function c_malloc(sz) result(p) BIND(C,name='malloc')
       import :: C_SIZE_T, C_PTR
@@ -227,7 +228,7 @@ module data_serialize
 
   end function jar_contents
 
-  subroutine final_jar(j)                    ! deallocate a jar's data if not already done at finalize
+  subroutine final_jar(j)                    ! deallocate a jar's data if not already done at finalize (if jar owns it)
     implicit none
     type(jar), intent(INOUT) :: j            ! the data jar
 
@@ -245,7 +246,7 @@ module data_serialize
     j % size = 0                             ! data jar cannot store data
   end subroutine final_jar
 
-  function free_jar(j) result(status)        ! deallocate a jar's data space
+  function free_jar(j) result(status)        ! deallocate a jar's data space (if jar owns it)
     implicit none
     class(jar), intent(INOUT) :: j           ! the data jar
     integer :: status                        ! 0 if O.K., -1 if nothing to free
