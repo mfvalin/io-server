@@ -33,6 +33,10 @@
 ! ok = JAR_CREATE(my_jar_name, size_of_jar)
 #define JAR_CREATE(jar, siz) jar%new(siz)
 
+! get Fortran pointer to an integer array with the jar data (NOT A COPY, a live pointer)
+! integer, dimension(:), pointer :: arrayptr
+#define JAR_DATA(jar, arrayptr)  arrayptr => jar%array()
+
 ! free the data container of the data jar (returns 0 if ok, -1 if error)
 ! integer :: ok
 ! ok = JAR_FREE(my_jar_name)

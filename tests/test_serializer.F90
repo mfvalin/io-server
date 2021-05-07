@@ -88,7 +88,8 @@ subroutine test_pickling
   ! disguise jar as integer array, test that it can be regenerated after pass-through
   ! here -> pass_through -> level2
   ! check that finalize does not release jas data space
-  blind_array => my_jar%array()     ! get Fortran pointer to jar contents
+!   blind_array => my_jar%array()     ! get Fortran pointer to jar contents
+  JAR_DATA(my_jar, blind_array)
   print *,'DIAG: before pass_through, blind_array size is',size(blind_array)
   call pass_through(blind_array, size(blind_array))  ! send integer array and its dimension
   print *,'DIAG: after pass_through'
@@ -131,7 +132,7 @@ subroutine pass_through(blind_array, n)    !  integer array inbound, jar outboun
   interface
     subroutine level2(my_jar)
     import :: jar
-    type(jar), intent(IN) :: my_jar
+    type(jar), intent(INOUT) :: my_jar
     end subroutine level2
   end interface
   integer, intent(IN) :: n
