@@ -276,22 +276,36 @@ endif
   end function ioserver_close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
-  function ioserver_write(this, mydata , area ,grid_in ,grid_out, cprs , meta ,nm) result(status)
+  function ioserver_write(this, mydata , area ,grid_in ,grid_out, cprs , meta) result(status)
+    use data_serialize
     implicit none
     class(server_file), intent(INOUT) :: this
     type(block_meta), intent(IN)      :: mydata           ! array descriptor from h % allocate
     type(subgrid), intent(IN)         :: area             ! area in global space
     integer, intent(IN), optional     :: grid_in          ! input grid code (implies dimensions)
     integer, intent(IN), optional     :: grid_out         ! output grid code (implies dimensions)
-    type(cmeta), intent(IN), optional :: cprs             ! compression related metadata
-    integer, intent(IN), dimension(*), optional :: meta  ! metadata associated with data (carried blindly, see pickling)
-    integer, intent(IN), optional     :: nm               ! dimension of metadata
-    integer :: status
+    type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
+    type(jar), intent(IN), optional   :: meta             ! metadata associated with data (carried serialized and blindly)
+    integer :: status, n
 
     status = -1
     if(this % fd <= 0) return
     call bump_ioserver_tag(this)
 
+    ! transmission layout for circular buffer (compute PE -> relay PE) :
+    ! tag number             (32 bits)
+    ! file number            (32 bits)
+    ! grid segment size      (32 bits)
+    ! global grid size       (32 bits)
+    ! area lower left corner (2 x 32 bits)
+    ! ni, nj, nk, nvar       (4 x 32 bits)
+    ! data pointer           (64 bits)     (will be translated to its own memory space by relay PE)
+    ! cprs size , may be 0   (32 bits)
+    ! cprs                   (cprs size x 32 bits)
+    ! meta size, may be 0    (32 bits)
+    ! meta                   (meta size x 32 bits)
+    n = cio_out % atomic_put( fd_seq, 1, .false.)
+    n = cio_out % atomic_put( this % fd, 1, .false.)
     status = 0
   end function ioserver_write
 
