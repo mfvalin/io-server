@@ -287,6 +287,7 @@ endif
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
     type(jar), intent(IN), optional   :: meta             ! metadata associated with data (carried serialized and blindly)
     integer :: status, n
+    integer, dimension(1) :: temp
 
     status = -1
     if(this % fd <= 0) return
@@ -304,8 +305,10 @@ endif
     ! cprs                   (cprs size x 32 bits)
     ! meta size, may be 0    (32 bits)
     ! meta                   (meta size x 32 bits)
-    n = cio_out % atomic_put( fd_seq, 1, .false.)
-    n = cio_out % atomic_put( this % fd, 1, .false.)
+    temp(1) = fd_seq
+    n = cio_out % atomic_put( temp, 1, .false.)
+    temp(1) = this % fd
+    n = cio_out % atomic_put(temp , 1, .false.)
     status = 0
   end function ioserver_write
 

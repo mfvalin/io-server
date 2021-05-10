@@ -180,8 +180,10 @@ contains
     integer(C_INT), intent(IN), value                :: num_elements !< How many elements we want to look at
 
     integer(C_INT) :: n !< Number of elements available after this operation, -1 if error
+    type(C_PTR) :: temp
 
-    n = CB_atomic_get(this % p, dest, num_elements, CB_PEEK)
+    temp = transfer(LOC(dest), temp)
+    n = CB_atomic_get(this % p, temp, num_elements, CB_PEEK)
   end function peek
 
   !> \brief wait until ndst tokens are available then extract them into dst
@@ -196,8 +198,11 @@ contains
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
 
     integer(C_INT) :: operation = CB_NO_COMMIT
+    type(C_PTR) :: temp
+
     if (commit_transaction) operation = CB_COMMIT
-    n = CB_atomic_get(this % p, dst, ndst, operation)
+    temp = transfer(LOC(dst), temp)
+    n = CB_atomic_get(this % p, temp, ndst, operation)
   end function atomic_get
 
   !> \brief wait until nsrc free slots are available then insert from src array
@@ -212,9 +217,12 @@ contains
     integer(C_INT) :: n                                    !< number of free slots available after this operation, -1 if error
 
     integer(C_INT) :: operation
+    type(C_PTR) :: temp
+
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
-    n = CB_atomic_put(this % p, src, nsrc, operation)
+    temp = transfer(LOC(src), temp)
+    n = CB_atomic_put(this % p, temp, nsrc, operation)
   end function atomic_put
 
   function delete(this) result(status)

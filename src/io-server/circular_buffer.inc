@@ -197,7 +197,8 @@ import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: ndst          !< number of tokens to extract
-integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+! integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst
+type(C_PTR), intent(IN), value :: dst              !< destination array to receive extracted data
 integer(C_INT), intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
 integer(C_INT) :: n                                !< number of data tokens available after this operation, -1 if error
 end function CB_atomic_get
@@ -208,7 +209,8 @@ import :: C_PTR, C_INT, DATA_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: p                     !< pointer to a circular buffer
 integer(C_INT), intent(IN), value :: nsrc               !< number of tokens to insert from src
-integer(DATA_ELEMENT), dimension(*), intent(IN) :: src  !< source array for data insertion
+! integer(DATA_ELEMENT), dimension(*), intent(IN) :: src 
+type(C_PTR), intent(IN), value :: src  !< source array for data insertion
 integer(C_INT), intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
 integer(C_INT) :: n                                     !< number of free slots available after this operation
 end function CB_atomic_put
