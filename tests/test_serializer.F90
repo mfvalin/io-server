@@ -101,7 +101,7 @@ subroutine test_pickling
   ne = JAR_PUT_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
-  ne = JAR_PUT_MULTI_AT(my_jar, a2(2:4), my_jar%stored()+2)    ! skip one position, start at top + 2
+  ne = JAR_PUT_MULTI_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
 

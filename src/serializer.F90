@@ -11,6 +11,8 @@
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 !  Lesser General Public License for more details.
 !
+! Author:   M.Valin , Recherche en Prevision Numerique, April 2021
+!
 ! _the Cray Fortran compiler treats loc() as a type(C_PTR), other compilers as integer(C_INTPTR_T)
 #if defined(_CRAYFTN)
 #define WHAT_TYPE type(C_PTR)
@@ -48,7 +50,7 @@ module data_serialize
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
     integer(JAR_ELEMENT) :: top  = 0             ! last posision "written" (cannot write beyond size)
     integer(JAR_ELEMENT) :: bot  = 0             ! last position "read" (cannot read beyond top)
-    integer(JAR_ELEMENT) :: opt  = 0             ! option flags
+    integer(JAR_ELEMENT) :: opt  = 0             ! option flags (0 owner of data memory, 1 not owner)
     type(C_PTR)          :: p = C_NULL_PTR       ! address of actual data
   end type
 
@@ -57,7 +59,7 @@ module data_serialize
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
     integer(JAR_ELEMENT) :: top  = 0             ! last posision "written" (cannot write beyond size)
     integer(JAR_ELEMENT) :: bot  = 0             ! last position "read" (cannot read beyond top)
-    integer(JAR_ELEMENT) :: opt  = 0             ! option flags
+    integer(JAR_ELEMENT) :: opt  = 0             ! option flags (0 owner of data memory, 1 not owner)
     type(C_PTR)          :: p = C_NULL_PTR       ! address of actual data
   contains
     procedure, PASS :: new     => new_jar        ! create a new data jar, allocate data storage
@@ -69,8 +71,9 @@ module data_serialize
     procedure, PASS :: data    => jar_pointer    ! get C pointer to actual jar data
     procedure, PASS :: array   => jar_contents   ! get Fortran pointer to actual jar data
     procedure, PASS :: usable  => jar_size       ! maximum capacity of data jar
-    procedure, PASS :: stored  => jar_top        ! current number of elements inserted
-    procedure, PASS :: avail   => jar_avail      ! current number of elements available for extraction
+    procedure, PASS :: high    => jar_top        ! current number of elements inserted (written)
+    procedure, PASS :: low     => jar_bot        ! current number of elements extracted (read)
+    procedure, PASS :: avail   => jar_avail      ! current number of elements available for extraction (high - low)
     procedure, PASS :: put     => add_to_jar     ! add data to jar at top of jar (or at a specific position)
     procedure, PASS :: get     => get_from_jar   ! get data from jar at current (or specific position)
     procedure, PASS :: print   => print_jar
@@ -192,6 +195,17 @@ module data_serialize
     sz = j % top
 
   end function jar_top
+
+  function jar_bot(j) result(sz)            ! get amount of data in jar (32 bit units)
+    implicit none
+    class(jar), intent(IN) :: j             ! the data jar
+    integer :: sz                           ! amount of data inserted in jar (32 bit units)
+
+    sz = -1
+    if(.not. C_ASSOCIATED(j % p)) return
+    sz = j % bot
+
+  end function jar_bot
 
   function jar_size(j) result(sz)           ! get data jar capacity (32 bit units)
     implicit none
