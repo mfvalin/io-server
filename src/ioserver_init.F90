@@ -299,16 +299,19 @@ function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,na
   else if(from_color == RELAY_COLOR) then     ! translate from address of relay PE of rank from_rank
     new_base = mem % pe(relay_index(from_rank)) % io_ra
   else
-    return   ! invalid color
+    print *,'ERROR(ptr_translate_from): invalid from_color',from_color
+    return   ! invalid from_color
   endif
 
   offset = Pointer_offset(new_base, from, 1)      ! offset in other PE space
+  if(offset < 0) print *,'ERROR(ptr_translate_from): negative offset'
   if(offset < 0) return                  ! not in shared memory arena
 
   new   = transfer(my_base, new)         ! make large integer from C pointer
   new   = new + offset                   ! add offset to my base
   local = transfer(new, local)           ! honest C pointer
-
+! print *,'DEBUG(ptr_translate_from): from, from_color, from_rank, local', &
+!        transfer(from,1_8), from_color, from_rank, transfer(local,1_8)
 !! F_StArT
 end function ptr_translate_from
 !!
@@ -335,6 +338,7 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
   to = C_NULL_PTR
   my_base = mem % pe(smp_rank) % io_ra   ! local address of memory arena
   offset = Pointer_offset(my_base, from, 1)       ! offset in local space
+  if(offset < 0) print *,'ERROR(ptr_translate_to): negative offset'
   if(offset < 0) return                  ! not in shared memory arena
 
   new_base = C_NULL_PTR                  ! find new base
@@ -345,13 +349,15 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
   else if(to_color == RELAY_COLOR) then       ! translate to address of relay PE of rank to_rank
     new_base = mem % pe(relay_index(to_rank)) % io_ra
   else
-    return   ! invalid color
+    print *,'ERROR(ptr_translate_to): invalid to_color',to_color
+    return   ! invalid to_color
   endif
 
   new = transfer(new_base, new)          ! make large integer from C pointer
   new = new + offset                     ! add offset to new base
   to  = transfer(new, to)                ! honest C pointer
-
+! print *,'DEBUG(ptr_translate_to): from, to_color, to_rank, to', &
+!         transfer(from,1_8), to_color, to_rank, transfer(to,1_8)
 !! F_StArT
 end function ptr_translate_to
 !!
@@ -483,6 +489,7 @@ subroutine verify_translations()  ! chech that address translations are coherent
   integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
   integer(C_INTPTR_T) :: iora0
   integer :: i, errors
+  type(C_PTR) :: temp
   
   iora0 = transfer(relaymem, iora0)  ! local address of relay shared memory (shared between relay and compute PEs)
 
@@ -491,7 +498,8 @@ subroutine verify_translations()  ! chech that address translations are coherent
   enddo
 !   write(6,'(A,/(5Z18.16))') 'IO-RA :', iora1(0:smp_size -1)
   do i = 0, smp_size -1              ! translate local address into other PE address (put into long integer for later comparison)
-    iora2(i) = transfer(ptr_translate_to(relaymem, NODE_COLOR, i), iora2(i))
+    temp = ptr_translate_to(relaymem, NODE_COLOR, i)
+    iora2(i) = transfer(temp, iora2(i))
   enddo
 !   write(6,'(A,/(5Z18.16))') '      :', iora2(0:smp_size -1)
   errors = 0
@@ -508,7 +516,8 @@ subroutine verify_translations()  ! chech that address translations are coherent
     write(6,*) 'INFO: number of errors in local -> remote address translations =',errors
   endif
   do i = 0, smp_size -1     ! translate other PE adddress into local address (put into long integer for later comparison)
-    iora2(i) = transfer(ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i), iora2(i))
+    temp = ptr_translate_from(mem % pe(i) % io_ra, NODE_COLOR, i)
+    iora2(i) = transfer(temp, iora2(i))
   enddo
   errors = 0
 ! iora2(0) = 0  ! force error to test detection
