@@ -222,10 +222,10 @@ module ioserver_functions
 !     if(model .eq. crs % comm) print *,'INFO : model .eq. crs % comm'
   end function ioserver_init
 
-  function ioserver_finalize() result(status)
+  function ioserver_terminate() result(status)
     integer :: status
     status = ioserver_int_finalize()
-  end function ioserver_finalize
+  end function ioserver_terminate
 
   function ioserver_open(this, name) result(status)
     implicit none
@@ -341,7 +341,7 @@ subroutine ioserver_functions_demo
   h = ioserver_heap(0)
   status = f % open('my/file/path')
   status = f % close()
-  status = ioserver_finalize()
+  status = ioserver_terminate()
 end subroutine ioserver_functions_demo
 !
 ! =============================================================================================

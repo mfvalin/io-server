@@ -1390,6 +1390,19 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
 end subroutine RPN_MPI_Win_allocate_shared
 
 !! F_StArT
+subroutine ioserver_finalize
+!! F_EnD
+  implicit none
+  integer :: ierr
+  call ioserver_free_windows
+  call MPI_Finalize(ierr)
+!! F_StArT
+end subroutine ioserver_finalize
+!!
+!! F_EnD
+
+
+!! F_StArT
 subroutine ioserver_free_windows
 !! F_EnD
   use ioserver_internal_mod
