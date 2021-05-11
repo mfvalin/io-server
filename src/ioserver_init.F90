@@ -284,7 +284,6 @@ function ptr_translate_from(from, from_color, from_rank) result(local) BIND(C,na
   type(C_PTR) :: local
 !! F_EnD
 
-  integer :: rank
   integer(C_INTPTR_T) :: offset, new
   type(C_PTR) :: my_base, new_base
 
@@ -331,7 +330,6 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
   type(C_PTR) :: to
 !! F_EnD
 
-  integer :: rank
   integer(C_INTPTR_T) :: offset, new
   type(C_PTR) :: my_base, new_base
 
@@ -957,7 +955,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
   integer, dimension(:), pointer :: f_win_base
   type(C_PTR) :: c_win_base, temp_ptr
   integer(C_INT64_T) :: shmsz64
-  integer :: sz32, nfree
+  integer :: sz32
   logical :: ok
 #include <io-server/iso_c_binding_extras.hf>
 

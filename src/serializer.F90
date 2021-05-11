@@ -26,20 +26,18 @@ module data_serialize
 
   public
 
-  private :: c_malloc    ! DO NOT EXPORT
-  private :: c_free      ! DO NOT EXPORT
   interface
-    function c_malloc(sz) result(p) BIND(C,name='malloc')
+    function libc_malloc(sz) result(p) BIND(C,name='malloc')
       import :: C_SIZE_T, C_PTR
       implicit none
       integer(C_SIZE_T), intent(IN), value :: sz
       type(C_PTR) :: p
-    end function c_malloc
-    subroutine c_free(p) BIND(C, name='free')
+    end function libc_malloc
+    subroutine libc_free(p) BIND(C, name='free')
       import :: C_PTR
       implicit none
       type(C_PTR), intent(IN), value :: p
-    end subroutine c_free
+    end subroutine libc_free
   end interface
 
   logical, save, private :: debug_mode = .false.
@@ -105,7 +103,7 @@ module data_serialize
     if(C_ASSOCIATED(j % p)) return          ! error, there is already an allocated data container
 
     dsz = data_size
-    j % p = c_malloc( dsz * 4)              ! size in bytes
+    j % p = libc_malloc( dsz * 4)              ! size in bytes
     if(.not. C_ASSOCIATED(j % p)) return    ! malloc failed
     ok = 0
 
@@ -249,7 +247,7 @@ module data_serialize
     if(C_ASSOCIATED(j % p)) then
       if(debug_mode .and. j%opt == 0) print *,'DEBUG(jar finalize): freing jar memory, size =', j%size
       if(debug_mode .and. j%opt == 1) print *,'DEBUG(jar finalize): not owner, not freing jar memory, size =', j%size
-      if(j%opt == 0) call c_free(j % p)      ! release storage associated with jar if jar owns it
+      if(j%opt == 0) call libc_free(j % p)      ! release storage associated with jar if jar owns it
       j % p = C_NULL_PTR
     else
       if(debug_mode) print *,'DEBUG(jar finalize): nothing to free in jar'
@@ -268,7 +266,7 @@ module data_serialize
     if(C_ASSOCIATED(j % p)) then
       if(debug_mode .and. j%opt == 0) print *,'DEBUG(jar free): freing jar memory'
       if(debug_mode .and. j%opt == 1) print *,'DEBUG(jar free): not owner, not freing jar memory'
-      if(j % opt == 0) call c_free(j % p)    ! release storage associated with jar if jar owns it
+      if(j % opt == 0) call libc_free(j % p)    ! release storage associated with jar if jar owns it
       j % p = C_NULL_PTR                     ! nullify data pointer to avoid accidents
       status = 0
     else

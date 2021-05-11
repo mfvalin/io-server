@@ -181,7 +181,6 @@ module ioserver_functions
   subroutine ioserver_start()
     implicit none
     integer :: navail, nfree
-    type(comm_rank_size)  :: crs 
     type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
     integer, dimension(1) :: tag
 
