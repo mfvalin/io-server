@@ -173,27 +173,32 @@ contains
     num_elements = CB_get_capacity(this % p)
   end function get_capacity
 
+#define IgnoreTypeKindRank dest
+#define ExtraAttributes , target
   function peek(this, dest, num_elements) result(n)
     implicit none
     class(circular_buffer), intent(INOUT)            :: this !< The circular_buffer
-    integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dest !< Destination array to receive the data
+!     integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dest !< Destination array to receive the data
+#include <IgnoreTypeKindRankPlus.hf>
     integer(C_INT), intent(IN), value                :: num_elements !< How many elements we want to look at
-
     integer(C_INT) :: n !< Number of elements available after this operation, -1 if error
     type(C_PTR) :: temp
 
-    temp = transfer(LOC(dest), temp)
+    temp = C_LOC(dest)
     n = CB_atomic_get(this % p, temp, num_elements, CB_PEEK)
   end function peek
 
   !> \brief wait until ndst tokens are available then extract them into dst
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%atomic_get(dst, ndst, commit_transaction)
+#define IgnoreTypeKindRank dst
+#define ExtraAttributes , target
   function atomic_get(this, dst, ndst, commit_transaction) result(n)
     implicit none
     class(circular_buffer), intent(INOUT)            :: this  !< circular_buffer
     integer(C_INT), intent(IN), value                :: ndst  !< number of tokens to extract
-    integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+!     integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst   !< destination array to receive extracted data
+#include <IgnoreTypeKindRankPlus.hf>
     logical, intent(IN), value                       :: commit_transaction !< Whether to update the buffer (ie _extract_ the data)
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
 
@@ -201,18 +206,21 @@ contains
     type(C_PTR) :: temp
 
     if (commit_transaction) operation = CB_COMMIT
-    temp = transfer(LOC(dst), temp)
+    temp = C_LOC(dst)
     n = CB_atomic_get(this % p, temp, ndst, operation)
   end function atomic_get
 
   !> \brief wait until nsrc free slots are available then insert from src array
   !> <br>type(circular_buffer) :: cb<br>integer :: n<br>
   !> n = cb\%atomic_put(src, nsrc)
+#define IgnoreTypeKindRank src
+#define ExtraAttributes , target
   function atomic_put(this, src, nsrc, commit_transaction) result(n)
     implicit none
     class(circular_buffer), intent(INOUT)           :: this  !< circular_buffer
     integer(C_INT), intent(IN), value               :: nsrc  !< number of tokens to insert from src
-    integer(DATA_ELEMENT), dimension(*), intent(IN) :: src   !< source array for data insertion
+!     integer(DATA_ELEMENT), dimension(*), intent(IN) :: src   !< source array for data insertion
+#include <IgnoreTypeKindRankPlus.hf>
     logical, intent(IN), value                      :: commit_transaction !< Whether to make the inserted data immediately available
     integer(C_INT) :: n                                    !< number of free slots available after this operation, -1 if error
 
@@ -221,7 +229,7 @@ contains
 
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
-    temp = transfer(LOC(src), temp)
+    temp = C_LOC(src)
     n = CB_atomic_put(this % p, temp, nsrc, operation)
   end function atomic_put
 
