@@ -1388,6 +1388,22 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
   baseptr = transfer(p, baseptr)
   ierror = MPI_SUCCESS
 end subroutine RPN_MPI_Win_allocate_shared
+
+!! F_StArT
+subroutine ioserver_free_windows
+!! F_EnD
+  use ioserver_internal_mod
+  implicit none
+  integer :: ierr
+  if(ctrlwin .ne. MPI_WIN_NULL) call MPI_Win_free(ctrlwin, ierr)
+  if(alliowin .ne. MPI_WIN_NULL) call MPI_Win_free(alliowin, ierr)
+  if(relaywin .ne. MPI_WIN_NULL) call MPI_Win_free(relaywin, ierr)
+  if(serverwin .ne. MPI_WIN_NULL) call MPI_Win_free(serverwin, ierr)
+!! F_StArT
+end subroutine ioserver_free_windows
+!!
+!! F_EnD
+
 !! F_StArT
 !! end interface
 !! F_EnD

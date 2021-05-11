@@ -144,6 +144,7 @@ program pseudomodelandserver
   call ioserver_set_time_to_quit()
   write(6,*)'Final:      node PE',noderank+1,' of',nodesize
   write(6,*)'Final: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
+  call ioserver_free_windows
   call mpi_finalize(status)
 end program
 
@@ -385,6 +386,7 @@ relay_debug = .true.
   call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
   write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'Final: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
+  call ioserver_free_windows
   call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
   stop
 1 format(A,I10,A,Z10.8,A,Z18.16,A,I10)
@@ -424,6 +426,7 @@ subroutine io_server_out()
   write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'Final:       full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
 
+  call ioserver_free_windows
   call mpi_finalize(ierr)
   stop
 end subroutine io_server_out

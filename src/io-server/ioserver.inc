@@ -181,4 +181,7 @@ character(len=*), intent(IN) :: app_class
 integer :: status
 end function IOserver_int_init
 
+subroutine ioserver_free_windows
+end subroutine ioserver_free_windows
+
 end interface
