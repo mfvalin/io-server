@@ -1,0 +1,9 @@
+#!/bin/bash
+export MPI_CHILD=${MP_CHILD:-${PMI_RANK:-${OMPI_COMM_WORLD_RANK:-${ALPS_APP_PE}}}}
+export TAG=$((100000+${MPI_CHILD}))
+TAG=${TAG#1}
+mkdir -p ${TAG}
+[[ -z $TEE_OUTPUT ]] && "$@" >${TAG}/stdout 2>&1
+[[ -n $TEE_OUTPUT ]] && "$@" 2>&1 | tee ${TAG}/stdout
+true
+#echo ${TAG}/stdout : $?

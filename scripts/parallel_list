@@ -1,0 +1,20 @@
+#!/bin/bash
+# -clean   : remove stdout file from directory
+[[ "$1" == *clean* ]] && clean=clean && shift
+# -n N     : list stdout from PEs 0 to N-1
+# -s N1 N2 : list stdout from PEs N1 to N2
+# -s N     : list stdout from PE N
+# nothing  : list stdout from all PEs
+[[ "$1" == -n* ]] && shift && npe="${1:-100}" && npe="0 $((npe-1))" && shift
+[[ "$1" == -s* ]] && shift && npe="${1:-0} ${2:-${1:-100}} " && shift   && shift
+#echo npe = $npe , clean = $clean
+#exit 0
+npe=${npe:-0 100}
+for i in $(seq $npe)  ; do 
+  for dir in 0*${i} ; do
+    [[ -f $dir/stdout ]] && { echo ; echo "=========================================== ${dir}/stdout ===========================================" ; echo ; }
+    [[ -f $dir/stdout ]] && sed "s/^/$dir: /" ${dir}/stdout
+    [[ -f $dir/stdout ]] && [[ "$clean" == *clean ]] && rm ${dir}/stdout && echo "removing ${dir}/stdout"
+  done
+done
+
