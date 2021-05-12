@@ -60,22 +60,26 @@ subroutine test_pickling
   print 1,'(test_pickling) my_jar : ok, size, avail =',ok, my_jar%usable(), my_jar%avail()
 
   a1 = machin1([0,1,2],-123456,'xxxx','yy','zz')
-  ne = JAR_PUT_SINGLE(my_jar, a1)
+!   ne = JAR_PUT_SINGLE(my_jar, a1)
+  ne = JAR_INTO_SINGLE(my_jar, a1)
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
 
   do i = 1, size(a2)
     a2(i) = machin2(500+i, 600+i, 'X_')
   enddo
-  ne = JAR_PUT_MULTI(my_jar, a2(2:3))
+!   ne = JAR_PUT_MULTI(my_jar, a2(2:3))
+  ne = JAR_INTO_MULTI(my_jar, a2(2:3))
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
 
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-  ne = JAR_GET_SINGLE(my_jar, x1)
+!   ne = JAR_GET_SINGLE(my_jar, x1)
+  ne = JAR_OUTOF_SINGLE(my_jar, x1)
   print *,'       ',a1
   print *,'x1    =',x1
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   x2 = machin2(-1, -1, '**')
-  ne = JAR_GET_MULTI(my_jar, x2(1:2))
+!   ne = JAR_GET_MULTI(my_jar, x2(1:2))
+  ne = JAR_OUTOF_MULTI(my_jar, x2(1:2))
   print *,'       ',a2(2)
   print *,'x2(1) =',x2(1)
   print *,'       ',a2(3)
@@ -98,24 +102,29 @@ subroutine test_pickling
   JAR_RESET(my_jar)
   call my_jar%print(20)
   print 1,'(test_pickling) my_jar reset : size, avail =',my_jar%usable(), my_jar%avail()
-  ne = JAR_PUT_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+!   ne = JAR_PUT_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  ne = JAR_INTO_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
-  ne = JAR_PUT_MULTI_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
+!   ne = JAR_PUT_MULTI_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
+  ne = JAR_INTO_MULTI_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
 
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-  ne = JAR_GET_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+!   ne = JAR_GET_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  ne = JAR_OUTOF_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
   print *,'         ',a1
   print *,'x1      =',x1
   x2 = machin2(-1, -1, '**')
-  ne = JAR_GET_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
+!   ne = JAR_GET_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
+  ne = JAR_OUTOF_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
   print *,'       ',a2(2)
   print *,'x2(1) =',x2(1)
   print *,'       ',a2(3)
   print *,'x2(2) =',x2(2)
-  ne = JAR_GET_MULTI(my_jar, x2(3:3))
+!   ne = JAR_GET_MULTI(my_jar, x2(3:3))
+  ne = JAR_OUTOF_MULTI(my_jar, x2(3:3))
   print *,'       ',a2(4)
   print *,'x2(3) =',x2(3)
 
@@ -155,9 +164,13 @@ subroutine level2(my_jar)    ! receives jar, recreated from integer array by pas
 
   print *,'DIAG(level2) :'
   call my_jar%print(20)
-  ne = JAR_GET_SINGLE(my_jar, x1)
+!   ne = JAR_GET_SINGLE(my_jar, x1)
+!   ne = my_jar % outof(x1, storage_size(x1))
+  ne = JAR_OUTOF_SINGLE(my_jar, x1)
   print *,'x1    =',x1
-  ne = JAR_GET_MULTI(my_jar, x2(1:2))
+!   ne = JAR_GET_MULTI(my_jar, x2(1:2))
+!   ne = my_jar % outof(x2(1:2), storage_size(x2(1:2)) * size(x2(1:2)) )
+  ne = JAR_OUTOF_MULTI(my_jar, x2(1:2))
   print *,'x2(1) =',x2(1)
   print *,'x2(2) =',x2(2)
   print *,'DIAG(level2) exiting'

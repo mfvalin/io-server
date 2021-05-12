@@ -61,10 +61,12 @@
 ! the result is the position of the last filled element in the data jar (or -1 if an overflow would accur)
 ! integer :: ne, insertion_point
 ! type(whatever_type) :: my_item
-! ne = JAR_PUT_SINGLE(my_jar_name, my_item)
-! ne = JAR_PUT_SINGLE_AT(my_jar_name, my_item, insertion_point)
+! ne = JAR_PUT_SINGLE(my_jar_name, my_item)                       ! or JAR_INTO_SINGLE
+! ne = JAR_PUT_SINGLE_AT(my_jar_name, my_item, insertion_point)   ! or JAR_INTO_SINGLE_AT
 #define JAR_PUT_SINGLE(jar, item)          jar%put( LOC(item), storage_size(item) )
+#define JAR_INTO_SINGLE(jar, item)         jar%into( item, storage_size(item) )
 #define JAR_PUT_SINGLE_AT(jar, item, pos)  jar%put( LOC(item), storage_size(item), where=pos )
+#define JAR_INTO_SINGLE_AT(jar, item, pos) jar%into( item, storage_size(item), where=pos )
 
 ! insert an ARRAY or an ARRAY section into data jar at current insertion position or at a specific position
 ! beginning of data jar is at position 1
@@ -72,10 +74,12 @@
 ! the result is the position of the last filled element in the data jar (or -1 if an overflow would accur)
 ! integer :: ne, insertion_point
 ! type(whatever_type), dimension(whatever_dimensions) :: my_array
-! ne = JAR_PUT_MULTI(my_jar_name, my_array(start:end))
-! ne = JAR_PUT_MULTI(my_jar_name, my_array(start:end), insertion_point)
+! ne = JAR_PUT_MULTI(my_jar_name, my_array(start:end))                      ! or JAR_INTO_MULTI
+! ne = JAR_PUT_MULTI_AT(my_jar_name, my_array(start:end), insertion_point)  ! or JAR_INTO_MULTI_AT
 #define JAR_PUT_MULTI(jar, item)           jar%put( LOC(item), storage_size(item)*size(item) )
+#define JAR_INTO_MULTI(jar, item)          jar%into( item, storage_size(item)*size(item) )
 #define JAR_PUT_MULTI_AT(jar, item, pos)   jar%put( LOC(item), storage_size(item)*size(item), where=pos )
+#define JAR_INTO_MULTI_AT(jar, item, pos)  jar%into( item, storage_size(item)*size(item), where=pos )
 
 ! extract a SCALAR item from data jar at current extraction position or at a specific position
 ! beginning of data jar is at position 1
@@ -83,10 +87,12 @@
 ! the result is the position of the last extracted element in the data jar (or -1 if there is not enough data)
 ! integer :: ne, extraction_point
 ! type(whatever_type) :: my_item
-! ne = JAR_GET_SINGLE(my_jar_name, my_item)
-! ne = JAR_GET_SINGLE_AT(my_jar_name, my_item, extraction_point)
-#define JAR_GET_SINGLE(jar, item)          jar%get( LOC(item), storage_size(item) )
-#define JAR_GET_SINGLE_AT(jar, item, pos)  jar%get( LOC(item), storage_size(item), where=pos )
+! ne = JAR_GET_SINGLE(my_jar_name, my_item)                       ! or JAR_OUTOF_SINGLE
+! ne = JAR_GET_SINGLE_AT(my_jar_name, my_item, extraction_point)  ! or JAR_OUTOF_SINGLE_AT
+#define JAR_GET_SINGLE(jar, item)           jar%get( LOC(item), storage_size(item) )
+#define JAR_OUTOF_SINGLE(jar, item)         jar%outof( item, storage_size(item) )
+#define JAR_GET_SINGLE_AT(jar, item, pos)   jar%get( LOC(item), storage_size(item), where=pos )
+#define JAR_OUTOF_SINGLE_AT(jar, item, pos) jar%outof( item, storage_size(item), where=pos )
 
 ! extract an ARRAY or an ARRAY section from data jar at current extraction position or at a specific position
 ! beginning of data jar is at position 1
@@ -94,10 +100,12 @@
 ! the result is the position of the last extracted element in the data jar (or -1 if there is not enough data)
 ! integer :: ne, extraction_point
 ! type(whatever_type), dimension(whatever_dimensions) :: my_array
-! ne = JAR_GET_MULTI(my_jar_name, my_array(start:end))
-! ne = JAR_GET_MULTI_AT(my_jar_name, my_array(start:end), extraction_point)
+! ne = JAR_GET_MULTI(my_jar_name, my_array(start:end))                       ! or JAR_OUTOF_MULTI
+! ne = JAR_GET_MULTI_AT(my_jar_name, my_array(start:end), extraction_point)  ! or JAR_OUTOF_MULTI_AT
 #define JAR_GET_MULTI(jar, item)           jar%get( LOC(item), storage_size(item)*size(item) )
+#define JAR_OUTOF_MULTI(jar, item)         jar%outof( item, storage_size(item)*size(item) )
 #define JAR_GET_MULTI_AT(jar, item, pos)   jar%get( LOC(item), storage_size(item)*size(item), where=pos )
+#define JAR_OUTOF_MULTI_AT(jar, item, pos) jar%outof( item, storage_size(item)*size(item), where=pos )
 
 #endif
 
