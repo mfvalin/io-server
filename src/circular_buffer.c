@@ -598,7 +598,7 @@ int32_t CB_atomic_get(
 //C_EnD
 {
   io_timer_t timer = {0, 0};
-  io_timer_start(&timer);
+  IO_timer_start(&timer);
 
   const int num_available = CB_wait_data_available(buffer, num_elements);
   if (num_available < 0)
@@ -635,8 +635,8 @@ int32_t CB_atomic_get(
     *outp                       = out;
   }
 
-  io_timer_stop(&timer);
-  buffer->stats.total_read_time_ms += io_time_ms(&timer);
+  IO_timer_stop(&timer);
+  buffer->stats.total_read_time_ms += IO_time_ms(&timer);
   if (operation != CB_PEEK) {
     buffer->stats.num_read_elems += (uint64_t)num_elements;
     buffer->stats.num_reads++;
@@ -672,7 +672,7 @@ int32_t CB_atomic_put(
 //C_EnD
 {
   io_timer_t timer = {0, 0};
-  io_timer_start(&timer);
+  IO_timer_start(&timer);
 
   if (CB_wait_space_available(buffer, num_elements) < 0)
     return -1;
@@ -702,11 +702,11 @@ int32_t CB_atomic_put(
     *inp                       = current_in;
   }
 
-  io_timer_stop(&timer);
+  IO_timer_stop(&timer);
 
   buffer->stats.num_write_elems += num_elements;
   buffer->stats.num_writes++;
-  buffer->stats.total_write_time_ms += io_time_ms(&timer);
+  buffer->stats.total_write_time_ms += IO_time_ms(&timer);
 
   return CB_get_available_space(buffer);
 }

@@ -52,12 +52,17 @@
 
 
  To extract the function interface only, you must put the begin/end tags around
- the header. The placement of the closing parenthesis/opening bracket does not
- matter, as long as they are not on the same line with a space between them
+ the header. The closing parenthesis/opening bracket must either
+  - be on the same line, without a space between them
+or
+  - be on different lines, with the closing parenthesis by itself on a line
 
  For example:
      //C_StArT
-     int my_function(type1 arg1, type2* arg2)
+     int my_function(
+         type1 arg1, //! Doxygen doc
+         type2* arg2 //! Moar doc
+         )
      //C_EnD
      {
          [function body]

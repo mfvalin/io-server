@@ -10,6 +10,7 @@ set(C_TO_INC_FILES
   distributed_circular_buffer.c
   memory_arena.c
   rpn_extra.c
+  timer.c
 )
 
 set(C_TO_H_FILES
@@ -18,6 +19,7 @@ set(C_TO_H_FILES
   memory_arena.c
   rpn_extra.c
   shmem_heap.c
+  timer.c
 )
 
 set(F_ALLOC_FILE ${CMAKE_CURRENT_SOURCE_DIR}/io-server/f_alloc.inc)
