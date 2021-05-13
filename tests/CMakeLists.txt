@@ -3,10 +3,11 @@ cmake_minimum_required(VERSION 3.16)
 set(TEST_SOURCES
    cb_plus_dcb.F90
    circular_buffer.F90
-   circular_buffer_fill.c
+   # circular_buffer_fill.c
    circular_buffer_single_thread.F90
    distributed_circular_buffer.F90
 #   memory_arena.F90
+   mpi_bandwidth.F90
    pseudo-model.F90
 #   pseudo-server.F90
 #   small_dcb_test.c
