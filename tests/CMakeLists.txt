@@ -68,7 +68,7 @@ endfunction()
 
 # Create the test library
 set(TEST_HELPER_LIB test_helper)
-add_library(${TEST_HELPER_LIB} ${TEST_HELPER_FILES})
+add_library(${TEST_HELPER_LIB} STATIC ${TEST_HELPER_FILES})
 
 # Build the tests
 foreach(TEST_SOURCE ${TEST_SOURCES})
@@ -76,6 +76,7 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
 endforeach(TEST_SOURCE)
 
 gen_test_target(SOURCES benchmark_mpi_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
+gen_test_target(SOURCES benchmark_disk_bandwidth.F90 LIBRARIES ${TEST_HELPER_LIB})
 
 
 # Targets to run basic tests

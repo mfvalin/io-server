@@ -1,5 +1,6 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <time.h>
 
 //C_StArT
 #include <stdint.h>
@@ -14,6 +15,7 @@
 // !> ptr = memory_allocate_shared(shmid, size)
 // function memory_allocate_shared(shmid, size) result(ptr) BIND(C,name='memory_allocate_shared')
 //   import :: C_PTR, C_INT, C_INT64_T
+//   implicit none
 //   integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (set by memory_allocate_shared) (see shmget)
 //   integer(C_INT64_T), intent(IN), value :: size  !< size of segment in bytes
 //   type(C_PTR) :: ptr                             !< local address of memory segment
@@ -57,6 +59,7 @@ void *memory_allocate_shared(
 // !> ptr = memory_address_from_id(shmid)
 // function memory_address_from_id(shmid) result(ptr) BIND(C,name='memory_address_from_id')
 //   import :: C_PTR, C_INT
+//   implicit none
 //   integer(C_INT), intent(IN), value :: shmid           !< shared memory id of segment (see shmget)
 //   type(C_PTR) :: ptr                             !< local memory addres of shared memory segment
 // end function memory_address_from_id
@@ -76,6 +79,24 @@ void *memory_address_from_id(
   return p;
 }
 
+
+//F_StArT
+// function get_current_time_us() result(now) BIND(C,name='get_current_time_us')
+//   import :: C_INT64_T
+//   implicit none
+//   integer(C_INT64_T) :: now
+// end function get_current_time_us
+//F_EnD
+//! Get current system time in microseconds, wraps around approximately every year
+int64_t get_current_time_us() {
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+
+  // Wraps around every year or so. Not sure why you would need microsecond precision for longer
+  const int64_t now_us = ((int64_t)now.tv_sec % (1 << 25)) * 1000000 + (int64_t)now.tv_nsec / 1000;
+
+  return now_us;
+}
 
 //F_StArT
 //end interface
