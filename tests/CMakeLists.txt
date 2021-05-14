@@ -75,7 +75,7 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
    gen_test_target(SOURCES ${TEST_SOURCE} LIBRARIES ${PROJECT_NAME})
 endforeach(TEST_SOURCE)
 
-gen_test_target(SOURCES mpi_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
+gen_test_target(SOURCES benchmark_mpi_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
 
 
 # Targets to run basic tests
