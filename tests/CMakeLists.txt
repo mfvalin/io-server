@@ -7,7 +7,7 @@ set(TEST_SOURCES
    circular_buffer_single_thread.F90
    distributed_circular_buffer.F90
 #   memory_arena.F90
-   mpi_bandwidth.F90
+   # mpi_bandwidth.F90
    pseudo-model.F90
 #   pseudo-server.F90
 #   small_dcb_test.c
@@ -15,17 +15,67 @@ set(TEST_SOURCES
    test_shmem_heap.F90
    )
 
+set(TEST_HELPER_FILES
+   test_helper.c
+   test_helper_mod.F90
+)
+
+# Fortran headers
+set(EXTRACT_FORTRAN_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh)
+foreach(C_FILE test_helper.c)
+   get_filename_component(FILE_NAME ${C_FILE} NAME_WLE)
+   set(IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${C_FILE}")
+   set(OUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/${FILE_NAME}.inc")
+   add_custom_command(OUTPUT ${OUT_FILE} COMMAND ${EXTRACT_FORTRAN_SCRIPT} ${IN_FILE} > ${OUT_FILE} DEPENDS ${C_FILE} ${EXTRACT_FORTRAN_SCRIPT})
+   list(APPEND TEST_HELPER_FILES ${OUT_FILE})
+endforeach(C_FILE)
+
+# C headers
+set(EXTRACT_C_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh)
+foreach(C_FILE test_helper.c)
+   get_filename_component(FILE_NAME ${C_FILE} NAME_WLE)
+   set(IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${C_FILE}")
+   set(OUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/${FILE_NAME}.h")
+   add_custom_command(OUTPUT ${OUT_FILE} COMMAND ${EXTRACT_C_SCRIPT} ${IN_FILE} > ${OUT_FILE} DEPENDS ${C_FILE} ${EXTRACT_C_SCRIPT})
+   list(APPEND TEST_HELPER_FILES ${OUT_FILE})
+endforeach(C_FILE)
+
+
 function(get_test_name SOURCE_FILE TEST_NAME)
    get_filename_component(BASE_NAME ${SOURCE_FILE} NAME_WLE)
    set(${TEST_NAME} ${PROJECT_NAME}_${BASE_NAME} PARENT_SCOPE)
 endfunction(get_test_name)
 
+function(gen_test_target)
+#   set(options )
+#   set(oneValueArgs )
+   set(multiValueArgs SOURCES LIBRARIES)
+   cmake_parse_arguments(GEN_TEST "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+   if (NOT DEFINED GEN_TEST_SOURCES)
+     message(WARNING "Missing sources")
+   endif()
+
+   list (GET GEN_TEST_SOURCES 0 FIRST_SOURCE)
+   get_test_name(${FIRST_SOURCE} TEST_TARGET)
+
+   add_executable(${TEST_TARGET} ${GEN_TEST_SOURCES})
+   foreach(LIB ${GEN_TEST_LIBRARIES})
+      target_link_libraries(${TEST_TARGET} ${LIB})
+   endforeach()
+endfunction()
+
+
+# Create the test library
+set(TEST_HELPER_LIB test_helper)
+add_library(${TEST_HELPER_LIB} ${TEST_HELPER_FILES})
+
 # Build the tests
 foreach(TEST_SOURCE ${TEST_SOURCES})
-   get_test_name(${TEST_SOURCE} TEST_TARGET)
-   add_executable(${TEST_TARGET} ${TEST_SOURCE})
-   target_link_libraries(${TEST_TARGET} ${PROJECT_NAME})
+   gen_test_target(SOURCES ${TEST_SOURCE} LIBRARIES ${PROJECT_NAME})
 endforeach(TEST_SOURCE)
+
+gen_test_target(SOURCES mpi_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
 
 
 # Targets to run basic tests
