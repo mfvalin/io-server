@@ -209,7 +209,7 @@ contains
     integer, intent(in) :: num_channel_counts
     integer, dimension(num_channel_counts), intent(in) :: channel_counts
 
-    integer, parameter :: MAX_TOTAL_DATA = 100000000
+    integer, parameter :: MAX_TOTAL_DATA = 50000000
 
     integer :: rank
     integer :: ierror, i, i_num_channel
