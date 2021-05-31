@@ -38,6 +38,8 @@ module io_timer_module
       procedure :: get_time_ms
   end type io_timer
 
+  public :: rdtscp, rdtsc
+
 contains
 
   !> See IO_timer_create

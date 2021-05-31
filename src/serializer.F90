@@ -147,7 +147,7 @@ module data_serialize
     ok = C_ASSOCIATED(j%p)
   end function valid_jar
 
-  subroutine reset_jar(j)                   ! re initialize a jar (leave data conttainer alone)
+  subroutine reset_jar(j)                   ! re initialize a jar (leave data container alone)
     implicit none
     class(jar), intent(INOUT) :: j          ! the data jar
 

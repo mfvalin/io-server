@@ -97,11 +97,18 @@ static inline uint64_t get_current_time_us() {
   return now_us;
 }
 //! Record the current timestamp
-void IO_timer_start(io_timer_t* timer);
+static inline void IO_timer_start(io_timer_t* timer) {
+  timer->start = get_current_time_us();
+}
 //! Increment total time with number of ticks since last start
-void IO_timer_stop(io_timer_t* timer);
+static void IO_timer_stop(io_timer_t* timer) {
+  timer->total_time += get_current_time_us() - timer->start;
+}
 //! Retrieve the accumulated time in number of milliseconds, as a double
-double IO_time_ms(const io_timer_t* timer);
+static inline double IO_time_ms(const io_timer_t* timer) {
+  // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
+  return timer->total_time / 1000.0;
+}
 static inline double IO_time_since_start(const io_timer_t* timer) {
   // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
   return (get_current_time_us() - timer->start) / 1000.0;

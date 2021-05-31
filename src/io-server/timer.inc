@@ -30,30 +30,40 @@
 !******************************************************************************
 
 interface
-function IO_timer_create() result(timer) BIND(C, name = 'IO_timer_create')
+function IO_timer_create() result(timer) BIND(C, name = 'IO_timer_create_f')
 import C_PTR
 implicit none
 type(C_PTR) :: timer
 end function IO_timer_create
-subroutine IO_timer_delete(timer) BIND(C, name = 'IO_timer_delete')
+subroutine IO_timer_delete(timer) BIND(C, name = 'IO_timer_delete_f')
 import C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: timer
 end subroutine IO_timer_delete
-subroutine IO_timer_start(timer) BIND(C, name = 'IO_timer_start')
+subroutine IO_timer_start(timer) BIND(C, name = 'IO_timer_start_f')
 import C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: timer
 end subroutine IO_timer_start
-subroutine IO_timer_stop(timer) BIND(C, name = 'IO_timer_stop')
+subroutine IO_timer_stop(timer) BIND(C, name = 'IO_timer_stop_f')
 import C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: timer
 end subroutine IO_timer_stop
-function IO_time_ms(timer) result(time) BIND(C, name = 'IO_time_ms')
+function IO_time_ms(timer) result(time) BIND(C, name = 'IO_time_ms_f')
 import C_PTR, C_DOUBLE
 implicit none
 type(C_PTR), intent(IN), value :: timer
 real(C_DOUBLE) :: time
 end function IO_time_ms
+function rdtscp() result(count) BIND(C, name = 'rdtscp_f')
+import C_INT64_T
+implicit none
+integer(C_INT64_T) :: count
+end function rdtscp
+function rdtsc() result(count) BIND(C, name = 'rdtsc_f')
+import C_INT64_T
+implicit none
+integer(C_INT64_T) :: count
+end function rdtsc
 end interface
