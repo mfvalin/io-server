@@ -27,8 +27,8 @@ module cb_plus_dcb_parameters
 
   integer, parameter :: NUM_CB_ELEMENTS       = 1040                     ! Number of elements in each CB
   integer, parameter :: CB_MESSAGE_SIZE       = 100                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 1000000                  ! How much total data to send (for each CB)
-  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 20     ! Size of each data batch put in the DCB
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
+  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
 
   logical :: CHECK_CB_MESSAGES
@@ -100,6 +100,12 @@ program pseudomodelandserver
   ! arg = '0'
   ! if(COMMAND_ARGUMENT_COUNT() >= 5) call GET_COMMAND_ARGUMENT(5, arg)
   ! read(arg,*)noops
+
+  ! Arguments
+  ! 1. Check messages or not
+  ! 2. Number of consumer processes
+  ! 3. Number of channel processes
+  ! 4. Number of relay processes per node
 
   arg = '3'
   if(COMMAND_ARGUMENT_COUNT() >= 2) call GET_COMMAND_ARGUMENT(2, arg)
@@ -266,10 +272,14 @@ subroutine consumer_process(data_buffer)
 
   type(distributed_circular_buffer), intent(inout) :: data_buffer
 
+  integer, parameter :: WRITE_BUFFER_SIZE = 50000
+
   integer :: consumer_id, num_producers, num_consumers
   integer :: i_producer, i_data_check, i_print
   integer :: num_elements
   integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: message, expected_message
+  integer(DATA_ELEMENT), dimension(WRITE_BUFFER_SIZE) :: file_write_buffer
+  integer :: file_write_position, write_size
   logical :: finished
   integer :: num_errors = 0
 
@@ -284,16 +294,18 @@ subroutine consumer_process(data_buffer)
 
   allocate(producer_activated(num_producers))
 
+  file_write_position = 1
+
   write(file_name,'(A6, I4.4, A4)') 'SERVER', consumer_id, '.out'
-  print *, 'File name: ', file_name
-  open(newunit = file_unit, file = file_name, status = 'scratch', form = 'unformatted')
-  print *, 'File ', file_name, ' is open'
-  print *, 'Checking received messages: ', CHECK_DCB_MESSAGES
+  ! print *, 'File name: ', file_name
+  open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
+  ! print *, 'File ', file_name, ' is open'
+  ! print *, 'Checking received messages: ', CHECK_DCB_MESSAGES
 
   ! Should receive one test signal
   do i_producer = consumer_id, num_producers - 1, num_consumers
     num_elements = data_buffer % get(i_producer, message, 2, .true.)
-    write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
+    ! write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
     producer_activated(i_producer + 1) = .false.
     if (message(1) == 0) producer_activated(i_producer + 1) = .true.
   end do
@@ -301,7 +313,7 @@ subroutine consumer_process(data_buffer)
   ! Now, we repeatedly loop through all buffers this consumer is responsible for
   ! If the buffer is empty, just go on to the next
   ! If the buffer has something, the first value is the size of the data block to read, so we read it
-  ! If the first value to read is 0, it means this buffer is done won't send anything anymore
+  ! If the first value to read is 0, it means this buffer is done and won't send anything anymore
   ! When all buffer have a first value of 0, the entire test is finished
   finished = .false.
   do while (.not. finished)
@@ -323,9 +335,17 @@ subroutine consumer_process(data_buffer)
         ! There is something in the buffer!
         finished = .false.
         num_elements = data_buffer % get(i_producer, message, message(1), .true.)
-        ! do i_print = 2, message(1)
-          ! write(file_unit, *) message(i_print)
-        ! end do
+
+
+        write_size = message(1) / 4
+        if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
+          write(file_unit) file_write_buffer(1:file_write_position)
+          file_write_position = 1
+        end if
+
+        file_write_buffer(file_write_position:file_write_position+write_size) = message(2:write_size+1)
+        file_write_position = file_write_position + write_size
+
         ! write(file_unit) message(2:(message(1)/4))
         ! print *, 'Wrote message in file ', file_name
       else if (message(1) == 0) then
@@ -349,7 +369,9 @@ subroutine consumer_process(data_buffer)
     end do
   end do
 
+  write(file_unit) file_write_buffer(1:file_write_position)
   close(file_unit)
+  file_write_position = 1
 
   ! Final check on the buffers' content
   do i_producer = consumer_id, num_producers - 1, num_consumers
