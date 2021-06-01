@@ -120,7 +120,7 @@ module data_serialize
     implicit none
     class(jar), intent(INOUT) :: j          ! the data jar
     integer(C_INT), intent(IN), value :: arraysize  ! number of elements in arrray
-    integer, dimension(arraysize), intent(IN) :: array    ! DO NOT LIE
+    integer(C_INT), dimension(arraysize), intent(IN) :: array    ! DO NOT LIE
     integer :: ok                            ! 0 if O.K., -1 if error
 
     integer(C_INTPTR_T) :: temp
@@ -131,7 +131,7 @@ module data_serialize
     temp = LOC(array)
     j % p = transfer(temp, j % p)
     ok = 0
-
+!   arraysize * storage_size(jar_element)/storage_size(integer)
     j % top  = arraysize                    ! data jar is full
     j % bot  = 0                            ! no data has been read yet
     j % opt  = 1                            ! options = 1, jar is not the owner of the storage
