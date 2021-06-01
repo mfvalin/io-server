@@ -71,6 +71,7 @@ contains
   end function am_server_node
 end module cb_plus_dcb_parameters
 
+#include <serializer.hf>
 
 program pseudomodelandserver
   use ISO_C_BINDING
@@ -276,7 +277,7 @@ subroutine consumer_process(data_buffer)
 
   integer :: consumer_id, num_producers, num_consumers
   integer :: i_producer, i_data_check, i_print
-  integer :: num_elements
+  integer :: num_elements, message_size
   integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: message, expected_message
   integer(DATA_ELEMENT), dimension(WRITE_BUFFER_SIZE) :: file_write_buffer
   integer :: file_write_position, write_size
@@ -297,10 +298,7 @@ subroutine consumer_process(data_buffer)
   file_write_position = 1
 
   write(file_name,'(A6, I4.4, A4)') 'SERVER', consumer_id, '.out'
-  ! print *, 'File name: ', file_name
   open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
-  ! print *, 'File ', file_name, ' is open'
-  ! print *, 'Checking received messages: ', CHECK_DCB_MESSAGES
 
   ! Should receive one test signal
   do i_producer = consumer_id, num_producers - 1, num_consumers
@@ -329,39 +327,36 @@ subroutine consumer_process(data_buffer)
         cycle
       end if
 
-      num_elements = data_buffer % peek(i_producer, message, 1)
+      num_elements = data_buffer % peek(i_producer, message_size, 1)
 
-      if (message(1) > 0)  then
+      if (message_size > 0)  then
         ! There is something in the buffer!
         finished = .false.
-        num_elements = data_buffer % get(i_producer, message, message(1), .true.)
+        num_elements = data_buffer % get(i_producer, message, message_size + 1, .true.)
 
 
-        write_size = message(1) / 4
+        write_size = message_size / 4
         if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
           write(file_unit) file_write_buffer(1:file_write_position)
           file_write_position = 1
         end if
 
-        file_write_buffer(file_write_position:file_write_position+write_size) = message(2:write_size+1)
+        file_write_buffer(file_write_position:file_write_position+write_size) = message(1:write_size)
         file_write_position = file_write_position + write_size
-
-        ! write(file_unit) message(2:(message(1)/4))
-        ! print *, 'Wrote message in file ', file_name
-      else if (message(1) == 0) then
+      else if (message_size == 0) then
         ! The buffer will not send anything more
       else
         ! This should not happen
-        write (6, *) 'Message(1): ', message(1)
+        write (6, *) 'message_size: ', message_size
         num_errors = num_errors + 1
       end if
 
       if (CHECK_DCB_MESSAGES) then
         expected_message(1:3) = message(1:3)
-        do i_data_check = 1, message(1) - 3
+        do i_data_check = 1, message_size - 2
            expected_message(i_data_check + 3) = compute_data_point(message(2), message(3) + i_data_check)
         end do
-        if (.not. all(expected_message(1:message(1)) == message(1:message(1)))) then
+        if (.not. all(expected_message(1:message_size + 1) == message(1:message_size + 1))) then
           num_errors = num_errors + 1
         end if
       end if
@@ -388,6 +383,24 @@ subroutine consumer_process(data_buffer)
 
 end subroutine consumer_process
 
+subroutine model_pseudo_write(cb, array, n)
+  use data_serialize
+  use circular_buffer_module
+  implicit none
+  type(circular_buffer), intent(inout) :: cb
+  integer, intent(in) :: n
+  integer, dimension(n), intent(inout) :: array
+
+  type(jar) :: parcel
+  integer :: status
+  integer, dimension(:), pointer :: blind_array
+
+  status = parcel % shape(array(2:n), n-1)
+  JAR_DATA(parcel, blind_array)
+  status = cb % atomic_put(n-1, 1, .false.)
+  status = cb % atomic_put(blind_array, n-1, .true.)
+  ! status = cb % atomic_put(array(1:n), n, .true.)
+end subroutine model_pseudo_write
 
 subroutine model_process()
   use ISO_C_BINDING
@@ -439,7 +452,7 @@ subroutine model_process()
   message(1) = global_rank
   num_spaces = data_buffer % atomic_put(message, 1, .true.)
 
-  ! Now send a bunch of message
+  ! Now send a bunch of messages
   ! First item  = number of elements in message
   ! Second item = global rank of the sender
   ! Third item  = position at which we are in the message sequence (how many data elements sent so far)
@@ -454,7 +467,8 @@ subroutine model_process()
         message(j + 3) = compute_data_point(global_rank, i + j)
       end do
       ! Do the sending
-      num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
+      call model_pseudo_write(data_buffer, message(:), CB_MESSAGE_SIZE)
+      ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
 !      call sleep_us(50)
     end do
     ! We done. Send the stop signal
@@ -540,7 +554,7 @@ subroutine io_relay_process()
     integer :: i_data_check
     integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: cb_message, expected_message
     integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: dcb_message
-    integer :: current_message_size
+    integer :: current_message_size, model_message_size, blind_message_size
     integer :: num_elements, num_spaces
     logical :: finished = .false.
 
@@ -570,30 +584,30 @@ subroutine io_relay_process()
             cycle
           end if
 
-          num_elements = local_data_buffers(i_compute) % peek(cb_message, 1)
-          if (cb_message(1) > 0) then
+          num_elements = local_data_buffers(i_compute) % peek(model_message_size, 1)
+          if (model_message_size > 0) then
             ! There is something in the buffer!
             finished = .false.
 
             ! Read the content of the CB
-            num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, cb_message(1), .true.)
+            num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, model_message_size + 1, .true.)
 
             ! If the DCB message buffer is too full to contain that new package, flush it now
-            if (current_message_size + cb_message(1) > MAX_DCB_MESSAGE_SIZE) then
+            if (current_message_size + model_message_size + 1 > MAX_DCB_MESSAGE_SIZE) then
               num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
               current_message_size = 0
             end if
 
             ! Copy the CB message to the DCB message buffer
-            dcb_message(current_message_size + 1: current_message_size + cb_message(1)) = cb_message(1:cb_message(1))
-            current_message_size = current_message_size + cb_message(1)
+            dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = cb_message(1:model_message_size + 1)
+            current_message_size = current_message_size + model_message_size + 1
 
             if (CHECK_CB_MESSAGES) then
               expected_message(1:3) = cb_message(1:3)
-              do i_data_check = 1, cb_message(1) - 3
+              do i_data_check = 1, model_message_size - 2
                 expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
               end do
-              if (.not. all(expected_message(1:cb_message(1)) == cb_message(1:cb_message(1)))) then
+              if (.not. all(expected_message(1:model_message_size + 1) == cb_message(1:model_message_size + 1))) then
                 num_errors = num_errors + 1
               end if
             end if
