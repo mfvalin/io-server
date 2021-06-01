@@ -286,7 +286,18 @@ endif
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
     type(jar), intent(IN), optional   :: meta             ! metadata associated with data (carried serialized and blindly)
     integer :: status, n
-!     integer, dimension(1) :: temp
+    type :: my_record
+      integer(C_INT) :: rl              ! global record length = size of my_record + csize + msize
+      integer(C_INT) :: tag, stream
+      integer(C_INT) :: ni, nj, gnignj
+      integer(C_INT) :: gin, gout
+      integer(C_INT) :: i0, j0
+      integer(C_INT) :: nk, nvar
+      type(C_PTR)    :: data
+      integer(C_INT) :: csize, msize
+    end type
+    type(my_record) :: rec
+    integer(C_INT), dimension(:), pointer :: metadata
 
     status = -1
     if(this % fd <= 0) return
@@ -295,23 +306,44 @@ endif
     ! transmission layout for circular buffer (compute PE -> relay PE) :
     ! length                 (32 bits)
     ! tag number             (32 bits)
-    ! file number            (32 bits)
-    ! grid segment size      (32 bits)
+    ! file (stream) number   (32 bits)
+    ! grid segment dimensions(2 x32 bits)
     ! global grid size       (32 bits)
-    ! grid_in                (32 bits)
-    ! grid_out               (32 bits)
+    ! grid_in (code)         (32 bits)
+    ! grid_out (code)        (32 bits)
     ! area lower left corner (2 x 32 bits)
-    ! ni, nj, nk, nvar       (4 x 32 bits)
+    ! nk, nvar               (2 x 32 bits)
     ! data pointer           (64 bits)     (will be translated to its own memory space by relay PE)
     ! cprs size , may be 0   (32 bits)
-    ! cprs                   (cprs size x 32 bits)
     ! meta size, may be 0    (32 bits)
+    ! cprs                   (cprs size x 32 bits)
     ! meta                   (meta size x 32 bits)
-    n = cio_out % atomic_put( fd_seq, 1, .false.)
-    n = cio_out % atomic_put(this % fd , 1, .false.)
-    n = cio_out % atomic_put( area, storage_size(area)/storage_size(1), .false.)
-    n = cio_out % atomic_put( grid_in, 1, .false.)
-    n = cio_out % atomic_put( grid_out, 1, .false.)
+!
+    rec % csize = 0
+    rec % msize = 0
+    if(present(cprs)) rec % csize = storage_size(cprs) / storage_size(n)
+    if(present(meta)) then
+      rec % msize =  meta % high()
+      metadata    => meta % array()
+    endif
+    rec % rl = storage_size(rec) / storage_size(n) + rec % csize + rec % msize
+    rec % tag    = fd_seq
+    rec % stream = this % fd
+!     rec % ni     =
+!     rec % nj     =
+!     rec % gin    =
+!     rec % gout   =
+!     rec % i0     =
+!     rec % j0     =
+!     rec % nk     =
+!     rec % nvar   =
+!     rec % data   =
+!
+    n = cio_out % atomic_put( rec, storage_size(rec) / storage_size(n), .false.)
+    if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
+    if(present(meta)) n = cio_out % atomic_put( metadata, rec % msize, .false.)
+    n = cio_out % atomic_put( rec % rl, 1, .true.)
+
     status = 0
   end function ioserver_write
 
