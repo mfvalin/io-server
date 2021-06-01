@@ -7,11 +7,11 @@ set(TEST_SOURCES
    circular_buffer_single_thread.F90
    distributed_circular_buffer.F90
 #   memory_arena.F90
-   # mpi_bandwidth.F90
    pseudo-model.F90
 #   pseudo-server.F90
 #   small_dcb_test.c
    test_memory_arena.F90
+   test_serializer.F90
    test_shmem_heap.F90
    )
 
@@ -59,7 +59,15 @@ function(gen_test_target)
    list (GET GEN_TEST_SOURCES 0 FIRST_SOURCE)
    get_test_name(${FIRST_SOURCE} TEST_TARGET)
 
+   # The target
    add_executable(${TEST_TARGET} ${GEN_TEST_SOURCES})
+
+   # Modules
+   get_target_property(LIBRARY_DIR ${TEST_TARGET} BINARY_DIR)
+   set_target_properties(${TEST_TARGET} PROPERTIES Fortran_MODULE_DIRECTORY ${LIBRARY_DIR}/mod)
+   target_include_directories(${TEST_TARGET} INTERFACE ${LIBRARY_DIR}/mod)
+
+   # Libraries
    foreach(LIB ${GEN_TEST_LIBRARIES})
       target_link_libraries(${TEST_TARGET} ${LIB})
    endforeach()
@@ -69,6 +77,12 @@ endfunction()
 # Create the test library
 set(TEST_HELPER_LIB test_helper)
 add_library(${TEST_HELPER_LIB} STATIC ${TEST_HELPER_FILES})
+target_include_directories(${TEST_HELPER_LIB} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+# Where to put test library modules
+get_target_property(LIBRARY_DIR ${TEST_HELPER_LIB} BINARY_DIR)
+set_target_properties(${TEST_HELPER_LIB} PROPERTIES Fortran_MODULE_DIRECTORY ${LIBRARY_DIR}/mod)
+target_include_directories(${TEST_HELPER_LIB} INTERFACE ${LIBRARY_DIR}/mod)
 
 # Build the tests
 foreach(TEST_SOURCE ${TEST_SOURCES})

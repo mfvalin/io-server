@@ -72,7 +72,7 @@ contains
 
   !> See IO_time_ms
   function get_time_ms(this) result(time)
-    import C_DOUBLE
+    implicit none
     class(io_timer), intent(inout) :: this
     real(C_DOUBLE) :: time
     time = IO_time_ms(this % c_timer)
