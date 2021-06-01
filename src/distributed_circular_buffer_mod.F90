@@ -114,45 +114,65 @@ contains
   end subroutine print
 
   !> Insert elements into a distributed circular buffer. See DCB_put
+#define IgnoreTypeKindRank src_data
+#define ExtraAttributes , target
   function put(this, src_data, num_elements, commit_transaction) result(num_space_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
-    integer(DATA_ELEMENT), dimension(*), intent(in)     :: src_data
+    ! integer(DATA_ELEMENT), dimension(*), intent(in)     :: src_data
+#include <IgnoreTypeKindRankPlus.hf>
     integer(C_INT), intent(in)                          :: num_elements
     logical, intent(in)                                 :: commit_transaction
     integer(C_INT) :: num_space_available !< The return value of DCB_put (number of available spaces, if successful)
 
+    type(C_PTR)    :: src_ptr
     integer(C_INT) :: operation
+
+    src_ptr = C_LOC(src_data)
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
-    num_space_available = DCB_put(this % c_buffer, src_data, num_elements, operation)
+    num_space_available = DCB_put(this % c_buffer, src_ptr, num_elements, operation)
   end function put
 
   !> Extract elements from a distributed circular buffer. See DCB_get
+#define IgnoreTypeKindRank dest_data
+#define ExtraAttributes , target
   function get(this, buffer_id, dest_data, num_elements, commit_transaction) result(num_data_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(C_INT), intent(in)                          :: buffer_id
-    integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
+    ! integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
+#include <IgnoreTypeKindRankPlus.hf>
     integer(C_INT), intent(in)                          :: num_elements
     logical, intent(in)                                 :: commit_transaction
     integer(C_INT) :: num_data_available !< The return value of DCB_get
 
-    integer(C_INT) :: operation = CB_NO_COMMIT
+    type(C_PTR)    :: dest_ptr
+    integer(C_INT) :: operation
+
+    dest_ptr = C_LOC(dest_data)
+    operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
-    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_data, num_elements, operation)
+
+    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_ptr, num_elements, operation)
   end function get
 
+#define IgnoreTypeKindRank dest_data
+#define ExtraAttributes , target
   function peek(this, buffer_id, dest_data, num_elements) result(num_data_available)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(C_INT), intent(in)                          :: buffer_id
-    integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
+    ! integer(DATA_ELEMENT), dimension(*), intent(inout)  :: dest_data
+#include <IgnoreTypeKindRankPlus.hf>
     integer(C_INT), intent(in)                          :: num_elements
     integer(C_INT) :: num_data_available !< The return value of DCB_get
 
-    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_data, num_elements, CB_PEEK)
+    type(C_PTR) :: dest_ptr
+    dest_ptr = C_LOC(dest_data)
+
+    num_data_available = DCB_get(this % c_buffer, buffer_id, dest_ptr, num_elements, CB_PEEK)
   end function peek
 
   function get_num_elements(this, buffer_id) result(num_elements)

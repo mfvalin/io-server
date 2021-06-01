@@ -1224,12 +1224,12 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 
 //F_StArT
 //  function DCB_put(buffer, src_data, num_elements, operation) result(num_available) BIND(C, name = 'DCB_put')
-//    import :: C_PTR, C_INT, DATA_ELEMENT
+//    import :: C_PTR, C_INT
 //    implicit none
-//    type(C_PTR), intent(in), value           :: buffer          !< Buffer where we want to insert data
-//    integer(DATA_ELEMENT), dimension(*), intent(in) :: src_data !< Data to insert
-//    integer(C_INT), intent(in), value        :: num_elements    !< How many data elements we want to insert
-//    integer(C_INT), intent(in), value        :: operation       !< Whether to commit the transaction or wait
+//    type(C_PTR),    intent(in), value :: buffer       !< Buffer where we want to insert data
+//    type(C_PTR),    intent(in), value :: src_data     !< Data to insert
+//    integer(C_INT), intent(in), value :: num_elements !< How many data elements we want to insert
+//    integer(C_INT), intent(in), value :: operation    !< Whether to commit the transaction or wait
 //    integer(C_INT) :: num_available !< How many element can still fit in the buffer after this call
 //  end function DCB_put
 //F_EnD
@@ -1314,13 +1314,13 @@ data_element DCB_put(
 
 //F_StArT
 //  function DCB_get(buffer, buffer_id, dest_data, num_elements, operation) result(num_available) BIND(C, name = 'DCB_get')
-//    import :: C_PTR, C_INT, DATA_ELEMENT
+//    import :: C_PTR, C_INT
 //    implicit none
-//    type(C_PTR), intent(in), value       :: buffer        !< DCB from which we want to read
-//    integer(C_INT), intent(in), value    :: buffer_id     !< Which buffer in the DCB we want to read from
-//    integer(DATA_ELEMENT), dimension(*), intent(inout) :: dest_data !< Where to put the data from the buffer
-//    integer(C_INT), intent(in), value    :: num_elements  !< How many data elements to read
-//    integer(C_INT), intent(in), value    :: operation     !< Whether to actually extract, read or just peek at the data
+//    type(C_PTR),    intent(in), value :: buffer       !< DCB from which we want to read
+//    integer(C_INT), intent(in), value :: buffer_id    !< Which buffer in the DCB we want to read from
+//    type(C_PTR),    intent(in), value :: dest_data    !< Where to put the data from the buffer
+//    integer(C_INT), intent(in), value :: num_elements !< How many data elements to read
+//    integer(C_INT), intent(in), value :: operation    !< Whether to actually extract, read or just peek at the data
 //    integer(C_INT) :: num_available
 //  end function DCB_get
 //F_EnD

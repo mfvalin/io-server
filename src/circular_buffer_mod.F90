@@ -202,9 +202,10 @@ contains
     logical, intent(IN), value                       :: commit_transaction !< Whether to update the buffer (ie _extract_ the data)
     integer(C_INT) :: n                                     !< number of data tokens available after this operation, -1 if error
 
-    integer(C_INT) :: operation = CB_NO_COMMIT
+    integer(C_INT) :: operation
     type(C_PTR) :: temp
 
+    operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
     temp = C_LOC(dst)
     n = CB_atomic_get(this % p, temp, ndst, operation)
