@@ -10,6 +10,7 @@ set(C_TO_INC_FILES
   distributed_circular_buffer.c
   memory_arena.c
   rpn_extra.c
+  timer.c
 )
 
 set(C_TO_H_FILES
@@ -18,6 +19,7 @@ set(C_TO_H_FILES
   memory_arena.c
   rpn_extra.c
   shmem_heap.c
+  timer.c
 )
 
 set(F_ALLOC_FILE ${CMAKE_CURRENT_SOURCE_DIR}/io-server/f_alloc.inc)
@@ -28,7 +30,7 @@ file(GLOB PROJECT_INCLUDE_FILES
   io-server/*.hf
 )
 
-# C headers
+# Fortran headers
 set(EXTRACT_FORTRAN_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh)
 foreach(C_FILE ${C_TO_INC_FILES})
    get_filename_component(FILE_NAME ${C_FILE} NAME_WLE)
@@ -38,7 +40,7 @@ foreach(C_FILE ${C_TO_INC_FILES})
    list(APPEND PROJECT_INCLUDE_FILES ${OUT_FILE})
 endforeach(C_FILE)
 
-# Fortran headers
+# C headers
 set(EXTRACT_C_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_c_interfaces.sh)
 foreach(C_FILE ${C_TO_H_FILES})
    get_filename_component(FILE_NAME ${C_FILE} NAME_WLE)

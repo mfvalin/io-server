@@ -758,6 +758,17 @@ distributed_circular_buffer_p DCB_create(
       MPI_Comm_size(buffer->communicator, &total_num_procs);
       buffer->num_consumers = total_num_procs - buffer->num_producers - buffer->num_channels;
     }
+
+    MPI_Comm local_comm;
+    MPI_Comm_split_type(buffer->server_communicator, MPI_COMM_TYPE_SHARED, buffer->server_rank, MPI_INFO_NULL, &local_comm);
+
+    int local_size, server_size;
+    MPI_Comm_size(local_comm, &local_size);
+    MPI_Comm_size(buffer->server_communicator, &server_size);
+    if (local_size != server_size) {
+      printf("ERROR during DCB create: Server processes appear to be on multiple nodes\n");
+      return NULL;
+    }
   }
 
   // We assume the rank DCB_ROOT_ID process is the root and contains the relevant info
@@ -774,8 +785,10 @@ distributed_circular_buffer_p DCB_create(
   }
   else {
     // Le the producers create their own (temporary) communicator
+    int global_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &global_rank);
     MPI_Comm dummy;
-    MPI_Comm_split(buffer->communicator, 0, dcb_rank, &dummy);
+    MPI_Comm_split(buffer->communicator, 0, global_rank, &dummy);
 
     if (buffer->server_rank < 0) {
       printf("WE HAVE A PROBLEM!!!\n");
@@ -867,7 +880,7 @@ distributed_circular_buffer_p DCB_create(
     return NULL;
   }
 
-  io_timer_start(&buffer->existence_timer);
+  IO_timer_start(&buffer->existence_timer);
 
   return buffer;
 }
@@ -914,7 +927,7 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
       "Server rank: %d\n"
       "Current time: %.2f ms\n",
       buffer->num_producers, buffer->num_channels, buffer->window_offset, buffer->consumer_id, buffer->producer_id,
-      buffer->channel_id, buffer->server_rank, io_time_since_start(&buffer->existence_timer));
+      buffer->channel_id, buffer->server_rank, IO_time_since_start(&buffer->existence_timer));
   if (is_producer(buffer)) {
     print_instance(&buffer->local_header);
   }
@@ -938,7 +951,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 ) {
   DCB_full_barrier(buffer); // Make sure all transfers are done before we start the deletion process
 
-  io_timer_stop(&buffer->existence_timer);
+  IO_timer_stop(&buffer->existence_timer);
 
   // Producers must send their collected stats to the root
   if (is_producer(buffer)) {
@@ -979,11 +992,11 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
       total_data_written += remote_stats.num_write_elems;
     }
 
-    const double existence_time = io_time_ms(&buffer->existence_timer);
+    const double existence_time = IO_time_ms(&buffer->existence_timer);
     char         total_data_s[8], dps_s[8];
     readable_element_count((double)total_data_written * sizeof(data_element), total_data_s);
     readable_element_count(total_data_written / existence_time * 1000.0 * sizeof(data_element), dps_s);
-    printf("Total data written: %sB (%sB/s)\n", total_data_s, dps_s);
+    printf("Total data received: %sB (%sB/s)\n", total_data_s, dps_s);
     printf("------------------------------------------------------------------------------------\n");
   }
 
@@ -1241,7 +1254,7 @@ data_element DCB_put(
 //C_EnD
 {
   io_timer_t timer = {0, 0};
-  io_timer_start(&timer);
+  IO_timer_start(&timer);
 
   const int num_spaces = DCB_wait_space_available(buffer, num_elements);
   if (num_spaces < 0)
@@ -1290,11 +1303,11 @@ data_element DCB_put(
 
   MPI_Win_unlock(target_rank, buffer->window);
 
-  io_timer_stop(&timer);
+  IO_timer_stop(&timer);
 
   buffer->local_header.circ_buffer.stats.num_write_elems += num_elements;
   buffer->local_header.circ_buffer.stats.num_writes++;
-  buffer->local_header.circ_buffer.stats.total_write_time_ms += io_time_ms(&timer);
+  buffer->local_header.circ_buffer.stats.total_write_time_ms += IO_time_ms(&timer);
 
   return get_available_space(&buffer->local_header);
 }
@@ -1322,7 +1335,7 @@ int DCB_get(
 //C_EnD
 {
   io_timer_t timer = {0, 0};
-  io_timer_start(&timer);
+  IO_timer_start(&timer);
 
   const int num_available_elem = DCB_wait_data_available(buffer, buffer_id, num_elements);
   if (num_available_elem < 0)
@@ -1369,8 +1382,8 @@ int DCB_get(
     *d_out                       = out_index; // Update actual extraction pointer
   }
 
-  io_timer_stop(&timer);
-  instance->circ_buffer.stats.total_read_time_ms += io_time_ms(&timer);
+  IO_timer_stop(&timer);
+  instance->circ_buffer.stats.total_read_time_ms += IO_time_ms(&timer);
   if (operation != CB_PEEK) {
     instance->circ_buffer.stats.num_read_elems += (uint64_t)num_elements;
     instance->circ_buffer.stats.num_reads++;

@@ -27,8 +27,8 @@ module cb_plus_dcb_parameters
 
   integer, parameter :: NUM_CB_ELEMENTS       = 1040                     ! Number of elements in each CB
   integer, parameter :: CB_MESSAGE_SIZE       = 100                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 1000000                  ! How much total data to send (for each CB)
-  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 20     ! Size of each data batch put in the DCB
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
+  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
 
   logical :: CHECK_CB_MESSAGES
@@ -47,6 +47,28 @@ contains
     data_point = mod(global_rank, 20000) * 100000 + mod(index, 100000)
   end function compute_data_point
 
+  function am_server_node(node_rank)
+    implicit none
+    include 'mpif.h'
+
+    integer, intent(out) :: node_rank
+    logical :: am_server_node
+
+    integer :: global_rank, node_comm, node_root_global_rank
+    integer :: ierr
+
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
+    call MPI_Comm_rank(node_comm, node_rank, ierr)
+
+    node_root_global_rank = -1
+    if (node_rank == 0) node_root_global_rank = global_rank
+
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
+
+    am_server_node = .false.
+    if (node_root_global_rank == 0) am_server_node = .true.
+  end function am_server_node
 end module cb_plus_dcb_parameters
 
 
@@ -67,20 +89,28 @@ program pseudomodelandserver
   type(comm_rank_size) :: fullnode_crs, local_crs
 
   integer, parameter :: NUM_NODES = 3
+  logical :: server_node
+  integer :: node_rank
 
   call mpi_init(status)
   local_crs = COMM_RANK_SIZE_NULL
 
 !  call IOSERVER_debug(1)            ! activate debug mode
 
-  arg = '0'
-  if(COMMAND_ARGUMENT_COUNT() >= 5) call GET_COMMAND_ARGUMENT(5, arg)
-  read(arg,*)noops
+  ! arg = '0'
+  ! if(COMMAND_ARGUMENT_COUNT() >= 5) call GET_COMMAND_ARGUMENT(5, arg)
+  ! read(arg,*)noops
+
+  ! Arguments
+  ! 1. Check messages or not
+  ! 2. Number of consumer processes
+  ! 3. Number of channel processes
+  ! 4. Number of relay processes per node
 
   arg = '3'
   if(COMMAND_ARGUMENT_COUNT() >= 2) call GET_COMMAND_ARGUMENT(2, arg)
   read(arg,*) nserv
-  nserv = nserv + noops
+  nserv = nserv ! + noops
 
   arg = '1'
   if (COMMAND_ARGUMENT_COUNT() >= 3) call GET_COMMAND_ARGUMENT(3, arg)
@@ -99,6 +129,7 @@ program pseudomodelandserver
 
   arg = '2'
   if(COMMAND_ARGUMENT_COUNT() >= 4) call GET_COMMAND_ARGUMENT(4, arg)
+  read(arg,*) nio_node                    ! number of relay processes per node
 
   call get_local_world(comm, rank, size)
   me = ma % setid(rank)
@@ -108,12 +139,14 @@ program pseudomodelandserver
     goto 777
   endif
 
+  server_node = am_server_node(node_rank)
+
   ! if(rank >= nserv) then
-  if(mod(rank, NUM_NODES) .ne. 0) then
+  ! if(mod(rank, NUM_NODES) .ne. 0) then
+  if (.not. server_node) then
     ! =============================================================================================
     !                                 compute or IO relay Processes
     ! =============================================================================================
-    read(arg,*) nio_node                    ! number of relay processes per node
     call set_IOSERVER_relay(io_relay_process)
     !  no return from ioserver_int_init in the case of IO relay processes when io_relay_fn is defined
     !  compute processes will return from call
@@ -132,7 +165,8 @@ program pseudomodelandserver
     ! =============================================================================================
     nio_node = -1
     ! if(rank < noops) then          ! ranks below noops are NO-OP processes
-    if(rank/NUM_NODES >= nserv) then          ! ranks below noops are NO-OP processes
+    ! if(rank/NUM_NODES >= nserv) then          ! ranks below noops are NO-OP processes
+    if (node_rank >= nserv) then
       ! =============================================================================================
       !                                no-op processes
       ! =============================================================================================
@@ -174,7 +208,7 @@ subroutine io_server_process()
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
 
-  write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
   num_producers = allio_crs % size - server_crs % size
@@ -229,34 +263,65 @@ subroutine consumer_process(data_buffer)
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
 
+  interface
+    function c_gethostid() result(h) bind(C,name='gethostid') ! SMP host identifier
+      import :: C_LONG
+      integer(C_LONG) :: h
+    end function c_gethostid
+  end interface
+
   type(distributed_circular_buffer), intent(inout) :: data_buffer
 
+  integer, parameter :: WRITE_BUFFER_SIZE = 50000
+
   integer :: consumer_id, num_producers, num_consumers
-  integer :: i_producer, i_data_check
+  integer :: i_producer, i_data_check, i_print
   integer :: num_elements
   integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: message, expected_message
+  integer(DATA_ELEMENT), dimension(WRITE_BUFFER_SIZE) :: file_write_buffer
+  integer :: file_write_position, write_size
   logical :: finished
   integer :: num_errors = 0
+
+  logical, allocatable :: producer_activated(:)
+
+  integer           :: file_unit
+  character(len=14) :: file_name
 
   consumer_id   = data_buffer % get_consumer_id()
   num_consumers = data_buffer % get_num_consumers()
   num_producers = data_buffer % get_num_producers()
 
+  allocate(producer_activated(num_producers))
+
+  file_write_position = 1
+
+  write(file_name,'(A6, I4.4, A4)') 'SERVER', consumer_id, '.out'
+  ! print *, 'File name: ', file_name
+  open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
+  ! print *, 'File ', file_name, ' is open'
+  ! print *, 'Checking received messages: ', CHECK_DCB_MESSAGES
+
   ! Should receive one test signal
   do i_producer = consumer_id, num_producers - 1, num_consumers
     num_elements = data_buffer % get(i_producer, message, 2, .true.)
-    write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
+    ! write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
+    producer_activated(i_producer + 1) = .false.
+    if (message(1) == 0) producer_activated(i_producer + 1) = .true.
   end do
 
   ! Now, we repeatedly loop through all buffers this consumer is responsible for
   ! If the buffer is empty, just go on to the next
   ! If the buffer has something, the first value is the size of the data block to read, so we read it
-  ! If the first value to read is 0, it means this buffer is done won't send anything anymore
+  ! If the first value to read is 0, it means this buffer is done and won't send anything anymore
   ! When all buffer have a first value of 0, the entire test is finished
   finished = .false.
   do while (.not. finished)
     finished = .true.
     do i_producer = consumer_id, num_producers - 1, num_consumers
+
+      ! Skip relays that do not produce data
+      if (.not. producer_activated(i_producer + 1)) cycle
 
       ! The buffer is empty, so it has not finished sending stuff. Just move on to the next
       if (data_buffer % get_num_elements(i_producer) == 0) then
@@ -270,6 +335,19 @@ subroutine consumer_process(data_buffer)
         ! There is something in the buffer!
         finished = .false.
         num_elements = data_buffer % get(i_producer, message, message(1), .true.)
+
+
+        write_size = message(1) / 4
+        if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
+          write(file_unit) file_write_buffer(1:file_write_position)
+          file_write_position = 1
+        end if
+
+        file_write_buffer(file_write_position:file_write_position+write_size) = message(2:write_size+1)
+        file_write_position = file_write_position + write_size
+
+        ! write(file_unit) message(2:(message(1)/4))
+        ! print *, 'Wrote message in file ', file_name
       else if (message(1) == 0) then
         ! The buffer will not send anything more
       else
@@ -291,9 +369,13 @@ subroutine consumer_process(data_buffer)
     end do
   end do
 
+  write(file_unit) file_write_buffer(1:file_write_position)
+  close(file_unit)
+  file_write_position = 1
+
   ! Final check on the buffers' content
   do i_producer = consumer_id, num_producers - 1, num_consumers
-    if (data_buffer % get_num_elements(i_producer) .ne. 1) then
+    if (producer_activated(i_producer + 1) .and. (data_buffer % get_num_elements(i_producer) .ne. 1)) then
       num_errors = num_errors + 1
       write (6, *) 'ERROR: buffer should be empty at the end of test'
     end if
@@ -338,7 +420,7 @@ subroutine model_process()
   call IOSERVER_get_winmem(p_base, p_relay, p_server)
   tmp_ptr = ma % clone(p_relay)
 
-  write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
 
   ! Create a single CB in our allocated space in shared memory
   write(compute_name,'(A4,I4.4)') "MCIO", local_compute_id
@@ -385,6 +467,8 @@ subroutine model_process()
     error stop 1
   end if
 
+  call MPI_Barrier(node_crs % comm, ierr) ! Sync with relays and avoid scrambling output
+
 end subroutine model_process
 
 
@@ -420,7 +504,7 @@ subroutine io_relay_process()
   num_local_compute = nodecom_crs % size - local_relay_crs % size
   num_errors        = 0
 
-  write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used to communicate with the server
   success = data_buffer % create(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1)
@@ -460,64 +544,68 @@ subroutine io_relay_process()
     integer :: num_elements, num_spaces
     logical :: finished = .false.
 
-    ! Get the initial test signal from each CB this relay is responsible for
-    do i_compute = local_relay_id + 1, num_local_compute, num_local_relays
-      cb_message(:) = -1
-      num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, 1, .true.)
-    end do
-
     ! Say hi to the consumer processes
     dcb_message(1) = local_relay_id
     dcb_message(2) = global_rank
     num_spaces = data_buffer % put(dcb_message, 2, .true.)
 
-    ! The main loop
-    expected_message(:) = -1
-    current_message_size = 0
-    do while (.not. finished)
-      finished = .true.
-      do i_compute = local_relay_id + 1, num_local_compute, num_local_relays
+    if (local_relay_id == 0) then ! only 1 relay per node sends output
 
-        ! The buffer is empty, so it has not finished sending stuff. Move on to the next CB
-        if (local_data_buffers(i_compute) % get_num_elements() == 0) then
-          finished = .false.
-          cycle
-        end if
+      ! Get the initial test signal from each CB this relay is responsible for
+      do i_compute = local_relay_id + 1, num_local_compute !, num_local_relays
+        cb_message(:) = -1
+        num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, 1, .true.)
+      end do
 
-        num_elements = local_data_buffers(i_compute) % peek(cb_message, 1)
-        if (cb_message(1) > 0) then
-          ! There is something in the buffer!
-          finished = .false.
+      ! The main loop
+      expected_message(:) = -1
+      current_message_size = 0
+      do while (.not. finished)
+        finished = .true.
+        do i_compute = local_relay_id + 1, num_local_compute !, num_local_relays
 
-          ! Read the content of the CB
-          num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, cb_message(1), .true.)
-
-          ! If the DCB message buffer is too full to contain that new package, flush it now
-          if (current_message_size + cb_message(1) > MAX_DCB_MESSAGE_SIZE) then
-            num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
-            current_message_size = 0
+          ! The buffer is empty, so it has not finished sending stuff. Move on to the next CB
+          if (local_data_buffers(i_compute) % get_num_elements() == 0) then
+            finished = .false.
+            cycle
           end if
 
-          ! Copy the CB message to the DCB message buffer
-          dcb_message(current_message_size + 1: current_message_size + cb_message(1)) = cb_message(1:cb_message(1))
-          current_message_size = current_message_size + cb_message(1)
+          num_elements = local_data_buffers(i_compute) % peek(cb_message, 1)
+          if (cb_message(1) > 0) then
+            ! There is something in the buffer!
+            finished = .false.
 
-          if (CHECK_CB_MESSAGES) then
-            expected_message(1:3) = cb_message(1:3)
-            do i_data_check = 1, cb_message(1) - 3
-               expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
-            end do
-            if (.not. all(expected_message(1:cb_message(1)) == cb_message(1:cb_message(1)))) then
-              num_errors = num_errors + 1
+            ! Read the content of the CB
+            num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, cb_message(1), .true.)
+
+            ! If the DCB message buffer is too full to contain that new package, flush it now
+            if (current_message_size + cb_message(1) > MAX_DCB_MESSAGE_SIZE) then
+              num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
+              current_message_size = 0
+            end if
+
+            ! Copy the CB message to the DCB message buffer
+            dcb_message(current_message_size + 1: current_message_size + cb_message(1)) = cb_message(1:cb_message(1))
+            current_message_size = current_message_size + cb_message(1)
+
+            if (CHECK_CB_MESSAGES) then
+              expected_message(1:3) = cb_message(1:3)
+              do i_data_check = 1, cb_message(1) - 3
+                expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
+              end do
+              if (.not. all(expected_message(1:cb_message(1)) == cb_message(1:cb_message(1)))) then
+                num_errors = num_errors + 1
+              end if
             end if
           end if
-        end if
+        end do
       end do
-    end do
 
-    dcb_message(current_message_size + 1) = 0 ! Put a 'stop' signal at the end of the DCB message buffer
-    ! Send the stop signal along with the remaining data
-    num_spaces = data_buffer % put(dcb_message, current_message_size + 1, .true.)
+      dcb_message(current_message_size + 1) = 0 ! Put a 'stop' signal at the end of the DCB message buffer
+      ! Send the stop signal along with the remaining data
+      num_spaces = data_buffer % put(dcb_message, current_message_size + 1, .true.)
+
+    end if
   end block
 
   call data_buffer % delete()
@@ -537,6 +625,8 @@ subroutine io_relay_process()
     error stop 1
   end if
 
+  call MPI_Barrier(nodecom_crs % comm, ierr) ! Sync with models and avoid scrambling output
+
 end subroutine io_relay_process
 
 
@@ -551,3 +641,4 @@ subroutine get_local_world(comm, rank, size)
   call MPI_Comm_rank(comm, rank, ierr)
   call MPI_Comm_size(comm, size, ierr)
 end subroutine get_local_world
+

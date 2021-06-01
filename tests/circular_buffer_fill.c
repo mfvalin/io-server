@@ -108,7 +108,7 @@ int fill_test(int argc, char** argv) {
 
   {
     io_timer_t put_time = {0, 0};
-    io_timer_start(&put_time);
+    IO_timer_start(&put_time);
 
     //---------------------------
     MPI_Barrier(MPI_COMM_WORLD);
@@ -122,9 +122,9 @@ int fill_test(int argc, char** argv) {
     }
     else {
       CB_atomic_put(local_buffer, local_data + NUM_BUFFER_ELEMENTS, 1, CB_COMMIT);
-      io_timer_stop(&put_time);
+      IO_timer_stop(&put_time);
 
-      const double t = io_time_ms(&put_time);
+      const double t = IO_time_ms(&put_time);
       //      printf("Put data after %f ms (rank %d)\n", t, my_rank);
 
       if (t * 1000 < READ_DELAY_US * my_rank)
@@ -138,7 +138,7 @@ int fill_test(int argc, char** argv) {
 
   {
     io_timer_t read_time = {0, 0};
-    io_timer_start(&read_time);
+    IO_timer_start(&read_time);
 
     //---------------------------
     MPI_Barrier(MPI_COMM_WORLD);
@@ -147,9 +147,9 @@ int fill_test(int argc, char** argv) {
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
         CB_atomic_get(all_buffers[i], received_data, max_num_elements - NUM_BUFFER_ELEMENTS / 2 + 2, CB_COMMIT);
-        io_timer_stop(&read_time);
-        io_timer_start(&read_time);
-        const double t = io_time_ms(&read_time);
+        IO_timer_stop(&read_time);
+        IO_timer_start(&read_time);
+        const double t = IO_time_ms(&read_time);
         if (t * 1000 < WRITE_DELAY_US * i)
           num_errors++;
 
