@@ -322,6 +322,7 @@ endif
     ! meta size, may be 0    (32 bits)
     ! cprs                   (cprs size x 32 bits)
     ! meta                   (meta size x 32 bits)
+    ! length                 (32 bits)
 !
     call block_meta_internals(mydata, p, d, tkr, o)        ! grep block_meta private contents
     ! check that dimensions in area are consistent with metadata
