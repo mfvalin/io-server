@@ -103,21 +103,32 @@ function I15D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I15D_bm
 
-function bm_I15D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I15D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*1+16*I+5
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 1) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 5) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I15D
@@ -194,21 +205,32 @@ function I14D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I14D_bm
 
-function bm_I14D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I14D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*1+16*I+4
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 1) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 4) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I14D
@@ -285,21 +307,32 @@ function I13D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I13D_bm
 
-function bm_I13D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I13D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*1+16*I+3
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 1) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 3) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I13D
@@ -376,21 +409,32 @@ function I12D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I12D_bm
 
-function bm_I12D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I12D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*1+16*I+2
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 1) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 2) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I12D
@@ -467,21 +511,32 @@ function I11D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I11D_bm
 
-function bm_I11D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I11D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*1+16*I+1
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 1) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 1) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I11D
@@ -558,21 +613,32 @@ function I25D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I25D_bm
 
-function bm_I25D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I25D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*2+16*I+5
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 2) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 5) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I25D
@@ -649,21 +715,32 @@ function I24D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I24D_bm
 
-function bm_I24D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I24D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*2+16*I+4
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 2) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 4) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I24D
@@ -740,21 +817,32 @@ function I23D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I23D_bm
 
-function bm_I23D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I23D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*2+16*I+3
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 2) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 3) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I23D
@@ -831,21 +919,32 @@ function I22D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I22D_bm
 
-function bm_I22D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I22D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*2+16*I+2
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 2) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 2) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I22D
@@ -922,21 +1021,32 @@ function I21D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I21D_bm
 
-function bm_I21D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I21D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*2+16*I+1
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 2) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 1) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I21D
@@ -1013,21 +1123,32 @@ function I45D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I45D_bm
 
-function bm_I45D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I45D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*I+5
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 5) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I45D
@@ -1104,21 +1225,32 @@ function I44D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I44D_bm
 
-function bm_I44D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I44D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*I+4
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 4) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I44D
@@ -1195,21 +1327,32 @@ function I43D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I43D_bm
 
-function bm_I43D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I43D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*I+3
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 3) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I43D
@@ -1286,21 +1429,32 @@ function I42D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I42D_bm
 
-function bm_I42D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I42D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*I+2
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 2) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I42D
@@ -1377,21 +1531,32 @@ function I41D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I41D_bm
 
-function bm_I41D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I41D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*I+1
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 1) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I41D
@@ -1468,21 +1633,32 @@ function I85D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I85D_bm
 
-function bm_I85D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I85D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*I+5
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 5) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I85D
@@ -1559,21 +1735,32 @@ function I84D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I84D_bm
 
-function bm_I84D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I84D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*I+4
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 4) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I84D
@@ -1650,21 +1837,32 @@ function I83D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I83D_bm
 
-function bm_I83D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I83D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*I+3
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 3) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I83D
@@ -1741,21 +1939,32 @@ function I82D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I82D_bm
 
-function bm_I82D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I82D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*I+2
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 2) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I82D
@@ -1832,21 +2041,32 @@ function I81D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function I81D_bm
 
-function bm_I81D(p, bm) result(status)  ! metadata to pointer translation
+function bm_I81D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*I+1
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. I) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 1) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_I81D
@@ -1923,21 +2143,32 @@ function R45D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R45D_bm
 
-function bm_R45D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R45D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*R+5
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 5) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R45D
@@ -2014,21 +2245,32 @@ function R44D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R44D_bm
 
-function bm_R44D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R44D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*R+4
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 4) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R44D
@@ -2105,21 +2347,32 @@ function R43D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R43D_bm
 
-function bm_R43D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R43D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*R+3
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 3) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R43D
@@ -2196,21 +2449,32 @@ function R42D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R42D_bm
 
-function bm_R42D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R42D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*R+2
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 2) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R42D
@@ -2287,21 +2551,32 @@ function R41D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R41D_bm
 
-function bm_R41D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R41D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*4+16*R+1
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 4) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 1) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R41D
@@ -2378,21 +2653,32 @@ function R85D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R85D_bm
 
-function bm_R85D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R85D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*R+5
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 5) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R85D
@@ -2469,21 +2755,32 @@ function R84D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R84D_bm
 
-function bm_R84D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R84D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*R+4
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 4) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R84D
@@ -2560,21 +2857,32 @@ function R83D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R83D_bm
 
-function bm_R83D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R83D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*R+3
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 3) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R83D
@@ -2651,21 +2959,32 @@ function R82D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R82D_bm
 
-function bm_R82D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R82D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*R+2
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 2) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R82D
@@ -2742,21 +3061,32 @@ function R81D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   status = 0
 end function R81D_bm
 
-function bm_R81D(p, bm) result(status)  ! metadata to pointer translation
+function bm_R81D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
+  logical, intent(IN), value :: strict
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
-  integer :: tkr
+  integer :: tkr, tp, kd, rk
 
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
   tkr = 256*8+16*R+1
-  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+  if(kd .ne. 8) return                           ! wrong kind
+
+  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  if(tp .ne. R) return                          ! wrong type
+
+  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  if(rk > 1) return                              ! insufficient rank of pointer
+
+  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
+
   call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
   status = 0
 end function bm_R81D
