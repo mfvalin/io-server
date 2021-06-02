@@ -77,6 +77,51 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   endif
 end function I1_5D
 
+function I15D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*1+16*I+5
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 5                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I15D_bm
+
+function bm_I15D(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*1+16*I+5
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I15D
+
 !! ===============================  integer*1 4D  ===============================
 !> \brief integer*1 4D array allocator
 function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
@@ -122,6 +167,51 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
 
   endif
 end function I1_4D
+
+function I14D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*1+16*I+4
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 4                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I14D_bm
+
+function bm_I14D(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*1+16*I+4
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I14D
 
 !! ===============================  integer*1 3D  ===============================
 !> \brief integer*1 3D array allocator
@@ -169,6 +259,51 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   endif
 end function I1_3D
 
+function I13D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*1+16*I+3
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 3                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I13D_bm
+
+function bm_I13D(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*1+16*I+3
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I13D
+
 !! ===============================  integer*1 2D  ===============================
 !> \brief integer*1 2D array allocator
 function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
@@ -214,6 +349,51 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
 
   endif
 end function I1_2D
+
+function I12D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*1+16*I+2
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 2                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I12D_bm
+
+function bm_I12D(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*1+16*I+2
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I12D
 
 !! ===============================  integer*1 1D  ===============================
 !> \brief integer*1 1D array allocator
@@ -261,6 +441,51 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   endif
 end function I1_1D
 
+function I11D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*1+16*I+1
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 1                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I11D_bm
+
+function bm_I11D(p, bm) result(status)
+  implicit none
+  integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*1+16*I+1
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I11D
+
 !! ===============================  integer*2 5D  ===============================
 !> \brief integer*2 5D array allocator
 function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
@@ -306,6 +531,51 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
 
   endif
 end function I2_5D
+
+function I25D_bm(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*2+16*I+5
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 5                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I25D_bm
+
+function bm_I25D(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*2+16*I+5
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I25D
 
 !! ===============================  integer*2 4D  ===============================
 !> \brief integer*2 4D array allocator
@@ -353,6 +623,51 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   endif
 end function I2_4D
 
+function I24D_bm(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*2+16*I+4
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 4                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I24D_bm
+
+function bm_I24D(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*2+16*I+4
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I24D
+
 !! ===============================  integer*2 3D  ===============================
 !> \brief integer*2 3D array allocator
 function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
@@ -398,6 +713,51 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
 
   endif
 end function I2_3D
+
+function I23D_bm(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*2+16*I+3
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 3                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I23D_bm
+
+function bm_I23D(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*2+16*I+3
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I23D
 
 !! ===============================  integer*2 2D  ===============================
 !> \brief integer*2 2D array allocator
@@ -445,6 +805,51 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   endif
 end function I2_2D
 
+function I22D_bm(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*2+16*I+2
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 2                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I22D_bm
+
+function bm_I22D(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*2+16*I+2
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I22D
+
 !! ===============================  integer*2 1D  ===============================
 !> \brief integer*2 1D array allocator
 function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
@@ -490,6 +895,51 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
 
   endif
 end function I2_1D
+
+function I21D_bm(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*2+16*I+1
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 1                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I21D_bm
+
+function bm_I21D(p, bm) result(status)
+  implicit none
+  integer(C_SHORT), dimension(:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*2+16*I+1
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I21D
 
 !! ===============================  integer*4 5D  ===============================
 !> \brief integer*4 5D array allocator
@@ -537,6 +987,51 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   endif
 end function I4_5D
 
+function I45D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*I+5
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 5                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I45D_bm
+
+function bm_I45D(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*I+5
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I45D
+
 !! ===============================  integer*4 4D  ===============================
 !> \brief integer*4 4D array allocator
 function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
@@ -582,6 +1077,51 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
 
   endif
 end function I4_4D
+
+function I44D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*I+4
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 4                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I44D_bm
+
+function bm_I44D(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*I+4
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I44D
 
 !! ===============================  integer*4 3D  ===============================
 !> \brief integer*4 3D array allocator
@@ -629,6 +1169,51 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   endif
 end function I4_3D
 
+function I43D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*I+3
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 3                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I43D_bm
+
+function bm_I43D(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*I+3
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I43D
+
 !! ===============================  integer*4 2D  ===============================
 !> \brief integer*4 2D array allocator
 function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
@@ -674,6 +1259,51 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
 
   endif
 end function I4_2D
+
+function I42D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*I+2
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 2                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I42D_bm
+
+function bm_I42D(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*I+2
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I42D
 
 !! ===============================  integer*4 1D  ===============================
 !> \brief integer*4 1D array allocator
@@ -721,6 +1351,51 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   endif
 end function I4_1D
 
+function I41D_bm(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*I+1
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 1                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I41D_bm
+
+function bm_I41D(p, bm) result(status)
+  implicit none
+  integer(C_INT), dimension(:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*I+1
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I41D
+
 !! ===============================  integer*8 5D  ===============================
 !> \brief integer*8 5D array allocator
 function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
@@ -766,6 +1441,51 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
 
   endif
 end function I8_5D
+
+function I85D_bm(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*I+5
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 5                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I85D_bm
+
+function bm_I85D(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*I+5
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I85D
 
 !! ===============================  integer*8 4D  ===============================
 !> \brief integer*8 4D array allocator
@@ -813,6 +1533,51 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   endif
 end function I8_4D
 
+function I84D_bm(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*I+4
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 4                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I84D_bm
+
+function bm_I84D(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*I+4
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I84D
+
 !! ===============================  integer*8 3D  ===============================
 !> \brief integer*8 3D array allocator
 function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
@@ -858,6 +1623,51 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
 
   endif
 end function I8_3D
+
+function I83D_bm(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*I+3
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 3                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I83D_bm
+
+function bm_I83D(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*I+3
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I83D
 
 !! ===============================  integer*8 2D  ===============================
 !> \brief integer*8 2D array allocator
@@ -905,6 +1715,51 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   endif
 end function I8_2D
 
+function I82D_bm(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*I+2
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 2                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I82D_bm
+
+function bm_I82D(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*I+2
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I82D
+
 !! ===============================  integer*8 1D  ===============================
 !> \brief integer*8 1D array allocator
 function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
@@ -950,6 +1805,51 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
 
   endif
 end function I8_1D
+
+function I81D_bm(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*I+1
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 1                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function I81D_bm
+
+function bm_I81D(p, bm) result(status)
+  implicit none
+  integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*I+1
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_I81D
 
 !! ===============================  real*4 5D  ===============================
 !> \brief real*4 5D array allocator
@@ -997,6 +1897,51 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   endif
 end function R4_5D
 
+function R45D_bm(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*R+5
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 5                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R45D_bm
+
+function bm_R45D(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*R+5
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R45D
+
 !! ===============================  real*4 4D  ===============================
 !> \brief real*4 4D array allocator
 function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
@@ -1042,6 +1987,51 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
 
   endif
 end function R4_4D
+
+function R44D_bm(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*R+4
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 4                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R44D_bm
+
+function bm_R44D(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*R+4
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R44D
 
 !! ===============================  real*4 3D  ===============================
 !> \brief real*4 3D array allocator
@@ -1089,6 +2079,51 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   endif
 end function R4_3D
 
+function R43D_bm(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*R+3
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 3                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R43D_bm
+
+function bm_R43D(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*R+3
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R43D
+
 !! ===============================  real*4 2D  ===============================
 !> \brief real*4 2D array allocator
 function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
@@ -1134,6 +2169,51 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
 
   endif
 end function R4_2D
+
+function R42D_bm(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*R+2
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 2                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R42D_bm
+
+function bm_R42D(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*R+2
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R42D
 
 !! ===============================  real*4 1D  ===============================
 !> \brief real*4 1D array allocator
@@ -1181,6 +2261,51 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   endif
 end function R4_1D
 
+function R41D_bm(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*4+16*R+1
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 1                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R41D_bm
+
+function bm_R41D(p, bm) result(status)
+  implicit none
+  real(C_FLOAT), dimension(:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*4+16*R+1
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R41D
+
 !! ===============================  real*8 5D  ===============================
 !> \brief real*8 5D array allocator
 function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
@@ -1226,6 +2351,51 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
 
   endif
 end function R8_5D
+
+function R85D_bm(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*R+5
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 5                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R85D_bm
+
+function bm_R85D(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*R+5
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R85D
 
 !! ===============================  real*8 4D  ===============================
 !> \brief real*8 4D array allocator
@@ -1273,6 +2443,51 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   endif
 end function R8_4D
 
+function R84D_bm(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*R+4
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 4                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R84D_bm
+
+function bm_R84D(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*R+4
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R84D
+
 !! ===============================  real*8 3D  ===============================
 !> \brief real*8 3D array allocator
 function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
@@ -1318,6 +2533,51 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
 
   endif
 end function R8_3D
+
+function R83D_bm(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*R+3
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 3                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R83D_bm
+
+function bm_R83D(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*R+3
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R83D
 
 !! ===============================  real*8 2D  ===============================
 !> \brief real*8 2D array allocator
@@ -1365,6 +2625,51 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   endif
 end function R8_2D
 
+function R82D_bm(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*R+2
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 2                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R82D_bm
+
+function bm_R82D(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*R+2
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R82D
+
 !! ===============================  real*8 1D  ===============================
 !> \brief real*8 1D array allocator
 function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
@@ -1410,4 +2715,49 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
 
   endif
 end function R8_1D
+
+function R81D_bm(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*8+16*R+1
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, 1                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function R81D_bm
+
+function bm_R81D(p, bm) result(status)
+  implicit none
+  real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*8+16*R+1
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_R81D
 

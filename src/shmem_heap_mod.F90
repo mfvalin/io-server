@@ -208,6 +208,24 @@ module shmem_heap
                      R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &   ! 32 bit real functions, 
                      R8_5D, R8_4D, R8_3D, R8_2D, R8_1D      ! 64 bit real functions
   end interface
+
+  interface ptr_to_bm
+    module procedure I15D_bm, I14D_bm, I13D_bm, I12D_bm, I11D_bm, &   !  8 bit integer functions
+                     I25D_bm, I24D_bm, I23D_bm, I22D_bm, I21D_bm, &   ! 16 bit integer functions
+                     I45D_bm, I44D_bm, I43D_bm, I42D_bm, I41D_bm, &   ! 32 bit integer functions
+                     I85D_bm, I84D_bm, I83D_bm, I82D_bm, I81D_bm, &   ! 64 bit integer functions
+                     R45D_bm, R44D_bm, R43D_bm, R42D_bm, R41D_bm, &   ! 32 bit real functions, 
+                     R85D_bm, R84D_bm, R83D_bm, R82D_bm, R81D_bm      ! 64 bit real functions
+  end interface
+
+  interface bm_to_ptr
+    module procedure bm_I15D, bm_I14D, bm_I13D, bm_I12D, bm_I11D, &   !  8 bit integer functions
+                     bm_I25D, bm_I24D, bm_I23D, bm_I22D, bm_I21D, &   ! 16 bit integer functions
+                     bm_I45D, bm_I44D, bm_I43D, bm_I42D, bm_I41D, &   ! 32 bit integer functions
+                     bm_I85D, bm_I84D, bm_I83D, bm_I82D, bm_I81D, &   ! 64 bit integer functions
+                     bm_R45D, bm_R44D, bm_R43D, bm_R42D, bm_R41D, &   ! 32 bit real functions, 
+                     bm_R85D, bm_R84D, bm_R83D, bm_R82D, bm_R81D      ! 64 bit real functions
+  end interface
   
 !   ===========================  interfaces to shmem_heap.c functions  ===========================
   interface  ! to functions in shmem_heap.c

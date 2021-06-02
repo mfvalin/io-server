@@ -94,6 +94,51 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   endif
 end function ${RI}${L}_${D}D
 
+function ${RI}${L}${D}D_bm(p, bm) result(status)
+  implicit none
+  $TYPE($KIND), dimension($DIMENSION), intent(IN), pointer :: p
+  type(block_meta), intent(OUT) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr, ix
+
+  status = -1
+  bm % p = C_NULL_PTR               ! prepare for failure
+  bm % a % d   = 0
+  bm % a % tkr = 0
+  if(.not. ASSOCIATED(p)) return    ! NULL pointer
+  tkr = 256*${L}+16*${RI}+${D}
+  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bm % a % d   = 1
+  do ix = 1, ${D}                   ! copy array dimensions
+    bm % a % d(i) = size(p, ix)
+  enddo
+  bm % p = transfer(LOC(p), bm % p) ! array address
+  
+  status = 0
+end function ${RI}${L}${D}D_bm
+
+function bm_${RI}${L}${D}D(p, bm) result(status)
+  implicit none
+  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p
+  type(block_meta), intent(IN) :: bm
+  integer :: status
+
+  integer, parameter :: I = 1
+  integer, parameter :: R = 2
+  integer :: tkr
+
+  status = -1
+  p => NULL()                                       ! prepare for failure
+  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
+  tkr = 256*${L}+16*${RI}+${D}
+  if(bm % a % tkr  .ne. tkr)    return              ! wrong type, kind, or rank
+  call C_F_POINTER(bm % p, p, bm % a % d(1:${D}))   ! make Fortran array pointer from C pointer
+  status = 0
+end function bm_${RI}${L}${D}D
+
 EOT
     done
   done
