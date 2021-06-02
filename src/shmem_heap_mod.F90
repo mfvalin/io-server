@@ -798,5 +798,20 @@ module shmem_heap
     type(C_PTR) :: p                            !< address, NULL if invalid offset/heap combination
     p = ShmemHeapPtr(h%p, offset)
   end function address 
+
+  subroutine block_meta_internals(b, p, d, tkr, o)   ! accessor for block_meta private data
+    implicit none
+    type(block_meta), intent(IN) :: b
+    type(C_PTR), intent(OUT) :: p
+    integer(C_INT), dimension(MAX_ARRAY_RANK), intent(OUT) :: d
+    integer(C_INT), intent(OUT) :: tkr
+    integer(C_SIZE_T), intent(OUT) :: o
+
+    p   = b % p
+    d   = b % a % d
+    tkr = b % a % tkr
+    o   = b % a % offset
+
+  end subroutine block_meta_internals
   
 end module shmem_heap

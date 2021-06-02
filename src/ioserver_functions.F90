@@ -281,8 +281,8 @@ endif
     class(server_file), intent(INOUT) :: this
     type(block_meta), intent(IN)      :: mydata           ! array descriptor from h % allocate
     type(subgrid), intent(IN)         :: area             ! area in global space
-    integer, intent(IN), optional     :: grid_in          ! input grid code (implies dimensions)
-    integer, intent(IN), optional     :: grid_out         ! output grid code (implies dimensions)
+    type(grid), intent(IN), optional  :: grid_in          ! input grid
+    type(grid), intent(IN), optional  :: grid_out         ! output grid
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
     type(jar), intent(IN), optional   :: meta             ! metadata associated with data (carried serialized and blindly)
     integer :: status, n
@@ -298,10 +298,14 @@ endif
     end type
     type(my_record) :: rec
     integer(C_INT), dimension(:), pointer :: metadata
+    type(C_PTR) :: p
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
+    integer(C_INT) :: tkr
+    integer(C_SIZE_T) :: o
+    logical :: dimok
 
     status = -1
     if(this % fd <= 0) return
-    call bump_ioserver_tag(this)
 
     ! transmission layout for circular buffer (compute PE -> relay PE) :
     ! length                 (32 bits)
@@ -319,9 +323,18 @@ endif
     ! cprs                   (cprs size x 32 bits)
     ! meta                   (meta size x 32 bits)
 !
+    call block_meta_internals(mydata, p, d, tkr, o)        ! grep block_meta private contents
+    ! check that dimensions in area are consistent with metadata
+    dimok = d(1) == area % ni .and. d(2) == area % nj .and. d(3) == area % nk .and. d(4) == area % nv
+
+    if(.not. dimok) return
+
+    call bump_ioserver_tag(this)
     rec % csize = 0
     rec % msize = 0
-    if(present(cprs)) rec % csize = storage_size(cprs) / storage_size(n)
+    if(present(cprs)) then
+      rec % csize = storage_size(cprs) / storage_size(n)
+    endif
     if(present(meta)) then
       rec % msize =  meta % high()
       metadata    => meta % array()
@@ -329,15 +342,16 @@ endif
     rec % rl = storage_size(rec) / storage_size(n) + rec % csize + rec % msize
     rec % tag    = fd_seq
     rec % stream = this % fd
-!     rec % ni     =
-!     rec % nj     =
-!     rec % gin    =
-!     rec % gout   =
-!     rec % i0     =
-!     rec % j0     =
-!     rec % nk     =
-!     rec % nvar   =
-!     rec % data   =
+    rec % ni     = area % ni
+    rec % nj     = area % nj
+    rec % gnignj = grid_in % gni * grid_in % gnj
+    rec % gin    = grid_in % id
+    rec % gout   = grid_out % id
+    rec % i0     = area % i0
+    rec % j0     = area % j0
+    rec % nk     = area % nk
+    rec % nvar   = area % nv
+    rec % data   = p
 !
     n = cio_out % atomic_put( rec, storage_size(rec) / storage_size(n), .false.)
     if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
