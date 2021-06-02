@@ -61,8 +61,8 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -94,14 +94,14 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   endif
 end function ${RI}${L}_${D}D
 
-function ${RI}${L}${D}D_bm(p, bm) result(status)
+function ${RI}${L}${D}D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   $TYPE($KIND), dimension($DIMENSION), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -120,14 +120,14 @@ function ${RI}${L}${D}D_bm(p, bm) result(status)
   status = 0
 end function ${RI}${L}${D}D_bm
 
-function bm_${RI}${L}${D}D(p, bm) result(status)
+function bm_${RI}${L}${D}D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1

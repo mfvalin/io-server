@@ -44,8 +44,8 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -77,14 +77,14 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   endif
 end function I1_5D
 
-function I15D_bm(p, bm) result(status)
+function I15D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -103,14 +103,14 @@ function I15D_bm(p, bm) result(status)
   status = 0
 end function I15D_bm
 
-function bm_I15D(p, bm) result(status)
+function bm_I15D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -135,8 +135,8 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -168,14 +168,14 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   endif
 end function I1_4D
 
-function I14D_bm(p, bm) result(status)
+function I14D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -194,14 +194,14 @@ function I14D_bm(p, bm) result(status)
   status = 0
 end function I14D_bm
 
-function bm_I14D(p, bm) result(status)
+function bm_I14D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -226,8 +226,8 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -259,14 +259,14 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   endif
 end function I1_3D
 
-function I13D_bm(p, bm) result(status)
+function I13D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -285,14 +285,14 @@ function I13D_bm(p, bm) result(status)
   status = 0
 end function I13D_bm
 
-function bm_I13D(p, bm) result(status)
+function bm_I13D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -317,8 +317,8 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -350,14 +350,14 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   endif
 end function I1_2D
 
-function I12D_bm(p, bm) result(status)
+function I12D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT8_T), dimension(:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -376,14 +376,14 @@ function I12D_bm(p, bm) result(status)
   status = 0
 end function I12D_bm
 
-function bm_I12D(p, bm) result(status)
+function bm_I12D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -408,8 +408,8 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -441,14 +441,14 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   endif
 end function I1_1D
 
-function I11D_bm(p, bm) result(status)
+function I11D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT8_T), dimension(:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -467,14 +467,14 @@ function I11D_bm(p, bm) result(status)
   status = 0
 end function I11D_bm
 
-function bm_I11D(p, bm) result(status)
+function bm_I11D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -499,8 +499,8 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -532,14 +532,14 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   endif
 end function I2_5D
 
-function I25D_bm(p, bm) result(status)
+function I25D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_SHORT), dimension(:,:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -558,14 +558,14 @@ function I25D_bm(p, bm) result(status)
   status = 0
 end function I25D_bm
 
-function bm_I25D(p, bm) result(status)
+function bm_I25D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -590,8 +590,8 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -623,14 +623,14 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   endif
 end function I2_4D
 
-function I24D_bm(p, bm) result(status)
+function I24D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_SHORT), dimension(:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -649,14 +649,14 @@ function I24D_bm(p, bm) result(status)
   status = 0
 end function I24D_bm
 
-function bm_I24D(p, bm) result(status)
+function bm_I24D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -681,8 +681,8 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -714,14 +714,14 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   endif
 end function I2_3D
 
-function I23D_bm(p, bm) result(status)
+function I23D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_SHORT), dimension(:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -740,14 +740,14 @@ function I23D_bm(p, bm) result(status)
   status = 0
 end function I23D_bm
 
-function bm_I23D(p, bm) result(status)
+function bm_I23D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -772,8 +772,8 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -805,14 +805,14 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   endif
 end function I2_2D
 
-function I22D_bm(p, bm) result(status)
+function I22D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_SHORT), dimension(:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -831,14 +831,14 @@ function I22D_bm(p, bm) result(status)
   status = 0
 end function I22D_bm
 
-function bm_I22D(p, bm) result(status)
+function bm_I22D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -863,8 +863,8 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -896,14 +896,14 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   endif
 end function I2_1D
 
-function I21D_bm(p, bm) result(status)
+function I21D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_SHORT), dimension(:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -922,14 +922,14 @@ function I21D_bm(p, bm) result(status)
   status = 0
 end function I21D_bm
 
-function bm_I21D(p, bm) result(status)
+function bm_I21D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -954,8 +954,8 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -987,14 +987,14 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   endif
 end function I4_5D
 
-function I45D_bm(p, bm) result(status)
+function I45D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT), dimension(:,:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1013,14 +1013,14 @@ function I45D_bm(p, bm) result(status)
   status = 0
 end function I45D_bm
 
-function bm_I45D(p, bm) result(status)
+function bm_I45D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1045,8 +1045,8 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1078,14 +1078,14 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   endif
 end function I4_4D
 
-function I44D_bm(p, bm) result(status)
+function I44D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT), dimension(:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1104,14 +1104,14 @@ function I44D_bm(p, bm) result(status)
   status = 0
 end function I44D_bm
 
-function bm_I44D(p, bm) result(status)
+function bm_I44D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1136,8 +1136,8 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1169,14 +1169,14 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   endif
 end function I4_3D
 
-function I43D_bm(p, bm) result(status)
+function I43D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT), dimension(:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1195,14 +1195,14 @@ function I43D_bm(p, bm) result(status)
   status = 0
 end function I43D_bm
 
-function bm_I43D(p, bm) result(status)
+function bm_I43D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1227,8 +1227,8 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1260,14 +1260,14 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   endif
 end function I4_2D
 
-function I42D_bm(p, bm) result(status)
+function I42D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT), dimension(:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1286,14 +1286,14 @@ function I42D_bm(p, bm) result(status)
   status = 0
 end function I42D_bm
 
-function bm_I42D(p, bm) result(status)
+function bm_I42D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1318,8 +1318,8 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1351,14 +1351,14 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   endif
 end function I4_1D
 
-function I41D_bm(p, bm) result(status)
+function I41D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_INT), dimension(:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1377,14 +1377,14 @@ function I41D_bm(p, bm) result(status)
   status = 0
 end function I41D_bm
 
-function bm_I41D(p, bm) result(status)
+function bm_I41D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_INT), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1409,8 +1409,8 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1442,14 +1442,14 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   endif
 end function I8_5D
 
-function I85D_bm(p, bm) result(status)
+function I85D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1468,14 +1468,14 @@ function I85D_bm(p, bm) result(status)
   status = 0
 end function I85D_bm
 
-function bm_I85D(p, bm) result(status)
+function bm_I85D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1500,8 +1500,8 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1533,14 +1533,14 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   endif
 end function I8_4D
 
-function I84D_bm(p, bm) result(status)
+function I84D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1559,14 +1559,14 @@ function I84D_bm(p, bm) result(status)
   status = 0
 end function I84D_bm
 
-function bm_I84D(p, bm) result(status)
+function bm_I84D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1591,8 +1591,8 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1624,14 +1624,14 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   endif
 end function I8_3D
 
-function I83D_bm(p, bm) result(status)
+function I83D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1650,14 +1650,14 @@ function I83D_bm(p, bm) result(status)
   status = 0
 end function I83D_bm
 
-function bm_I83D(p, bm) result(status)
+function bm_I83D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1682,8 +1682,8 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1715,14 +1715,14 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   endif
 end function I8_2D
 
-function I82D_bm(p, bm) result(status)
+function I82D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1741,14 +1741,14 @@ function I82D_bm(p, bm) result(status)
   status = 0
 end function I82D_bm
 
-function bm_I82D(p, bm) result(status)
+function bm_I82D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1773,8 +1773,8 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1806,14 +1806,14 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   endif
 end function I8_1D
 
-function I81D_bm(p, bm) result(status)
+function I81D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   integer(C_LONG_LONG), dimension(:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1832,14 +1832,14 @@ function I81D_bm(p, bm) result(status)
   status = 0
 end function I81D_bm
 
-function bm_I81D(p, bm) result(status)
+function bm_I81D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1864,8 +1864,8 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1897,14 +1897,14 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   endif
 end function R4_5D
 
-function R45D_bm(p, bm) result(status)
+function R45D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_FLOAT), dimension(:,:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1923,14 +1923,14 @@ function R45D_bm(p, bm) result(status)
   status = 0
 end function R45D_bm
 
-function bm_R45D(p, bm) result(status)
+function bm_R45D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -1955,8 +1955,8 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1988,14 +1988,14 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   endif
 end function R4_4D
 
-function R44D_bm(p, bm) result(status)
+function R44D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_FLOAT), dimension(:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2014,14 +2014,14 @@ function R44D_bm(p, bm) result(status)
   status = 0
 end function R44D_bm
 
-function bm_R44D(p, bm) result(status)
+function bm_R44D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2046,8 +2046,8 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2079,14 +2079,14 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   endif
 end function R4_3D
 
-function R43D_bm(p, bm) result(status)
+function R43D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_FLOAT), dimension(:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2105,14 +2105,14 @@ function R43D_bm(p, bm) result(status)
   status = 0
 end function R43D_bm
 
-function bm_R43D(p, bm) result(status)
+function bm_R43D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2137,8 +2137,8 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2170,14 +2170,14 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   endif
 end function R4_2D
 
-function R42D_bm(p, bm) result(status)
+function R42D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_FLOAT), dimension(:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2196,14 +2196,14 @@ function R42D_bm(p, bm) result(status)
   status = 0
 end function R42D_bm
 
-function bm_R42D(p, bm) result(status)
+function bm_R42D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2228,8 +2228,8 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2261,14 +2261,14 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   endif
 end function R4_1D
 
-function R41D_bm(p, bm) result(status)
+function R41D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_FLOAT), dimension(:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2287,14 +2287,14 @@ function R41D_bm(p, bm) result(status)
   status = 0
 end function R41D_bm
 
-function bm_R41D(p, bm) result(status)
+function bm_R41D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2319,8 +2319,8 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2352,14 +2352,14 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   endif
 end function R8_5D
 
-function R85D_bm(p, bm) result(status)
+function R85D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2378,14 +2378,14 @@ function R85D_bm(p, bm) result(status)
   status = 0
 end function R85D_bm
 
-function bm_R85D(p, bm) result(status)
+function bm_R85D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2410,8 +2410,8 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2443,14 +2443,14 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   endif
 end function R8_4D
 
-function R84D_bm(p, bm) result(status)
+function R84D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2469,14 +2469,14 @@ function R84D_bm(p, bm) result(status)
   status = 0
 end function R84D_bm
 
-function bm_R84D(p, bm) result(status)
+function bm_R84D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2501,8 +2501,8 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2534,14 +2534,14 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   endif
 end function R8_3D
 
-function R83D_bm(p, bm) result(status)
+function R83D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2560,14 +2560,14 @@ function R83D_bm(p, bm) result(status)
   status = 0
 end function R83D_bm
 
-function bm_R83D(p, bm) result(status)
+function bm_R83D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2592,8 +2592,8 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2625,14 +2625,14 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   endif
 end function R8_2D
 
-function R82D_bm(p, bm) result(status)
+function R82D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_DOUBLE), dimension(:,:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2651,14 +2651,14 @@ function R82D_bm(p, bm) result(status)
   status = 0
 end function R82D_bm
 
-function bm_R82D(p, bm) result(status)
+function bm_R82D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1
@@ -2683,8 +2683,8 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2716,14 +2716,14 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   endif
 end function R8_1D
 
-function R81D_bm(p, bm) result(status)
+function R81D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   real(C_DOUBLE), dimension(:), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2742,14 +2742,14 @@ function R81D_bm(p, bm) result(status)
   status = 0
 end function R81D_bm
 
-function bm_R81D(p, bm) result(status)
+function bm_R81D(p, bm) result(status)  ! metadata to pointer translation
   implicit none
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
   integer :: status
 
-  integer, parameter :: I = 1
-  integer, parameter :: R = 2
+  integer, parameter :: I = TKR_INTEGER
+  integer, parameter :: R = TKR_REAL
   integer :: tkr
 
   status = -1

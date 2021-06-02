@@ -29,6 +29,12 @@ module shmem_heap
   !> \brief maximum number of allowed dimensions for an array in this heap type
   integer, parameter :: MAX_ARRAY_RANK = 5
 
+  !> \brief tkr code for integer arrays
+  integer, parameter :: TKR_INTEGER = 1
+
+  !> \brief tkr code for real arrays
+  integer, parameter :: TKR_REAL    = 2
+
 ! type of a heap element (must be consistent with circular buffer and io-server definition)
   integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
 !   ===========================  metadata types and type bound procedures ===========================
