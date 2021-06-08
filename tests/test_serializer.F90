@@ -11,7 +11,11 @@
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 !  Lesser General Public License for more details.
 
+! test extended macros
+#define JAR_EXTENDED_MACROS 1
+! include serializer macros
 #include <serializer.hf>
+
 program test_jar
   implicit none
   call test_free
@@ -47,9 +51,9 @@ subroutine test_pickling
 
   print *,'==========================================================='
 
-  ne = JARSPACE_ITEM(a1)
+  ne = JAR_ELEM_COUNT(a1)
   print *,'each machin1 scalar item will use',ne,' cells in jar'
-  ne = JARSPACE_ITEM(a2)
+  ne = JAR_ELEM_COUNT(a2)
   print *,'a machin2 array / array section will use',ne,' cells per array element in jar'
 
   old_debug = my_jar%debug(.true.)
@@ -60,26 +64,22 @@ subroutine test_pickling
   print 1,'(test_pickling) my_jar : ok, size, avail =',ok, my_jar%usable(), my_jar%avail()
 
   a1 = machin1([0,1,2],-123456,'xxxx','yy','zz')
-!   ne = JAR_PUT_SINGLE(my_jar, a1)
-  ne = JAR_INTO_SINGLE(my_jar, a1)
+  ne = JAR_PUT_ITEM(my_jar, a1)
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
 
   do i = 1, size(a2)
     a2(i) = machin2(500+i, 600+i, 'X_')
   enddo
-!   ne = JAR_PUT_MULTI(my_jar, a2(2:3))
-  ne = JAR_INTO_MULTI(my_jar, a2(2:3))
+  ne = JAR_PUT_ITEMS(my_jar, a2(2:3))
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
 
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-!   ne = JAR_GET_SINGLE(my_jar, x1)
-  ne = JAR_OUTOF_SINGLE(my_jar, x1)
+  ne = JAR_GET_ITEM(my_jar, x1)
   print *,'       ',a1
   print *,'x1    =',x1
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   x2 = machin2(-1, -1, '**')
-!   ne = JAR_GET_MULTI(my_jar, x2(1:2))
-  ne = JAR_OUTOF_MULTI(my_jar, x2(1:2))
+  ne = JAR_GET_ITEM(my_jar, x2(1:2))
   print *,'       ',a2(2)
   print *,'x2(1) =',x2(1)
   print *,'       ',a2(3)
@@ -102,29 +102,28 @@ subroutine test_pickling
   JAR_RESET(my_jar)
   call my_jar%print(20)
   print 1,'(test_pickling) my_jar reset : size, avail =',my_jar%usable(), my_jar%avail()
-!   ne = JAR_PUT_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
-  ne = JAR_INTO_SINGLE_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  ne = JAR_PUT_ITEM_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+!   ne = my_jar%put( a1, storage_size(a1), where=2 )
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
-!   ne = JAR_PUT_MULTI_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
-  ne = JAR_INTO_MULTI_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
+  ne = JAR_PUT_ITEMS_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
+!   ne = my_jar%put(a2(2:4), storage_size(a2(2:4))*size(a2(2:4)), where=my_jar%high()+2 )
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
 
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-!   ne = JAR_GET_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
-  ne = JAR_OUTOF_SINGLE_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  ne = JAR_GET_ITEM_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+!   ne = my_jar%get( x1, storage_size(x1), where=2 )
   print *,'         ',a1
   print *,'x1      =',x1
   x2 = machin2(-1, -1, '**')
-!   ne = JAR_GET_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
-  ne = JAR_OUTOF_MULTI_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
+  ne = JAR_GET_ITEMS_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
+!   ne = my_jar%get(x2(1:2), storage_size(x2(1:2))*size(x2(1:2)), where=ne+2 )
   print *,'       ',a2(2)
   print *,'x2(1) =',x2(1)
   print *,'       ',a2(3)
   print *,'x2(2) =',x2(2)
-!   ne = JAR_GET_MULTI(my_jar, x2(3:3))
-  ne = JAR_OUTOF_MULTI(my_jar, x2(3:3))
+  ne = JAR_GET_ITEMS(my_jar, x2(3:3))
   print *,'       ',a2(4)
   print *,'x2(3) =',x2(3)
 
@@ -164,13 +163,9 @@ subroutine level2(my_jar)    ! receives jar, recreated from integer array by pas
 
   print *,'DIAG(level2) :'
   call my_jar%print(20)
-!   ne = JAR_GET_SINGLE(my_jar, x1)
-!   ne = my_jar % outof(x1, storage_size(x1))
-  ne = JAR_OUTOF_SINGLE(my_jar, x1)
+  ne = JAR_GET_ITEM(my_jar, x1)
   print *,'x1    =',x1
-!   ne = JAR_GET_MULTI(my_jar, x2(1:2))
-!   ne = my_jar % outof(x2(1:2), storage_size(x2(1:2)) * size(x2(1:2)) )
-  ne = JAR_OUTOF_MULTI(my_jar, x2(1:2))
+  ne = JAR_GET_ITEMS(my_jar, x2(1:2))
   print *,'x2(1) =',x2(1)
   print *,'x2(2) =',x2(2)
   print *,'DIAG(level2) exiting'

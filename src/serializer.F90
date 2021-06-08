@@ -72,10 +72,8 @@ module data_serialize
     procedure, PASS :: high    => jar_top        ! current number of elements inserted (written)
     procedure, PASS :: low     => jar_bot        ! current number of elements extracted (read)
     procedure, PASS :: avail   => jar_avail      ! current number of elements available for extraction (high - low)
-    procedure, PASS :: put     => add_to_jar     ! add data to jar at top of jar (or at a specific position)
-    procedure, PASS :: into    => add_into_jar   ! add data to jar at top of jar (or at a specific position)
-    procedure, PASS :: get     => get_from_jar   ! get data from jar at current (or specific position)
-    procedure, PASS :: outof   => get_outof_jar  ! get data from jar at current (or specific position)
+    procedure, PASS :: put     => put_into_jar   ! add data to jar at top of jar (or at a specific position)
+    procedure, PASS :: get     => get_outof_jar  ! get data from jar at current (or specific position)
     procedure, PASS :: print   => print_jar
     procedure, NOPASS :: debug => debug_jars
     final :: final_jar
@@ -283,7 +281,7 @@ module data_serialize
 
 #define IgnoreTypeKindRank object
 #define ExtraAttributes , target
-  function add_into_jar(j, object, size, where) result(sz)  ! insert data into data jar (IgnoreTypeKindRank version)
+  function put_into_jar(j, object, size, where) result(sz)  ! insert data into data jar (IgnoreTypeKindRank version)
     implicit none
     class(jar), intent(INOUT) :: j                          ! the data jar
 #include <IgnoreTypeKindRankPlus.hf>
@@ -317,42 +315,42 @@ module data_serialize
     j % top = pos + intsize                                 ! update top of jar position
     sz = j % top                                            ! number of elements in jar
 
-  end function add_into_jar
+  end function put_into_jar
 
-  function add_to_jar(j, what, size, where) result(sz)      ! insert data into data jar
-    implicit none
-    class(jar), intent(INOUT) :: j                          ! the data jar
-    WHAT_TYPE, intent(IN), value :: what                    ! must match type of loc(xxx)
-    integer, intent(IN), value :: size                      ! size to insert = storage_size(item) * nb_of_items
-    integer, intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
-    integer :: sz                                           ! position of last inserted element (-1 if error)
-
-    integer :: intsize, pos
-    type(C_PTR) :: temp
-    integer(JAR_ELEMENT), dimension(:), pointer :: je, content
-
-    sz = -1
-    if(.not. C_ASSOCIATED(j % p)) return
-
-    call C_F_POINTER(j % p, content, [j % size])            ! pointer to jar data
-    if( present(where) ) then
-      pos = where - 1                                       ! insert starting at position "where"
-    else
-      pos = j%top                                           ! insert after data currently in jar
-    endif
-    if(pos < 0) return                                      ! invalid insertion position
-    if(pos > j%top) content(j%top+1:pos) = 0                ! zero fill skipped portion
-
-    intsize = size / storage_size(content(1))
-    if(pos + intsize > j%size) return                       ! jar would overflow
-
-    temp    = transfer(what,temp)                           ! address of data to insert
-    call C_F_POINTER(temp, je, [intsize])                   ! make what into an integer array
-    content(pos + 1 : pos + intsize) = je(1 : intsize)      ! insert into data portion of jar
-    j % top = pos + intsize                                 ! update top of jar position
-    sz = j % top                                            ! number of elements in jar
-
-  end function add_to_jar
+!   function add_to_jar(j, what, size, where) result(sz)      ! insert data into data jar
+!     implicit none
+!     class(jar), intent(INOUT) :: j                          ! the data jar
+!     WHAT_TYPE, intent(IN), value :: what                    ! must match type of loc(xxx)
+!     integer, intent(IN), value :: size                      ! size to insert = storage_size(item) * nb_of_items
+!     integer, intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
+!     integer :: sz                                           ! position of last inserted element (-1 if error)
+! 
+!     integer :: intsize, pos
+!     type(C_PTR) :: temp
+!     integer(JAR_ELEMENT), dimension(:), pointer :: je, content
+! 
+!     sz = -1
+!     if(.not. C_ASSOCIATED(j % p)) return
+! 
+!     call C_F_POINTER(j % p, content, [j % size])            ! pointer to jar data
+!     if( present(where) ) then
+!       pos = where - 1                                       ! insert starting at position "where"
+!     else
+!       pos = j%top                                           ! insert after data currently in jar
+!     endif
+!     if(pos < 0) return                                      ! invalid insertion position
+!     if(pos > j%top) content(j%top+1:pos) = 0                ! zero fill skipped portion
+! 
+!     intsize = size / storage_size(content(1))
+!     if(pos + intsize > j%size) return                       ! jar would overflow
+! 
+!     temp    = transfer(what,temp)                           ! address of data to insert
+!     call C_F_POINTER(temp, je, [intsize])                   ! make what into an integer array
+!     content(pos + 1 : pos + intsize) = je(1 : intsize)      ! insert into data portion of jar
+!     j % top = pos + intsize                                 ! update top of jar position
+!     sz = j % top                                            ! number of elements in jar
+! 
+!   end function add_to_jar
 
 #define IgnoreTypeKindRank object
 #define ExtraAttributes , target
@@ -391,38 +389,38 @@ module data_serialize
 
   end function get_outof_jar
 
-  function get_from_jar(j, what, size, where) result(sz)    ! get data from data jar
-    implicit none
-    class(jar), intent(INOUT) :: j                          ! the data jar
-    WHAT_TYPE, intent(IN), value :: what                    ! must match type of loc(xxx)
-    integer, intent(IN), value :: size                      ! size to insert = storage_size(item) * nb_of_items
-    integer, intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
-    integer :: sz                                           ! position of last extracted element (-1 if error)
-
-    integer :: intsize, pos
-    type(C_PTR) :: temp
-    integer(JAR_ELEMENT), dimension(:), pointer :: je, content
-
-    sz = -1
-    if(.not. C_ASSOCIATED(j % p)) return
-
-    call C_F_POINTER(j % p, content, [j % size])            ! pointer to jar data
-    if( present(where) ) then
-      pos = where - 1                                       ! insert at position "where"
-    else
-      pos = j%bot                                           ! insert after data currently in jar
-    endif
-    if(pos < 0) return                                      ! invalid insertion position
-
-    intsize = size / storage_size(content(1))
-    if(pos + intsize > j%top) return                        ! insufficient data in jar
-
-    temp    = transfer(what,temp)                           ! address of data to insert
-    call C_F_POINTER(temp, je, [intsize])                   ! make what into an integer array
-    je(1 : intsize) = content(pos + 1 : pos + intsize)      ! insert into data portion of jar
-    j % bot = pos + intsize                                 ! update top of jar position
-    sz = j % bot                                            ! position of last extracted element
-
-  end function get_from_jar
+!   function get_from_jar(j, what, size, where) result(sz)    ! get data from data jar
+!     implicit none
+!     class(jar), intent(INOUT) :: j                          ! the data jar
+!     WHAT_TYPE, intent(IN), value :: what                    ! must match type of loc(xxx)
+!     integer, intent(IN), value :: size                      ! size to insert = storage_size(item) * nb_of_items
+!     integer, intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
+!     integer :: sz                                           ! position of last extracted element (-1 if error)
+! 
+!     integer :: intsize, pos
+!     type(C_PTR) :: temp
+!     integer(JAR_ELEMENT), dimension(:), pointer :: je, content
+! 
+!     sz = -1
+!     if(.not. C_ASSOCIATED(j % p)) return
+! 
+!     call C_F_POINTER(j % p, content, [j % size])            ! pointer to jar data
+!     if( present(where) ) then
+!       pos = where - 1                                       ! insert at position "where"
+!     else
+!       pos = j%bot                                           ! insert after data currently in jar
+!     endif
+!     if(pos < 0) return                                      ! invalid insertion position
+! 
+!     intsize = size / storage_size(content(1))
+!     if(pos + intsize > j%top) return                        ! insufficient data in jar
+! 
+!     temp    = transfer(what,temp)                           ! address of data to insert
+!     call C_F_POINTER(temp, je, [intsize])                   ! make what into an integer array
+!     je(1 : intsize) = content(pos + 1 : pos + intsize)      ! insert into data portion of jar
+!     j % bot = pos + intsize                                 ! update top of jar position
+!     sz = j % bot                                            ! position of last extracted element
+! 
+!   end function get_from_jar
 
 end module
