@@ -117,14 +117,16 @@ function bm_I15D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*1+16*I+5
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*1+16*I+5                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 1) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 5) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -219,14 +221,16 @@ function bm_I14D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*1+16*I+4
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*1+16*I+4                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 1) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 4) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -321,14 +325,16 @@ function bm_I13D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*1+16*I+3
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*1+16*I+3                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 1) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 3) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -423,14 +429,16 @@ function bm_I12D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*1+16*I+2
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*1+16*I+2                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 1) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 2) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -525,14 +533,16 @@ function bm_I11D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*1+16*I+1
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*1+16*I+1                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 1) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 1) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -627,14 +637,16 @@ function bm_I25D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*2+16*I+5
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*2+16*I+5                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 2) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 5) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -729,14 +741,16 @@ function bm_I24D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*2+16*I+4
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*2+16*I+4                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 2) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 4) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -831,14 +845,16 @@ function bm_I23D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*2+16*I+3
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*2+16*I+3                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 2) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 3) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -933,14 +949,16 @@ function bm_I22D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*2+16*I+2
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*2+16*I+2                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 2) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 2) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1035,14 +1053,16 @@ function bm_I21D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*2+16*I+1
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*2+16*I+1                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 2) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 1) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1137,14 +1157,16 @@ function bm_I45D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*I+5
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*I+5                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 5) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1239,14 +1261,16 @@ function bm_I44D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*I+4
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*I+4                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 4) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1341,14 +1365,16 @@ function bm_I43D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*I+3
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*I+3                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 3) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1443,14 +1469,16 @@ function bm_I42D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*I+2
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*I+2                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 2) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1545,14 +1573,16 @@ function bm_I41D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*I+1
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*I+1                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 1) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1647,14 +1677,16 @@ function bm_I85D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*I+5
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*I+5                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 5) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1749,14 +1781,16 @@ function bm_I84D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*I+4
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*I+4                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 4) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1851,14 +1885,16 @@ function bm_I83D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*I+3
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*I+3                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 3) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -1953,14 +1989,16 @@ function bm_I82D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*I+2
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*I+2                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 2) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2055,14 +2093,16 @@ function bm_I81D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*I+1
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*I+1                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. I) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 1) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2157,14 +2197,16 @@ function bm_R45D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*R+5
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*R+5                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 5) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2259,14 +2301,16 @@ function bm_R44D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*R+4
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*R+4                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 4) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2361,14 +2405,16 @@ function bm_R43D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*R+3
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*R+3                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 3) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2463,14 +2509,16 @@ function bm_R42D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*R+2
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*R+2                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 2) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2565,14 +2613,16 @@ function bm_R41D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*4+16*R+1
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*4+16*R+1                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 4) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 1) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2667,14 +2717,16 @@ function bm_R85D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*R+5
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*R+5                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 5) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2769,14 +2821,16 @@ function bm_R84D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*R+4
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*R+4                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 4) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2871,14 +2925,16 @@ function bm_R83D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*R+3
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*R+3                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 3) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -2973,14 +3029,16 @@ function bm_R82D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*R+2
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*R+2                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 2) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
@@ -3075,14 +3133,16 @@ function bm_R81D(p, bm, strict) result(status)  ! metadata to pointer translatio
   status = -1
   p => NULL()                                       ! prepare for failure
   if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-  tkr = 256*8+16*R+1
-  kd = ishft(bm % a % tkr, -8)                      ! kind 1/2/4/8
+
+  tkr = 256*8+16*R+1                      ! full TKR
+
+  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
   if(kd .ne. 8) return                           ! wrong kind
 
-  tp = and(15, ishft(bm % a % tkr, -4))             ! type 1/2
+  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
   if(tp .ne. R) return                          ! wrong type
 
-  rk = and(bm % a % tkr, 15)                        ! rank 1/2/3/4/5
+  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
   if(rk > 1) return                              ! insufficient rank of pointer
 
   if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
