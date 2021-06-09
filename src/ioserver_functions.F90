@@ -298,6 +298,7 @@ endif
     end type
     type(my_record) :: rec
     integer(C_INT), dimension(:), pointer :: metadata
+    integer(C_INT) :: low, high
     type(C_PTR) :: p
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
     integer(C_INT) :: tkr
@@ -337,7 +338,9 @@ endif
       rec % csize = storage_size(cprs) / storage_size(n)
     endif
     if(present(meta)) then
-      rec % msize =  meta % high()
+      low = meta % low()
+      high = meta % high()
+      rec % msize =  high - low
       metadata    => meta % array()
     endif
     rec % rl = storage_size(rec) / storage_size(n) + rec % csize + rec % msize
@@ -356,7 +359,7 @@ endif
 !
     n = cio_out % atomic_put( rec, storage_size(rec) / storage_size(n), .false.)
     if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
-    if(present(meta)) n = cio_out % atomic_put( metadata, rec % msize, .false.)
+    if(present(meta)) n = cio_out % atomic_put( metadata(low + 1 : high), rec % msize, .false.)
     n = cio_out % atomic_put( rec % rl, 1, .true.)
 
     status = 0
