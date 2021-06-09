@@ -359,7 +359,7 @@ endif
 !
     n = cio_out % atomic_put( rec, storage_size(rec) / storage_size(n), .false.)
     if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
-    ! only send usefule part of metadata jar (if supplied)
+    ! only send useful part of metadata jar (if supplied)
     if(present(meta)) n = cio_out % atomic_put( metadata(low + 1 : high), rec % msize, .false.)
     n = cio_out % atomic_put( rec % rl, 1, .true.)
 
