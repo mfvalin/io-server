@@ -27,6 +27,13 @@
 ! We use the '//F_StArT' and '//F_EnD' tags to indicate the beginning and end
 ! of extraction. Anything that happens to be between these tags will be
 ! included in the output, with the leading '//' and trailing spaces removed.
+!
+!******************************************************************************
+!     INSTRUCTIONS FOR PROPERLY GENERATING THE HEADER FROM A FORTRAN FILE
+!  --------------------------------------------------------------------------
+! Same as for .C files, except that we use the '!! F_StArT' and '!! F_EnD'
+! tags. Don't forget to include parameter declarations too.
+!
 !******************************************************************************
 
 interface
