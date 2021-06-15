@@ -35,6 +35,35 @@ module machins
     integer               :: l2
     character(len=2)      :: unit
   end type
+
+  interface same_machin
+    module procedure same_machin1
+    module procedure same_machin2
+  end interface
+
+ contains
+  function same_machin1(a, b) result(ok)
+    implicit none
+    type(machin1), intent(IN) :: a,b
+    logical :: ok
+    ok = all(a%ip == b%ip) .and. a%date == b%date .and. a%nom == b%nom .and. a%typ == b%typ .and. a%tmp == b%tmp
+    if(ok) then
+      print *,'SUCCESS 1'
+    else
+      print *,'ERROR 1'
+    endif
+  end function same_machin1
+  function same_machin2(a, b) result(ok)
+    implicit none
+    type(machin2), intent(IN) :: a,b
+    logical :: ok
+    ok = a%l1 == b%l1 .and. a%l2 == b%l2 .and. a%unit == b%unit
+    if(ok) then
+      print *,'SUCCESS 2'
+    else
+      print *,'ERROR 2'
+    endif
+  end function same_machin2
 end module
 
 subroutine test_pickling
@@ -48,6 +77,7 @@ subroutine test_pickling
   type(machin2), dimension(4) :: a2, x2
   integer, dimension(:), pointer :: blind_array
   type(C_PTR) :: c_blind_array
+  logical :: success
 
   print *,'==========================================================='
 
@@ -79,6 +109,7 @@ subroutine test_pickling
   ne = JAR_GET_ITEM(my_jar, x1)
   print *,'       ',a1
   print *,'x1    =',x1
+  success = same_machin(a1,x1)
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   print 2,'after get #1        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x2 = machin2(-1, -1, '**')
@@ -87,6 +118,7 @@ subroutine test_pickling
   print *,'x2(1) =',x2(1)
   print *,'       ',a2(3)
   print *,'x2(2) =',x2(2)
+  success = success .and. same_machin(a2(2),x2(1)) .and. same_machin(a2(3),x2(2))
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   print 2,'after get #2        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   call my_jar%print(15)
@@ -118,12 +150,14 @@ subroutine test_pickling
   print 2,'before get        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
   ne = JAR_GET_ITEM_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  success = success .and. same_machin(a1,x1)
 !   ne = my_jar%get( x1, storage_size(x1), where=2 )
   print *,'         ',a1
   print *,'x1      =',x1
   print 2,'after get #1        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x2 = machin2(-1, -1, '**')
   ne = JAR_GET_ITEMS_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
+  success = success .and. same_machin(a2(2),x2(1)) .and. same_machin(a2(3),x2(2))
 !   ne = my_jar%get(x2(1:2), storage_size(x2(1:2))*size(x2(1:2)), where=ne+2 )
   print *,'       ',a2(2)
   print *,'x2(1) =',x2(1)
@@ -131,6 +165,7 @@ subroutine test_pickling
   print *,'x2(2) =',x2(2)
   print 2,'after get #2        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   ne = JAR_GET_ITEM(my_jar, x2(3:3))
+  success = success .and. same_machin(a2(4),x2(3))
   print *,'       ',a2(4)
   print *,'x2(3) =',x2(3)
   print 2,'after get #3        ',blind_array(my_jar%low()+1:my_jar%high()),-1
@@ -139,8 +174,18 @@ subroutine test_pickling
   if(.not. JAR_VALID(my_jar)) print *,'SUCCESS: jar is not valid after free'
   if(JAR_VALID(my_jar))       print *,'ERROR:   jar is valid after free'
 
+  if(success) then
+    print *,'============= TEST is a SUCCESS ============='
+    return
+  else
+    print *,'============= ERRORS detected ============='
+    error stop 1
+  endif
+
 1 format(A,10I8)
 2 format(A15,30Z9.8)
+
+9 stop
 end subroutine test_pickling
 
 subroutine pass_through(blind_array, n)    !  integer array inbound, jar outbound
