@@ -635,14 +635,17 @@ int32_t CB_atomic_get(
     *outp                       = out;
   }
 
-  IO_timer_stop(&timer);
-  buffer->stats.total_read_time_ms += IO_time_ms(&timer);
   if (operation != CB_PEEK) {
     buffer->stats.num_read_elems += (uint64_t)num_elements;
     buffer->stats.num_reads++;
   }
 
-  return CB_get_available_data(buffer);
+  const data_element new_num_available = CB_get_available_data(buffer);
+
+  IO_timer_stop(&timer);
+  buffer->stats.total_read_time_ms += IO_time_ms(&timer);
+
+  return new_num_available;
 }
 
 //F_StArT
@@ -785,9 +788,9 @@ void readable_element_count(
   double amount = num_elements;
   int    unit   = 0;
 
-  const char UNITS[] = {'\0', 'k', 'M', 'G'};
+  const char UNITS[] = {'\0', 'k', 'M', 'G', 'T', 'P'};
 
-  while (amount > 1900.0 && unit < 3) {
+  while (amount > 1900.0 && unit < 5) {
     amount /= 1000.0;
     unit++;
   }
@@ -843,10 +846,10 @@ void CB_print_stats(
 
   const double avg_wait_w       = num_writes > 0 ? (double)stats->total_write_wait_time_ms / num_writes : 0.0;
   const double avg_wait_r       = num_reads > 0 ? (double)stats->total_read_wait_time_ms / num_reads : 0.0;
-  const double total_write_time = stats->total_write_time_ms;
-  const double total_read_time  = stats->total_read_time_ms;
+  const double total_write_time = stats->total_write_time_ms + 1e-10; // Lazy trick to avoid division by zero later on
+  const double total_read_time  = stats->total_read_time_ms  + 1e-10; // Lazy trick to avoid division by zero later on
   readable_element_count(num_write_elems / total_write_time * 1000.0 * sizeof(data_element), write_per_sec_s);
-  readable_element_count(num_read_elems / total_read_time * 1000.0 * sizeof(data_element), read_per_sec_s);
+  readable_element_count(num_read_elems  / total_read_time  * 1000.0 * sizeof(data_element), read_per_sec_s);
 
   readable_element_count(stats->max_fill, max_fill_s);
   const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity(buffer));
