@@ -19,7 +19,7 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020/2021
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
-module cb_plus_dcb_parameters
+module model_write_parameters
   use ISO_C_BINDING
   implicit none
 
@@ -69,7 +69,7 @@ contains
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
   end function am_server_node
-end module cb_plus_dcb_parameters
+end module model_write_parameters
 
 #include <serializer.hf>
 
@@ -77,7 +77,7 @@ program pseudomodelandserver
   use ISO_C_BINDING
   use ioserver_functions
   use memory_arena_mod
-  use cb_plus_dcb_parameters
+  use model_write_parameters
   implicit none
   external io_relay_process
   external io_server_process
@@ -96,7 +96,7 @@ program pseudomodelandserver
   call mpi_init(status)
   local_crs = COMM_RANK_SIZE_NULL
 
-!  call IOSERVER_debug(1)            ! activate debug mode
+  ! call IOSERVER_debug(1)            ! activate debug mode
 
   ! arg = '0'
   ! if(COMMAND_ARGUMENT_COUNT() >= 5) call GET_COMMAND_ARGUMENT(5, arg)
@@ -195,7 +195,7 @@ end program
 
 
 subroutine io_server_process()
-  use cb_plus_dcb_parameters
+  use model_write_parameters
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   use io_server_mod
   implicit none
@@ -261,7 +261,7 @@ subroutine channel_process(data_buffer)
 end subroutine channel_process
 
 subroutine consumer_process(data_buffer, consumer_comm)
-  use cb_plus_dcb_parameters
+  use model_write_parameters
   use circular_buffer_module, only : DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
@@ -336,9 +336,6 @@ subroutine consumer_process(data_buffer, consumer_comm)
     do i_producer = consumer_id + 1, num_active_producers, num_consumers
 
       producer_id = active_producers(i_producer)
-
-      ! Skip relays that do not produce data
-      ! if (.not. producer_activated(i_producer + 1)) cycle
 
       ! The buffer is empty, so it has not finished sending stuff. Just move on to the next
       if (data_buffer % get_num_elements(producer_id) == 0) then
@@ -424,7 +421,7 @@ end subroutine model_pseudo_write
 
 subroutine model_process()
   use ISO_C_BINDING
-  use cb_plus_dcb_parameters
+  use model_write_parameters
   use circular_buffer_module
   use rpn_extra_module, only: sleep_us
   use io_common_mod
@@ -455,14 +452,10 @@ subroutine model_process()
 
   ! write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
 
-  ! Create a single CB in our allocated space in shared memory
-  write(compute_name,'(A4,I4.4)') "MCIO", local_compute_id
-  tmp_ptr = ma % getblock(bsize, bflags, compute_name)
-  success = data_buffer % create(tmp_ptr, NUM_CB_ELEMENTS)
-  if (.not. success) then
-    num_errors = num_errors + 1
-    write (6, *) 'AAAAHHHhhhh could not create CB from model PE ', node_crs % rank
-    error stop 1
+  data_buffer = IOserver_get_cio_out()
+
+  if (data_buffer % get_capacity() .ne. data_buffer % get_num_spaces()) then
+    print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh'
   end if
 
   ! NODE barrier to signal RELAY processes that the CB (from each MODEL) is ready
@@ -508,10 +501,11 @@ end subroutine model_process
 
 subroutine io_relay_process()
   use ISO_C_BINDING
-  use cb_plus_dcb_parameters
+  use model_write_parameters
   use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   use io_relay_mod
+  use ioserver_memory_mod
   implicit none
 
   integer              :: global_comm, global_rank, global_size
@@ -522,13 +516,16 @@ subroutine io_relay_process()
   integer              :: bsize, bflags
   type(C_PTR)          :: tmp_ptr
 
-  type(circular_buffer), dimension(MAX_NUM_WORKER_PER_NODE) :: local_data_buffers
+  ! type(circular_buffer), dimension(:), pointer :: local_data_buffers
 
   logical :: success = .false.
   type(distributed_circular_buffer) :: data_buffer
 
+  ! equivalence(circ_buffer_in, local_data_buffers)
+
   call io_relay_mod_init()
   call get_local_world(global_comm, global_rank, global_size)
+
 
   local_relay_crs = IOserver_get_crs(RELAY_COLOR + NODE_COLOR)
   local_model_crs = IOserver_get_crs(MODEL_COLOR + NODE_COLOR)
@@ -554,20 +551,6 @@ subroutine io_relay_process()
 
   ! Recover all CBs that are stored on this node and check that they are valid (even if we don't necessarily access all of them)
   index = 1
-  do i_compute = 0, num_local_compute - 1
-    write(compute_name,'(A4,I4.4)') "MCIO", i_compute
-
-    tmp_ptr = ma % getblock(bsize, bflags, compute_name)
-    success = local_data_buffers(index) % create(tmp_ptr)
-
-    if (success) then
-      index = index + 1
-    else
-      num_errors = num_errors + 1
-      print *, 'AAAAhhhh invalid buffer given...', i_compute
-      error stop 1
-    end if
-  end do
 
   block
     
@@ -586,9 +569,13 @@ subroutine io_relay_process()
     if (local_relay_id == 0) then ! only 1 relay per node sends output
 
       ! Get the initial test signal from each CB this relay is responsible for
-      do i_compute = local_relay_id + 1, num_local_compute !, num_local_relays
+      do i_compute = 0, num_local_compute - 1 !, num_local_relays
         cb_message(:) = -1
-        num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, 1, .true.)
+        num_elements = c_cio_out(i_compute) % atomic_get(cb_message, 1, .true.)
+        if (num_elements < 0) then
+          print *, 'ERROR in relay. atomic_get returned a negative value'
+          error stop 1
+        end if
       end do
 
       ! The main loop
@@ -596,21 +583,21 @@ subroutine io_relay_process()
       current_message_size = 0
       do while (.not. finished)
         finished = .true.
-        do i_compute = local_relay_id + 1, num_local_compute !, num_local_relays
+        do i_compute = 0, num_local_compute - 1
 
           ! The buffer is empty, so it has not finished sending stuff. Move on to the next CB
-          if (local_data_buffers(i_compute) % get_num_elements() == 0) then
+          if (c_cio_out(i_compute) % get_num_elements() == 0) then
             finished = .false.
             cycle
           end if
 
-          num_elements = local_data_buffers(i_compute) % peek(model_message_size, 1)
+          num_elements = c_cio_out(i_compute) % peek(model_message_size, 1)
           if (model_message_size > 0) then
             ! There is something in the buffer!
             finished = .false.
 
             ! Read the content of the CB
-            num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, model_message_size + 1, .true.)
+            num_elements = c_cio_out(i_compute) % atomic_get(cb_message, model_message_size + 1, .true.)
 
             ! If the DCB message buffer is too full to contain that new package, flush it now
             if (current_message_size + model_message_size + 1 > MAX_DCB_MESSAGE_SIZE) then
@@ -619,7 +606,8 @@ subroutine io_relay_process()
             end if
 
             ! Copy the CB message to the DCB message buffer
-            dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = cb_message(1:model_message_size + 1)
+            dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = &
+                cb_message(1:model_message_size + 1)
             current_message_size = current_message_size + model_message_size + 1
 
             if (CHECK_CB_MESSAGES) then
@@ -647,8 +635,8 @@ subroutine io_relay_process()
   call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
 
   if (local_relay_id == 0) then
-    do i_compute = 1, num_local_compute
-      call local_data_buffers(i_compute) % print_stats(producer_id * 100 + i_compute - 1, i_compute == 1)
+    do i_compute = 0, num_local_compute - 1
+      call c_cio_out(i_compute) % print_stats(producer_id * 100 + i_compute, i_compute == 0)
     end do
   end if
 

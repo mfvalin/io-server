@@ -82,7 +82,8 @@ module ioserver_functions
     integer :: nm            ! length of metadata "jar" (32 bit units)
   end type
 
-  private  :: fd_seq, local_heap, cio_in, cio_out, initialized    
+  private  :: fd_seq, local_heap, initialized    
+  private  :: cio_in, cio_out
 !   private gdt, MAXGRIDS
 
   logical                :: initialized = .false.
@@ -464,6 +465,7 @@ module io_relay_mod
   end function io_relay_debug
 
   subroutine io_relay_mod_init()
+    use ioserver_memory_mod
     implicit none
     type(C_PTR) :: temp
 
@@ -481,6 +483,9 @@ module io_relay_mod
     call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
 
     temp = ma%clone(p_relay)
+
+    c_cio_out => circ_buffer_out
+    c_cio_in  => circ_buffer_in
 
     initialized = .true.
   end subroutine io_relay_mod_init

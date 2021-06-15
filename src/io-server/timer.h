@@ -86,10 +86,12 @@ typedef struct {
   uint64_t total_time; //! How many clock ticks have been recorded (updates every time the timer stops)
 } io_timer_t;
 
+static const clockid_t IO_CLOCK_ID = CLOCK_MONOTONIC;
+
 //! Get current system time in microseconds, wraps around approximately every year
 static inline uint64_t get_current_time_us() {
   struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
+  clock_gettime(IO_CLOCK_ID, &now);
 
   // Wraps around every year or so. Not sure why you would need microsecond precision for longer
   const uint64_t now_us = ((uint64_t)now.tv_sec % (1 << 25)) * 1000000 + (uint64_t)now.tv_nsec / 1000;

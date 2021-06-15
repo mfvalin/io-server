@@ -52,6 +52,7 @@ end module ioserver_constants
 module ioserver_memory_mod
   use ISO_C_BINDING
   use ioserver_constants
+  use circular_buffer_module
   implicit none
 
   integer, parameter :: MAX_PES_PER_NODE = 128
@@ -62,7 +63,7 @@ module ioserver_memory_mod
     integer(C_INTPTR_T) :: cio_in                   ! offset into shared memory arena
     integer(C_INTPTR_T) :: cio_out                  ! offset into shared memory arena
     integer(C_INT)      :: color                    ! PE type (compute/relay/server/...)
-    integer(C_INT)      :: rank                     ! rank on node
+    integer(C_INT)      :: rank                     ! rank on node + same color
     integer(C_INT), dimension(4) :: pad             ! pad to a size of 64 bytes
   end type
 
@@ -98,6 +99,9 @@ module ioserver_memory_mod
   private :: initialized
   logical :: initialized = .false.
 
+  type(circular_buffer), dimension(:), allocatable, target :: circ_buffer_in   ! The CB objects belonging to compute PEs (inbound)
+  type(circular_buffer), dimension(:), allocatable, target :: circ_buffer_out  ! The CB objects belonging to compute PEs (outbound)
+
   contains
 
   subroutine ioserver_memory_mod_init(address, n_pe)
@@ -115,6 +119,9 @@ module ioserver_memory_mod
     relay_index = -1
     allocate(compute_index(0:max_smp_pe))      ! size is overkill but it is easier
     compute_index = -1
+
+    allocate(circ_buffer_in(0:max_smp_pe))     ! size is overkill but it is easier
+    allocate(circ_buffer_out(0:max_smp_pe))    ! size is overkill but it is easier
 
     initialized = .true.
   end subroutine ioserver_memory_mod_init
@@ -360,6 +367,40 @@ function ptr_translate_to(from, to_color, to_rank) result(to) BIND(C,name='Ptr_t
 end function ptr_translate_to
 !!
 !! F_EnD
+
+subroutine fetch_node_io_buffers()
+  integer             :: i
+  integer(C_INTPTR_T) :: offset, new
+  type(C_PTR)         :: my_base, new_base, local
+  logical             :: success
+  integer(DATA_ELEMENT) :: elem, num_elem
+
+  my_base = mem % pe(smp_rank) % io_ra
+
+  do i = 0, max_smp_pe
+    if (mem % pe(i) % color == MODEL_COLOR) then
+      new     = transfer(my_base, new)              ! make large integer from C pointer
+      new     = new + mem % pe(i) % cio_in          ! add offset to my base
+      local   = transfer(new, local)                ! honest C pointer
+      success = circ_buffer_in(mem % pe(i) % rank) % create(local)   ! Initialize the local circular buffer structure
+
+      if (.not. success) then
+        print *, 'ERROR: Could not fetch input CB from PE ', i
+        error stop 1
+      end if
+
+      new     = transfer(my_base, new)              ! make large integer from C pointer
+      new     = new + mem % pe(i) % cio_out         ! add offset to my base
+      local   = transfer(new, local)                ! honest C pointer
+      success = circ_buffer_out(mem % pe(i) % rank) % create(local)  ! Initialize the local circular buffer structure
+
+      if (.not. success) then
+        print *, 'ERROR: Could not fetch output CB from PE ', i
+        error stop 1
+      end if
+    end if
+  end do
+end subroutine fetch_node_io_buffers
 
 !! F_StArT
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
@@ -1245,6 +1286,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
     stop
   endif
   call build_relay_model_index()
+  call fetch_node_io_buffers()
   if(debug_mode .and. (color == RELAY_COLOR .or. color == MODEL_COLOR)) call build_print_model_index()
 ! split IO PEs into server and relay PEs, create 1 sided communication window
 ! set return code to appropriate value or call supplied relay subroutine

@@ -216,7 +216,7 @@ subroutine compute_fn()
   type(comm_rank_size) :: local_crs, model_crs, relay_crs
   type(comm_rank_size) :: modelio_crs, allio_crs, server_crs, nodecom_crs
   type(C_PTR) :: p_relay, temp
-  type(circular_buffer) :: cio_in
+  ! type(circular_buffer) :: cio_in
   integer, dimension(1) :: tag
 
   call verify_translations()
