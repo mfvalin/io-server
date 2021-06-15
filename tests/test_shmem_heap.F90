@@ -24,8 +24,8 @@
 #define MAXINDEXES  1024
 
 program test_shmen_heap
+  use mpi_f08
   implicit none
-  include 'mpif.h'
   integer :: myrank, nprocs, ierr
   character(len=128) :: arg
 
@@ -55,15 +55,20 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   use ISO_C_BINDING
   ! heap and block management functions
   use shmem_heap, only : heap, HEAP_ELEMENT, MAX_ARRAY_RANK, block_meta_f08, block_meta
+  use mpi_f08
   implicit none
-  include 'mpif.h'
   integer, intent(IN) :: myrank, nprocs
 
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF
-  integer :: ierr, win, disp_unit, i, j, nheaps, status, array_rank, lastblock
+  integer :: ierr, disp_unit, i, j, nheaps, status, array_rank, lastblock
+  type(MPI_Win) :: win
   integer, dimension(:), allocatable :: disp_units
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase
-  integer(KIND=MPI_ADDRESS_KIND), dimension(:), allocatable :: bases, sizes
+  integer(KIND=MPI_ADDRESS_KIND) :: winsize
+  type(C_PTR) :: baseptr, mybase
+  integer(KIND=MPI_ADDRESS_KIND) :: imybase
+  integer(KIND=MPI_ADDRESS_KIND), dimension(:), allocatable :: sizes
+  type(C_PTR), dimension(:), allocatable :: bases
+  integer(KIND=MPI_ADDRESS_KIND), dimension(:), allocatable :: ibases
   type, bind(C) :: mem_layout             ! shared memory layout description
     integer(C_INT) :: nindexes            ! size of index table
     type(C_PTR)    :: pindex              ! pointer to index table (nindexes elements)
@@ -108,19 +113,21 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 
   disp_unit = C_SIZEOF(he)                          ! displacement unit in window = size of a heap element
   call MPI_Win_allocate_shared(winsize, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, baseptr, win, ierr)
-  allocate(bases(0:nprocs-1))
+  allocate(bases(0:nprocs-1), ibases(0:nprocs-1))
   allocate(sizes(0:nprocs-1))
   allocate(disp_units(0:nprocs-1))
   do i = 0, nprocs-1
     call MPI_Win_shared_query(win, i, sizes(i), disp_units(i), bases(i),   ierr)  ! get base addresses of partners
   enddo
   mybase = bases(myrank)  ! my own base address
-  print 5,'INFO: PE ',myrank,', my base address = ',bases(myrank)
+  imybase = transfer(mybase, imybase)
+  print 5,'INFO: PE ',myrank,', my base address = ', imybase
 
 ! ================================= setup of the "model" PE heaps =================================
   if(myrank == 0 .or. myrank == nprocs-1) then  ! relay PE (first rank and last rank)
     do i = 0, nprocs-1
-      print 5,'INFO: PE ',i,', base address = ',bases(i),' size =',sizes(i),' disp_unit =',disp_units(i)
+      imybase = transfer(bases(i), imybase)
+      print 5,'INFO: PE ',i,', base address = ',imybase,' size =',sizes(i),' disp_unit =',disp_units(i)
     enddo
   else                                          ! "model" PE, create and populate heaps
     p = transfer(mybase, C_NULL_PTR)                  ! make large integer from Win_shared_query into a C pointer
@@ -259,11 +266,12 @@ end subroutine relay_test
 
 subroutine base_test(nprocs, myrank)
   use shmem_heap
+  use mpi_f08
   implicit none
-  include 'mpif.h'
   integer, intent(IN) :: myrank, nprocs
 
-  integer :: ierr, win, disp_unit, i, status
+  integer :: ierr, disp_unit, i, status
+  type(MPI_Win) :: win
   type, bind(C) :: mem_layout             ! shared memory layout description
     integer(C_INT) :: nindexes            ! size of index table
     type(C_PTR)    :: pindex              ! pointer to index table (nindexes elements)
@@ -273,7 +281,8 @@ subroutine base_test(nprocs, myrank)
   type(heap)  :: h
   type(C_PTR) :: p
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, baseptr, mybase, mysize
+  integer(KIND=MPI_ADDRESS_KIND) :: winsize, mysize, iaddress
+  type(C_PTR) ::  baseptr, mybase
   integer(C_INT)    :: free_blocks, used_blocks
   integer(C_SIZE_T) :: free_space, used_space
   integer(C_INT), dimension(:), pointer :: ixtab   ! index table (integer array)
@@ -336,7 +345,8 @@ subroutine base_test(nprocs, myrank)
     enddo
     i = h % register(p)                             ! register heap on this process (other than process 0)
     print *,'process',myrank,', nheaps =',i
-    print 1 , 'RAM address  :',loc(ram), ', HEAP address :',transfer(p,baseptr)
+    iaddress = transfer(p,iaddress)
+    print 1 , 'RAM address  :',loc(ram), ', HEAP address :', iaddress
     status = h % check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
            ,free_space,' free bytes,',used_space,' bytes in use'
