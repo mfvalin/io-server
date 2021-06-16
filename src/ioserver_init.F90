@@ -1396,7 +1396,7 @@ end function IOserver_int_init
 ! same interface as MPI_Win_allocate_shared
 ! disp_unit_, info, win are not meaningful for this procedure
 ! disp_unit_ must be 0, info must be MPI_INFO_NULL, win is returned as MPI_WIN_NULL
-subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, win, ierror)
+subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, win, ierr)
   USE ISO_C_BINDING
   use ioserver_internal_mod
   implicit none
@@ -1406,9 +1406,9 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
   type(MPI_Comm),    INTENT(IN)  :: comm
   type(C_PTR),       INTENT(OUT) :: baseptr
   type(MPI_Win),     INTENT(OUT) :: win
-  INTEGER, OPTIONAL, INTENT(OUT) :: ierror
+  INTEGER, OPTIONAL, INTENT(OUT) :: ierr
 
-  integer :: myrank, shmid, thesize, i, hostid
+  integer :: myrank, shmid, thesize, i, hostid, ierror
   integer(C_INT64_T) :: siz
   type(C_PTR) :: p
   integer, dimension(:), allocatable :: hostids
@@ -1447,6 +1447,7 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
   endif
   baseptr = transfer(p, baseptr)
   ierror = MPI_SUCCESS
+  if( present(ierr)) ierr = ierror
 end subroutine RPN_MPI_Win_allocate_shared
 
 !! F_StArT
