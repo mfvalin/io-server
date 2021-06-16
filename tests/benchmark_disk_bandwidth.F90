@@ -2,12 +2,11 @@
 module disk_bandwidth_module
   use test_helper_module
   implicit none
-  include 'mpif.h'
-
   contains
 end module disk_bandwidth_module
 
 program disk_bandwidth
+  use mpi_f08
   use disk_bandwidth_module
   implicit none
   integer(C_INT64_T) :: time0, time1
@@ -20,7 +19,7 @@ program disk_bandwidth
 
   real :: total_time
   integer :: size, rank
-  integer :: ierror, i, j
+  integer :: i, j
   integer :: max_proc
 
   integer, parameter :: NUM_BUF_ELEM_COUNTS = 7
@@ -31,9 +30,9 @@ program disk_bandwidth
   integer           :: file_unit
   character(len=14) :: file_name
 
-  call MPI_Init(ierror)
-  call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierror)
-  call MPI_Comm_size(MPI_COMM_WORLD, size, ierror)
+  call MPI_Init()
+  call MPI_Comm_rank(MPI_COMM_WORLD, rank)
+  call MPI_Comm_size(MPI_COMM_WORLD, size)
 
   write(file_name,'(A6, I4.4, A4)') 'SERVER', rank, '.out'
   print *, 'Writing to file: ', file_name
@@ -71,11 +70,11 @@ program disk_bandwidth
       !   print *, 'num_elem, process data Kb, num writes: ', num_elem, process_data_kb, num_writes
       ! end if
       !---------------------------------------
-      call MPI_Barrier(MPI_COMM_WORLD, ierror)
+      call MPI_Barrier(MPI_COMM_WORLD)
       !---------------------------------------
       time0 = get_current_time_us()
       !---------------------------------------
-      call MPI_Barrier(MPI_COMM_WORLD, ierror)
+      call MPI_Barrier(MPI_COMM_WORLD)
       !---------------------------------------
       if (rank < j) then
         open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
@@ -85,7 +84,7 @@ program disk_bandwidth
         close(file_unit)
       end if
       !---------------------------------------
-      call MPI_Barrier(MPI_COMM_WORLD, ierror)
+      call MPI_Barrier(MPI_COMM_WORLD)
       !---------------------------------------
       time1 = get_current_time_us()
       total_time =  (time1 - time0) / 1000000.0
@@ -102,5 +101,5 @@ program disk_bandwidth
     end if
   end do
 
-  call MPI_Finalize(ierror)
+  call MPI_Finalize()
 end program disk_bandwidth

@@ -48,23 +48,23 @@ contains
   end function compute_data_point
 
   function am_server_node(node_rank)
+    use mpi_f08
     implicit none
-    include 'mpif.h'
 
     integer, intent(out) :: node_rank
     logical :: am_server_node
 
-    integer :: global_rank, node_comm, node_root_global_rank
-    integer :: ierr
+    type(MPI_Comm) :: node_comm
+    integer :: global_rank, node_root_global_rank
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
-    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
-    call MPI_Comm_rank(node_comm, node_rank, ierr)
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
+    call MPI_Comm_rank(node_comm, node_rank)
 
     node_root_global_rank = -1
     if (node_rank == 0) node_root_global_rank = global_rank
 
-    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
 
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
@@ -75,6 +75,8 @@ end module model_write_parameters
 
 program pseudomodelandserver
   use ISO_C_BINDING
+  use mpi_f08
+
   use ioserver_functions
   use memory_arena_mod
   use model_write_parameters
@@ -83,7 +85,9 @@ program pseudomodelandserver
   external io_server_process
   integer :: status, input
   integer :: me, nio_node
-  integer :: comm, rank, size, nserv, noops
+
+  type(MPI_Comm) :: comm
+  integer :: rank, size, nserv, noops
   logical :: error
   character(len=128) :: arg
   type(memory_arena) :: ma
@@ -195,16 +199,17 @@ end program
 
 
 subroutine io_server_process()
+  use mpi_f08
   use model_write_parameters
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   use io_server_mod
   implicit none
 
-  integer :: global_comm, global_rank, global_size, consumer_comm
+  type(MPI_Comm) :: global_comm, consumer_comm
+  integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
   logical :: success
   integer :: num_producers
-  integer :: ierr
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
@@ -222,10 +227,10 @@ subroutine io_server_process()
 
   ! Choose what to do based on whether we are a consumer or a channel process
   if (data_buffer % get_consumer_id() >= 0) then
-    call MPI_Comm_split(server_crs % comm, 0, data_buffer % get_consumer_id(), consumer_comm, ierr)
+    call MPI_Comm_split(server_crs % comm, 0, data_buffer % get_consumer_id(), consumer_comm)
     call consumer_process(data_buffer, consumer_comm)
   else if (data_buffer % get_channel_id() >= 0) then
-    call MPI_Comm_split(server_crs % comm, 1, data_buffer % get_channel_id(), consumer_comm, ierr)
+    call MPI_Comm_split(server_crs % comm, 1, data_buffer % get_channel_id(), consumer_comm)
     call channel_process(data_buffer)
   else
     write(6, *) 'We have a problem'
@@ -234,8 +239,8 @@ subroutine io_server_process()
 
   call data_buffer % delete()
 
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 
@@ -261,11 +266,11 @@ subroutine channel_process(data_buffer)
 end subroutine channel_process
 
 subroutine consumer_process(data_buffer, consumer_comm)
+  use mpi_f08
   use model_write_parameters
   use circular_buffer_module, only : DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   implicit none
-  include 'mpif.h'
 
   interface
     function c_gethostid() result(h) bind(C,name='gethostid') ! SMP host identifier
@@ -275,11 +280,10 @@ subroutine consumer_process(data_buffer, consumer_comm)
   end interface
 
   type(distributed_circular_buffer), intent(inout) :: data_buffer
-  integer, intent(in) :: consumer_comm
+  type(MPI_Comm), intent(in) :: consumer_comm
 
   integer, parameter :: WRITE_BUFFER_SIZE = 50000
 
-  integer :: ierr
   integer :: consumer_id, num_producers, num_consumers, producer_id
   integer :: i_producer, i_data_check, i_print
   integer :: num_elements, message_size
@@ -322,8 +326,8 @@ subroutine consumer_process(data_buffer, consumer_comm)
     end do
   end if
 
-  call MPI_Bcast(num_active_producers, 1, MPI_INTEGER, 0, consumer_comm, ierr)
-  call MPI_Bcast(active_producers, num_active_producers, MPI_INTEGER, 0, consumer_comm, ierr)
+  call MPI_Bcast(num_active_producers, 1, MPI_INTEGER, 0, consumer_comm)
+  call MPI_Bcast(active_producers, num_active_producers, MPI_INTEGER, 0, consumer_comm)
 
   ! Now, we repeatedly loop through all buffers this consumer is responsible for
   ! If the buffer is empty, just go on to the next
@@ -421,13 +425,16 @@ end subroutine model_pseudo_write
 
 subroutine model_process()
   use ISO_C_BINDING
+  use mpi_f08
+
   use model_write_parameters
   use circular_buffer_module
   use rpn_extra_module, only: sleep_us
   use io_common_mod
   implicit none
 
-  integer               :: global_comm, global_rank, global_size
+  type(MPI_Comm)        :: global_comm
+  integer               :: global_rank, global_size
   type(comm_rank_size)  :: node_crs, local_compute_crs
   integer               :: local_compute_id
   integer               :: num_errors, ierr
@@ -501,6 +508,8 @@ end subroutine model_process
 
 subroutine io_relay_process()
   use ISO_C_BINDING
+  use mpi_f08
+
   use model_write_parameters
   use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
@@ -508,10 +517,11 @@ subroutine io_relay_process()
   use ioserver_memory_mod
   implicit none
 
-  integer              :: global_comm, global_rank, global_size
+  type(MPI_Comm)       :: global_comm
+  integer              :: global_rank, global_size
   type(comm_rank_size) :: local_relay_crs, local_model_crs
   integer              :: num_local_compute, local_relay_id, num_local_relays, producer_id
-  integer              :: ierr, i_compute, index, num_errors
+  integer              :: i_compute, index, num_errors
   character(len=8)     :: compute_name
   integer              :: bsize, bflags
   type(C_PTR)          :: tmp_ptr
@@ -547,7 +557,7 @@ subroutine io_relay_process()
   producer_id = data_buffer % get_producer_id()
 
   ! NODE barrier to allow MODEL processes to initialize their CBs
-  call MPI_Barrier(nodecom_crs % comm, ierr)
+  call MPI_Barrier(nodecom_crs % comm)
 
   ! Recover all CBs that are stored on this node and check that they are valid (even if we don't necessarily access all of them)
   index = 1
@@ -632,7 +642,7 @@ subroutine io_relay_process()
 
   call data_buffer % delete()
 
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
   if (local_relay_id == 0) then
     do i_compute = 0, num_local_compute - 1
@@ -640,27 +650,27 @@ subroutine io_relay_process()
     end do
   end if
 
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from RELAY process'
     error stop 1
   end if
 
-  call MPI_Barrier(nodecom_crs % comm, ierr) ! Sync with models and avoid scrambling output
+  call MPI_Barrier(nodecom_crs % comm) ! Sync with models and avoid scrambling output
 
 end subroutine io_relay_process
 
 
 subroutine get_local_world(comm, rank, size)
   use ISO_C_BINDING
+  use mpi_f08
   implicit none
-  include 'mpif.h'
-  integer, intent(OUT) :: comm, rank, size
-  integer :: ierr
+  type(MPI_Comm), intent(OUT) :: comm
+  integer,        intent(OUT) :: rank, size
 
   comm = MPI_COMM_WORLD
-  call MPI_Comm_rank(comm, rank, ierr)
-  call MPI_Comm_size(comm, size, ierr)
+  call MPI_Comm_rank(comm, rank)
+  call MPI_Comm_size(comm, size)
 end subroutine get_local_world
 

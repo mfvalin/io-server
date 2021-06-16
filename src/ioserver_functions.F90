@@ -411,7 +411,6 @@ module io_common_mod
   use memory_arena_mod
   use ioserver_functions
   implicit none
-  include 'mpif.h'
 
   save
   type(comm_rank_size) :: model_crs        ! compute PEs

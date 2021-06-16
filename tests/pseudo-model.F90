@@ -29,8 +29,9 @@ subroutine print_comm(is_null, name)
 end subroutine print_comm
 
 subroutine print_comms(model, modelio, allio, relay, server, nodecom)
+  use mpi_f08
   implicit none
-  integer, intent(IN) :: model, allio, relay, server, modelio, nodecom
+  type(MPI_Comm), intent(IN) :: model, allio, relay, server, modelio, nodecom
 
   call print_comm(IOSERVER_Commisnull(model),    'model')
   call print_comm(IOSERVER_Commisnull(modelio),  'modelio')
@@ -66,7 +67,8 @@ program pseudomodelandserver
   implicit none
   external io_relay_fn, io_server_out, compute_fn
   integer :: status
-  integer :: comm, rank, size, nserv, noops, me, nio_node
+  type(MPI_Comm) :: comm
+  integer :: rank, size, nserv, noops, me, nio_node
   integer :: noderank, nodesize
   logical :: error
   character(len=128) :: arg
@@ -210,7 +212,7 @@ subroutine compute_fn()
   use ioserver_functions
   use memory_arena_mod
   implicit none
-  integer :: model, allio, relay, server, nio_node, modelio, nodecom, me
+  type(MPI_Comm) :: model, allio, relay, server, nio_node, modelio, nodecom, me
   integer :: comm, rank, size, ierr, noderank, nodesize, navail
   type(memory_arena) :: ma
   type(comm_rank_size) :: local_crs, model_crs, relay_crs
@@ -270,7 +272,8 @@ subroutine io_relay_fn()
   use io_relay_mod
   use ioserver_memory_mod
   implicit none
-  integer :: model, allio, relay, server, nodecom, modelio, old, new
+  type(MPI_Comm) :: model, allio, relay, server, nodecom, modelio
+  integer :: old, new
   integer :: rank, size, ierr, noderank, nodesize, ncompute, i, bsize, bflags, nleft, n, navail
   integer, dimension(1) :: tag
   type(C_PTR) :: temp, arena
@@ -403,9 +406,9 @@ subroutine io_server_out()
   use io_server_mod
   use ioserver_memory_mod
   implicit none
-  integer :: model, allio, relay, server, modelio, nodecom
+  type(MPI_Comm) :: model, allio, relay, server, modelio, nodecom
 
-  integer :: rank, size, ierr, noderank, nodesize
+  integer :: rank, size, noderank, nodesize
 
   call io_server_mod_init()
 
@@ -436,11 +439,11 @@ end subroutine io_server_out
 
 subroutine get_local_world(comm, rank, size)
   use ISO_C_BINDING
+  use mpi_f08
   implicit none
-  include 'mpif.h'
-  integer, intent(OUT) :: comm, rank, size
-  integer :: ierr
+  type(MPI_Comm), intent(OUT) :: comm
+  integer,        intent(OUT) ::  rank, size
   comm = MPI_COMM_WORLD
-  call MPI_Comm_rank(comm, rank, ierr)
-  call MPI_Comm_size(comm, size, ierr)
+  call MPI_Comm_rank(comm, rank)
+  call MPI_Comm_size(comm, size)
 end subroutine get_local_world
