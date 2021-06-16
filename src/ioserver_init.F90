@@ -1010,6 +1010,18 @@ function IOserver_int_init(nio_node, app_class) result(status)
       integer(C_INT), intent(IN), value :: nsec
       integer(C_INT) :: left
     end function sleep
+
+    subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, win, ierror)
+      import :: MPI_ADDRESS_KIND, MPI_Info, MPI_Comm, MPI_Win, C_PTR
+      implicit none
+      INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize
+      INTEGER,           INTENT(IN)  :: disp_unit_
+      type(MPI_Info),    INTENT(IN)  :: info
+      type(MPI_Comm),    INTENT(IN)  :: comm
+      type(C_PTR),       INTENT(OUT) :: baseptr
+      type(MPI_Win),     INTENT(OUT) :: win
+      INTEGER, OPTIONAL, INTENT(OUT) :: ierror
+    end subroutine RPN_MPI_Win_allocate_shared
   end interface
 
   ! 2 (model or server PE) or 3 (relay PE) of these 5 communicators will be true upon return from subroutine
@@ -1389,10 +1401,10 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
   use ioserver_internal_mod
   implicit none
   INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize
-  INTEGER,        INTENT(IN) :: disp_unit_
-  type(MPI_Info), INTENT(IN) :: info
-  type(MPI_Comm), INTENT(IN) :: comm
-  INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(OUT) :: baseptr
+  INTEGER,           INTENT(IN)  :: disp_unit_
+  type(MPI_Info),    INTENT(IN)  :: info
+  type(MPI_Comm),    INTENT(IN)  :: comm
+  type(C_PTR),       INTENT(OUT) :: baseptr
   type(MPI_Win),     INTENT(OUT) :: win
   INTEGER, OPTIONAL, INTENT(OUT) :: ierror
 
@@ -1408,7 +1420,7 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
     end function c_get_hostid
   end interface
 
-  baseptr = 0
+  baseptr = C_NULL_PTR
   win = MPI_WIN_NULL
   ierror = MPI_ERROR              ! precondition for failure
   p = C_NULL_PTR

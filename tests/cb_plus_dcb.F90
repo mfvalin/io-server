@@ -21,6 +21,7 @@
 
 module cb_plus_dcb_parameters
   use ISO_C_BINDING
+  use mpi_f08
   implicit none
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
@@ -49,22 +50,21 @@ contains
 
   function am_server_node(node_rank)
     implicit none
-    include 'mpif.h'
 
     integer, intent(out) :: node_rank
     logical :: am_server_node
 
-    integer :: global_rank, node_comm, node_root_global_rank
-    integer :: ierr
+    type(MPI_Comm) :: node_comm
+    integer :: global_rank, node_root_global_rank
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
-    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
-    call MPI_Comm_rank(node_comm, node_rank, ierr)
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
+    call MPI_Comm_rank(node_comm, node_rank)
 
     node_root_global_rank = -1
     if (node_rank == 0) node_root_global_rank = global_rank
 
-    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
 
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
@@ -83,7 +83,8 @@ program pseudomodelandserver
   external io_server_process
   integer :: status, input
   integer :: me, nio_node
-  integer :: comm, rank, size, nserv, noops
+  type(MPI_Comm) :: comm
+  integer :: rank, size, nserv, noops
   logical :: error
   character(len=128) :: arg
   type(memory_arena) :: ma
@@ -200,11 +201,11 @@ subroutine io_server_process()
   use io_server_mod
   implicit none
 
-  integer :: global_comm, global_rank, global_size
+  type(MPI_Comm) :: global_comm
+  integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
   logical :: success
   integer :: num_producers
-  integer :: ierr
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
@@ -232,8 +233,8 @@ subroutine io_server_process()
 
   call data_buffer % delete()
 
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
+  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 
@@ -646,13 +647,13 @@ end subroutine io_relay_process
 
 subroutine get_local_world(comm, rank, size)
   use ISO_C_BINDING
+  use mpi_f08
   implicit none
-  include 'mpif.h'
-  integer, intent(OUT) :: comm, rank, size
-  integer :: ierr
+  type(MPI_Comm), intent(OUT) :: comm
+  integer,        intent(OUT) :: rank, size
 
   comm = MPI_COMM_WORLD
-  call MPI_Comm_rank(comm, rank, ierr)
-  call MPI_Comm_size(comm, size, ierr)
+  call MPI_Comm_rank(comm, rank)
+  call MPI_Comm_size(comm, size)
 end subroutine get_local_world
 

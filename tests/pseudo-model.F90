@@ -42,11 +42,11 @@ subroutine print_comms(model, modelio, allio, relay, server, nodecom)
 end subroutine print_comms
 
 subroutine check_comm(comm, crs, name)
+  use mpi_f08
   implicit none
-  include 'mpif.h'
-  integer, intent(IN) :: comm
+  type(MPI_Comm),       intent(IN) :: comm
   type(comm_rank_size), intent(IN) :: crs
-  character(len=*), intent(IN) :: name
+  character(len=*),     intent(IN) :: name
   character(len=16) :: extra
   extra = ' (defined)'
   if(crs % comm == MPI_COMM_NULL) extra = ' (null)'
