@@ -68,7 +68,7 @@ module ioserver_functions
     integer :: j0            ! starting point of this subgrid in the y direction
     integer :: nj            ! number of points of this subgrid in the y direction
     integer :: nk            ! number of vertical levels
-    integer :: nv            ! number of variablethiss
+    integer :: nv            ! number of variables
   end type
 
   type, private :: data_header        ! record : data_header , metadata(nm integers) , subgrid(ni * nj * nk * nv elements)
@@ -244,18 +244,18 @@ module ioserver_functions
     lname = len(trim(name))
     allocate(this % name(lname))
     this % name(1:lname) = transfer(trim(name), this % name)
-print *,"'",this % name(1:lname),"'"
+    print *,"'",this % name(1:lname),"'"
 
     if(.not. C_ASSOCIATED(local_heap % ptr()) ) then
       print *,'locating local heap'
     endif
     this % h = local_heap                 ! associate heap to file
-p = this % h % ptr()
-if(C_ASSOCIATED(p)) then 
-print *,' p is defined'
-else
-print *,' p is NULL'
-endif
+    p = this % h % ptr()
+    if(C_ASSOCIATED(p)) then 
+      print *,' p is defined'
+    else
+      print *,' p is NULL'
+    endif
 
     status = 0
   end function ioserver_open
