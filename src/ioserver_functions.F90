@@ -82,6 +82,18 @@ module ioserver_functions
     integer :: nm            ! length of metadata "jar" (32 bit units)
   end type
 
+  ! Type used as a header when writing data (from a model process)
+  type, public :: model_record
+    integer(C_INT) :: record_length    ! global record length = size of model_record + csize + msize
+    integer(C_INT) :: tag, stream
+    integer(C_INT) :: ni, nj, gnignj
+    integer(C_INT) :: gin, gout
+    integer(C_INT) :: i0, j0
+    integer(C_INT) :: nk, nvar
+    type(C_PTR)    :: data
+    integer(C_INT) :: csize, msize
+  end type
+
   private  :: fd_seq, local_heap, initialized    
   private  :: cio_in, cio_out
 !   private gdt, MAXGRIDS
@@ -287,17 +299,7 @@ module ioserver_functions
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
     type(jar), intent(IN), optional   :: meta             ! metadata associated with data (carried serialized and blindly)
     integer :: status, n
-    type :: my_record
-      integer(C_INT) :: rl              ! global record length = size of my_record + csize + msize
-      integer(C_INT) :: tag, stream
-      integer(C_INT) :: ni, nj, gnignj
-      integer(C_INT) :: gin, gout
-      integer(C_INT) :: i0, j0
-      integer(C_INT) :: nk, nvar
-      type(C_PTR)    :: data
-      integer(C_INT) :: csize, msize
-    end type
-    type(my_record) :: rec
+    type(model_record) :: rec
     integer(C_INT), dimension(:), pointer :: metadata
     integer(C_INT) :: low, high
     type(C_PTR) :: p
@@ -344,14 +346,23 @@ module ioserver_functions
       rec % msize =  high - low       ! useful number of elements
       metadata    => meta % array()
     endif
-    rec % rl = storage_size(rec) / storage_size(n) + rec % csize + rec % msize
+    rec % record_length = storage_size(rec) / storage_size(n)
+    rec % record_length = rec % record_length + rec % csize
+    rec % record_length = rec % record_length + rec % msize
     rec % tag    = fd_seq
     rec % stream = this % fd
     rec % ni     = area % ni
     rec % nj     = area % nj
+    rec % gnignj = 0
+    rec % gin    = 0
+    rec % gout   = 0
+    if (present(grid_in)) then
     rec % gnignj = grid_in % gni * grid_in % gnj
     rec % gin    = grid_in % id
+    end if
+    if (present(grid_out)) then
     rec % gout   = grid_out % id
+    end if
     rec % i0     = area % i0
     rec % j0     = area % j0
     rec % nk     = area % nk
@@ -362,9 +373,9 @@ module ioserver_functions
     if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
     ! only send useful part of metadata jar (if supplied)
     if(present(meta)) n = cio_out % atomic_put( metadata(low + 1 : high), rec % msize, .false.)
-    n = cio_out % atomic_put( rec % rl, 1, .true.)
+    n = cio_out % atomic_put( rec % record_length, 1, .true.)
 
-    status = 0
+    if (n >= 0) status = 0
   end function ioserver_write
 
   function ioserver_read(this) result(status)
