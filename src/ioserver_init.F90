@@ -1300,8 +1300,10 @@ function IOserver_int_init(nio_node, app_class) result(status)
     call MPI_Finalize()
     stop
   endif
-  call build_relay_model_index()
-  call fetch_node_io_buffers()
+  if(color == RELAY_COLOR .or. color == MODEL_COLOR) then
+    call build_relay_model_index()
+    call fetch_node_io_buffers()
+  endif
   if(debug_mode .and. (color == RELAY_COLOR .or. color == MODEL_COLOR)) call build_print_model_index()
 ! split IO PEs into server and relay PEs, create 1 sided communication window
 ! set return code to appropriate value or call supplied relay subroutine

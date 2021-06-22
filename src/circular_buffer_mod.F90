@@ -141,6 +141,8 @@ contains
     this % p = ptr
     this % is_owner = .false.
     this % is_shared = .false.
+print *,'DEBUG: create_from_other',C_ASSOCIATED(ptr)
+success = .true.
     success = this % is_valid()
   end function create_from_other
   
