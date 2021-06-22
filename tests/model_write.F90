@@ -25,8 +25,7 @@ module model_write_parameters
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
-  integer, parameter :: NUM_CB_ELEMENTS       = 1040                     ! Number of elements in each CB
-  integer, parameter :: CB_MESSAGE_SIZE       = 100                      ! Size of each data batch put in a CB
+  integer, parameter :: CB_MESSAGE_SIZE       = 10                      ! Size of each data batch put in a CB
   integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
   integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
@@ -372,13 +371,14 @@ subroutine consumer_process(data_buffer, consumer_comm)
       end if
 
       if (CHECK_DCB_MESSAGES) then
-        expected_message(1:3) = message(1:3)
-        do i_data_check = 1, message_size - 2
-           expected_message(i_data_check + 3) = compute_data_point(message(2), message(3) + i_data_check)
-        end do
-        if (.not. all(expected_message(1:message_size + 1) == message(1:message_size + 1))) then
-          num_errors = num_errors + 1
-        end if
+        print *, 'Data check not implemented on server!'
+        ! expected_message(1:3) = message(1:3)
+        ! do i_data_check = 1, message_size - 2
+        !    expected_message(i_data_check + 3) = compute_data_point(message(2), message(3) + i_data_check)
+        ! end do
+        ! if (.not. all(expected_message(1:message_size + 1) == message(1:message_size + 1))) then
+        !   num_errors = num_errors + 1
+        ! end if
       end if
 
     end do
@@ -443,9 +443,24 @@ subroutine model_process()
   integer               :: num_spaces
   character(len=8)      :: compute_name
   integer               :: bsize, bflags
-  type(C_PTR)           :: tmp_ptr
 
   integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: message
+
+  integer :: f_status, h_status
+  type(server_file) :: results_file
+  type(heap)        :: node_heap
+  integer(kind=4), dimension(:), pointer :: msg_array
+  type(block_meta) :: msg_array_info
+  type(block_meta_f08) :: msg_array_info_f08
+  type(subgrid) :: my_grid
+
+  node_heap = ioserver_heap(0)
+
+  f_status = results_file % open('model_write_results')
+  if (f_status .ne. 0) then
+    print *, 'Unable to open model file!!!!'
+    error stop 1
+  end if
 
   call get_local_world(global_comm, global_rank, global_size)
 
@@ -454,15 +469,13 @@ subroutine model_process()
   local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
-  call IOSERVER_get_winmem(p_base, p_relay, p_server)
-  tmp_ptr = ma % clone(p_relay)
-
   ! write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
 
   data_buffer = IOserver_get_cio_out()
 
   if (data_buffer % get_capacity() .ne. data_buffer % get_num_spaces()) then
     print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh'
+    error stop 1
   end if
 
   ! NODE barrier to signal RELAY processes that the CB (from each MODEL) is ready
@@ -472,6 +485,25 @@ subroutine model_process()
   message(1) = global_rank
   num_spaces = data_buffer % atomic_put(message, 1, .true.)
 
+  ! Init area info
+  my_grid % i0 = local_compute_id * CB_MESSAGE_SIZE
+  my_grid % ni = CB_MESSAGE_SIZE
+  my_grid % j0 = 0
+  my_grid % nj = 1
+  my_grid % nk = 1
+  my_grid % nv = 1
+
+  msg_array_info = node_heap % allocate(msg_array, [CB_MESSAGE_SIZE])
+  msg_array(:) = local_compute_id
+  ! print *, 'Writing with i0 = ', my_grid % i0
+  f_status = results_file % write(msg_array_info, my_grid)
+
+  if (f_status .ne. 0) then
+    print *, 'ERROR while trying to do a WRITE'
+    error stop 1
+  end if
+
+
   ! Now send a bunch of messages
   ! First item  = number of elements in message
   ! Second item = global rank of the sender
@@ -479,22 +511,34 @@ subroutine model_process()
   message(1) = CB_MESSAGE_SIZE
   message(2) = global_rank
   block
-    integer :: i, j
-    do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
-      message(3) = i ! Where we at
-      ! Prepare the data to send
-      do j = 1, CB_MESSAGE_SIZE - 3
-        message(j + 3) = compute_data_point(global_rank, i + j)
-      end do
-      ! Do the sending
-      call model_pseudo_write(data_buffer, message(:), CB_MESSAGE_SIZE)
-      ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
-!      call sleep_us(50)
-    end do
+!     integer :: i, j
+!     do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
+!       message(3) = i ! Where we at
+!       ! Prepare the data to send
+!       do j = 1, CB_MESSAGE_SIZE - 3
+!         message(j + 3) = compute_data_point(global_rank, i + j)
+!       end do
+!       ! Do the sending
+!       call model_pseudo_write(data_buffer, message(:), CB_MESSAGE_SIZE)
+!       ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
+! !      call sleep_us(50)
+!     end do
     ! We done. Send the stop signal
     message(1) = 0
     num_spaces = data_buffer % atomic_put(message, 1, .true.)
   end block
+
+  msg_array_info_f08 = msg_array_info
+  h_status = node_heap % free(msg_array_info_f08)
+  if (h_status .ne. 0) then
+    print *, 'Unable to free heap mem'
+  end if
+
+  f_status = results_file % close()
+  if (f_status .ne. 0) then
+    ! print *, 'Unable to close model file!!!!'
+    ! error stop 1
+  end if
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from MODEL process'
@@ -571,6 +615,10 @@ subroutine io_relay_process()
     integer :: num_elements, num_spaces
     logical :: finished = .false.
 
+    type(model_record) :: record
+    integer :: jar_status, jar_num_elem, record_size
+    JAR_DECLARE(data_jar)
+
     ! Say hi to the consumer processes
     dcb_message(1) = local_relay_id
     dcb_message(2) = global_rank
@@ -586,6 +634,7 @@ subroutine io_relay_process()
           print *, 'ERROR in relay. atomic_get returned a negative value'
           error stop 1
         end if
+        print *, 'Got message from model: ', cb_message(1), i_compute
       end do
 
       ! The main loop
@@ -609,6 +658,22 @@ subroutine io_relay_process()
             ! Read the content of the CB
             num_elements = c_cio_out(i_compute) % atomic_get(cb_message, model_message_size + 1, .true.)
 
+            if (num_elements < 0) then
+              print *, 'ERROR when getting stuff from CIO_OUT', i_compute
+            end if
+
+            jar_status   = JAR_FREE(data_jar)
+            jar_status   = data_jar % shape(cb_message, model_message_size + 1)
+            jar_num_elem = JAR_GET_ITEM(data_jar, record)
+
+            print '(A12, I4, I5, I3, I4, I4, I4, I4, I4, I4, I4, I3, I3, I4, I4)', 'Record info: ', &
+              record % record_length, record % tag, record % stream, &
+              record % ni, record % nj, record % gnignj, &
+              record % gin, record % gout, record % i0, record % j0, &
+              record % nk, record % nvar, record % csize, record % msize
+            
+            ! print *, 'i0 = ', record % i0, i_compute
+
             ! If the DCB message buffer is too full to contain that new package, flush it now
             if (current_message_size + model_message_size + 1 > MAX_DCB_MESSAGE_SIZE) then
               num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
@@ -621,13 +686,14 @@ subroutine io_relay_process()
             current_message_size = current_message_size + model_message_size + 1
 
             if (CHECK_CB_MESSAGES) then
-              expected_message(1:3) = cb_message(1:3)
-              do i_data_check = 1, model_message_size - 2
-                expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
-              end do
-              if (.not. all(expected_message(1:model_message_size + 1) == cb_message(1:model_message_size + 1))) then
-                num_errors = num_errors + 1
-              end if
+              print *, 'Data check not implemented on relay!'
+              ! expected_message(1:3) = cb_message(1:3)
+              ! do i_data_check = 1, model_message_size - 2
+              !   expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
+              ! end do
+              ! if (.not. all(expected_message(1:model_message_size + 1) == cb_message(1:model_message_size + 1))) then
+              !   num_errors = num_errors + 1
+              ! end if
             end if
           end if
         end do
