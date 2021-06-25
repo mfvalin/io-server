@@ -26,7 +26,8 @@ module model_write_parameters
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
   integer, parameter :: CB_MESSAGE_SIZE       = 10                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
+  ! integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 100                 ! How much total data to send (for each CB)
   integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
 
@@ -353,6 +354,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
         finished = .false.
         num_elements = data_buffer % get(producer_id, message, message_size + 1, .true.)
 
+        print *, 'Message:   ', message(:message_size + 1)
 
         write_size = message_size / 4
         if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
@@ -404,25 +406,6 @@ subroutine consumer_process(data_buffer, consumer_comm)
 
 end subroutine consumer_process
 
-subroutine model_pseudo_write(cb, array, n)
-  use data_serialize
-  use circular_buffer_module
-  implicit none
-  type(circular_buffer), intent(inout) :: cb
-  integer, intent(in) :: n
-  integer, dimension(n), intent(inout) :: array
-
-  type(jar) :: parcel
-  integer :: status
-  integer, dimension(:), pointer :: blind_array
-
-  status = parcel % shape(array(2:n), n-1)
-  JAR_DATA(parcel, blind_array)
-  status = cb % atomic_put(n-1, 1, .false.)
-  status = cb % atomic_put(blind_array, n-1, .true.)
-  ! status = cb % atomic_put(array(1:n), n, .true.)
-end subroutine model_pseudo_write
-
 subroutine model_process()
   use ISO_C_BINDING
   use mpi_f08
@@ -443,6 +426,7 @@ subroutine model_process()
   integer               :: num_spaces
   character(len=8)      :: compute_name
   integer               :: bsize, bflags
+  integer :: i
 
   integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: message
 
@@ -494,7 +478,10 @@ subroutine model_process()
   my_grid % nv = 1
 
   msg_array_info = node_heap % allocate(msg_array, [CB_MESSAGE_SIZE])
-  msg_array(:) = local_compute_id
+  do i = 1, CB_MESSAGE_SIZE
+    msg_array(i) = local_compute_id * i
+  end do
+
   ! print *, 'Writing with i0 = ', my_grid % i0
   f_status = results_file % write(msg_array_info, my_grid)
 
@@ -503,7 +490,6 @@ subroutine model_process()
     error stop 1
   end if
 
-
   ! Now send a bunch of messages
   ! First item  = number of elements in message
   ! Second item = global rank of the sender
@@ -511,28 +497,21 @@ subroutine model_process()
   message(1) = CB_MESSAGE_SIZE
   message(2) = global_rank
   block
-!     integer :: i, j
-!     do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
-!       message(3) = i ! Where we at
-!       ! Prepare the data to send
-!       do j = 1, CB_MESSAGE_SIZE - 3
-!         message(j + 3) = compute_data_point(global_rank, i + j)
-!       end do
-!       ! Do the sending
-!       call model_pseudo_write(data_buffer, message(:), CB_MESSAGE_SIZE)
-!       ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
-! !      call sleep_us(50)
-!     end do
+    integer :: i, j
+    do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
+  !       message(3) = i ! Where we at
+  !       ! Prepare the data to send
+  !       do j = 1, CB_MESSAGE_SIZE - 3
+  !         message(j + 3) = compute_data_point(global_rank, i + j)
+  !       end do
+  !       ! Do the sending
+  !       ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
+  ! !      call sleep_us(50)
+    end do
     ! We done. Send the stop signal
     message(1) = 0
     num_spaces = data_buffer % atomic_put(message, 1, .true.)
   end block
-
-  msg_array_info_f08 = msg_array_info
-  h_status = node_heap % free(msg_array_info_f08)
-  if (h_status .ne. 0) then
-    print *, 'Unable to free heap mem'
-  end if
 
   f_status = results_file % close()
   if (f_status .ne. 0) then
@@ -569,6 +548,7 @@ subroutine io_relay_process()
   character(len=8)     :: compute_name
   integer              :: bsize, bflags
   type(C_PTR)          :: tmp_ptr
+  integer :: h_status
 
   ! type(circular_buffer), dimension(:), pointer :: local_data_buffers
 
@@ -579,7 +559,6 @@ subroutine io_relay_process()
 
   call io_relay_mod_init()
   call get_local_world(global_comm, global_rank, global_size)
-
 
   local_relay_crs = IOserver_get_crs(RELAY_COLOR + NODE_COLOR)
   local_model_crs = IOserver_get_crs(MODEL_COLOR + NODE_COLOR)
@@ -615,6 +594,10 @@ subroutine io_relay_process()
     integer :: num_elements, num_spaces
     logical :: finished = .false.
 
+    integer, dimension(:), pointer :: f_data
+    type(C_PTR) :: c_data
+    integer :: num_data
+
     type(model_record) :: record
     integer :: jar_status, jar_num_elem, record_size
     JAR_DECLARE(data_jar)
@@ -634,7 +617,7 @@ subroutine io_relay_process()
           print *, 'ERROR in relay. atomic_get returned a negative value'
           error stop 1
         end if
-        print *, 'Got message from model: ', cb_message(1), i_compute
+        ! print *, 'Got message from model: ', cb_message(1), i_compute
       end do
 
       ! The main loop
@@ -666,24 +649,37 @@ subroutine io_relay_process()
             jar_status   = data_jar % shape(cb_message, model_message_size + 1)
             jar_num_elem = JAR_GET_ITEM(data_jar, record)
 
-            print '(A12, I4, I5, I3, I4, I4, I4, I4, I4, I4, I4, I3, I3, I4, I4)', 'Record info: ', &
-              record % record_length, record % tag, record % stream, &
-              record % ni, record % nj, record % gnignj, &
-              record % gin, record % gout, record % i0, record % j0, &
-              record % nk, record % nvar, record % csize, record % msize
+            c_data = ptr_translate_from(record % data, MODEL_COLOR, i_compute)
+            num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
+            call c_f_pointer(c_data, f_data, [num_data])
+            ! print *, 'f_data: ', f_data, num_data
+
+            ! print '(A12, I4, I5, I3, I4, I4, I4, I4, I4, I4, I4, I3, I3, I4, I4)', 'Record info: ', &
+            !   record % record_length, record % tag, record % stream, &
+            !   record % ni, record % nj, record % gnignj, &
+            !   record % gin, record % gout, record % i0, record % j0, &
+            !   record % nk, record % nvar, record % csize, record % msize
             
             ! print *, 'i0 = ', record % i0, i_compute
 
+            cb_message(1) = record % record_length + num_data
+
             ! If the DCB message buffer is too full to contain that new package, flush it now
-            if (current_message_size + model_message_size + 1 > MAX_DCB_MESSAGE_SIZE) then
+            if (current_message_size + model_message_size + 1 + num_data > MAX_DCB_MESSAGE_SIZE) then
               num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
               current_message_size = 0
             end if
 
             ! Copy the CB message to the DCB message buffer
-            dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = &
-                cb_message(1:model_message_size + 1)
+            dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = cb_message(1:model_message_size + 1)
             current_message_size = current_message_size + model_message_size + 1
+            dcb_message(current_message_size + 1: current_message_size + num_data) = f_data(:)
+            current_message_size = current_message_size + num_data
+
+            h_status = c_heaps(i_compute) % free(c_data)
+            if (h_status .ne. 0) then
+              print*, 'Unable to free heap data (from RELAY)'
+            end if
 
             if (CHECK_CB_MESSAGES) then
               print *, 'Data check not implemented on relay!'
