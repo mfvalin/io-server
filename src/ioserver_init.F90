@@ -54,6 +54,7 @@ module ioserver_memory_mod
   use ISO_C_BINDING
   use ioserver_constants
   use circular_buffer_module
+  use shmem_heap
   implicit none
 
   integer, parameter :: MAX_PES_PER_NODE = 128
@@ -102,6 +103,7 @@ module ioserver_memory_mod
 
   type(circular_buffer), dimension(:), allocatable, target :: circ_buffer_in   ! The CB objects belonging to compute PEs (inbound)
   type(circular_buffer), dimension(:), allocatable, target :: circ_buffer_out  ! The CB objects belonging to compute PEs (outbound)
+  type(heap),            dimension(:), allocatable, target :: node_heaps       ! Shared memory heaps belonging to compute PEs
 
   contains
 
@@ -123,6 +125,7 @@ module ioserver_memory_mod
 
     allocate(circ_buffer_in(0:max_smp_pe))     ! size is overkill but it is easier
     allocate(circ_buffer_out(0:max_smp_pe))    ! size is overkill but it is easier
+    allocate(node_heaps(0:max_smp_pe))         ! size is overkill but it is easier
 
     initialized = .true.
   end subroutine ioserver_memory_mod_init
@@ -368,39 +371,56 @@ end function ptr_translate_to
 !!
 !! F_EnD
 
-subroutine fetch_node_io_buffers()
+subroutine fetch_node_shmem_structs()
   integer             :: i
   integer(C_INTPTR_T) :: offset, new
-  type(C_PTR)         :: my_base, new_base, local
+  type(C_PTR)         :: my_base, new_base, local_addr, temp
   logical             :: success
   integer(DATA_ELEMENT) :: elem, num_elem
+  integer :: target_rank, num_heaps
 
   my_base = mem % pe(smp_rank) % io_ra
 
   do i = 0, max_smp_pe
     if (mem % pe(i) % color == MODEL_COLOR) then
-      new     = transfer(my_base, new)              ! make large integer from C pointer
-      new     = new + mem % pe(i) % cio_in          ! add offset to my base
-      local   = transfer(new, local)                ! honest C pointer
-      success = circ_buffer_in(mem % pe(i) % rank) % create(local)   ! Initialize the local circular buffer structure
+
+      target_rank = mem % pe(i) % rank
+
+      new        = transfer(my_base, new)              ! make large integer from C pointer
+      new        = new + mem % pe(i) % cio_in          ! add offset to my base
+      local_addr = transfer(new, local_addr)           ! honest C pointer
+      success    = circ_buffer_in(target_rank) % create(local_addr)   ! Initialize the local circular buffer structure
 
       if (.not. success) then
         print *, 'ERROR: Could not fetch input CB from PE ', i
         error stop 1
       end if
 
-      new     = transfer(my_base, new)              ! make large integer from C pointer
-      new     = new + mem % pe(i) % cio_out         ! add offset to my base
-      local   = transfer(new, local)                ! honest C pointer
-      success = circ_buffer_out(mem % pe(i) % rank) % create(local)  ! Initialize the local circular buffer structure
+      new        = transfer(my_base, new)              ! make large integer from C pointer
+      new        = new + mem % pe(i) % cio_out         ! add offset to my base
+      local_addr = transfer(new, local_addr)           ! honest C pointer
+      success    = circ_buffer_out(target_rank) % create(local_addr)  ! Initialize the local circular buffer structure
 
       if (.not. success) then
         print *, 'ERROR: Could not fetch output CB from PE ', i
         error stop 1
       end if
+
+      new        = transfer(my_base, new)
+      new        = new + mem % pe(i) % heap
+      local_addr = transfer(new, local_addr)
+      temp       = node_heaps(target_rank) % clone(local_addr)
+
+      num_heaps = node_heaps(target_rank) % register(local_addr)
+      if (num_heaps < 0) then
+        print *, 'ERROR: Could not register other PE heap locally', i
+        error stop 1
+      end if
+
+      call node_heaps(target_rank) % set_base(my_base)
     end if
   end do
-end subroutine fetch_node_io_buffers
+end subroutine fetch_node_shmem_structs
 
 !! F_StArT
 subroutine IOserver_set_time_to_quit() BIND(C,name='IOserver_set_time_to_quit')   ! set time to quit flag in control area
@@ -1302,7 +1322,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
   endif
   if(color == RELAY_COLOR .or. color == MODEL_COLOR) then
     call build_relay_model_index()
-    call fetch_node_io_buffers()
+    call fetch_node_shmem_structs()
   endif
   if(debug_mode .and. (color == RELAY_COLOR .or. color == MODEL_COLOR)) call build_print_model_index()
 ! split IO PEs into server and relay PEs, create 1 sided communication window

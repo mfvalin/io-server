@@ -461,6 +461,7 @@ module io_relay_mod
 
   type(circular_buffer), dimension(:), pointer :: c_cio_out  ! compute PEs outbound circular buffers
   type(circular_buffer), dimension(:), pointer :: c_cio_in   ! compute PEs inbound circular buffers
+  type(heap),            dimension(:), pointer :: c_heaps    ! compute PEs heaps
 
   contains
 
@@ -496,6 +497,7 @@ module io_relay_mod
 
     c_cio_out => circ_buffer_out
     c_cio_in  => circ_buffer_in
+    c_heaps   => node_heaps
 
     initialized = .true.
   end subroutine io_relay_mod_init
