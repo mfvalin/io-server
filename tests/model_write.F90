@@ -25,9 +25,9 @@ module model_write_parameters
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
-  integer, parameter :: CB_MESSAGE_SIZE       = 10                      ! Size of each data batch put in a CB
-  ! integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 100                 ! How much total data to send (for each CB)
+  integer, parameter :: CB_MESSAGE_SIZE       = 500                      ! Size of each data batch put in a CB
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
+  ! integer, parameter :: CB_TOTAL_DATA_TO_SEND = 20000                 ! How much total data to send (for each CB)
   integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
 
@@ -38,13 +38,14 @@ module model_write_parameters
 
 contains
 
-  function compute_data_point(global_rank, index) result(data_point)
+  function compute_data_point(compute_rank, tag, index) result(data_point)
     implicit none
-    integer, intent(in) :: global_rank
+    integer, intent(in) :: compute_rank
+    integer, intent(in) :: tag
     integer, intent(in) :: index
     integer :: data_point
 
-    data_point = mod(global_rank, 20000) * 100000 + mod(index, 100000)
+    data_point = mod(compute_rank, 1000) * 1000000 + mod(tag, 1000) * 1000 + mod(index, 800) + tag / 1000
   end function compute_data_point
 
   function am_server_node(node_rank)
@@ -270,6 +271,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
   use model_write_parameters
   use circular_buffer_module, only : DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use ioserver_functions
   implicit none
 
   interface
@@ -293,11 +295,16 @@ subroutine consumer_process(data_buffer, consumer_comm)
   logical :: finished
   integer :: num_errors
   integer :: num_active_producers
+  integer :: num_data, data_start
+  type(model_record) :: record
+  integer :: jar_status, jar_num_elem
 
   integer, allocatable :: active_producers(:)
 
   integer           :: file_unit
   character(len=14) :: file_name
+
+  JAR_DECLARE(data_jar)
 
   num_errors = 0
 
@@ -354,7 +361,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
         finished = .false.
         num_elements = data_buffer % get(producer_id, message, message_size + 1, .true.)
 
-        print *, 'Message:   ', message(:message_size + 1)
+        ! print *, 'Message:   ', message(:message_size + 1)
 
         write_size = message_size / 4
         if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
@@ -369,18 +376,28 @@ subroutine consumer_process(data_buffer, consumer_comm)
       else
         ! This should not happen
         write (6, *) 'message_size: ', message_size
+        write (6, *) 'This line should not ever be printed'
         num_errors = num_errors + 1
+        error stop 1
       end if
 
       if (CHECK_DCB_MESSAGES) then
-        print *, 'Data check not implemented on server!'
-        ! expected_message(1:3) = message(1:3)
-        ! do i_data_check = 1, message_size - 2
-        !    expected_message(i_data_check + 3) = compute_data_point(message(2), message(3) + i_data_check)
-        ! end do
-        ! if (.not. all(expected_message(1:message_size + 1) == message(1:message_size + 1))) then
-        !   num_errors = num_errors + 1
-        ! end if
+        jar_status   = JAR_FREE(data_jar)
+        jar_status   = data_jar % shape(message, message_size + 1)
+        jar_num_elem = JAR_GET_ITEM(data_jar, record)
+
+        num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
+        data_start = record % record_length - num_data + 2
+        expected_message(1) = message(data_start)
+        do i_data_check = 2, num_data
+           expected_message(i_data_check) = compute_data_point(message(data_start), record % tag, i_data_check)
+        end do
+        if (.not. all(expected_message(1:num_data) == message(data_start:data_start + num_data))) then
+          num_errors = num_errors + 1
+          print *, 'Expected: ', expected_message(1:num_data)
+          print *, 'Received: ', message(data_start:data_start + num_data)
+          error stop 1
+        end if
       end if
 
     end do
@@ -416,27 +433,23 @@ subroutine model_process()
   use io_common_mod
   implicit none
 
-  type(MPI_Comm)        :: global_comm
-  integer               :: global_rank, global_size
   type(comm_rank_size)  :: node_crs, local_compute_crs
   integer               :: local_compute_id
-  integer               :: num_errors, ierr
+  integer               :: num_errors
   type(circular_buffer) :: data_buffer
-  logical               :: success
   integer               :: num_spaces
-  character(len=8)      :: compute_name
-  integer               :: bsize, bflags
-  integer :: i
-
-  integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: message
 
   integer :: f_status, h_status
   type(server_file) :: results_file
   type(heap)        :: node_heap
   integer(kind=4), dimension(:), pointer :: msg_array
   type(block_meta) :: msg_array_info
-  type(block_meta_f08) :: msg_array_info_f08
   type(subgrid) :: my_grid
+
+  type(C_PTR) :: p
+  integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
+  integer(C_INT) :: tkr
+  integer(C_SIZE_T) :: o
 
   node_heap = ioserver_heap(0)
 
@@ -446,28 +459,22 @@ subroutine model_process()
     error stop 1
   end if
 
-  call get_local_world(global_comm, global_rank, global_size)
-
   num_errors        = 0
   node_crs          = IOserver_get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
   local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
-  ! write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
-
   data_buffer = IOserver_get_cio_out()
-
   if (data_buffer % get_capacity() .ne. data_buffer % get_num_spaces()) then
     print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh'
     error stop 1
   end if
 
   ! NODE barrier to signal RELAY processes that the CB (from each MODEL) is ready
-  call MPI_Barrier(node_crs % comm, ierr)
+  call MPI_Barrier(node_crs % comm)
 
   ! Send a first test signal
-  message(1) = global_rank
-  num_spaces = data_buffer % atomic_put(message, 1, .true.)
+  num_spaces = data_buffer % atomic_put(local_compute_id, 1, .true.)
 
   ! Init area info
   my_grid % i0 = local_compute_id * CB_MESSAGE_SIZE
@@ -477,46 +484,49 @@ subroutine model_process()
   my_grid % nk = 1
   my_grid % nv = 1
 
-  msg_array_info = node_heap % allocate(msg_array, [CB_MESSAGE_SIZE])
-  do i = 1, CB_MESSAGE_SIZE
-    msg_array(i) = local_compute_id * i
-  end do
-
-  ! print *, 'Writing with i0 = ', my_grid % i0
-  f_status = results_file % write(msg_array_info, my_grid)
-
-  if (f_status .ne. 0) then
-    print *, 'ERROR while trying to do a WRITE'
-    error stop 1
-  end if
-
-  ! Now send a bunch of messages
-  ! First item  = number of elements in message
-  ! Second item = global rank of the sender
-  ! Third item  = position at which we are in the message sequence (how many data elements sent so far)
-  message(1) = CB_MESSAGE_SIZE
-  message(2) = global_rank
+  ! call sleep_us(5000)
   block
     integer :: i, j
-    do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
-  !       message(3) = i ! Where we at
-  !       ! Prepare the data to send
-  !       do j = 1, CB_MESSAGE_SIZE - 3
-  !         message(j + 3) = compute_data_point(global_rank, i + j)
-  !       end do
-  !       ! Do the sending
-  !       ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
-  ! !      call sleep_us(50)
+    integer(C_INTPTR_T) :: tmp
+    do i = 0, CB_TOTAL_DATA_TO_SEND / CB_MESSAGE_SIZE
+      ! Get memory and put data in it
+      msg_array_info = node_heap % allocate(msg_array, [CB_MESSAGE_SIZE])
+      call block_meta_internals(msg_array_info, p, d, tkr, o)
+      do while (.not. c_associated(p))
+        ! print*, 'Could not allocate!!!!! Trying again soon'
+        call sleep_us(10)
+        msg_array_info = node_heap % allocate(msg_array, [CB_MESSAGE_SIZE])
+        call block_meta_internals(msg_array_info, p, d, tkr, o)
+        ! error stop 2
+      end do
+
+      msg_array(1) = local_compute_id
+      do j = 2, CB_MESSAGE_SIZE
+        msg_array(j) = compute_data_point(local_compute_id, i + 2, j)
+      end do
+
+      ! if (local_compute_id == 0) then
+      !   print *, 'Sending', msg_array(1:3), transfer(p, tmp)
+      ! end if
+      ! Write the data to a file (i.e. send it to the server to do that for us)
+      f_status = results_file % write(msg_array_info, my_grid)
+
+      if (f_status .ne. 0) then
+        print *, 'ERROR while trying to do a WRITE'
+        error stop 1
+      end if
+
+      call sleep_us(50)
     end do
+
     ! We done. Send the stop signal
-    message(1) = 0
-    num_spaces = data_buffer % atomic_put(message, 1, .true.)
+    num_spaces = data_buffer % atomic_put(0, 1, .true.)
   end block
 
   f_status = results_file % close()
   if (f_status .ne. 0) then
-    ! print *, 'Unable to close model file!!!!'
-    ! error stop 1
+    print *, 'Unable to close model file!!!!'
+    error stop 1
   end if
 
   if (num_errors > 0) then
@@ -524,10 +534,9 @@ subroutine model_process()
     error stop 1
   end if
 
-  call MPI_Barrier(node_crs % comm, ierr) ! Sync with relays and avoid scrambling output
+  call MPI_Barrier(node_crs % comm) ! Sync with relays and avoid scrambling output
 
 end subroutine model_process
-
 
 subroutine io_relay_process()
   use ISO_C_BINDING
@@ -550,12 +559,8 @@ subroutine io_relay_process()
   type(C_PTR)          :: tmp_ptr
   integer :: h_status
 
-  ! type(circular_buffer), dimension(:), pointer :: local_data_buffers
-
   logical :: success = .false.
   type(distributed_circular_buffer) :: data_buffer
-
-  ! equivalence(circ_buffer_in, local_data_buffers)
 
   call io_relay_mod_init()
   call get_local_world(global_comm, global_rank, global_size)
@@ -567,8 +572,6 @@ subroutine io_relay_process()
   num_local_relays  = local_relay_crs % size
   num_local_compute = nodecom_crs % size - local_relay_crs % size
   num_errors        = 0
-
-  ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used to communicate with the server
   success = data_buffer % create(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1)
@@ -602,6 +605,8 @@ subroutine io_relay_process()
     integer :: jar_status, jar_num_elem, record_size
     JAR_DECLARE(data_jar)
 
+    integer(C_INTPTR_T) :: tmp
+
     ! Say hi to the consumer processes
     dcb_message(1) = local_relay_id
     dcb_message(2) = global_rank
@@ -617,7 +622,6 @@ subroutine io_relay_process()
           print *, 'ERROR in relay. atomic_get returned a negative value'
           error stop 1
         end if
-        ! print *, 'Got message from model: ', cb_message(1), i_compute
       end do
 
       ! The main loop
@@ -659,8 +663,6 @@ subroutine io_relay_process()
             !   record % ni, record % nj, record % gnignj, &
             !   record % gin, record % gout, record % i0, record % j0, &
             !   record % nk, record % nvar, record % csize, record % msize
-            
-            ! print *, 'i0 = ', record % i0, i_compute
 
             cb_message(1) = record % record_length + num_data
 
@@ -676,21 +678,29 @@ subroutine io_relay_process()
             dcb_message(current_message_size + 1: current_message_size + num_data) = f_data(:)
             current_message_size = current_message_size + num_data
 
+            if (CHECK_CB_MESSAGES) then
+              expected_message(1) = i_compute
+              do i_data_check = 2, num_data
+                expected_message(i_data_check) = compute_data_point(i_compute, record % tag, i_data_check)
+              end do
+              ! if (i_compute == 0) then
+              !   print *, 'Got ', f_data(1:3), transfer(record % data, tmp)
+              ! end if
+              if (.not. all(expected_message(1:num_data) == f_data(:))) then
+                num_errors = num_errors + 1
+                print *, 'Expected: ', expected_message(1:num_data / 100 + 3)
+                print *, 'Received: ', f_data(:num_data / 100 + 3)
+                print *, 'i_compute, tag: ', i_compute, record % tag
+                error stop 1
+              end if
+            end if
+
+            f_data(2) = -1
             h_status = c_heaps(i_compute) % free(c_data)
             if (h_status .ne. 0) then
               print*, 'Unable to free heap data (from RELAY)'
             end if
 
-            if (CHECK_CB_MESSAGES) then
-              print *, 'Data check not implemented on relay!'
-              ! expected_message(1:3) = cb_message(1:3)
-              ! do i_data_check = 1, model_message_size - 2
-              !   expected_message(i_data_check + 3) = compute_data_point(cb_message(2), cb_message(3) + i_data_check)
-              ! end do
-              ! if (.not. all(expected_message(1:model_message_size + 1) == cb_message(1:model_message_size + 1))) then
-              !   num_errors = num_errors + 1
-              ! end if
-            end if
           end if
         end do
       end do
@@ -707,6 +717,7 @@ subroutine io_relay_process()
   call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
   if (local_relay_id == 0) then
+    call c_heaps(0) % dumpinfo()
     do i_compute = 0, num_local_compute - 1
       call c_cio_out(i_compute) % print_stats(producer_id * 100 + i_compute, i_compute == 0)
     end do
