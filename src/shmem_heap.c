@@ -606,9 +606,9 @@ void *ShmemHeapAllocBlock(
     }
     if(bsz <= sz){                                   // block large enough to satisfy request
       t = h + cur + 2 ;                              // point to element following size marker
+      (heap_table[index].inf)->nblk += 1 ;
+      (heap_table[index].inf)->nbyt += nbyt ;
       if(sz - bsz > 64) {             //  split block if worth it (more than 64 extra elements)
-        (heap_table[index].inf)->nblk += 1 ;
-        (heap_table[index].inf)->nbyt += nbyt ;
         h[cur]       =  -bsz ;        // head count (lower block)
         h[cur+1]     =  HEAD ;        // low  marker
         h[cur+bsz-2] =  TAIL ;        // tail marker
@@ -618,6 +618,10 @@ void *ShmemHeapAllocBlock(
         h[cur+bsz+1]    = HEAD ;      // low  marker
         h[cur + sz - 2] = TAIL ;      // tail marker
         h[cur + sz - 1] = sz - bsz ;  // tail count (upper block)
+      }
+      else {
+        h[cur] = -sz;
+        if( (cur + sz) > (heap_table[index].inf)->max ) (heap_table[index].inf)->max = (cur + sz) ;
       }
     }else{
 //       printf("block is too small to allocate, need %d, have %d\n", bsz, sz-2);
