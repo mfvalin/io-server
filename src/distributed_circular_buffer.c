@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (C) 2021  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
@@ -685,7 +685,7 @@ static inline void send_channel_signal(distributed_circular_buffer_p buffer, con
 // Forward declarations
 //C_StArT
 void DCB_delete(distributed_circular_buffer_p);
-void DCB_print(distributed_circular_buffer_p);
+void DCB_print(distributed_circular_buffer_p, int32_t);
 void DCB_full_barrier(distributed_circular_buffer_p buffer);
 int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
 //C_EnD
@@ -910,14 +910,17 @@ distributed_circular_buffer_p DCB_create_f(
 }
 
 //F_StArT
-//  subroutine DCB_print(buffer) BIND(C, name = 'DCB_print')
-//    import :: C_PTR
+//  subroutine DCB_print(buffer, dump_data) BIND(C, name = 'DCB_print')
+//    import :: C_PTR, C_INT
 //    implicit none
-//    type(C_PTR), INTENT(IN), value :: buffer   !< Buffer for which to print data
+//    type(C_PTR),    INTENT(IN), value :: buffer    !< Buffer for which to print data
+//    integer(C_INT), INTENT(IN), value :: dump_data !< Whether to print buffer content
 //  end subroutine DCB_print
 //F_EnD
 //! Print some debug info
-void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which to print data
+void DCB_print(
+  distributed_circular_buffer_p buffer, //!< [in] Buffer for which to print data
+  int32_t dump_data                     //!< [in] Whether to print content too
 ) {
   printf(
       "Printing distributed circ buf: num producers %d, num channels %d, window offset = %d\n"
@@ -930,11 +933,18 @@ void DCB_print(distributed_circular_buffer_p buffer //!< [in] Buffer for which t
       buffer->channel_id, buffer->server_rank, IO_time_since_start(&buffer->existence_timer));
   if (is_producer(buffer)) {
     print_instance(&buffer->local_header);
+    if (dump_data == 1) {
+      CB_dump_data(&buffer->local_header.circ_buffer);
+    }
   }
   else if (is_root(buffer)) {
     for (int i = 0; i < buffer->num_producers; ++i) {
       const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i);
       printf("From root: buffer %d has %ld data in it\n", i, (int64_t)get_available_data(instance));
+      if (dump_data == 1) {
+        print_instance(instance);
+        CB_dump_data(&instance->circ_buffer);
+      }
     }
   }
 }

@@ -107,11 +107,17 @@ contains
   end subroutine delete
 
   !> Print info about a distributed circular buffer. See DCB_print
-  subroutine print(this)
+  subroutine print(this, dump_data)
     implicit none
     class(distributed_circular_buffer), intent(in)  :: this
+    logical, intent(in) :: dump_data !< Whether to print buffer content
 
-    call DCB_print(this % c_buffer)
+    integer(C_INT) :: c_dump_data
+
+    c_dump_data = 0
+    if (dump_data) c_dump_data = 1
+
+    call DCB_print(this % c_buffer, c_dump_data)
   end subroutine print
 
   !> Insert elements into a distributed circular buffer. See DCB_put

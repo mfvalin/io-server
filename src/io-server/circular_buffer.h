@@ -251,6 +251,8 @@ static inline double num_elem_to_kb(const size_t num_elements) {
 //! Print buffer header (to help debugging)
 void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to print
 );
+void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to print
+);
 //! initialize a circular buffer
 //! <br> = CB_init(p, nwords)
 //! @return pointer to buffer upon success, NULL upon error

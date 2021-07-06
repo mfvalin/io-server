@@ -52,10 +52,11 @@ integer(C_INT), intent(IN), value :: num_channels   !< Number of channels (PEs u
 integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
 type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
 end function DCB_create
-subroutine DCB_print(buffer) BIND(C, name = 'DCB_print')
-import :: C_PTR
+subroutine DCB_print(buffer, dump_data) BIND(C, name = 'DCB_print')
+import :: C_PTR, C_INT
 implicit none
-type(C_PTR), INTENT(IN), value :: buffer   !< Buffer for which to print data
+type(C_PTR),    INTENT(IN), value :: buffer    !< Buffer for which to print data
+integer(C_INT), INTENT(IN), value :: dump_data !< Whether to print buffer content
 end subroutine DCB_print
 subroutine DCB_delete(buffer) BIND(C, name = 'DCB_delete')
 import :: C_PTR

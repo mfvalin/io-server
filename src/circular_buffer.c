@@ -244,6 +244,43 @@ void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to prin
 }
 
 //F_StArT
+//  subroutine CB_dump_data(buffer) bind(C, name = 'CB_dump_data')
+//    import :: C_PTR
+//    implicit none
+//    type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
+//  end subroutine CB_dump_data
+//F_EnD
+//C_StArT
+void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to print
+                 )
+//C_EnD
+{
+  const int LINE_LENGTH = 30;
+  printf("Buffer data:");
+  for (int i = 0; i < buffer->m.limit; ++i)
+  {
+    if (i % LINE_LENGTH == 0) printf("\n[%4d] ", i / LINE_LENGTH);
+
+    int add_space = 0;
+    if (i == buffer->m.in[CB_PARTIAL]) { printf("\nPARTIAL IN"); add_space = 1; }
+    if (i == buffer->m.in[CB_FULL]) { printf("\nFULL IN"); add_space = 1; }
+    if (i == buffer->m.out[CB_PARTIAL]) { printf("\nPARTIAL OUT"); add_space = 1; }
+    if (i == buffer->m.out[CB_FULL]) { printf("\nFULL OUT"); add_space = 1; }
+
+    if (add_space) {
+      printf("\n[    ] ");
+      for (int j = 0; j < i % LINE_LENGTH; ++j) printf("      ");
+    }
+
+    if (buffer->data[i] > 99999)
+      printf("?%04d ", buffer->data[i] % 10000);
+    else
+      printf("%5d ", buffer->data[i]);
+  }
+  printf("\n");
+}
+
+//F_StArT
 //   !> initialize a circular buffer<br>
 //   !> buffer = CB_init(p, nwords)
 //   function CB_init(p, nwords) result(buffer) bind(C,name='CB_init')
