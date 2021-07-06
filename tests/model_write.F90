@@ -48,15 +48,17 @@ contains
     data_point = mod(compute_rank, 1000) * 1000000 + mod(tag, 1000) * 1000 + mod(index, 800) + tag / 1000
   end function compute_data_point
 
-  function am_server_node(node_rank)
+  function am_server_node(node_rank, single_node)
     use mpi_f08
     implicit none
 
     integer, intent(out) :: node_rank
+    logical, intent(out) :: single_node
     logical :: am_server_node
 
     type(MPI_Comm) :: node_comm
     integer :: global_rank, node_root_global_rank
+    integer :: node_size, global_size
 
     call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
     call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
@@ -69,6 +71,12 @@ contains
 
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
+
+    call MPI_Comm_size(MPI_COMM_WORLD, global_size)
+    call MPI_Comm_size(node_comm, node_size)
+
+    single_node = .false.
+    if (global_size == node_size) single_node = .true.
   end function am_server_node
 end module model_write_parameters
 
@@ -95,7 +103,7 @@ program pseudomodelandserver
   type(comm_rank_size) :: fullnode_crs, local_crs
 
   integer, parameter :: NUM_NODES = 3
-  logical :: server_node
+  logical :: server_node, single_node
   integer :: node_rank
 
   call mpi_init(status)
@@ -145,7 +153,7 @@ program pseudomodelandserver
     goto 777
   endif
 
-  server_node = am_server_node(node_rank)
+  server_node = am_server_node(node_rank, single_node)
 
   ! if(rank >= nserv) then
   ! if(mod(rank, NUM_NODES) .ne. 0) then
@@ -169,26 +177,41 @@ program pseudomodelandserver
     ! =============================================================================================
     !                                server and no-op processes
     ! =============================================================================================
-    nio_node = -1
+    ! nio_node = -1
     ! if(rank < noops) then          ! ranks below noops are NO-OP processes
     ! if(rank/NUM_NODES >= nserv) then          ! ranks below noops are NO-OP processes
-    if (node_rank >= nserv) then
-      ! =============================================================================================
-      !                                no-op processes
-      ! =============================================================================================
-      ! no return from ioserver_int_init in the case of NO-OP processes
-      status = ioserver_init(nio_node, 'Z')
-    else
-      ! =============================================================================================
-      !                                server processes (usually on another node)
-      ! =============================================================================================
+    if (node_rank < nserv) then
       call set_IOserver_server(io_server_process)
       status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
-      ! io_server_out may or may not return from call
-!      call io_server_out()
-!      noderank = server_crs % rank
-!      nodesize = server_crs % size
-    endif
+    else 
+      if (single_node) then
+        call set_IOSERVER_relay(io_relay_process)
+        !  no return from ioserver_int_init in the case of IO relay processes when io_relay_fn is defined
+        !  compute processes will return from call
+        status = ioserver_init(nio_node, 'M')
+        call model_process()
+        write(6,*)'END: compute, PE',rank+1,' of',size
+      else
+        status = ioserver_init(nio_node, 'Z')
+      end if
+    end if
+!     if (node_rank >= nserv) then
+!       ! =============================================================================================
+!       !                                no-op processes
+!       ! =============================================================================================
+!       ! no return from ioserver_int_init in the case of NO-OP processes
+!       status = ioserver_init(nio_node, 'Z')
+!     else
+!       ! =============================================================================================
+!       !                                server processes (usually on another node)
+!       ! =============================================================================================
+!       call set_IOserver_server(io_server_process)
+!       status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
+!       ! io_server_out may or may not return from call
+! !      call io_server_out()
+! !      noderank = server_crs % rank
+! !      nodesize = server_crs % size
+!     endif
 
   endif
 777 continue
@@ -215,7 +238,7 @@ subroutine io_server_process()
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
 
-  ! write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
+  ! write(6, *) 'SERVER process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
   num_producers = allio_crs % size - server_crs % size
@@ -272,6 +295,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
   use circular_buffer_module, only : DATA_ELEMENT
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   use ioserver_functions
+  use data_serialize
   implicit none
 
   interface
@@ -298,6 +322,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
   integer :: num_data, data_start
   type(model_record) :: record
   integer :: jar_status, jar_num_elem
+  integer :: dummy_integer
 
   integer, allocatable :: active_producers(:)
 
@@ -356,16 +381,41 @@ subroutine consumer_process(data_buffer, consumer_comm)
 
       num_elements = data_buffer % peek(producer_id, message_size, 1)
 
+      if (num_elements < 0) then
+        print *, 'Error after peeking into DCB'
+        error stop 1
+      end if
+
+      if (message_size > MAX_DCB_MESSAGE_SIZE - 1) then
+        print *, 'Message is larger than what we can deal with. That is problematic.'
+        print *, 'Message size: ', message_size
+        print *, 'num_elements = ', num_elements
+        num_elements = data_buffer % get_capacity(producer_id)
+        print *, 'capacity     = ', num_elements
+        print *, 'producer id  = ', producer_id
+        num_elements = data_buffer % peek(producer_id, record, storage_size(record) / storage_size(dummy_integer))
+        print '(A12, I5, I6, I4, I5, I5, I5, I5, I5, I5, I5, I4, I4, I5, I5)', 'Record info: ', &
+          record % record_length, record % tag, record % stream, &
+          record % ni, record % nj, record % gnignj, &
+          record % gin, record % gout, record % i0, record % j0, &
+          record % nk, record % nvar, record % csize, record % msize
+        error stop 1
+      end if
+
       if (message_size > 0)  then
         ! There is something in the buffer!
         finished = .false.
         num_elements = data_buffer % get(producer_id, message, message_size + 1, .true.)
 
+        if (num_elements < 0) then
+          print *, 'Error after reading data from DCB'
+          error stop 1
+        end if
         ! print *, 'Message:   ', message(:message_size + 1)
 
         write_size = message_size / 4
         if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
-          write(file_unit) file_write_buffer(1:file_write_position)
+          ! write(file_unit) file_write_buffer(1:file_write_position)
           file_write_position = 1
         end if
 
@@ -464,6 +514,8 @@ subroutine model_process()
   local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
+  ! print *, 'MODEL, local compute id: ', local_compute_id
+
   data_buffer = IOserver_get_cio_out()
   if (data_buffer % get_capacity() .ne. data_buffer % get_num_spaces()) then
     print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh'
@@ -547,6 +599,7 @@ subroutine io_relay_process()
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   use io_relay_mod
   use ioserver_memory_mod
+  use data_serialize
   implicit none
 
   type(MPI_Comm)       :: global_comm
@@ -572,6 +625,8 @@ subroutine io_relay_process()
   num_local_relays  = local_relay_crs % size
   num_local_compute = nodecom_crs % size - local_relay_crs % size
   num_errors        = 0
+
+  ! print *, 'RELAY, local relay id: ', local_relay_id
 
   ! Create the DCB used to communicate with the server
   success = data_buffer % create(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1)
