@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (C) 2021  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
@@ -1262,14 +1262,14 @@ data_element DCB_put(
 
   const int target_rank = buffer->local_header.target_rank;
 
-  // NOTE: We could in theory use the MPI_MODE_NOCHECK, but it does not work with OpenMPI 4.0.5
+  // NOTE: We could in theory use the MPI_MODE_NOCHECK flag, but it does not work with OpenMPI 4.0.5 on large data transfers
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, 0, buffer->window);
 
   data_element       in_index = buffer->local_header.circ_buffer.m.in[CB_PARTIAL];
   const data_element capacity = buffer->local_header.capacity;
 
   // First segment
-  const int num_elem_segment_1 = num_elements >= (capacity - in_index) ? (capacity - in_index + 1) : num_elements;
+  const int num_elem_segment_1 = num_elements > (capacity - in_index + 1) ? (capacity - in_index + 1) : num_elements;
   MPI_Accumulate(
       src_data, num_elem_segment_1, CB_MPI_ELEMENT_TYPE, target_rank, buffer_element_displacement(buffer, in_index),
       num_elem_segment_1, CB_MPI_ELEMENT_TYPE, MPI_REPLACE, buffer->window);
@@ -1353,7 +1353,7 @@ int DCB_get(
   const data_element* const buffer_data = instance->circ_buffer.data;
 
   // 1st segment
-  const int num_elements_1 = num_elements >= (capacity - out_index) ? (capacity - out_index + 1) : num_elements;
+  const int num_elements_1 = num_elements > (capacity - out_index + 1) ? (capacity - out_index + 1) : num_elements;
   copy_elements(dest_data, buffer_data + out_index, num_elements_1);
 
   // Update temporary extraction pointer
