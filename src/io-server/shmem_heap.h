@@ -91,7 +91,11 @@ or
 // typedef data_element heap_element
 
 //!> heap element (same as data_element)
+#if defined(DATA_ELEMENT_64)
+typedef int64_t heap_element ;
+#else
 typedef data_element heap_element ;
+#endif
 // #define heap_element data_element
 
 //!> maximum number of registered heaps
@@ -175,7 +179,7 @@ heap_element *ShmemHeapContains(
   );
 //! translate address to offset within a heap
 //! @return offset with respect to base of heap in heap_element units (NOT bytes)
-int32_t ShmemHeapPtr2Offset(
+heap_element ShmemHeapPtr2Offset(
   void *addr                    //!< [in]  address to translate to index
   );
 //! is this the address of a block belonging to a known heap ?
