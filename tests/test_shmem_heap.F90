@@ -76,7 +76,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   end type mem_layout
   type(mem_layout) :: memory
   type(mem_layout), dimension(:), allocatable :: memories
-  integer(C_INT), dimension(:), pointer :: ixtab   ! index table (integer array)
+  integer(HEAP_ELEMENT), dimension(:), pointer :: ixtab   ! index table (integer array)
   integer(C_INT), dimension(:), pointer :: ram     ! shared memory (addressable as an integer array)
   type(heap)  :: h                        ! a managed heap
   type(heap), dimension(:), allocatable :: heaps   ! the heaps for "model" PEs
@@ -285,7 +285,7 @@ subroutine base_test(nprocs, myrank)
   type(C_PTR) ::  baseptr, mybase
   integer(C_INT)    :: free_blocks, used_blocks
   integer(C_SIZE_T) :: free_space, used_space
-  integer(C_INT), dimension(:), pointer :: ixtab   ! index table (integer array)
+  integer(HEAP_ELEMENT), dimension(:), pointer :: ixtab   ! index table (integer array)
   integer(C_INT), dimension(:), pointer :: ram     ! shared memory (addressable as an integer array)
   integer(HEAP_ELEMENT) :: he              ! only used for C_SIZEOF purpose
   logical, parameter :: bugged = .false.
