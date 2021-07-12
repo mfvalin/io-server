@@ -1034,7 +1034,7 @@ int32_t DCB_get_num_elements(
     )
 //C_EnD
 {
-  if (is_consumer(buffer))
+  if (buffer != NULL && is_consumer(buffer) && buffer_id < buffer->num_producers)
     return (int32_t)get_available_data(get_circular_buffer_instance(buffer, buffer_id));
   return -1;
 }
@@ -1257,7 +1257,7 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 //C_StArT
 data_element DCB_put(
     distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
-    data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
+    void* const                   src_data,     //!< [in] Pointer to the data we want to insert
     const int                     num_elements, //!< [in] How many #data_element tokens we want to insert
     const int                     operation     //!< [in] What operation to perform (whether to commit the transaction)
     )
@@ -1293,7 +1293,7 @@ data_element DCB_put(
   const int num_elem_segment_2 = num_elements - num_elem_segment_1;
   if (num_elem_segment_2 > 0) {
     MPI_Accumulate(
-        src_data + num_elem_segment_1, num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank,
+        (char*)src_data + (num_elem_segment_1 * sizeof(data_element)), num_elem_segment_2, CB_MPI_ELEMENT_TYPE, target_rank,
         buffer_element_displacement(buffer, in_index), num_elem_segment_2, CB_MPI_ELEMENT_TYPE, MPI_REPLACE,
         buffer->window);
 
@@ -1338,7 +1338,7 @@ data_element DCB_put(
 int DCB_get(
     distributed_circular_buffer_p buffer,       //!< [in,out] DCB from which we want to read
     const int                     buffer_id,    //!< [in] Specific buffer in the DCB
-    int32_t*                      dest_data,    //!< [in] Where to put the data from the buffer
+    void*                         dest_data,    //!< [in] Where to put the data from the buffer
     const int                     num_elements, //!< [in] How many elements to read
     const int                     operation     //!< [in] What operation to perform: extract, read or just peek
     )
@@ -1364,7 +1364,7 @@ int DCB_get(
 
   // 1st segment
   const int num_elements_1 = num_elements > (capacity - out_index + 1) ? (capacity - out_index + 1) : num_elements;
-  copy_elements(dest_data, buffer_data + out_index, num_elements_1);
+  copy_elements(dest_data, (void*)(buffer_data + out_index), num_elements_1);
 
   // Update temporary extraction pointer
   out_index += num_elements_1;
@@ -1374,7 +1374,7 @@ int DCB_get(
   // 2nd segment (if there is one)
   const int num_elements_2 = num_elements - num_elements_1;
   if (num_elements_2 > 0) {
-    copy_elements(dest_data + num_elements_1, buffer_data + out_index, num_elements_2);
+    copy_elements((char*)dest_data + (num_elements_1 * sizeof(data_element)), (void*)(buffer_data + out_index), num_elements_2);
 
     out_index += num_elements_2;
   }

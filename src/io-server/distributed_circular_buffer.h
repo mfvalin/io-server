@@ -175,14 +175,14 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [i
 );
 data_element DCB_put(
     distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
-    data_element* const           src_data,     //!< [in] Pointer to the data we want to insert
+    void* const                   src_data,     //!< [in] Pointer to the data we want to insert
     const int                     num_elements, //!< [in] How many #data_element tokens we want to insert
     const int                     operation     //!< [in] What operation to perform (whether to commit the transaction)
 );
 int DCB_get(
     distributed_circular_buffer_p buffer,       //!< [in,out] DCB from which we want to read
     const int                     buffer_id,    //!< [in] Specific buffer in the DCB
-    int32_t*                      dest_data,    //!< [in] Where to put the data from the buffer
+    void*                         dest_data,    //!< [in] Where to put the data from the buffer
     const int                     num_elements, //!< [in] How many elements to read
     const int                     operation     //!< [in] What operation to perform: extract, read or just peek
 );

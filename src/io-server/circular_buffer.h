@@ -236,9 +236,9 @@ enum
  * @brief Copy buffer elements into another array (either into or out of the buffer)
  */
 static inline void copy_elements(
-    data_element*       dst, //!< [out] Where to copy the elements
-    const data_element* src, //!< [in]  The elements to copy
-    int                 n    //!< [in] How many we want to copy
+    void*       dst, //!< [out] Where to copy the elements
+    const void* src, //!< [in]  The elements to copy
+    int         n    //!< [in] How many we want to copy
 ) {
   memcpy(dst, src, sizeof(data_element) * (size_t)n);
 }
@@ -317,7 +317,7 @@ int32_t CB_wait_data_available(
 //! @return number of data tokens available after this operation, -1 if error
 int32_t CB_atomic_get(
     circular_buffer_p buffer,       //!< [in]  Pointer to a circular buffer
-    data_element*     dst,          //!< [out] Destination array for data extraction
+    void*             dst,          //!< [out] Destination array for data extraction
     int               num_elements, //!< [in]  Number of #data_element data items to extract
     int operation //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
 );
@@ -326,7 +326,7 @@ int32_t CB_atomic_get(
 //! @return number of free slots available after this operation, -1 upon error
 int32_t CB_atomic_put(
     circular_buffer_p buffer,       //!< [in] Pointer to a circular buffer
-    data_element*     src,          //!< [in] Source array for data insertion
+    void*             src,          //!< [in] Source array for data insertion
     int               num_elements, //!< [in] Number of #data_element data items to insert
     int operation //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
 );

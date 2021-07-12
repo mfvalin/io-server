@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.16)
 
 set(TEST_SOURCES
    cb_plus_dcb.F90
+   cb_unaligned_input.c
    circular_buffer.F90
    circular_buffer_fill.c
    circular_buffer_single_thread.F90
    dcb_edge_case_1.F90
+   dcb_unaligned_input.c
    distributed_circular_buffer.F90
 #   memory_arena.F90
    model_write.F90
@@ -99,6 +101,9 @@ gen_test_target(SOURCES benchmark_disk_bandwidth.F90 LIBRARIES ${TEST_HELPER_LIB
 get_test_name(circular_buffer_single_thread.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
 
+get_test_name(cb_unaligned_input.c TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
+
 get_test_name(circular_buffer.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
@@ -115,6 +120,9 @@ get_test_name(cb_plus_dcb.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} -oversubscribe ${MPIEXEC_NUMPROC_FLAG} 16 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 4 0)
 
 get_test_name(dcb_edge_case_1.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(dcb_unaligned_input.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 #get_test_name(test_shmem_heap.F90 TEST_TARGET)
