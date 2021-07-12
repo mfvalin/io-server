@@ -257,7 +257,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 2 format(4(I8,A))
 3 format(4(A,I8))
 5 format(A,I3,A,Z16.16,2(A,I8))
-6 format(A,10I6)
+6 format(A,20I6)
 7 format(A,I3,A,I8,A,10I6)
 8 format(A,i3,4I10)
 end subroutine relay_test
