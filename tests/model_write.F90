@@ -21,22 +21,99 @@
 
 module model_write_parameters
   use ISO_C_BINDING
+  use ioserver_functions
   implicit none
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
   integer, parameter :: CB_MESSAGE_SIZE       = 500                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
-  ! integer, parameter :: CB_TOTAL_DATA_TO_SEND = 20000                 ! How much total data to send (for each CB)
+  ! integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 2000                 ! How much total data to send (for each CB)
   integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
   integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
+
+  integer, parameter :: MAX_ASSEMBLY_LINES = 20
 
   logical :: CHECK_CB_MESSAGES
   logical :: CHECK_DCB_MESSAGES
 
   integer :: num_channels
 
+  type, private :: grid_assembly_line
+    integer :: tag = -1
+    integer :: file_unit
+    integer, dimension(:, :), allocatable :: data
+    integer(kind=8) :: missing_data = -1
+  end type
+
+  type, public :: grid_assembly
+    type(grid_assembly_line), dimension(MAX_ASSEMBLY_LINES) :: lines
+
+    contains
+    procedure :: put_data => grid_assembly_put_data
+  end type
+
 contains
+
+  function grid_assembly_put_data(this, record, entry_size, subgrid_data) result(status)
+    implicit none
+    class(grid_assembly), intent(inout) :: this
+    class(model_record),  intent(in)    :: record
+    ! integer, intent(in) :: tag
+    ! integer, intent(in) :: start_i, start_j
+    ! integer, intent(in) :: num_i, num_j
+    ! integer, intent(in) :: total_size_i, total_size_j
+    integer, intent(in) :: entry_size
+    integer, intent(in), dimension(record % ni, record % nj * entry_size) :: subgrid_data
+
+    integer :: status
+
+    integer :: i_line, line_id, free_line_id
+    integer :: i0, i1, j0, j1
+
+    status       = -1
+    line_id      = -1
+    free_line_id = -1
+    do i_line = 1, MAX_ASSEMBLY_LINES
+      if (this % lines(i_line) % tag == record % tag) then
+        line_id = i_line
+        exit
+      else if (this % lines(i_line) % tag == -1 .and. free_line_id == -1) then
+        free_line_id = i_line
+      end if
+    end do
+    
+    if (line_id == -1) then
+      if (free_line_id .ne. -1) then
+        line_id = free_line_id
+        print *, 'Starting assembly for a new grid! Tag = ', record % tag, line_id, free_line_id
+        this % lines(line_id) % tag = record % tag
+        this % lines(line_id) % file_unit = record % stream
+        allocate(this % lines(line_id) % data(record % grid_size_i, record % grid_size_j * entry_size))
+        this % lines(line_id) % missing_data = record % grid_size_i * record % grid_size_j * entry_size
+      else
+        print *, 'We have reached the maximum number of grids being assembled! Quitting.'
+        error stop 1
+        return
+      end if
+    end if
+
+    i0 = record % i0
+    i1 = i0 + record % ni - 1
+    j0 = record % j0 * entry_size
+    j1 = j0 + (record % nj - 1) * entry_size
+    ! print *, 'si, sj, ni, nj', start_i, start_j, num_i, num_j
+    ! print *, 'Writing to ', i0, i1, j0, j1, entry_size
+    this % lines(line_id) % data(i0:i1, j0:j1) = subgrid_data(:,:)
+    this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - record % ni * record % nj * entry_size
+
+    if (this % lines(line_id) % missing_data == 0) then
+      print *, 'Completed a grid! Gotta write it down now'
+      status = line_id
+    else
+      status = 0
+    end if
+  end function grid_assembly_put_data
 
   function compute_data_point(compute_rank, tag, index) result(data_point)
     implicit none
@@ -111,10 +188,6 @@ program pseudomodelandserver
 
   ! call IOSERVER_debug(1)            ! activate debug mode
 
-  ! arg = '0'
-  ! if(COMMAND_ARGUMENT_COUNT() >= 5) call GET_COMMAND_ARGUMENT(5, arg)
-  ! read(arg,*)noops
-
   ! Arguments
   ! 1. Check messages or not
   ! 2. Number of consumer processes
@@ -178,13 +251,13 @@ program pseudomodelandserver
     !                                server and no-op processes
     ! =============================================================================================
     ! nio_node = -1
-    ! if(rank < noops) then          ! ranks below noops are NO-OP processes
-    ! if(rank/NUM_NODES >= nserv) then          ! ranks below noops are NO-OP processes
     if (node_rank < nserv) then
       call set_IOserver_server(io_server_process)
       status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
     else 
       if (single_node) then
+        !--------------------------------------------------------------
+        ! Relay + model processes, when eeeveryone in on the same node
         call set_IOSERVER_relay(io_relay_process)
         !  no return from ioserver_int_init in the case of IO relay processes when io_relay_fn is defined
         !  compute processes will return from call
@@ -192,26 +265,11 @@ program pseudomodelandserver
         call model_process()
         write(6,*)'END: compute, PE',rank+1,' of',size
       else
+        !-----------------
+        ! no-op processes
         status = ioserver_init(nio_node, 'Z')
       end if
     end if
-!     if (node_rank >= nserv) then
-!       ! =============================================================================================
-!       !                                no-op processes
-!       ! =============================================================================================
-!       ! no return from ioserver_int_init in the case of NO-OP processes
-!       status = ioserver_init(nio_node, 'Z')
-!     else
-!       ! =============================================================================================
-!       !                                server processes (usually on another node)
-!       ! =============================================================================================
-!       call set_IOserver_server(io_server_process)
-!       status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
-!       ! io_server_out may or may not return from call
-! !      call io_server_out()
-! !      noderank = server_crs % rank
-! !      nodesize = server_crs % size
-!     endif
 
   endif
 777 continue
@@ -321,8 +379,11 @@ subroutine consumer_process(data_buffer, consumer_comm)
   integer :: num_active_producers
   integer :: num_data, data_start
   type(model_record) :: record
-  integer :: jar_status, jar_num_elem
+  integer :: jar_status, jar_num_elem, old_record_length
   integer :: dummy_integer
+  integer :: assembly_status
+
+  type(grid_assembly) :: partial_grids
 
   integer, allocatable :: active_producers(:)
 
@@ -350,7 +411,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
     ! Should receive one test signal
     do i_producer = 0, num_producers - 1
       num_elements = data_buffer % get(i_producer, message, 2, .true.)
-      ! write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
+      write (6, *) 'Received HI from relay #', i_producer, message(1), message(2)
       if (message(1) == 0) then
         num_active_producers = num_active_producers + 1
         active_producers(num_active_producers) = i_producer
@@ -386,7 +447,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
         error stop 1
       end if
 
-      if (message_size > MAX_DCB_MESSAGE_SIZE - 1) then
+      if (message_size > MAX_DCB_MESSAGE_SIZE) then
         print *, 'Message is larger than what we can deal with. That is problematic.'
         print *, 'Message size: ', message_size
         print *, 'num_elements = ', num_elements
@@ -394,24 +455,47 @@ subroutine consumer_process(data_buffer, consumer_comm)
         print *, 'capacity     = ', num_elements
         print *, 'producer id  = ', producer_id
         num_elements = data_buffer % peek(producer_id, record, storage_size(record) / storage_size(dummy_integer))
-        print '(A12, I5, I6, I4, I5, I5, I5, I5, I5, I5, I5, I4, I4, I5, I5)', 'Record info: ', &
+        print '(A12, I5, I6, I4, I5, I5, I5, I5, I5, I5, I5, I5, I4, I4, I6, I5, I5)', 'Record info: ', &
           record % record_length, record % tag, record % stream, &
           record % ni, record % nj, record % gnignj, &
-          record % gin, record % gout, record % i0, record % j0, &
-          record % nk, record % nvar, record % csize, record % msize
+          record % grid_size_i, record % grid_size_j, record % output_grid, record % i0, record % j0, &
+          record % nk, record % nvar, record % type_kind_rank, &
+          record % csize, record % msize
         error stop 1
       end if
 
       if (message_size > 0)  then
         ! There is something in the buffer!
         finished = .false.
-        num_elements = data_buffer % get(producer_id, message, message_size + 1, .true.)
+        num_elements = data_buffer % get(producer_id, message, message_size, .true.)
 
         if (num_elements < 0) then
           print *, 'Error after reading data from DCB'
           error stop 1
         end if
-        ! print *, 'Message:   ', message(:message_size + 1)
+
+        jar_status   = JAR_FREE(data_jar)
+        jar_status   = data_jar % shape(message, message_size)
+        jar_num_elem = JAR_GET_ITEM(data_jar, record)
+        jar_num_elem = JAR_GET_ITEM(data_jar, old_record_length)
+
+        num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size (tkr) into account
+
+        ! print '(A12, I5, I6, I4, I5, I5, I5, I5, I5, I5, I5, I5, I4, I4, I6, I5, I5)', 'Record info: ', &
+        !   record % record_length, record % tag, record % stream, &
+        !   record % ni, record % nj, record % gnignj, &
+        !   record % grid_size_i, record % grid_size_j, record % output_grid, record % i0, record % j0, &
+        !   record % nk, record % nvar, record % type_kind_rank, &
+        !   record % csize, record % msize
+
+        ! Sanity check
+        if (num_data .ne. record % record_length - old_record_length - 1) then
+          print *, 'Record length is not equal to old length + num data. Aborting.'
+          print *, old_record_length, num_data, record % record_length
+          error stop 1
+        end if
+
+        ! call partial_grids % put_data(record, 1, message(old_record_length + 1:))
 
         write_size = message_size / 4
         if (file_write_position + write_size >= WRITE_BUFFER_SIZE) then
@@ -433,11 +517,11 @@ subroutine consumer_process(data_buffer, consumer_comm)
 
       if (CHECK_DCB_MESSAGES) then
         jar_status   = JAR_FREE(data_jar)
-        jar_status   = data_jar % shape(message, message_size + 1)
+        jar_status   = data_jar % shape(message, message_size)
         jar_num_elem = JAR_GET_ITEM(data_jar, record)
 
         num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
-        data_start = record % record_length - num_data + 2
+        data_start = record % record_length - num_data + 1
         expected_message(1) = message(data_start)
         do i_data_check = 2, num_data
            expected_message(i_data_check) = compute_data_point(message(data_start), record % tag, i_data_check)
@@ -495,6 +579,7 @@ subroutine model_process()
   integer(kind=4), dimension(:), pointer :: msg_array
   type(block_meta) :: msg_array_info
   type(subgrid) :: my_grid
+  type(grid) :: input_grid, output_grid
 
   type(C_PTR) :: p
   integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
@@ -508,6 +593,8 @@ subroutine model_process()
     print *, 'Unable to open model file!!!!'
     error stop 1
   end if
+
+  model_crs = IOserver_get_crs(MODEL_COLOR)
 
   num_errors        = 0
   node_crs          = IOserver_get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
@@ -529,12 +616,18 @@ subroutine model_process()
   num_spaces = data_buffer % atomic_put(local_compute_id, 1, .true.)
 
   ! Init area info
-  my_grid % i0 = local_compute_id * CB_MESSAGE_SIZE
+  my_grid % i0 = local_compute_id * CB_MESSAGE_SIZE + 1
   my_grid % ni = CB_MESSAGE_SIZE
-  my_grid % j0 = 0
+  my_grid % j0 = 1 ! cause ARRAYS START AT 1
   my_grid % nj = 1
   my_grid % nk = 1
   my_grid % nv = 1
+
+  input_grid % id = 1
+  input_grid % size_i = CB_MESSAGE_SIZE * model_crs % size
+  input_grid % size_j = 1
+
+  output_grid % id = 1
 
   ! call sleep_us(5000)
   block
@@ -561,7 +654,7 @@ subroutine model_process()
       !   print *, 'Sending', msg_array(1:3), transfer(p, tmp)
       ! end if
       ! Write the data to a file (i.e. send it to the server to do that for us)
-      f_status = results_file % write(msg_array_info, my_grid)
+      f_status = results_file % write(msg_array_info, my_grid, input_grid, output_grid)
 
       if (f_status .ne. 0) then
         print *, 'ERROR while trying to do a WRITE'
@@ -719,7 +812,7 @@ subroutine io_relay_process()
             !   record % gin, record % gout, record % i0, record % j0, &
             !   record % nk, record % nvar, record % csize, record % msize
 
-            cb_message(1) = record % record_length + num_data
+            cb_message(1) = record % record_length + num_data + 1
 
             ! If the DCB message buffer is too full to contain that new package, flush it now
             if (current_message_size + model_message_size + 1 + num_data > MAX_DCB_MESSAGE_SIZE) then
@@ -727,9 +820,11 @@ subroutine io_relay_process()
               current_message_size = 0
             end if
 
-            ! Copy the CB message to the DCB message buffer
+            ! Copy the CB message header to the DCB message buffer
             dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = cb_message(1:model_message_size + 1)
             current_message_size = current_message_size + model_message_size + 1
+
+            ! Copy the data to the DCB message buffer
             dcb_message(current_message_size + 1: current_message_size + num_data) = f_data(:)
             current_message_size = current_message_size + num_data
 

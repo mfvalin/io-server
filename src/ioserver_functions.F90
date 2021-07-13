@@ -59,7 +59,7 @@ module ioserver_functions
 
   type, public :: grid
     integer :: id            ! grid id
-    integer :: gni, gnj      ! horizontal dimensions of full grid
+    integer :: size_i, size_j      ! horizontal dimensions of full grid
   end type
 
   type, public :: subgrid
@@ -86,20 +86,23 @@ module ioserver_functions
   type, public :: model_record
     integer(C_INT) :: record_length    ! global record length = size of model_record + csize + msize
     integer(C_INT) :: tag, stream
-    integer(C_INT) :: ni, nj, gnignj
-    integer(C_INT) :: gin, gout
+    integer(C_INT) :: ni, nj
+    integer(C_INT) :: grid_size_i, grid_size_j, gnignj
+    integer(C_INT) :: output_grid
     integer(C_INT) :: i0, j0
     integer(C_INT) :: nk, nvar
+    integer(C_INT) :: type_kind_rank
     type(C_PTR)    :: data
     integer(C_INT) :: csize, msize
   end type
 
-  private  :: fd_seq, local_heap, initialized    
+  private  :: file_tag_seq, file_open_seq, local_heap, initialized    
   private  :: cio_in, cio_out
 !   private gdt, MAXGRIDS
 
   logical                :: initialized = .false.
-  integer                :: fd_seq = 0
+  integer                :: file_tag_seq = 0
+  integer                :: file_open_seq = 0
   type(heap)             :: local_heap   ! type is self initializing
   type(circular_buffer)  :: cio_in       ! type is self initializing
   type(circular_buffer)  :: cio_out      ! type is self initializing
@@ -162,9 +165,10 @@ module ioserver_functions
 
   end function file_is_open
 
-  subroutine bump_ioserver_tag(this)
+  subroutine bump_ioserver_tag(this, new_file)
     implicit none
     class(server_file), intent(IN) :: this
+    logical, intent(in), optional :: new_file
     integer :: ierr
     type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
 
@@ -172,7 +176,11 @@ module ioserver_functions
       if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
       call MPI_Barrier(model_crs % comm, ierr)    ! in debug mode, enforce collective mode
     endif
-    fd_seq = fd_seq + 1
+    file_tag_seq = file_tag_seq + 1
+
+    if (present(new_file)) then
+      if (new_file) file_open_seq = file_open_seq + 1
+    end if
   end subroutine bump_ioserver_tag
 
   function ioserver_heap(n) result(h)
@@ -252,7 +260,7 @@ module ioserver_functions
     if(.not. file_version_is_valid(this) ) return ! wrong version
     if(file_is_open(this) )        return ! already open
 
-    call bump_ioserver_tag(this)
+    call bump_ioserver_tag(this, .true.)
     lname = len(trim(name))
     allocate(this % name(lname))
     this % name(1:lname) = transfer(trim(name), this % name)
@@ -288,16 +296,18 @@ module ioserver_functions
   end function ioserver_close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
-  function ioserver_write(this, mydata , area ,grid_in ,grid_out, cprs , meta) result(status)
+  function ioserver_write(this, mydata, area, grid_in, grid_out, cprs, meta) result(status)
     use data_serialize
     implicit none
     class(server_file), intent(INOUT) :: this
-    type(block_meta), intent(IN)      :: mydata           ! array descriptor from h % allocate
-    type(subgrid), intent(IN)         :: area             ! area in global space
-    type(grid), intent(IN), optional  :: grid_in          ! input grid
-    type(grid), intent(IN), optional  :: grid_out         ! output grid
+    type(block_meta),   intent(IN)    :: mydata           ! array descriptor from h % allocate
+    type(subgrid),      intent(IN)    :: area             ! area in global space
+    type(grid),         intent(IN)    :: grid_in          ! input grid
+    type(grid),         intent(IN)    :: grid_out         ! output grid
+
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
-    type(jar), intent(IN), optional   :: meta             ! metadata associated with data (carried serialized and blindly)
+    type(jar),   intent(IN), optional :: meta             ! metadata associated with data (carried serialized and blindly)
+
     integer :: status, n
     type(model_record) :: rec
     integer(C_INT), dimension(:), pointer :: metadata
@@ -316,11 +326,12 @@ module ioserver_functions
     ! tag number             (32 bits)
     ! file (stream) number   (32 bits)
     ! grid segment dimensions(2 x32 bits)
+    ! input grid size (i,j)  (2 x 32 bits)
     ! global grid size       (32 bits)
-    ! grid_in (code)         (32 bits)
     ! grid_out (code)        (32 bits)
     ! area lower left corner (2 x 32 bits)
     ! nk, nvar               (2 x 32 bits)
+    ! array type/kind/rank   (32 bits)
     ! data pointer           (64 bits)     (will be translated to its own memory space by relay PE)
     ! cprs size , may be 0   (32 bits)
     ! meta size, may be 0    (32 bits)
@@ -349,25 +360,20 @@ module ioserver_functions
     rec % record_length = storage_size(rec) / storage_size(n)
     rec % record_length = rec % record_length + rec % csize
     rec % record_length = rec % record_length + rec % msize
-    rec % tag    = fd_seq
-    rec % stream = this % fd
-    rec % ni     = area % ni
-    rec % nj     = area % nj
-    rec % gnignj = 0
-    rec % gin    = 0
-    rec % gout   = 0
-    if (present(grid_in)) then
-    rec % gnignj = grid_in % gni * grid_in % gnj
-    rec % gin    = grid_in % id
-    end if
-    if (present(grid_out)) then
-    rec % gout   = grid_out % id
-    end if
-    rec % i0     = area % i0
-    rec % j0     = area % j0
-    rec % nk     = area % nk
-    rec % nvar   = area % nv
-    rec % data   = p
+    rec % tag           = file_tag_seq
+    rec % stream        = this % fd
+    rec % ni            = area % ni
+    rec % nj            = area % nj
+    rec % grid_size_i   = grid_in % size_i
+    rec % grid_size_j   = grid_in % size_j
+    rec % gnignj        = grid_in % size_i * grid_in % size_j
+    rec % output_grid   = grid_out % id
+    rec % i0            = area % i0
+    rec % j0            = area % j0
+    rec % nk            = area % nk
+    rec % nvar          = area % nv
+    rec % type_kind_rank = tkr
+    rec % data          = p
 !
     n = cio_out % atomic_put( rec, storage_size(rec) / storage_size(n), .false.)
     if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
@@ -400,7 +406,8 @@ subroutine ioserver_functions_demo
   type(heap) :: h
 
 #if defined(WITH_ERRORS)
-  print *, fd_seq               ! this line must not compile successfully (private reference)
+  print *, file_tag_seq         ! this line must not compile successfully (private reference)
+  print *, file_open_seq        ! this line must not compile successfully (private reference)
   print *, f % fd               ! this line must not compile successfully (private reference)
   call bump_ioserver_tag(f)
 #endif
