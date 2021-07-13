@@ -9,6 +9,8 @@ SVG_FILE="${1}"
 
 sed -i ${SVG_FILE} \
     -e 's/font-family:'"'"'Liberation Sans'"'"';/font-family:'"'"'Liberation Sans'"'"',Helvetica,Arial,sans-serif;/g' \
+    -e 's/font-family:sans-serif;/font-family:'"'"'Liberation Sans'"'"',Helvetica,Arial,sans-serif;/g' \
+    -e 's/-inkscape-font-specification:'"'"'sans-serif, Normal'"'"';/-inkscape-font-specification:'"'"'Liberation Sans, Normal'"'"','"'"'Helvetica, Normal'"'"','"'"'Arial, Normal'"'"','"'"'sans-serif, Normal'"'"';/g' \
     -e 's/-inkscape-font-specification:'"'"'Liberation Sans, Normal'"'"';/-inkscape-font-specification:'"'"'Liberation Sans, Normal'"'"','"'"'Helvetica, Normal'"'"','"'"'Arial, Normal'"'"','"'"'sans-serif, Normal'"'"';/g'
 
 
