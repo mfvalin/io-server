@@ -141,6 +141,17 @@ typedef struct{
 //!> size of a symbol table entry in arena table
 #define SymtabEntrySize64 (sizeof(symtab_entry) / sizeof(uint64_t))
 
+//!> symbol table entry (64 bit mode)
+typedef struct{
+  uint32_t lock;             //!< to lock this memory block
+  uint32_t flags;            //!< control flags
+  uint64_t data_index;       //!< index relative to start of memory arena
+  uint64_t data_size;        //!< size of data portion of block (64 bit units)
+  uint64_t data_name;        //!< block name (max 8 characters)
+} symtab_entry_64;
+//!> size of a symbol table entry in arena table
+#define SymtabEntry64Size64 (sizeof(symtab_entry_64) / sizeof(uint64_t))
+
 //!> memory arena information
 typedef struct{              //!< MUST BE CONSISTENT WITH arena_header
   uint32_t lock;             //!< to lock this memory arena
@@ -154,7 +165,56 @@ typedef struct{              //!< MUST BE CONSISTENT WITH arena_header
 //!> size of memory arena header (no symbol table)
 #define ArenaHeaderSize64 (sizeof(memory_arena) / sizeof(uint64_t))
 
-//!> description of a memory arena
+//!> memory arena information (64 bit mode)
+typedef struct{              //!< MUST BE CONSISTENT WITH arena_header
+  uint32_t lock;             //!< to lock this memory arena
+  uint32_t owner;            //!< MPI rank or PID of owner process
+  uint32_t max_entries;      //!< max number of entries in t[]
+  uint32_t n_entries;        //!< number of entries in use in t[]
+  uint64_t first_free;       //!< index of first free location in arena
+  uint64_t arena_size;       //!< size of memory arena (data + metadata) (64 bit units)
+  symtab_entry_64 t[];          //!< symbol table entries for memory blocks in this arena
+} memory_arena_64;
+//!> size of memory arena header (no symbol table)
+#define ArenaHeader64Size64 (sizeof(memory_arena_64) / sizeof(uint64_t))
+
+//!> memory block header
+typedef struct{
+  uint32_t fwd;              //!< forward index to next block (64 bit units) (0 for last block)
+  uint32_t ix;               //!< index to this block (64 bit units)
+  uint32_t nwd;              //!< length of data portion of block (in 64 bit units)
+  uint32_t sign;             //!< low marker signature
+}block_header;
+//!> size of memory block header
+#define BlockHeaderSize64 (sizeof(block_header) / sizeof(uint64_t))
+
+//!> memory block header (64 bit mode)
+typedef struct{
+  uint64_t fwd;              //!< forward index to next block (64 bit units) (0 for last block)
+  uint64_t ix;               //!< index to this block (64 bit units)
+  uint64_t nwd;              //!< length of data portion of block (in 64 bit units)
+  uint64_t sign;             //!< low marker signature
+}block_header_64;
+//!> size of memory block header
+#define BlockHeader64Size64 (sizeof(block_header_64) / sizeof(uint64_t))
+
+//!> memory block trailer
+typedef struct{
+  uint32_t sign;             //!< high marker signature
+  uint32_t bwd;              //!< backward index to start of this block (in 64 bit units)
+}block_tail;
+//!> size of memory block trailer
+#define BlockTailSize64 (sizeof(block_tail) / sizeof(uint64_t))
+
+//!> memory block trailer (64 bit mode)
+typedef struct{
+  uint64_t sign;             //!< high marker signature
+  uint64_t bwd;              //!< backward index to start of this block (in 64 bit units)
+}block_tail_64;
+//!> size of memory block trailer
+#define BlockTail64Size64 (sizeof(block_tail_64) / sizeof(uint64_t))
+
+//!> description of a memory arena (for master arena)
 typedef struct{
   uint64_t arena_name;       //!< name of segment (max 8 characters, stops at null or space)
   size_t   arena_sz;         //!< size of segment
@@ -164,19 +224,6 @@ typedef struct{
 
 //!> max number of arenas in master arena
 #define MAX_MASTER 256
-
-#if 0
-//!> header of master arena (only used to compute the master header size)
-typedef struct{
-  uint32_t lock;             //!< to lock master arena
-  int32_t  arena_id;         //!< shared memory id of master arena
-  uint64_t arena_name;       //!< name of master arena  (max 8 characters, stops at null or space)
-  size_t   arena_sz;         //!< size of master arena segment
-  master_entry me[MAX_MASTER];
-} master_header;
-//!> size of master arena header (old way)
-#define OldMasterHeaderSize64 (sizeof(master_header) / sizeof(uint64_t))
-#endif
 
 //!> master arena contains the master table, followed by a memory for its own arena
 typedef struct{
@@ -206,24 +253,6 @@ typedef struct{
   local_entry  le[MAX_MASTER];  //!< table in local memory describing memory arenas in the master arena
 }local_arena;
 
-//!> memory block header
-typedef struct{
-  uint32_t fwd;              //!< forward index to next block (64 bit units) (0 for last block)
-  uint32_t ix;               //!< index to this block (64 bit units)
-  uint32_t nwd;              //!< length of data portion of block (in 64 bit units)
-  uint32_t sign;             //!< low marker signature
-}block_header;
-//!> size of memory block header
-#define BlockHeaderSize64 (sizeof(block_header) / sizeof(uint64_t))
-
-//!> memory block trailer
-typedef struct{
-  uint32_t sign;             //!< high marker signature
-  uint32_t bwd;              //!< backward index to start of this block (in 64 bit units)
-}block_tail;
-//!> size of memory block trailer
-#define BlockTailSize64 (sizeof(block_tail) / sizeof(uint64_t))
-
 // ======= memory "fencing" macros (X86 family) =======
 
 //!> memory store fence
@@ -242,6 +271,12 @@ typedef struct{
 int32_t memory_arena_set_id(
   int32_t id                      //!< [in] owner's id (usually MPI rank) 
 );
+//! set owner's id (usually MPI rank) for memory arenas<br>
+//! me64 = memory_arena_64_set_id(id)
+//! @return -1 upon error, value > 0 otherwise
+int32_t memory_arena_64_set_id(
+  int32_t id                      //!< [in] owner's id (usually MPI rank) 
+);
 //! dump arena header and symbol table (description of contents of memory arena)<br>
 //! memory_arena_print_status(mem)
 //! @return none
@@ -249,9 +284,23 @@ void memory_arena_print_status(
   void *mem                                  //!< [in] pointer to memory arena (see  memory_arena_init)
 );
 //! dump arena header and symbol table (description of contents of memory arena)<br>
+//! memory_arena_64_print_status(mem)
+//! @return none
+void memory_arena_64_print_status(
+  void *mem                                  //!< [in] pointer to memory arena (see  memory_arena_64_init)
+);
+//! dump arena header and symbol table (description of contents of memory arena)<br>
 //! id = memory_arena_init(mem, nsym, size)
 //! @return id of current owner process (not necessarily me)
 uint32_t memory_arena_init(
+  void *mem,                   //!< [in] pointer to memory arena
+  uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
+  uint64_t size                //!< [in] size of memory area in bytes
+);
+//! dump arena header and symbol table (description of contents of memory arena)<br>
+//! id = memory_arena_64_init(mem, nsym, size)
+//! @return id of current owner process (not necessarily me64)
+uint32_t memory_arena_64_init(
   void *mem,                   //!< [in] pointer to memory arena
   uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
   uint64_t size                //!< [in] size of memory area in bytes
@@ -279,12 +328,31 @@ void *memory_block_find(
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
 );
+//! find memory block called 'name'<br>
+//! ptr = memory_block_find_64(mem, size, flags, name)
+//! @return local address of memory block (NULL if not found)
+void *memory_block_find_64(
+  void *mem,                      //!< [in]  pointer to memory arena
+  uint64_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
+  uint32_t *flags,                //!< [OUT] block flags (0 if not found)
+  unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
+);
 //! same as memory_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 //! ptr = memory_block_find_wait(mem, size, flags, name, timeout)
 //! @return local address of memory block (NULL if not found)
 void *memory_block_find_wait(
   void *mem,                      //!< [in]  pointer to memory arena (see  memory_arena_init)
   uint32_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
+  uint32_t *flags,                //!< [OUT] block flags (0 if not found)
+  unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
+  int timeout                     //!< [in]  timeout in milliseconds, -1 means practically forever
+);
+//! same as memory_block_find_64, but wait until block is created or timeout (in milliseconds) expires<br>
+//! ptr = memory_block_find_64_wait(mem, size, flags, name, timeout)
+//! @return local address of memory block (NULL if not found)
+void *memory_block_find_64_wait(
+  void *mem,                      //!< [in]  pointer to memory arena (see  memory_arena_64_init)
+  uint64_t *size,                 //!< [OUT] size of memory block in 32 bit units (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   int timeout                     //!< [in]  timeout in milliseconds, -1 means practically forever
@@ -296,6 +364,13 @@ void *memory_block_mark_init(
   void *mem,                       //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
   unsigned char *name              //!< [in]  name of block to find (characters beyond the 8th will be ignored)
 );
+//! mark memory block 'name' as initialized<br>
+//! ptr = memory_block_mark_init_64(mem, name)
+//! @return block address if found, NULL otherwise
+void *memory_block_mark_init_64(
+  void *mem,                       //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_64_init)
+  unsigned char *name              //!< [in]  name of block to find (characters beyond the 8th will be ignored)
+);
 //! create a named block in a managed 'memory arena'<br>
 //! ptr = memory_block_create(mem, size, name)
 //! @return local address of created block (NULL if error)
@@ -304,11 +379,26 @@ void *memory_block_create(
   uint32_t size,                    //!< [in]  desired size of block in 32 bit units
   unsigned char *name               //!< [in]  name of block to find (characters beyond the 8th will be ignored)
 );
+//! create a named block in a managed 'memory arena'<br>
+//! ptr = memory_block_create_64(mem, size, name)
+//! @return local address of created block (NULL if error)
+void *memory_block_create_64(
+  void *mem,                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_64_init)
+  uint64_t size,                    //!< [in]  desired size of block in 32 bit units
+  unsigned char *name               //!< [in]  name of block to find (characters beyond the 8th will be ignored)
+);
 //! allocate a shared memory segment<br>
 //! ptr = memory_allocate_shared(shmid, size)
 //! @return local address of memory block
 void *memory_allocate_shared(
   int *shmid,                 //!< [out] shared memory id of segment (set by memory_allocate_shared) (see shmget)
+  uint64_t size               //!< [in]  size of segment in 32 bit units
+);
+//! allocate a shared memory segment<br>
+//! ptr = memory_allocate_shared_64(shmid, size)
+//! @return local address of memory block
+void *memory_allocate_shared_64(
+  int *shmid,                 //!< [out] shared memory id of segment (set by memory_allocate_shared_64) (see shmget)
   uint64_t size               //!< [in]  size of segment in 32 bit units
 );
 //! create a memory arena in user memory<br>
@@ -319,10 +409,26 @@ void *memory_arena_create_from_address(
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
   uint64_t size                //!< [in]  size of segment in 32 bit units
 );
+//! create a memory arena in user memory<br>
+//! ptr = memory_arena_64_create_from_address(memaddr, nsym, size)
+//! @return  address of memory arena (NULL if error)
+void *memory_arena_64_create_from_address(
+  void *memaddr,               //!< [in]  user memory address
+  uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
+  uint64_t size                //!< [in]  size of segment in 32 bit units
+);
 //! create a memory arena in shared memory<br>
 //! ptr = memory_arena_create_shared(shmid, nsym, size)
 //! @return  local address of memory arena
 void *memory_arena_create_shared(
+  int *shmid,                  //!< [out] shared memory id of segment (see shmget)
+  uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
+  uint64_t size                //!< [in]  size of segment in bytes
+);
+//! create a memory arena in shared memory<br>
+//! ptr = memory_arena_64_create_shared(shmid, nsym, size)
+//! @return  local address of memory arena
+void *memory_arena_64_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
   uint64_t size                //!< [in]  size of segment in bytes
@@ -339,6 +445,12 @@ void *master_arena_create_shared(
 //! ptr = memory_address_from_id(shmid)
 //! @return local memory addres of shared memory segment
 void *memory_address_from_id(
+  int shmid                  //!< [in] shared memory id of segment (see shmget)
+);
+//! get memory address associated with shared memory segment id<br>
+//! ptr = memory_address_from_id_64(shmid)
+//! @return local memory addres of shared memory segment
+void *memory_address_from_id_64(
   int shmid                  //!< [in] shared memory id of segment (see shmget)
 );
 //! get memory arena address of master arena address<br>
