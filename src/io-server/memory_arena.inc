@@ -214,6 +214,21 @@ character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to fin
 type(C_PTR) :: ptr                                       !< block address if found, NULL otherwise
 end function memory_block_mark_init_64
 
+!> find the max size allowed for next block in a managed 'memory arena'<br>
+!> size = memory_block_max_size(mem)
+function memory_block_max_size(mem) result(size) BIND(C,name='memory_block_max_size')
+import :: C_INT, C_PTR
+type(C_PTR), intent(IN), value :: mem                    !< pointer to the managed 'memory arena' (see  memory_arena_init)
+integer(C_INT) :: size                                   !< size of block in 32 bit units
+end function memory_block_max_size
+
+!> size = memory_block_max_size_64(mem)
+function memory_block_max_size_64(mem) result(size) BIND(C,name='memory_block_max_size_64')
+import :: C_INT64_T, C_PTR
+type(C_PTR), intent(IN), value :: mem                    !< pointer to the managed 'memory arena' (see  memory_arena_init)
+integer(C_INT64_T) :: size                               !< size of block in 32 bit units
+end function memory_block_max_size_64
+
 !> create a named block in a managed 'memory arena'<br>
 !> ptr = memory_block_create(mem, size, name)
 function memory_block_create(mem, size, name) result(ptr) BIND(C,name='memory_block_create')

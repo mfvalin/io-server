@@ -355,10 +355,16 @@ void memory_arena_print_status(
   uint64_t *dataptr64;
   block_header *bh, *bhnext;
   block_tail *bt;
+  uint32_t owner = ma->owner & 0x3FFFFFFF ;
 
+  if((ma->owner & 0x40000000u) == 0) {
+    fprintf(stdout,"ERROR : NOT a 32 bit arena\n");
+    fflush(stdout);
+    return;
+  }
   fprintf(stdout,"\n==============================================\n");
   fprintf(stdout,"Arena Header, id = %d, address = %p\n", me - 1 , ma);  // me -1 is the id
-  fprintf(stdout,"owner       = %8.8x\n",ma->owner - 1);                 // id + 1 was stored, print id
+  fprintf(stdout,"owner       = %8.8x\n",owner - 1);                     // id + 1 was stored, print id
   fprintf(stdout,"max entries = %d\n",ma->max_entries);
   fprintf(stdout,"max size    = %d\n",ma->arena_size);
   fprintf(stdout,"entries     = %d\n",ma->n_entries);
@@ -412,10 +418,16 @@ void memory_arena_64_print_status(
   uint64_t *dataptr64;
   block_header_64 *bh, *bhnext;
   block_tail_64 *bt;
+  uint64_t owner64 = ma->owner & 0x3FFFFFFF;
 
+  if((ma->owner & 0x80000000u) == 0) {
+    fprintf(stdout,"ERROR : NOT a 64 bit arena\n");
+    fflush(stdout);
+    return;
+  }
   fprintf(stdout,"\n==============================================\n");
   fprintf(stdout,"Arena Header, id = %d, address = %p\n", me64 - 1 , ma);  // me64 -1 is the id
-  fprintf(stdout,"owner       = %8.8x\n",ma->owner - 1);                 // id + 1 was stored, print id
+  fprintf(stdout,"owner       = %8.8lx\n",owner64 - 1);                     // id + 1 was stored, print id
   fprintf(stdout,"max entries = %d\n",ma->max_entries);
   fprintf(stdout,"max size    = %ld\n",ma->arena_size);
   fprintf(stdout,"entries     = %d\n",ma->n_entries);
@@ -490,8 +502,8 @@ uint32_t memory_arena_init(
   uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
   int i;
   if(ma->owner != 0) {
-    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner);
-    return ma->owner;                           // area already initialized, return id of initializer
+    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner & 0x3FFFFFFF);
+    return (ma->owner & 0x3FFFFFFF);                           // area already initialized, return id of initializer
   }else{
 //     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
     fprintf(stderr," DEBUG: ma init %p, not owned, ", ma);
@@ -515,7 +527,7 @@ uint32_t memory_arena_init(
     sym[i].data_name  = 0;
   }
 
-  ma->owner = me;  // flag area as initialized by me
+  ma->owner = me | 0x40000000u;  // flag area as initialized by me
 
   i = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
 // fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
@@ -539,8 +551,8 @@ uint32_t memory_arena_64_init(
   uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
   int i;
   if(ma->owner != 0) {
-    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner);
-    return ma->owner;                           // area already initialized, return id of initializer
+    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner & 0x3FFFFFFF);
+    return (ma->owner & 0x3FFFFFFF);                           // area already initialized, return id of initializer
   }else{
 //     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
     fprintf(stderr," DEBUG: ma init %p, not owned, ", ma);
@@ -565,7 +577,7 @@ uint32_t memory_arena_64_init(
     sym[i].data_name  = 0;
   }
 
-  ma->owner = me64;  // flag area as initialized by me64
+  ma->owner = me64 | 0x80000000u;  // flag area as initialized by me64
 
   i = __sync_val_compare_and_swap(&(ma->lock), me64, 0); // unlock memory arena and return my id
 // fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me64);
@@ -685,6 +697,8 @@ uint32_t master_arena_init(
 static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t name64){
   uint32_t i;
 
+  if((ma->owner & 0x40000000u) == 0) return -1;  // not a 32 bit arena
+
   for(i = 0 ; i < ma->n_entries ; i++){
     if(sym[i].data_name == name64){
       return i;
@@ -696,6 +710,8 @@ static inline int32_t find_block(memory_arena *ma, symtab_entry *sym, uint64_t n
 // find entry in symbol table, return index if found, -1 otherwise
 static inline int32_t find_block_64(memory_arena_64 *ma, symtab_entry_64 *sym, uint64_t name64){
   uint32_t i;
+
+  if((ma->owner & 0x80000000u) == 0) return -1;  // not a 64 bit arena
 
   for(i = 0 ; i < ma->n_entries ; i++){
     if(sym[i].data_name == name64){
@@ -835,6 +851,9 @@ void *memory_block_find_wait(
 {
   void *p = NULL;
   useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
+  memory_arena *ma = (memory_arena *) mem;
+
+  if((ma->owner & 0x40000000u) == 0) return NULL;  // not a 32 bit arena
 
   p = memory_block_find(mem, size, flags, name);     // does the block exist ?
   while(p == NULL && timeout > 0) {                  // no, sleep a bit and retry
@@ -859,6 +878,9 @@ void *memory_block_find_64_wait(
 {
   void *p = NULL;
   useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
+  memory_arena_64 *ma = (memory_arena_64 *) mem;
+
+  if((ma->owner & 0x80000000u) == 0) return NULL;  // not a 32 bit arena
 
   p = memory_block_find_64(mem, size, flags, name);     // does the block exist ?
   while(p == NULL && timeout > 0) {                  // no, sleep a bit and retry
@@ -944,6 +966,62 @@ void *memory_block_mark_init_64(
 }
 
 //F_StArT
+// !> find the max size allowed for next block in a managed 'memory arena'<br>
+// !> size = memory_block_max_size(mem)
+// function memory_block_max_size(mem) result(size) BIND(C,name='memory_block_max_size')
+//   import :: C_INT, C_PTR
+//   type(C_PTR), intent(IN), value :: mem                    !< pointer to the managed 'memory arena' (see  memory_arena_init)
+//   integer(C_INT) :: size                                   !< size of block in 32 bit units
+// end function memory_block_max_size
+//
+// !> size = memory_block_max_size_64(mem)
+// function memory_block_max_size_64(mem) result(size) BIND(C,name='memory_block_max_size_64')
+//   import :: C_INT64_T, C_PTR
+//   type(C_PTR), intent(IN), value :: mem                    !< pointer to the managed 'memory arena' (see  memory_arena_init)
+//   integer(C_INT64_T) :: size                               !< size of block in 32 bit units
+// end function memory_block_max_size_64
+//
+//F_EnD
+//C_StArT
+//! find the max size allowed for next block in a managed 'memory arena'<br>
+//! int size
+//! size = memory_block_max_size(mem)
+//! @return maximum size for next block allocated in 32 bit units
+int memory_block_max_size(
+  void *mem                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
+    )
+//C_EnD
+{
+  memory_arena *ma = (memory_arena *) mem;
+  uint32_t head64 ;      // sum of block header and tail sizes in 64 bit units
+  uint32_t free64 ;          // free 64 bit slots left in arena
+  if((ma->owner & 0x40000000u) == 0) return -1;      // not a 32 bit arena
+  head64 = BlockHeaderSize64 + BlockTailSize64;      // sum of block header and tail sizes in 64 bit units
+  free64 = ma->arena_size - ma->first_free;          // free 64 bit slots left in arena
+  free64 = (free64 <= head64) ? 0 : free64 - head64;          // max data payload size in 64 bit units
+  return (free64 * 2);                                        // convert into 32 bit units
+}
+//C_StArT
+//! find the max size allowed for next block in a managed 'memory arena'<br>
+//! int64_t size64
+//! size64 = memory_block_max_size_64(mem)
+//! @return maximum size for next block allocated in 32 bit units
+int64_t memory_block_max_size_64(
+  void *mem                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
+    )
+//C_EnD
+{
+  memory_arena_64 *ma = (memory_arena_64 *) mem;
+  uint64_t head64 ;  // sum of block header and tail sizes in 64 bit units
+  uint64_t free64 ;          // free 64 bit slots left in arena
+  if((ma->owner & 0x80000000u) == 0) return -1;      // not a 64 bit arena
+  head64 = BlockHeader64Size64 + BlockTail64Size64;  // sum of block header and tail sizes in 64 bit units
+  free64 = ma->arena_size - ma->first_free;          // free 64 bit slots left in arena
+  free64 = (free64 <= head64) ? 0 : free64 - head64;          // max data payload size in 64 bit units
+  return (free64 * 2);                                        // convert into 32 bit units
+}
+
+//F_StArT
 // !> create a named block in a managed 'memory arena'<br>
 // !> ptr = memory_block_create(mem, size, name)
 // function memory_block_create(mem, size, name) result(ptr) BIND(C,name='memory_block_create')
@@ -986,6 +1064,8 @@ void *memory_block_create(
   block_tail *bt;
   char *dataptr;
   uint64_t name64 = block_name(name);
+
+  if((ma->owner & 0x40000000u) == 0) return NULL;           // not a 32 bit arena
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory area
 // fprintf(stderr,"memory_block_create LOCK by %d\n",me);
@@ -1048,6 +1128,8 @@ void *memory_block_create_64(
   block_tail_64 *bt;
   char *dataptr;
   uint64_t name64 = block_name_64(name);
+
+  if((ma->owner & 0x80000000u) == 0) return NULL;           // not a 64 bit arena
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me64) != 0); // lock memory area
 // fprintf(stderr,"memory_block_create_64 LOCK by %d\n",me64);
@@ -1453,11 +1535,16 @@ int main(int argc, char **argv){
   int shmid = -1;
   void *shmaddr = NULL;
   void *p = NULL;
+  void *e = NULL;
   int shmsz = 1024 * 1024 * 4;  // 4 MBytes
   uint64_t shmsz64 = shmsz;
+  uint64_t size_64;
+  uint32_t size_32;
   struct shmid_ds dummy;
   MPI_Win win ;
   MPI_Aint winsize ;
+  int mbs[5] ;
+  uint32_t flags;
 
   err = MPI_Init(&argc, &argv);
   err = MPI_Comm_rank(MPI_COMM_WORLD,&rank);
@@ -1488,23 +1575,47 @@ int main(int argc, char **argv){
     shmaddr = memory_arena_create_shared(&shmid, NSYM, shmsz64);
 #endif
     id2 = memory_arena_init(shmaddr, NSYM, shmsz64);
-    fprintf(stderr,"id2 = %d, rank = %d\n", id2, rank);
+//     fprintf(stderr,"id2 = %d, rank = %d\n", id2, rank);
+    fprintf(stderr,"id2 = %d, rank = %d, free = %d\n", id2, rank, memory_block_max_size(shmaddr));
     memory_arena_print_status(shmaddr);
-    p = memory_block_create(shmaddr, DBLK*1, "BLOCK000"); p = memory_block_mark_init(shmaddr, "BLOCK000");
-    p = memory_block_create(shmaddr, DBLK*2, "BLOCK001"); p = memory_block_mark_init(shmaddr, "BLOCK001");
-    p = memory_block_create(shmaddr, DBLK*3, "BLOCK002"); p = memory_block_mark_init(shmaddr, "BLOCK002");
-    p = memory_block_create(shmaddr, DBLK*4, "BLOCK003"); p = memory_block_mark_init(shmaddr, "BLOCK003");
-    p = memory_block_create(shmaddr, DBLK*5, "BLOCK004"); p = memory_block_mark_init(shmaddr, "BLOCK004");
+    p = memory_block_create_64(shmaddr, DBLK*1, "BLOCKXXX");
+    if(p != NULL) {
+      fprintf(stderr,"FAIL: block BLOCKXXX has been created\n");
+    }else{
+      fprintf(stderr,"PASS: block BLOCKXXX has NOT been created\n");
+    }
+    p = memory_block_create(shmaddr, DBLK*1, "BLOCK000"); p = memory_block_mark_init(shmaddr, "BLOCK000"); mbs[0] = memory_block_max_size(shmaddr);
+    p = memory_block_create(shmaddr, DBLK*2, "BLOCK001"); p = memory_block_mark_init(shmaddr, "BLOCK001"); mbs[1] = memory_block_max_size(shmaddr);
+    p = memory_block_create(shmaddr, DBLK*3, "BLOCK002"); p = memory_block_mark_init(shmaddr, "BLOCK002"); mbs[2] = memory_block_max_size(shmaddr);
+    p = memory_block_create(shmaddr, DBLK*4, "BLOCK003"); p = memory_block_mark_init(shmaddr, "BLOCK003"); mbs[3] = memory_block_max_size(shmaddr);
+    p = memory_block_create(shmaddr, DBLK*5, "BLOCK004"); p = memory_block_mark_init(shmaddr, "BLOCK004"); mbs[4] = memory_block_max_size(shmaddr);
+    p = memory_block_find(shmaddr, &size_32, &flags, "BLOCK004");
+    e = memory_block_find_64(shmaddr, &size_64, &flags, "BLOCK004");
+    if(p == NULL || e != NULL) {
+      if(p == NULL) fprintf(stderr,"FAIL : BLOCK004 not found in 32 bit heap\n");
+      if(e != NULL) fprintf(stderr,"FAIL : BLOCK004 was found in 64 bit heap\n");
+    }else{
+      fprintf(stderr,"PASS : BLOCK004 was found in 32 bit heap and not found in 64 bit heap\n");
+    }
   }
 #if ! defined(MPI_SHARED)
   err = MPI_Bcast(&shmid, 1, MPI_INTEGER, 0, MPI_COMM_WORLD);
   if(rank != 0) shmaddr = shmat(shmid, NULL, 0);
 #endif
-  fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p\n",rank+1,size,id,shmid,shmaddr);
+  err = MPI_Barrier(MPI_COMM_WORLD);
+  if(rank == 0) {
+    fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p free = %d %d %d %d %d\n",
+                   rank+1,size,id,shmid,shmaddr,mbs[0],mbs[1],mbs[2],mbs[3],mbs[4]);
+  }else{
+    fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p free = %d (%ld)\n",
+                   rank+1,size,id,shmid,shmaddr,memory_block_max_size(shmaddr),memory_block_max_size_64(shmaddr));
+  }
   err = MPI_Barrier(MPI_COMM_WORLD);
   if(rank == 1) {
 //     system("ipcs -m");
     memory_arena_print_status(shmaddr);
+    fprintf(stdout,"error EXPECTED\n");
+    memory_arena_64_print_status(shmaddr);
   }
   err = MPI_Finalize();
 }
@@ -1522,11 +1633,16 @@ int main(int argc, char **argv){
   int shmid = -1;
   void *shmaddr = NULL;
   void *p = NULL;
+  void *e = NULL;
   int shmsz = 1024 * 1024 * 4;  // 4 MBytes
   uint64_t shmsz64 = shmsz;
+  uint64_t size_64;
+  uint32_t size_32;
   struct shmid_ds dummy;
   MPI_Win win ;
   MPI_Aint winsize ;
+  int64_t mbs[5] ;
+  uint32_t flags;
 
   err = MPI_Init(&argc, &argv);
   err = MPI_Comm_rank(MPI_COMM_WORLD,&rank);
@@ -1548,23 +1664,47 @@ int main(int argc, char **argv){
     fprintf(stderr,"rank 0 creating memory arena in shared memory, id = %d\n", shmid);
 #endif
     id2 = memory_arena_64_init(shmaddr, NSYM, shmsz64);
-    fprintf(stderr,"id2 = %d, rank = %d\n", id2, rank);
+    fprintf(stderr,"id2 = %d, rank = %d, free = %ld\n", id2, rank, memory_block_max_size_64(shmaddr));
     memory_arena_64_print_status(shmaddr);
-    p = memory_block_create_64(shmaddr, DBLK*1, "BLOCK000"); p = memory_block_mark_init_64(shmaddr, "BLOCK000");
-    p = memory_block_create_64(shmaddr, DBLK*2, "BLOCK001"); p = memory_block_mark_init_64(shmaddr, "BLOCK001");
-    p = memory_block_create_64(shmaddr, DBLK*3, "BLOCK002"); p = memory_block_mark_init_64(shmaddr, "BLOCK002");
-    p = memory_block_create_64(shmaddr, DBLK*4, "BLOCK003"); p = memory_block_mark_init_64(shmaddr, "BLOCK003");
-    p = memory_block_create_64(shmaddr, DBLK*5, "BLOCK004"); p = memory_block_mark_init_64(shmaddr, "BLOCK004");
+    p = memory_block_create(shmaddr, DBLK*1, "BLOCKXXX");
+    if(p != NULL) {
+      fprintf(stderr,"FAIL: block BLOCKXXX has been created\n");
+    }else{
+      fprintf(stderr,"PASS: block BLOCKXXX has NOT been created\n");
+    }
+    p = memory_block_create_64(shmaddr, DBLK*1, "BLOCK000"); p = memory_block_mark_init_64(shmaddr, "BLOCK000"); mbs[0] = memory_block_max_size_64(shmaddr);
+    p = memory_block_create_64(shmaddr, DBLK*2, "BLOCK001"); p = memory_block_mark_init_64(shmaddr, "BLOCK001"); mbs[1] = memory_block_max_size_64(shmaddr);
+    p = memory_block_create_64(shmaddr, DBLK*3, "BLOCK002"); p = memory_block_mark_init_64(shmaddr, "BLOCK002"); mbs[2] = memory_block_max_size_64(shmaddr);
+    p = memory_block_create_64(shmaddr, DBLK*4, "BLOCK003"); p = memory_block_mark_init_64(shmaddr, "BLOCK003"); mbs[3] = memory_block_max_size_64(shmaddr);
+    p = memory_block_create_64(shmaddr, DBLK*5, "BLOCK004"); p = memory_block_mark_init_64(shmaddr, "BLOCK004"); mbs[4] = memory_block_max_size_64(shmaddr);
+    p = memory_block_find_64(shmaddr, &size_64, &flags, "BLOCK004");
+    e = memory_block_find(shmaddr, &size_32, &flags, "BLOCK004");
+    if(p == NULL || e != NULL) {
+      if(p == NULL) fprintf(stderr,"FAIL : BLOCK004 not found in 64 bit heap\n");
+      if(e != NULL) fprintf(stderr,"FAIL : BLOCK004 was found in 32 bit heap\n");
+    }else{
+      fprintf(stderr,"PASS : BLOCK004 was found in 64 bit heap and not found in 32 bit heap\n");
+    }
   }
 #if ! defined(MPI_SHARED)
   err = MPI_Bcast(&shmid, 1, MPI_INTEGER, 0, MPI_COMM_WORLD);
   if(rank != 0) shmaddr = shmat(shmid, NULL, 0);
 #endif
-  fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p\n",rank+1,size,id,shmid,shmaddr);
+  err = MPI_Barrier(MPI_COMM_WORLD);
+//   fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p\n",rank+1,size,id,shmid,shmaddr);
+  if(rank == 0) {
+    fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p free = %ld %ld %ld %ld %ld\n",
+                   rank+1,size,id,shmid,shmaddr,mbs[0],mbs[1],mbs[2],mbs[3],mbs[4]);
+  }else{
+    fprintf(stderr,"I am process %d of %d, id = %d, shmid = %d, addr = %p free = %ld (%d)\n",
+                   rank+1,size,id,shmid,shmaddr,memory_block_max_size_64(shmaddr),memory_block_max_size(shmaddr));
+  }
   err = MPI_Barrier(MPI_COMM_WORLD);
   if(rank == 1) {
 //     system("ipcs -m");
     memory_arena_64_print_status(shmaddr);
+    fprintf(stdout,"error EXPECTED\n");
+    memory_arena_print_status(shmaddr);
   }
   err = MPI_Finalize();
 }

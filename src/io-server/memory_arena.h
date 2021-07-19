@@ -371,6 +371,20 @@ void *memory_block_mark_init_64(
   void *mem,                       //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_64_init)
   unsigned char *name              //!< [in]  name of block to find (characters beyond the 8th will be ignored)
 );
+//! find the max size allowed for next block in a managed 'memory arena'<br>
+//! int size
+//! size = memory_block_max_size(mem)
+//! @return maximum size for next block allocated in 32 bit units
+int memory_block_max_size(
+  void *mem                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
+);
+//! find the max size allowed for next block in a managed 'memory arena'<br>
+//! int64_t size64
+//! size64 = memory_block_max_size_64(mem)
+//! @return maximum size for next block allocated in 32 bit units
+int64_t memory_block_max_size_64(
+  void *mem                        //!< [in]  pointer to the managed 'memory arena' (see  memory_arena_init)
+);
 //! create a named block in a managed 'memory arena'<br>
 //! ptr = memory_block_create(mem, size, name)
 //! @return local address of created block (NULL if error)
