@@ -1,6 +1,7 @@
 program test_memory_arena
   use ISO_C_BINDING
-  use memory_arena_mod
+  use shmem_arena_mod
+  use mpi_f08
   implicit none
 
 #define DBLK 20
@@ -9,7 +10,7 @@ program test_memory_arena
 #define NSYM (NBLKS+32)
 #define XTRA 10
 
-  include 'mpif.h'
+!   include 'mpif.h'
   interface
     function shmat(shmid, ptr, opt) result(p) BIND(C,name='shmat')
       import :: C_PTR, C_INT
@@ -22,15 +23,16 @@ program test_memory_arena
   end interface
 
 #if defined(MPI_SHARED)
-  integer(C_INT) :: win
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize, disp_unit
+  type(MPI_win) :: win
+  integer(KIND=MPI_ADDRESS_KIND) :: winsize
+  integer :: disp_unit
 #endif
   integer(C_INT) :: ierr, rank, size, id, id2, shmid, bsize, bflags, timeout, i, j, jerr
-  integer(KIND=MPI_ADDRESS_KIND) :: shmaddr
+  type(C_PTR) :: shmaddr
   integer(C_INT64_T) :: shmsz64
   type(C_PTR) :: memadr, p
   integer, dimension(:), pointer :: fp
-  type(memory_arena) :: m
+  type(shmem_arena) :: m
   character(len=8) :: bname
   type(C_PTR), dimension(0:NBLKS*2) :: pp
 
@@ -47,6 +49,7 @@ program test_memory_arena
 #if defined(MPI_SHARED)
   winsize = 0
   if(rank == 0) winsize = shmsz64  ! allocate size non zero only on PE 0
+  disp_unit = 1
   call MPI_Win_allocate_shared (winsize, 1, MPI_INFO_NULL, MPI_COMM_WORLD, shmaddr, win, ierr)
   call MPI_Win_shared_query (win, 0, winsize, disp_unit, shmaddr, ierr) ! get address of segment for rank 0
   memadr = transfer(shmaddr, C_NULL_PTR)
@@ -74,7 +77,7 @@ program test_memory_arena
   if(rank > 0) then
     memadr = shmat(shmid, C_NULL_PTR, 0)
     shmaddr = transfer(memadr,shmaddr)
-    print 1,"attached segment: shmid, addr =",rank, shmid, shmaddr
+    print 1,"attached segment: shmid, addr =",rank, shmid, transfer(shmaddr,shmsz64)
     memadr = m % clone(memadr)    ! create local object for memory arena using shared memory segment
   endif
 #endif
@@ -83,41 +86,41 @@ program test_memory_arena
 !     id2 = memory_arena_init(memadr, NSYM, shmsz64)    ! deliberate extra initalization
     id2 = m % init(NSYM, shmsz64)
     call m % dump()
-    print 1,"id2, rank, address =", id2, rank,transfer(memadr,shmaddr)
+    print 1,"id2, rank, address =", id2, rank,transfer(memadr,shmsz64)
     p = m%newblock(DBLK*1, "BLOCK000") ! p = memory_block_create(memadr, DBLK*1, STR("BLOCK000"))
     p = m%markblock("BLOCK000")        ! p = memory_block_mark_init(memadr, STR("BLOCK000"))
-    print 1,"BLOCK000 created at address",0, 0,transfer(p,shmaddr)
+    print 2,"BLOCK000 created at address",transfer(p,shmsz64)
     p = m%newblock(DBLK*2, "BLOCK001") ! p = memory_block_create(memadr, DBLK*2, STR("BLOCK001"))
     p = m%markblock("BLOCK001")        ! p = memory_block_mark_init(memadr, STR("BLOCK001"))
-    print 1,"BLOCK001 created at address",0, 0,transfer(p,shmaddr)
+    print 2,"BLOCK001 created at address",transfer(p,shmsz64)
     p = m%newblock(DBLK*3, "BLOCK002") ! p = memory_block_create(memadr, DBLK*3, STR("BLOCK002"))
     p = m%markblock("BLOCK002")        ! p = memory_block_mark_init(memadr, STR("BLOCK002"))
-    print 1,"BLOCK002 created at address",0, 0,transfer(p,shmaddr)
+    print 2,"BLOCK002 created at address",transfer(p,shmsz64)
     p = m%newblock(DBLK*4, "BLOCK003") ! p = memory_block_create(memadr, DBLK*4, STR("BLOCK003"))
     p = m%markblock("BLOCK003")        ! p = memory_block_mark_init(memadr, STR("BLOCK003"))
-    print 1,"BLOCK003 created at address",0, 0,transfer(p,shmaddr)
+    print 2,"BLOCK003 created at address",transfer(p,shmsz64)
     p = m%newblock(DBLK*5, "BLOCK004") ! p = memory_block_create(memadr, DBLK*5, STR("BLOCK004"))
 !     p = m%markblock("BLOCK004")        ! p = memory_block_mark_init(memadr, STR("BLOCK004"))
-    print 1,"BLOCK004 created at address",0, 0,transfer(p,shmaddr)
+    print 2,"BLOCK004 created, not marked, at address",transfer(p,shmsz64)
   endif
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
 !   shmaddr = transfer(memadr,shmaddr)
-  print *,"I am process",rank+1," of",size
+  print *,"after barrier : I am process",rank+1," of",size
   call m % dump()
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
   p = m%find(bsize, bflags, "BLOCK000", timeout) ! p = memory_block_find_wait(memadr, bsize, bflags, STR("BLOCK000"), timeout)
-  print 1,"BLOCK000 found at address",bsize, bflags,transfer(p,shmaddr)
+  print 1,"BLOCK000 size, flags, address",bsize, bflags,transfer(p,shmsz64)
   p = m%find(bsize, bflags, "BLOCK001", timeout) ! p = memory_block_find_wait(memadr, bsize, bflags, STR("BLOCK001"), timeout)
-  print 1,"BLOCK001 found at address",bsize, bflags,transfer(p,shmaddr)
+  print 1,"BLOCK001 size, flags, address",bsize, bflags,transfer(p,shmsz64)
   p = m%find(bsize, bflags, "BLOCK002", timeout) ! p = memory_block_find_wait(memadr, bsize, bflags, STR("BLOCK002"), timeout)
-  print 1,"BLOCK002 found at address",bsize, bflags,transfer(p,shmaddr)
+  print 1,"BLOCK002 size, flags, address",bsize, bflags,transfer(p,shmsz64)
   p = m%find(bsize, bflags, "BLOCK003"         ) ! p = memory_block_find(     memadr, bsize, bflags, STR("BLOCK003"))
-  print 1,"BLOCK003 found at address",bsize, bflags,transfer(p,shmaddr)
+  print 1,"BLOCK003 size, flags, address",bsize, bflags,transfer(p,shmsz64)
   p = m%find("BLOCK004"                        ) ! p = memory_block_find(     memadr, bsize, bflags, STR("BLOCK004"))
-  print 1,"BLOCK004 found at address",-1, -1,transfer(p,shmaddr)
+  print 1,"BLOCK004 size, flags, address",-1, -1,transfer(p,shmsz64)
 
   ierr = 0
   do i = rank, NBLKS, size                          ! create blocks
@@ -167,6 +170,10 @@ program test_memory_arena
   print *,'total errors =',jerr
 
 777 continue
+  write(6,*)"################################################################################"
+#if defined(MPI_SHARED)
+  call MPI_win_free(win)
+#endif
   call MPI_Finalize(ierr)
   if (jerr > 0) error stop 1
   stop
@@ -174,5 +181,6 @@ program test_memory_arena
   print *,'ERROR IN TEST'
   goto 777
 1   format(A,2I10,2X,Z16.16)
+2   format(A,2X,Z16.16)
 ! 2 format(100I4)
 end program
