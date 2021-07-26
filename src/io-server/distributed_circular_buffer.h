@@ -88,7 +88,7 @@ or
 typedef struct {
   int             target_rank; //!< With which process this instance should communicate for data transfers
   int             id;          //!< ID number assigned to the buffer instance
-  int64_t         capacity;    //!< How many elements can fit in this instance
+  uint64_t        capacity;    //!< How many bytes can fit in this instance
   void*           dummy;       //!< Force 64-bit alignment of the rest of the struct
   circular_buffer circ_buffer; //!< The buffer contained in this instance
 } circular_buffer_instance;

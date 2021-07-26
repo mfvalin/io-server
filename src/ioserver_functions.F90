@@ -14,7 +14,7 @@
 module ioserver_functions
   use ISO_C_BINDING
   use shmem_heap
-  use circular_buffer_module, only : circular_buffer
+  use circular_buffer_module
   use ioserver_constants
   implicit none
 #if ! defined(VERSION)
@@ -201,23 +201,23 @@ module ioserver_functions
 
   subroutine ioserver_start()
     implicit none
-    integer :: navail, nfree
     type(comm_rank_size), save :: model_crs !  = COMM_RANK_SIZE_NULL  (initialization is redundant)
-    integer, dimension(1) :: tag
+    integer :: tag
+    logical :: success
 
-    if(model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
+    if (model_crs % size == 0) model_crs = IOserver_get_crs(MODEL_COLOR)
 
-    ! prime outbound cio
-    tag = model_crs%rank + 10000
-    nfree = cio_out % atomic_put( tag, 1, .true.)
+    ! prime server-bound circular buffer
+    tag = model_crs % rank + 10000
+    success = cio_out % put(tag, 1_8, CB_KIND_INTEGER_4, .true.)
     write(6,*) 'INFO: token written into outbound buffer =',tag
 
-    ! check that inboind cio is primed
+    ! check that model-bound circular buffer is primed
     tag = -1
-    navail = cio_in%atomic_get(tag, 1, .true.)
-    write(6,2) 'INFO: inbound buffer PE, size, free, avail, tag, expected', &
-               model_crs%rank, cio_in%get_capacity(), cio_in%get_num_spaces(), &
-               navail, tag, model_crs%rank+20000
+    success = cio_in % get(tag, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+    write(6,2) 'INFO: inbound buffer PE, size, free, tag, expected', &
+               model_crs % rank, cio_in % get_capacity(CB_KIND_INTEGER_4), cio_in % get_num_spaces(CB_KIND_INTEGER_4), &
+               tag, model_crs % rank + 20000
 
 2   format(1X,A,10I8)
   end subroutine ioserver_start
@@ -316,7 +316,7 @@ module ioserver_functions
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
     integer(C_INT) :: tkr
     integer(C_SIZE_T) :: o
-    logical :: dimok
+    logical :: dimok, success
 
     status = -1
     if(this % fd <= 0) return
@@ -375,13 +375,14 @@ module ioserver_functions
     rec % type_kind_rank = tkr
     rec % data          = p
 !
-    n = cio_out % atomic_put( rec, storage_size(rec) / storage_size(n), .false.)
-    if(present(cprs)) n = cio_out % atomic_put( cprs, rec % csize, .false.)
+    success = .true.
+    success = cio_out % put( rec, int(storage_size(rec) / storage_size(n), kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    if(present(cprs)) success = cio_out % put(cprs, int(rec % csize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
     ! only send useful part of metadata jar (if supplied)
-    if(present(meta)) n = cio_out % atomic_put( metadata(low + 1 : high), rec % msize, .false.)
-    n = cio_out % atomic_put( rec % record_length, 1, .true.)
+    if(present(meta)) success = cio_out % put(metadata(low + 1 : high), int(rec % msize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    success = cio_out % put(rec % record_length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
 
-    if (n >= 0) status = 0
+    if (success) status = 0
   end function ioserver_write
 
   function ioserver_read(this) result(status)

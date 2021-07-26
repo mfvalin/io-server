@@ -25,6 +25,12 @@ enum
         integer, parameter :: CB_NO_COMMIT = CB_NO_COMMIT_val
         integer, parameter :: CB_COMMIT = CB_COMMIT_val
         integer, parameter :: CB_PEEK = CB_PEEK_val
+
+        integer, parameter :: CB_KIND_CHAR      = -1
+        integer, parameter :: CB_KIND_INTEGER_4 = -4
+        integer, parameter :: CB_KIND_INTEGER_8 = -8
+        integer, parameter :: CB_KIND_REAL_4    = -4
+        integer, parameter :: CB_KIND_REAL_8    = -8
 #endif
 
 #undef CB_NO_COMMIT_val

@@ -59,7 +59,7 @@ static const int DCB_ROOT_ID = 0;
 typedef struct {
   int             target_rank; //!< With which process this instance should communicate for data transfers
   int             id;          //!< ID number assigned to the buffer instance
-  int64_t         capacity;    //!< How many elements can fit in this instance
+  uint64_t        capacity;    //!< How many bytes can fit in this instance
   void*           dummy;       //!< Force 64-bit alignment of the rest of the struct
   circular_buffer circ_buffer; //!< The buffer contained in this instance
 } circular_buffer_instance;
@@ -164,30 +164,30 @@ static inline void print_instance(const circular_buffer_instance_p instance);
 
 //! @{ @name Various size calculators
 
-//! Compute the number of #data_element taken by the given number of bytes (rounded up)
-static inline data_element num_elem_from_bytes(const size_t num_bytes) {
-  return num_bytes / sizeof(data_element) + (num_bytes % sizeof(data_element) > 0);
-}
+// //! Compute the number of #data_element taken by the given number of bytes (rounded up)
+// static inline data_element num_elem_from_bytes(const size_t num_bytes) {
+//   return num_bytes / sizeof(data_element) + (num_bytes % sizeof(data_element) > 0);
+// }
 
 //! Compute the _even_ number of #data_element needed to contain the given number of bytes. This guarantees that the
 //! final amount will have a size of a multiple of 64 bits (since we use either 32- or 64-bit elements)
-static inline data_element num_elem_from_bytes_aligned64(const size_t num_bytes) {
-  const data_element num_elem_init = num_elem_from_bytes(num_bytes);
+static inline size_t num_elem_from_bytes_aligned64(const size_t num_bytes) {
+  const data_element num_elem_init = num_bytes_to_num_elem(num_bytes);
   return num_elem_init % 2 == 0 ? num_elem_init : num_elem_init + 1;
 }
 
 //! Gives the minumum _even_ number of #data_element that hold a circular_buffer (its header)
-static inline data_element circular_buffer_header_size() {
+static inline size_t circular_buffer_header_size() {
   return num_elem_from_bytes_aligned64(sizeof(circular_buffer));
 }
 
 //! Compute the _even_ number of #data_element taken by the circular_buffer_instance struct
-static inline data_element instance_header_size() {
+static inline size_t instance_header_size() {
   return num_elem_from_bytes_aligned64(sizeof(circular_buffer_instance));
 }
 
 //! Size of the common server header, in number of #data_element tokens
-static inline data_element common_server_header_size(
+static inline size_t common_server_header_size(
     const int num_buffers, //!< Number of circular buffers in the set
     const int num_channels //!< Number of communication channels (PEs) used for MPI 1-sided calls
 ) {
@@ -200,17 +200,17 @@ static inline data_element common_server_header_size(
 }
 
 //! Size of an entire circular buffer instance, based on the number of
-static inline data_element total_circular_buffer_instance_size(const int num_desired_elem) {
+static inline size_t total_circular_buffer_instance_size(const int num_desired_elem) {
   // Add 2 instead of 1 so that all instances are aligned to 64 bits
   return instance_header_size() + num_desired_elem + 2;
 }
 
 //! Compute the total size needed by the shared memory window to fit all circular buffers and metadata, in number of
 //! #data_element tokens
-static inline data_element total_window_num_elem(
-    const int num_buffers,                //!< How many circular buffers the set will hold
-    const int num_channels,               //!< How many communication channels with the IO server will be used
-    const int num_desired_elem_per_buffer //!< How many #data_element tokens we want to be able to store in each buffer
+static inline size_t total_window_num_elem(
+    const int num_buffers,                   //!< How many circular buffers the set will hold
+    const int num_channels,                  //!< How many communication channels with the IO server will be used
+    const size_t num_desired_elem_per_buffer //!< How many #data_element tokens we want to be able to store in each buffer
 ) {
   return num_buffers * (total_circular_buffer_instance_size(num_desired_elem_per_buffer)) +
          common_server_header_size(num_buffers, num_channels);
@@ -220,16 +220,16 @@ static inline data_element total_window_num_elem(
 
 //! @{ \name Circular buffer instance management
 
-static inline data_element get_available_space(
+static inline size_t get_available_space_bytes(
     const circular_buffer_instance_p buffer //!< [in] The buffer instance we want to query
 ) {
-  return CB_get_available_space(&buffer->circ_buffer);
+  return CB_get_available_space_bytes(&buffer->circ_buffer);
 }
 
-static inline data_element get_available_data(
+static inline data_element get_available_data_bytes(
     const circular_buffer_instance_p buffer //!< [in] The buffer instance we want to query
 ) {
-  return CB_get_available_data(&buffer->circ_buffer);
+  return CB_get_available_data_bytes(&buffer->circ_buffer);
 }
 
 static inline int check_instance_consistency(const circular_buffer_instance_p instance) {
@@ -238,7 +238,7 @@ static inline int check_instance_consistency(const circular_buffer_instance_p in
     return -1;
   }
 
-  if (instance->capacity != CB_get_capacity(&instance->circ_buffer))
+  if (instance->capacity != CB_get_capacity_bytes(&instance->circ_buffer))
     return -1;
 
   if (instance->target_rank < 0)
@@ -630,12 +630,12 @@ static inline int init_circular_buffer_instance(
   instance->target_rank = -1;
   instance->id          = id;
   instance->dummy       = NULL;
-  instance->capacity    = -1;
+  instance->capacity    = 0;
 
   if (CB_init(&instance->circ_buffer, num_elem) == NULL)
     return -1;
 
-  instance->capacity = CB_get_capacity(&instance->circ_buffer);
+  instance->capacity = CB_get_capacity_bytes(&instance->circ_buffer);
 
   return 0;
 }

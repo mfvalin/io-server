@@ -124,23 +124,23 @@ implicit none
 type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
 end subroutine CB_dump_data
 !> initialize a circular buffer<br>
-!> buffer = CB_init(p, nwords)
-function CB_init(p, nwords) result(buffer) bind(C,name='CB_init')
-import :: C_PTR, C_INT
+!> buffer = CB_init_bytes(p, num_bytes)
+function CB_init_bytes(p, num_bytes) result(buffer) bind(C,name='CB_init_bytes')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR), intent(IN), value :: p           !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: nwords   !< the size in elements of the circular buffer
-type(C_PTR) :: buffer                         !< pointer(C_PTR) to buffer upon success, C_NULL_PTR upon error
-end function CB_init
-!> create and initialize a circular buffer of size nwords in "shared memory"<br>
-!> p = CB_create_shared(shmid, nwords)
-function CB_create_shared(shmid, nwords) result(p) BIND(C,name='CB_create_shared')
-import :: C_PTR, C_INT
+type(C_PTR),       intent(IN), value :: p           !< pointer to a circular buffer
+integer(C_SIZE_T), intent(IN), value :: num_bytes   !< the size in bytes of the circular buffer
+type(C_PTR) :: buffer                               !< pointer(C_PTR) to buffer upon success, C_NULL_PTR upon error
+end function CB_init_bytes
+!> create and initialize a circular buffer of size num_bytes in "shared memory"<br>
+!> p = CB_create_shared_bytes(shmid, num_bytes)
+function CB_create_shared_bytes(shmid, num_bytes) result(p) BIND(C,name='CB_create_shared_bytes')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-integer(C_INT), intent(OUT) :: shmid          !< identifier of shared memory area (see man shmget) (-1 upon error)
-integer(C_INT), intent(IN), value :: nwords   !< size in 32 bit elements of the circular buffer
-type(C_PTR) :: p                              !< pointer to created circular buffer
-end function CB_create_shared
+integer(C_INT), intent(OUT)       :: shmid       !< identifier of shared memory area (see man shmget) (-1 upon error)
+integer(C_SIZE_T), intent(IN), value :: num_bytes   !< size in number of bytes of the circular buffer
+type(C_PTR) :: p                                 !< pointer to created circular buffer
+end function CB_create_shared_bytes
 !> detach "shared memory segment" used by circular buffer <br>
 !> status = CB_detach_shared(p)
 function CB_detach_shared(p) result(status) BIND(C,name='CB_detach_shared')
@@ -149,83 +149,81 @@ implicit none
 type(C_PTR), intent(IN), value :: p    !< pointer to a circular buffer
 integer(C_INT) :: status               !< 0 upon success, -1 upon error
 end function CB_detach_shared
-!> create and initialize a circular buffer of size nwords in process memory<br>
-!> p = CB_create(nwords)
-function CB_create(nwords) result(p) BIND(C,name='CB_create')
-import :: C_PTR, C_INT
+!> create and initialize a circular buffer of size num_bytes in process memory<br>
+!> p = CB_create_bytes(num_bytes)
+function CB_create_bytes(num_bytes) result(p) BIND(C,name='CB_create_bytes')
+import :: C_PTR, C_SIZE_T
 implicit none
-integer(C_INT), intent(IN), value :: nwords   !< size in 32 bit elements of the circular buffer
-type(C_PTR) :: p                              !< pointer to created circular buffer
-end function CB_create
-!> create and initialize a circular buffer of size nwords from user supplied memory<br>
-!> p = CB_from_pointer(ptr, nwords)
-function CB_from_pointer(ptr, nwords) result(p) BIND(C,name='CB_from_pointer')
-import :: C_PTR, C_INT
+integer(C_SIZE_T), intent(IN), value :: num_bytes  !< size in bytes of the circular buffer
+type(C_PTR) :: p                                   !< pointer to created circular buffer
+end function CB_create_bytes
+!> create and initialize a circular buffer of size num_bytes from user supplied memory<br>
+!> p = CB_from_pointer_bytes(ptr, num_bytes)
+function CB_from_pointer_bytes(ptr, num_bytes) result(p) BIND(C,name='CB_from_pointer_bytes')
+import :: C_PTR, C_SIZE_T
 implicit none
-type(C_PTR), intent(IN), value :: ptr         !< pointer to user supplied memory
-integer(C_INT), intent(IN), value :: nwords   !< size in 32 bit elements of the circular buffer
-type(C_PTR) :: p                              !< pointer to created circular buffer
-end function CB_from_pointer
-function CB_get_available_space(buffer) result(num_elements) BIND(C, name = 'CB_get_available_space')
-import C_PTR, C_INT
-implicit none
-type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
-integer(C_INT) :: num_elements           !< How many slots are free
-end function CB_get_available_space
-function CB_get_available_data(buffer) result(num_elements) BIND(C, name = 'CB_get_available_data')
-import C_PTR, C_INT
+type(C_PTR),       intent(IN), value :: ptr        !< pointer to user supplied memory
+integer(C_SIZE_T), intent(IN), value :: num_bytes  !< size in bytes of the circular buffer
+type(C_PTR) :: p                                   !< pointer to created circular buffer
+end function CB_from_pointer_bytes
+function CB_get_available_space_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_space_bytes')
+import C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
-integer(C_INT) :: num_elements           !< How many elements are stored in the buffer
-end function CB_get_available_data
-function CB_get_capacity(buffer) result(num_elements) BIND(C, name = 'CB_get_capacity')
-import C_PTR, C_INT
+integer(C_SIZE_T) :: num_bytes           !< How many slots are free
+end function CB_get_available_space_bytes
+function CB_get_available_data_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_data_bytes')
+import C_PTR, C_SIZE_T
+implicit none
+type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
+integer(C_SIZE_T) :: num_bytes           !< How many bytes are stored in the buffer
+end function CB_get_available_data_bytes
+function CB_get_capacity_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_capacity_bytes')
+import C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(in), value :: buffer !< Pointer to the circular buffer we want to query
-integer(C_INT) :: num_elements           !< How many total elements can potentially be store in the buffer
-end function CB_get_capacity
-!> wait until at least na empty slots are available for inserting data<br>
-!> n = CB_wait_space_available(p, na)
-function CB_wait_space_available(p, na) result(n) BIND(C,name='CB_wait_space_available')
-import :: C_PTR, C_INT
+integer(C_SIZE_T) :: num_bytes           !< How many total elements can potentially be store in the buffer
+end function CB_get_capacity_bytes
+!> wait until at least num_bytes_wanted empty slots are available for inserting data<br>
+!> n = CB_wait_space_available_bytes(p, num_bytes_wanted)
+function CB_wait_space_available_bytes(p, num_bytes_wanted) result(n) BIND(C,name='CB_wait_space_available_bytes')
+import :: C_PTR, C_SIZE_T, C_INT64_t
 implicit none
-type(C_PTR), intent(IN), value :: p          !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: na      !< needed number of available slots
-integer(C_INT) :: n                          !< actual number of empty slots available, -1 on error
-end function CB_wait_space_available
-!> wait until at least n data tokens are available for extracting data<br>
-!> p = CB_wait_data_available(p, na)
-function CB_wait_data_available(p, na) result(n) BIND(C,name='CB_wait_data_available')
-import :: C_PTR, C_INT
+type(C_PTR),       intent(IN), value :: p                 !< pointer to a circular buffer
+integer(C_SIZE_T), intent(IN), value :: num_bytes_wanted  !< needed number of available bytes
+integer(C_INT64_T) :: n                                   !< actual number of available bytes, -1 on error
+end function CB_wait_space_available_bytes
+!> wait until at least num_bytes_wanted are available for extracting data<br>
+!> p = CB_wait_data_available_bytes(p, num_bytes_wanted)
+function CB_wait_data_available_bytes(p, num_bytes_wanted) result(n) BIND(C,name='CB_wait_data_available_bytes')
+import :: C_PTR, C_SIZE_T, C_INT64_T
 implicit none
-type(C_PTR), intent(IN), value :: p            !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: na        !< needed number of available tokens
-integer(C_INT) :: n                            !< actual number of data tokens available, -1 if error
-end function CB_wait_data_available
-!> wait until ndst tokens are available then extract them into dst<br>
-!> n = CB_atomic_get(p, dst, ndst, operation)
-function CB_atomic_get(p, dst, ndst, operation) result(n) BIND(C,name='CB_atomic_get')
-import :: C_PTR, C_INT, DATA_ELEMENT
+type(C_PTR),       intent(IN), value :: p                !< pointer to a circular buffer
+integer(C_SIZE_T), intent(IN), value :: num_bytes_wanted !< needed number of available bytes
+integer(C_INT64_T) :: n                                  !< actual number of bytes available, -1 if error
+end function CB_wait_data_available_bytes
+!> wait until num_bytes are available then extract them into dst<br>
+!> CB_get(p, dest, num_bytes, operation)
+function CB_get(p, dest, num_bytes, operation) result(status) BIND(C, name='CB_get')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR), intent(IN), value :: p                !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: ndst          !< number of tokens to extract
-! integer(DATA_ELEMENT), dimension(*), intent(OUT) :: dst
-type(C_PTR), intent(IN), value :: dst              !< destination array to receive extracted data
-integer(C_INT), intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
-integer(C_INT) :: n                                !< number of data tokens available after this operation, -1 if error
-end function CB_atomic_get
-!> wait until nsrc free slots are available then insert from src array<br>
-!> n = CB_atomic_put(p, src, nsrc, commit_transaction)
-function CB_atomic_put(p, src, nsrc, commit_transaction) result(n) BIND(C,name='CB_atomic_put')
-import :: C_PTR, C_INT, DATA_ELEMENT
+type(C_PTR),       intent(IN), value :: p             !< pointer to a circular buffer
+integer(C_SIZE_T), intent(IN), value :: num_bytes     !< number of bytes to extract
+type(C_PTR),       intent(IN), value :: dest          !< destination array to receive extracted data
+integer(C_INT),    intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
+integer(C_INT) :: status                              !< number 0 if success, -1 if error
+end function CB_get
+!> wait until num_bytes are available then insert from src array<br>
+!> n = CB_put(p, src, num_bytes, commit_transaction)
+function CB_put(p, src, num_bytes, commit_transaction) result(status) BIND(C,name='CB_put')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR), intent(IN), value :: p                     !< pointer to a circular buffer
-integer(C_INT), intent(IN), value :: nsrc               !< number of tokens to insert from src
-! integer(DATA_ELEMENT), dimension(*), intent(IN) :: src 
-type(C_PTR), intent(IN), value :: src  !< source array for data insertion
-integer(C_INT), intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
-integer(C_INT) :: n                                     !< number of free slots available after this operation
-end function CB_atomic_put
+type(C_PTR),       intent(IN), value :: p                  !< pointer to a circular buffer
+integer(C_SIZE_T), intent(IN), value :: num_bytes          !< number of bytes to insert from src
+type(C_PTR),       intent(IN), value :: src                !< source array for data insertion
+integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+integer(C_INT) :: status                                   !< 0 if success, -1 if failure
+end function CB_put
 function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
 import C_INT, C_PTR
 implicit none
