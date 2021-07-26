@@ -1,16 +1,26 @@
 variables:
-  build_dir: /home/vincent/tmp/io-server-ci
+  build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_COMMIT_REF_NAME}/${CI_PIPELINE_ID}
   install_dir: ${build_dir}/install
   GIT_SUBMODULE_STRATEGY: recursive
+
+before_script:
+  - export ORDENV_SITE_PROFILE=20191220
+  - export ORDENV_COMM_PROFILE=eccc/20200409
+  - export ORDENV_GROUP_PROFILE=eccc/cmc/1.9.3
+  - . /fs/ssm/main/env/ordenv-boot-20200204.sh
+
+  - . ssmuse-sh -x main/opt/cmake/cmake-3.16.4
 
 stages:
   - configure
   - build
-  - test
-  - install
+  # - test
+  # - install
 
 configure_job:
   stage: configure
+  tags:
+    - just_testing
   script:
     - mkdir -p ${build_dir}
     - cd ${build_dir}
@@ -19,13 +29,15 @@ configure_job:
 
 build_job:
   stage: build
+  tags:
+    - just_testing
   script:
     - cd ${build_dir}
     - make -j8
 
-test_job:
-  stage: test
-  script:
-    - cd ${build_dir}
-    - make test
+# test_job:
+#   stage: test
+#   script:
+#     - cd ${build_dir}
+#     - make test
 
