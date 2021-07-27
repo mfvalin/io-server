@@ -19,8 +19,6 @@ stages:
 
 configure_job:
   stage: configure
-  tags:
-    - just_testing
   script:
     - mkdir -p ${build_dir}
     - cd ${build_dir}
@@ -29,8 +27,6 @@ configure_job:
 
 build_job:
   stage: build
-  tags:
-    - just_testing
   script:
     - cd ${build_dir}
     - make -j8
