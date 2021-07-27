@@ -56,12 +56,12 @@ build_job_login:
   script:
     - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
     - cd ${build_dir}
-    - make -j8
+    - make
 
 test_job_single_node_batch:
   stage: test_batch
   variables:
-    ORD_SOUMET_MACH: ${BIG_MACHINE_NAME_1}
+    ORD_SOUMET_MACH: "${BIG_MACHINE_NAME_1}"
     ORD_SOUMET_C: "40"
     ORD_SOUMET_W: "30"
   script:
