@@ -61,16 +61,22 @@ build_job_login:
 test_job_single_node_batch:
   stage: test_batch
   variables:
-    ORD_SOUMET_MACH: ${TEST_VAR_RUNNER}
-    ORD_SOUMET_C: "40"
+    NUM_CPUS: 40
+    ORD_SOUMET_MACH: ${BIG_MACHINE_1}
+    ORD_SOUMET_C: "${NUM_CPUS}"
     ORD_SOUMET_W: "30"
   script:
     - cd ${build_dir}
-    - hostname
-    - echo "TEST_VAR_RUNNER = ${TEST_VAR_RUNNER}"
-    - declare -x | sort
     - ${build_dir}/tests/io_server_circular_buffer_single_thread
-    - aprun -n 4 ${build_dir}/tests/io_server_circular_buffer
+    - ${build_dir}/tests/io_server_cb_unaligned_input
+    - aprun -n 4           ${build_dir}/tests/io_server_circular_buffer
+    - aprun -n 4           ${build_dir}/tests/io_server_circular_buffer_fill
+    - aprun -n ${NUM_CPUS} ${build_dir}/tests/io_server_distributed_circular_buffer
+    - aprun -n 4           ${build_dir}/tests/io_server_test_memory_arena
+    - aprun -n 16          ${build_dir}/tests/io_server_cb_plus_dcb                 1 2 2 4 0
+    - aprun -n 3           ${build_dir}/tests/io_server_dcb_edge_case_1
+    - aprun -n 3           ${build_dir}/tests/io_server_dcb_unaligned_input
+    - aprun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write                 1 2 2
 
 # test_job:
 #   stage: test
