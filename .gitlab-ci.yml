@@ -61,7 +61,7 @@ build_job_login:
 test_job_single_node_batch:
   stage: test_batch
   variables:
-    NUM_CPUS: 40
+    NUM_CPUS: "40"
     ORD_SOUMET_MACH: ${BIG_MACHINE_1}
     ORD_SOUMET_C: "${NUM_CPUS}"
     ORD_SOUMET_W: "30"
