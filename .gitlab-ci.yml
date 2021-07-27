@@ -20,7 +20,7 @@ stages:
 configure_job:
   stage: configure
   script:
-    - mkdir -p ${build_dir}
+    - mkdir -pv ${build_dir}
     - cd ${build_dir}
     - cmake ${CI_PROJECT_DIR}
 
