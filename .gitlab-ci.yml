@@ -63,6 +63,7 @@ test_job_batch:
   stage: test_batch
   variables:
     ORD_SOUMET_MACH: test_machine_name
+    ORD_SOUMET_C: "40"
   script:
     - cd ${build_dir}
     - hostname
