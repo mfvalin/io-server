@@ -60,8 +60,10 @@ build_job_login:
 
 test_job_single_node_batch:
   stage: test_batch
+  environment:
+    SOME_VAR: "${BIG_MACHINE_NAME_1}"
   variables:
-    ORD_SOUMET_MACH: "${BIG_MACHINE_NAME_1}"
+    ORD_SOUMET_MACH: ${SOME_VAR}
     ORD_SOUMET_C: "40"
     ORD_SOUMET_W: "30"
   script:
