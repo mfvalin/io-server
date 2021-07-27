@@ -5,7 +5,14 @@ variables:
   ORD_SOUMET_SHELL: /bin/bash
 
 before_script:
-  - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
+  - export ORDENV_SITE_PROFILE=20210129
+  - export ORDENV_COMM_PROFILE=eccc/20210309
+  - export ORDENV_GROUP_PROFILE=eccc/cmc/1.9.5
+  - . /fs/ssm/main/env/ordenv-boot-20201118.sh
+
+  - export EC_ATOMIC_PROFILE_VERSION=1.13.0
+
+  - export CLICOLOR_FORCE=1
 
 stages:
   - configure
@@ -16,6 +23,7 @@ stages:
 configure_job:
   stage: configure
   script:
+    - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
     - mkdir -pv ${build_dir}
     - cd ${build_dir}
     - cmake ${CI_PROJECT_DIR}
@@ -23,8 +31,29 @@ configure_job:
 build_job:
   stage: build
   script:
+    - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
     - cd ${build_dir}
     - make -j8
+
+configure_job_login:
+  stage: configure
+  tags:
+    - login_node
+  script:
+    - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
+    - mkdir -pv ${build_dir}
+    - cd ${build_dir}
+    - cmake ${CI_PROJECT_DIR}
+
+build_job_login:
+  stage: build
+  tags:
+    - login_node
+  script:
+    - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
+    - cd ${build_dir}
+    - make -j8
+
 
 # test_job:
 #   stage: test
