@@ -15,28 +15,28 @@ before_script:
   - export CLICOLOR_FORCE=1
 
 stages:
-  - configure
-  - build
+  # - configure
+  # - build
 
   - configure_login
   - build_login
   # - test
   # - install
 
-configure_job:
-  stage: configure
-  script:
-    - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
-    - mkdir -pv ${build_dir}
-    - cd ${build_dir}
-    - cmake ${CI_PROJECT_DIR}
+# configure_job:
+#   stage: configure
+#   script:
+#     - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
+#     - mkdir -pv ${build_dir}
+#     - cd ${build_dir}
+#     - cmake ${CI_PROJECT_DIR}
 
-build_job:
-  stage: build
-  script:
-    - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
-    - cd ${build_dir}
-    - make -j8
+# build_job:
+#   stage: build
+#   script:
+#     - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
+#     - cd ${build_dir}
+#     - make -j8
 
 configure_job_login:
   stage: configure_login
