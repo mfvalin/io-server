@@ -61,6 +61,7 @@ build_job_login:
 test_job_single_node_batch:
   stage: test_batch
   environment:
+    name: joijioj
     SOME_VAR: "${BIG_MACHINE_NAME_1}"
   variables:
     ORD_SOUMET_MACH: ${SOME_VAR}
