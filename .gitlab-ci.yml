@@ -5,12 +5,7 @@ variables:
   ORD_SOUMET_SHELL: /bin/bash
 
 before_script:
-  - export ORDENV_SITE_PROFILE=20191220
-  - export ORDENV_COMM_PROFILE=eccc/20200409
-  - export ORDENV_GROUP_PROFILE=eccc/cmc/1.9.3
-  - . /fs/ssm/main/env/ordenv-boot-20200204.sh
-
-  - . ssmuse-sh -x main/opt/cmake/cmake-3.16.4
+  - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
 
 stages:
   - configure
