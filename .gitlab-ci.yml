@@ -58,18 +58,18 @@ build_job_login:
     - cd ${build_dir}
     - make -j8
 
-
-test_job_batch:
+test_job_single_node_batch:
   stage: test_batch
   variables:
-    ORD_SOUMET_MACH: banting
+    ORD_SOUMET_MACH: ${BIG_MACHINE_NAME_1}
     ORD_SOUMET_C: "40"
     ORD_SOUMET_W: "30"
   script:
     - cd ${build_dir}
     - hostname
     - declare -x | sort
-
+    - ${build_dir}/tests/io_server_circular_buffer_single_thread
+    - aprun -n 4 ${build_dir}/tests/io_server_circular_buffer
 
 # test_job:
 #   stage: test
