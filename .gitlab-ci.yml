@@ -17,6 +17,9 @@ before_script:
 stages:
   - configure
   - build
+
+  - configure_login
+  - build_login
   # - test
   # - install
 
@@ -36,7 +39,7 @@ build_job:
     - make -j8
 
 configure_job_login:
-  stage: configure
+  stage: configure_login
   tags:
     - login_node
   script:
@@ -46,7 +49,7 @@ configure_job_login:
     - cmake ${CI_PROJECT_DIR}
 
 build_job_login:
-  stage: build
+  stage: build_login
   tags:
     - login_node
   script:
