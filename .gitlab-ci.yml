@@ -2,6 +2,7 @@ variables:
   build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}
   install_dir: ${build_dir}/install
   GIT_SUBMODULE_STRATEGY: recursive
+  ORD_SOUMET_SHELL: /bin/bash
 
 before_script:
   - export ORDENV_SITE_PROFILE=20191220
