@@ -171,7 +171,7 @@ static const size_t MIN_CIRC_BUFFER_SIZE = 128 * sizeof(data_element); //!> Mini
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
   uint64_t version; //!< version marker
-  uint64_t first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  uint64_t first;   //!< should be 0, because the feature has not been implemented yet
   uint64_t in[2];   //!< Start inserting data at data[in]
   uint64_t out[2];  //!< Start reading data at data[out]
   uint64_t limit;   //!< size of data buffer (last available index + 1)
@@ -184,12 +184,14 @@ typedef fiol_management* fiol_management_p;
 typedef struct {
   uint64_t num_reads;
   uint64_t num_read_elems;
+  uint64_t num_fractional_reads;
   double   total_read_wait_time_ms;
   double   total_read_time_ms;
   uint64_t max_fill;
 
   uint64_t num_writes;
   uint64_t num_write_elems;
+  uint64_t num_fractional_writes;
   double   total_write_wait_time_ms;
   double   total_write_time_ms;
 } cb_stats;
@@ -268,7 +270,7 @@ void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to pr
 //! @return pointer to buffer upon success, NULL upon error
 circular_buffer_p CB_init_bytes(
     circular_buffer_p p,        //!< [in]  pointer to a circular buffer
-    size_t            num_bytes //!< [in]  size in bytes of the circular buffer (#data_element)
+    size_t            num_bytes //!< [in]  size in bytes of the circular buffer
 );
 //! create and initialize a circular buffer of size num_bytes in "shared memory",
 //! shmid will be set to the shared memory id of the "shared memory segment upon success, -1 otherwise

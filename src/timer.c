@@ -134,7 +134,7 @@ static inline double IO_time_ms(const io_timer_t* timer) {
 //    real(C_DOUBLE) :: time
 //  end function IO_time_ms
 //F_EnD
-double IO_time_ms_f(const io_timer_t* timer) { IO_time_ms(timer); }
+double IO_time_ms_f(const io_timer_t* timer) { return IO_time_ms(timer); }
 
 //C_StArT
 static inline double IO_time_since_start(const io_timer_t* timer) {

@@ -23,9 +23,6 @@
 !> \brief shared memory heap Fortran module (object oriented)
 module shmem_heap
   use ISO_C_BINDING
-#if ! defined(DATA_ELEMENT_64)
-  use cb_common_module, only : DATA_ELEMENT
-#endif
   implicit none
 
   !> \brief maximum number of allowed dimensions for an array in this heap type
@@ -41,7 +38,7 @@ module shmem_heap
 #if defined(DATA_ELEMENT_64)
   integer, parameter :: HEAP_ELEMENT =  C_INT64_T     !<  type of a heap element (must be consistent with C code)
 #else
-  integer, parameter :: HEAP_ELEMENT =  DATA_ELEMENT  !<  type of a heap element (must be consistent with C code)
+  integer, parameter :: HEAP_ELEMENT =  C_INT  !<  type of a heap element (must be consistent with C code)
 #endif
 !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata

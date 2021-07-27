@@ -80,4 +80,5 @@ target_compile_options(
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>
 )
+
 install(TARGETS ${PROJECT_NAME})

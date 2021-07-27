@@ -77,21 +77,6 @@ contains
     end if
   end function is_valid
 
-  !> \brief Compute the size in bytes of a given type ID
-  !> \return The size in bytes of the given type ID. -1 if the ID is invalid
-  function get_type_size(type_id) result(type_size)
-    implicit none
-    integer, intent(IN) :: type_id
-    integer :: type_size
-
-    if (type_id < 0) then
-      type_size = -type_id
-    else
-      print *, 'ERROR: Trying to query CB space with an invalid element type_id', type_id
-      type_size = -1
-    endif
-  end function get_type_size
-
   subroutine print_header(this)
     implicit none
     class(circular_buffer), intent(INOUT) :: this
@@ -220,12 +205,12 @@ contains
     integer        :: type_size
     integer(C_INT) :: status
 
+    success   = .false.
     temp      = C_LOC(dest)
     type_size = get_type_size(type_id)
-    status    = CB_get(this % p, temp, num_elements * type_size, CB_PEEK)
 
-    success = .true.
-    if (status < 0) success = .false.
+    status = CB_get(this % p, temp, num_elements * type_size, CB_PEEK)
+    if (status == 0) success = .true.
   end function peek
 
   !> \brief Wait until num_elements (of type type_id) are available then extract them into dest
@@ -246,15 +231,14 @@ contains
     integer(C_INT) :: status
     type(C_PTR)    :: temp
 
+    success   = .false.
+    temp      = C_LOC(dest)
+    type_size = get_type_size(type_id)
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
-    temp      = C_LOC(dest)
-    type_size = get_type_size(type_id)
-    status    = CB_get(this % p, temp, num_elements * type_size, operation)
-
-    success = .true.
-    if (status < 0) success = .false.
+    status = CB_get(this % p, temp, num_elements * type_size, operation)
+    if (status == 0) success = .true.
   end function get
 
   !> \brief Wait until num_elements of type type_id are available, then insert from src array
@@ -275,15 +259,14 @@ contains
     integer(C_INT) :: status
     type(C_PTR)    :: temp
 
+    success   = .false.
+    temp      = C_LOC(src)
+    type_size = get_type_size(type_id)
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
-    temp      = C_LOC(src)
-    type_size = get_type_size(type_id)
-    status    = CB_put(this % p, temp, num_elements * type_size, operation)
-
-    success = .true.
-    if (status < 0) success = .false.
+    status = CB_put(this % p, temp, num_elements * type_size, operation)
+    if (status == 0) success = .true.
   end function put
 
   function delete(this) result(status)

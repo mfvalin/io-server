@@ -42,16 +42,16 @@ import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_sync_window
-function DCB_create(f_communicator, f_server_communicator, num_producers, num_channels, num_elements) result(p) BIND(C, name = 'DCB_create_f')
-import :: C_PTR, C_INT
+function DCB_create_bytes(f_communicator, f_server_communicator, num_producers, num_channels, num_bytes) result(p) BIND(C, name = 'DCB_create_bytes_f')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-integer(C_INT), intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
-integer(C_INT), intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
-integer(C_INT), intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
-integer(C_INT), intent(IN), value :: num_channels   !< Number of channels (PEs used for communication only)
-integer(C_INT), intent(IN), value :: num_elements   !< Number of desired #data_element in the circular buffer
-type(C_PTR) :: p                                    !< Pointer to created distributed circular buffer
-end function DCB_create
+integer(C_INT),    intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
+integer(C_INT),    intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
+integer(C_INT),    intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
+integer(C_INT),    intent(IN), value :: num_channels   !< Number of channels (PEs used for communication only)
+integer(C_SIZE_T), intent(IN), value :: num_bytes      !< Number of desired bytes in the circular buffer
+type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer
+end function DCB_create_bytes
 subroutine DCB_print(buffer, dump_data) BIND(C, name = 'DCB_print')
 import :: C_PTR, C_INT
 implicit none
@@ -63,20 +63,20 @@ import :: C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: buffer !< Buffer to delete
 end subroutine DCB_delete
-function DCB_get_num_elements(buffer, buffer_id) result(num_elements) BIND(C, name = 'DCB_get_num_elements')
-import :: C_PTR, C_INT
+function DCB_get_available_data_bytes(buffer, buffer_id) result(num_bytes) BIND(C, name = 'DCB_get_available_data_bytes')
+import :: C_PTR, C_INT, C_INT64_T
 implicit none
 type(C_PTR), intent(in), value    :: buffer
 integer(C_INT), intent(in), value :: buffer_id
-integer(C_INT) :: num_elements
-end function DCB_get_num_elements
-function DCB_get_num_spaces(buffer, update_from_remote) result(num_spaces) BIND(C, name = 'DCB_get_num_spaces')
-import :: C_PTR, C_INT
+integer(C_INT64_T) :: num_bytes
+end function DCB_get_available_data_bytes
+function DCB_get_available_space_bytes(buffer, update_from_remote) result(num_spaces) BIND(C, name = 'DCB_get_available_space_bytes')
+import :: C_PTR, C_INT, C_INT64_T
 implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT), intent(in), value :: update_from_remote
-integer(C_INT) :: num_spaces
-end function DCB_get_num_spaces
+integer(C_INT64_T) :: num_spaces
+end function DCB_get_available_space_bytes
 function DCB_get_producer_id(buffer) result(producer_id) BIND(C, name = 'DCB_get_producer_id')
 import :: C_PTR, C_INT
 implicit none
@@ -107,19 +107,19 @@ implicit none
 type(C_PTR), intent(in), value :: buffer
 integer(C_INT) :: num_consumers
 end function DCB_get_num_consumers
-function DCB_get_capacity_local(buffer) result(capacity) BIND(C, name = 'DCB_get_capacity_local')
-import :: C_PTR, C_INT
+function DCB_get_capacity_local_bytes(buffer) result(capacity) BIND(C, name = 'DCB_get_capacity_local_bytes')
+import :: C_PTR, C_INT64_T
 implicit none
 type(C_PTR), intent(in), value :: buffer
-integer(C_INT) :: capacity
-end function DCB_get_capacity_local
-function DCB_get_capacity_server(buffer, buffer_id) result(capacity) BIND(C, name = 'DCB_get_capacity_server')
-import :: C_PTR, C_INT
+integer(C_INT64_T) :: capacity
+end function DCB_get_capacity_local_bytes
+function DCB_get_capacity_server_bytes(buffer, buffer_id) result(capacity) BIND(C, name = 'DCB_get_capacity_server_bytes')
+import :: C_PTR, C_INT, C_INT64_T
 implicit none
 type(C_PTR),    intent(in), value :: buffer
 integer(C_INT), intent(in), value :: buffer_id
-integer(C_INT) :: capacity
-end function DCB_get_capacity_server
+integer(C_INT64_T) :: capacity
+end function DCB_get_capacity_server_bytes
 function DCB_channel_start_listening(buffer) result(return_value) BIND(C, name = 'DCB_channel_start_listening')
 import :: C_PTR, C_INT
 implicit none
@@ -136,25 +136,25 @@ import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_server_barrier
-function DCB_put(buffer, src_data, num_elements, operation) result(num_available) BIND(C, name = 'DCB_put')
-import :: C_PTR, C_INT
+function DCB_put_bytes(buffer, src_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_put_bytes')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR),    intent(in), value :: buffer       !< Buffer where we want to insert data
-type(C_PTR),    intent(in), value :: src_data     !< Data to insert
-integer(C_INT), intent(in), value :: num_elements !< How many data elements we want to insert
-integer(C_INT), intent(in), value :: operation    !< Whether to commit the transaction or wait
-integer(C_INT) :: num_available !< How many element can still fit in the buffer after this call
-end function DCB_put
-function DCB_get(buffer, buffer_id, dest_data, num_elements, operation) result(num_available) BIND(C, name = 'DCB_get')
-import :: C_PTR, C_INT
+type(C_PTR),       intent(in), value :: buffer    !< Buffer where we want to insert data
+type(C_PTR),       intent(in), value :: src_data  !< Data to insert
+integer(C_SIZE_T), intent(in), value :: num_bytes !< How many data elements we want to insert
+integer(C_INT),    intent(in), value :: operation !< Whether to commit the transaction or wait
+integer(C_INT) :: status !< 0 if success, -1 if failure
+end function DCB_put_bytes
+function DCB_get_bytes(buffer, buffer_id, dest_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_get_bytes')
+import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR),    intent(in), value :: buffer       !< DCB from which we want to read
-integer(C_INT), intent(in), value :: buffer_id    !< Which buffer in the DCB we want to read from
-type(C_PTR),    intent(in), value :: dest_data    !< Where to put the data from the buffer
-integer(C_INT), intent(in), value :: num_elements !< How many data elements to read
-integer(C_INT), intent(in), value :: operation    !< Whether to actually extract, read or just peek at the data
-integer(C_INT) :: num_available
-end function DCB_get
+type(C_PTR),       intent(in), value :: buffer    !< DCB from which we want to read
+integer(C_INT),    intent(in), value :: buffer_id !< Which buffer in the DCB we want to read from
+type(C_PTR),       intent(in), value :: dest_data !< Where to put the data from the buffer
+integer(C_SIZE_T), intent(in), value :: num_bytes !< How many bytes to read
+integer(C_INT),    intent(in), value :: operation !< Whether to actually extract, read or just peek at the data
+integer(C_INT) :: status
+end function DCB_get_bytes
 function DCB_check_integrity(buffer, verbose) result(result) BIND(C, name = 'DCB_check_integrity')
 import :: C_PTR, C_INT
 implicit none

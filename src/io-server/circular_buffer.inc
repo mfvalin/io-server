@@ -211,7 +211,7 @@ type(C_PTR),       intent(IN), value :: p             !< pointer to a circular b
 integer(C_SIZE_T), intent(IN), value :: num_bytes     !< number of bytes to extract
 type(C_PTR),       intent(IN), value :: dest          !< destination array to receive extracted data
 integer(C_INT),    intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
-integer(C_INT) :: status                              !< number 0 if success, -1 if error
+integer(C_INT) :: status                              !< 0 if success, -1 if error
 end function CB_get
 !> wait until num_bytes are available then insert from src array<br>
 !> n = CB_put(p, src, num_bytes, commit_transaction)

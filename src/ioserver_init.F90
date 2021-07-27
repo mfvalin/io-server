@@ -259,11 +259,11 @@ module ioserver_internal_mod
   type(C_PTR), bind(C, name='LocalArenaPtr')   :: local_arena_ptr      ! will be used to compute offsets into local arena
   integer(C_INT), dimension(:), pointer        :: arena_ptr
   type(C_PTR), bind(C, name='LocalHeapPtr')    :: local_heap_ptr       ! will be used to compute offsets into local heap
-  integer(DATA_ELEMENT), dimension(:), pointer :: heap_ptr
+  integer(C_INT), dimension(:), pointer        :: heap_ptr
   type(C_PTR), bind(C, name='LocalCioinPtr')   :: local_cioin_ptr
-  integer(DATA_ELEMENT), dimension(:), pointer :: cioin_ptr
+  integer(C_INT), dimension(:), pointer        :: cioin_ptr
   type(C_PTR), bind(C, name='LocalCiooutPtr')  :: local_cioout_ptr
-  integer(DATA_ELEMENT), dimension(:), pointer :: cioout_ptr
+  integer(C_INT), dimension(:), pointer        :: cioout_ptr
 
   type(memory_arena)     :: local_arena          ! local memory arena
   type(heap)             :: local_heap           ! local heap (located in memory arena)

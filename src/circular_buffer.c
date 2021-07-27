@@ -138,7 +138,7 @@ static const size_t MIN_CIRC_BUFFER_SIZE = 128 * sizeof(data_element); //!> Mini
 //!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
   uint64_t version; //!< version marker
-  uint64_t first;   //!< should be 0 (assumed to be 0 in circular_buffer.c)
+  uint64_t first;   //!< should be 0, because the feature has not been implemented yet
   uint64_t in[2];   //!< Start inserting data at data[in]
   uint64_t out[2];  //!< Start reading data at data[out]
   uint64_t limit;   //!< size of data buffer (last available index + 1)
@@ -151,12 +151,14 @@ typedef fiol_management* fiol_management_p;
 typedef struct {
   uint64_t num_reads;
   uint64_t num_read_elems;
+  uint64_t num_fractional_reads;
   double   total_read_wait_time_ms;
   double   total_read_time_ms;
   uint64_t max_fill;
 
   uint64_t num_writes;
   uint64_t num_write_elems;
+  uint64_t num_fractional_writes;
   double   total_write_wait_time_ms;
   double   total_write_time_ms;
 } cb_stats;
@@ -307,7 +309,7 @@ void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to pr
 //! @return pointer to buffer upon success, NULL upon error
 circular_buffer_p CB_init_bytes(
     circular_buffer_p p,        //!< [in]  pointer to a circular buffer
-    size_t            num_bytes //!< [in]  size in bytes of the circular buffer (#data_element)
+    size_t            num_bytes //!< [in]  size in bytes of the circular buffer
     )
 //C_EnD
 {
@@ -329,19 +331,23 @@ circular_buffer_p CB_init_bytes(
   p->m.out[CB_FULL]    = 0;
   p->m.out[CB_PARTIAL] = 0;
 
-  const int          num_elements = num_bytes / sizeof(data_element);               // Number of elements is rounded down
-  const data_element header_size  = num_bytes_to_num_elem(sizeof(circular_buffer)); // Header size in number of elements
+  // Memory is already allocated so to get the number of full elements we round down
+  const int num_elements = num_bytes / sizeof(data_element);
+  // Header size in number of elements
+  const data_element header_size  = num_bytes_to_num_elem(sizeof(circular_buffer));
 
   p->m.limit = num_elements - header_size;
 
   p->stats.num_reads               = 0;
   p->stats.num_read_elems          = 0;
+  p->stats.num_fractional_reads    = 0;
   p->stats.total_read_time_ms      = 0.0;
   p->stats.total_read_wait_time_ms = 0.0;
   p->stats.max_fill                = 0;
 
   p->stats.num_writes               = 0;
   p->stats.num_write_elems          = 0;
+  p->stats.num_fractional_writes    = 0;
   p->stats.total_write_time_ms      = 0.0;
   p->stats.total_write_wait_time_ms = 0.0;
 
@@ -621,7 +627,7 @@ int64_t CB_wait_data_available_bytes(
 //     integer(C_SIZE_T), intent(IN), value :: num_bytes     !< number of bytes to extract
 //     type(C_PTR),       intent(IN), value :: dest          !< destination array to receive extracted data
 //     integer(C_INT),    intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
-//     integer(C_INT) :: status                              !< number 0 if success, -1 if error
+//     integer(C_INT) :: status                              !< 0 if success, -1 if error
 //   end function CB_get
 //F_EnD
 //C_StArT
@@ -685,6 +691,8 @@ int CB_get(
 
   IO_timer_stop(&timer);
   buffer->stats.total_read_time_ms += IO_time_ms(&timer);
+
+  if (num_bytes_1 != num_elements * sizeof(data_element)) buffer->stats.num_fractional_reads++;
 
   return 0;
 }
@@ -754,6 +762,8 @@ int CB_put(
   buffer->stats.num_write_elems += num_elements;
   buffer->stats.num_writes++;
   buffer->stats.total_write_time_ms += IO_time_ms(&timer);
+
+  if (num_bytes != num_elements * sizeof(data_element)) buffer->stats.num_fractional_writes++;
 
   return 0;
 }
@@ -898,6 +908,9 @@ void CB_print_stats(
   readable_element_count(stats->max_fill, max_fill_s);
   const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity_bytes(buffer));
 
+  const int frac_write_percent = num_writes > 0 ? (int)(stats->num_fractional_writes * 100.0 / num_writes) : 0;
+  const int frac_read_percent  = num_reads  > 0 ? (int)(stats->num_fractional_reads  * 100.0 / num_reads)  : 0;
+
   if (with_header) {
     printf("     "
            "                       Write (ms)                        |"
@@ -905,17 +918,17 @@ void CB_print_stats(
            "rank "
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) |"
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) | "
-           "max fill (%%)\n");
+           "max fill (%%) | frac. writes/reads (%%)\n");
   }
 
   printf(
       "%04d: "
       "%s (%s) : %7.1f (%s) : %7.1f (%5.2f) | "
       "%s (%s) : %7.1f (%s) : %7.1f (%5.1f) | "
-      "%s (%3d)\n",
+      "%s (%3d) | %3d / %3d\n",
       buffer_id, total_in_s, avg_in_s, total_write_time, write_per_sec_s, stats->total_write_wait_time_ms, avg_wait_w,
       total_out_s, avg_out_s, total_read_time, read_per_sec_s, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,
-      max_fill_percent);
+      max_fill_percent, frac_write_percent, frac_read_percent);
 }
 
 //F_StArT

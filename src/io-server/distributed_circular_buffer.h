@@ -156,35 +156,35 @@ void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p, int32_t);
 void DCB_full_barrier(distributed_circular_buffer_p buffer);
 int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
-distributed_circular_buffer_p DCB_create(
+distributed_circular_buffer_p DCB_create_bytes(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
     const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
-    const int32_t num_elements   //!< [in] Number of elems in a single circular buffer (only needed on the root process)
+    const size_t  num_bytes      //!< [in] Number of bytes in a single circular buffer (only needed on the root process)
 );
-int32_t DCB_get_num_elements(
+int64_t DCB_get_available_data_bytes(
     distributed_circular_buffer_p buffer,   //!< [in] DCB we are querying
     const int                     buffer_id //!< [in] Which specific buffer in the DCB
 );
-int32_t DCB_get_num_spaces(
+int64_t DCB_get_available_space_bytes(
     distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
     int update_from_remote                //!< [in] Whether to look at the server to get the absolute latest num spaces
 );
 int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [in]
 );
-data_element DCB_put(
-    distributed_circular_buffer_p buffer,       //!< [in,out] Distributed buffer in which we want to put data
-    void* const                   src_data,     //!< [in] Pointer to the data we want to insert
-    const int                     num_elements, //!< [in] How many #data_element tokens we want to insert
-    const int                     operation     //!< [in] What operation to perform (whether to commit the transaction)
+int DCB_put_bytes(
+    distributed_circular_buffer_p buffer,    //!< [in,out] Distributed buffer in which we want to put data
+    void* const                   src_data,  //!< [in] Pointer to the data we want to insert
+    const size_t                  num_bytes, //!< [in] How many bytes we want to insert
+    const int                     operation  //!< [in] What operation to perform (whether to commit the transaction)
 );
-int DCB_get(
-    distributed_circular_buffer_p buffer,       //!< [in,out] DCB from which we want to read
-    const int                     buffer_id,    //!< [in] Specific buffer in the DCB
-    void*                         dest_data,    //!< [in] Where to put the data from the buffer
-    const int                     num_elements, //!< [in] How many elements to read
-    const int                     operation     //!< [in] What operation to perform: extract, read or just peek
+int DCB_get_bytes(
+    distributed_circular_buffer_p buffer,    //!< [in,out] DCB from which we want to read
+    const int                     buffer_id, //!< [in] Specific buffer in the DCB
+    void*                         dest_data, //!< [in] Where to put the data from the buffer
+    const size_t                  num_bytes, //!< [in] How many bytes to read
+    const int                     operation  //!< [in] What operation to perform: extract, read or just peek
 );
 
 #endif // IO_SERVER_distributed_circular_buffer_GEN_H
