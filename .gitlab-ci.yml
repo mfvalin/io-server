@@ -13,14 +13,9 @@ before_script:
   # - export CLICOLOR_FORCE=1
 
 stages:
-  # - configure
-  # - build
-
   - configure
   - build
   - test_batch
-  # - test
-  # - install
 
 configure_job_regular_intel:
   stage: configure
@@ -34,6 +29,7 @@ configure_job_regular_intel:
 
 build_job_regular_intel:
   stage: build
+  needs: [configure_job_regular_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
   script:
@@ -43,6 +39,7 @@ build_job_regular_intel:
 
 test_job_regular_intel_single_node:
   stage: test_batch
+  needs: [build_job_regular_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
     NUM_CPUS: "40"
@@ -65,6 +62,7 @@ test_job_regular_intel_single_node:
 
 test_job_regular_intel_multi_node:
   stage: test_batch
+  needs: [build_job_regular_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
     NUM_CPUS: "80"
@@ -90,6 +88,7 @@ configure_job_big_intel:
 
 build_job_big_intel:
   stage: build
+  needs: [configure_job_big_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${BIG_MACHINE_1}
   tags:
@@ -101,6 +100,7 @@ build_job_big_intel:
 
 test_job_single_node_batch:
   stage: test_batch
+  needs: [build_job_big_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${BIG_MACHINE_1}
     NUM_CPUS: "40"
@@ -123,6 +123,7 @@ test_job_single_node_batch:
 
 test_job_multi_node_batch:
   stage: test_batch
+  needs: [build_job_big_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${BIG_MACHINE_1}
     NUM_CPUS: "80"
@@ -133,10 +134,3 @@ test_job_multi_node_batch:
   script:
     - cd ${build_dir}
     - aprun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write 1 10 6
-
-# test_job:
-#   stage: test
-#   script:
-#     - cd ${build_dir}
-#     - make test
-
