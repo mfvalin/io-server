@@ -82,9 +82,9 @@ test_job_single_node_batch:
 test_job_multi_node_batch:
   stage: test_batch
   variables:
-    NUM_CPUS: "80x1"
+    NUM_CPUS: "80"
     ORD_SOUMET_MACH: ${BIG_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}"
+    ORD_SOUMET_C: "${NUM_CPUS}x1"
     ORD_SOUMET_W: "30"
     ORD_SOUMET_JN: io-server-big-multi-node
   script:
