@@ -81,6 +81,7 @@ configure_job_big_intel:
     - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
     - mkdir -pv ${build_dir}
     - cd ${build_dir}
+    - pwd
     - cmake ${CI_PROJECT_DIR}
 
 build_job_big_intel:
@@ -92,6 +93,7 @@ build_job_big_intel:
   script:
     - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
     - cd ${build_dir}
+    - pwd
     - make
 
 test_job_single_node_batch:
@@ -105,6 +107,7 @@ test_job_single_node_batch:
     ORD_SOUMET_JN: io-server-big-single-node
   script:
     - cd ${build_dir}
+    - pwd
     - ${build_dir}/tests/io_server_circular_buffer_single_thread
     - ${build_dir}/tests/io_server_cb_unaligned_input
     - aprun -n 4           ${build_dir}/tests/io_server_circular_buffer
