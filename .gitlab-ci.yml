@@ -17,62 +17,59 @@ stages:
   - build
   - test_batch
 
-configure_job_regular_intel:
-  stage: configure
-  variables:
-    build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-  script:
-    - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
-    - mkdir -pv ${build_dir}
-    - cd ${build_dir}
-    - cmake ${CI_PROJECT_DIR}
+# configure_job_regular_intel:
+#   stage: configure
+#   variables:
+#     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+#   script:
+#     - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
+#     - mkdir -pv ${build_dir}
+#     - cd ${build_dir}
+#     - cmake ${CI_PROJECT_DIR}
 
-build_job_regular_intel:
-  stage: build
-  needs: [configure_job_regular_intel]
-  variables:
-    build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-  script:
-    - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
-    - cd ${build_dir}
-    - make
+# build_job_regular_intel:
+#   stage: build
+#   variables:
+#     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+#   script:
+#     - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
+#     - cd ${build_dir}
+#     - make
 
-test_job_regular_intel_single_node:
-  stage: test_batch
-  needs: [build_job_regular_intel]
-  variables:
-    build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-    NUM_CPUS: "40"
-    ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}"
-    ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-regular-single-node
-  script:
-    - cd ${build_dir}
-    - ${build_dir}/tests/io_server_circular_buffer_single_thread
-    - ${build_dir}/tests/io_server_cb_unaligned_input
-    - mpirun -n 4           ${build_dir}/tests/io_server_circular_buffer
-    - mpirun -n 4           ${build_dir}/tests/io_server_circular_buffer_fill
-    - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_distributed_circular_buffer
-    - mpirun -n 4           ${build_dir}/tests/io_server_test_memory_arena
-    - mpirun -n 16          ${build_dir}/tests/io_server_cb_plus_dcb                 1 2 2 4 0
-    - mpirun -n 3           ${build_dir}/tests/io_server_dcb_edge_case_1
-    - mpirun -n 3           ${build_dir}/tests/io_server_dcb_unaligned_input
-    # - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write                 1 2 2
+# test_job_regular_intel_single_node:
+#   stage: test_batch
+#   variables:
+#     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+#     NUM_CPUS: "40"
+#     ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
+#     ORD_SOUMET_C: "${NUM_CPUS}"
+#     ORD_SOUMET_W: "30"
+#     ORD_SOUMET_JN: io-server-regular-single-node
+#   script:
+#     - cd ${build_dir}
+#     - ${build_dir}/tests/io_server_circular_buffer_single_thread
+#     - ${build_dir}/tests/io_server_cb_unaligned_input
+#     - mpirun -n 4           ${build_dir}/tests/io_server_circular_buffer
+#     - mpirun -n 4           ${build_dir}/tests/io_server_circular_buffer_fill
+#     - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_distributed_circular_buffer
+#     - mpirun -n 4           ${build_dir}/tests/io_server_test_memory_arena
+#     - mpirun -n 16          ${build_dir}/tests/io_server_cb_plus_dcb                 1 2 2 4 0
+#     - mpirun -n 3           ${build_dir}/tests/io_server_dcb_edge_case_1
+#     - mpirun -n 3           ${build_dir}/tests/io_server_dcb_unaligned_input
+#     # - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write                 1 2 2
 
-test_job_regular_intel_multi_node:
-  stage: test_batch
-  needs: [build_job_regular_intel]
-  variables:
-    build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-    NUM_CPUS: "80"
-    ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}x1"
-    ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-regular-multi-node
-  script:
-    - cd ${build_dir}
-    - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write 1 10 6
+# test_job_regular_intel_multi_node:
+#   stage: test_batch
+#   variables:
+#     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+#     NUM_CPUS: "80"
+#     ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
+#     ORD_SOUMET_C: "${NUM_CPUS}x1"
+#     ORD_SOUMET_W: "30"
+#     ORD_SOUMET_JN: io-server-regular-multi-node
+#   script:
+#     - cd ${build_dir}
+#     - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write 1 10 6
 
 configure_job_big_intel:
   stage: configure
@@ -88,7 +85,6 @@ configure_job_big_intel:
 
 build_job_big_intel:
   stage: build
-  needs: [configure_job_big_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${BIG_MACHINE_1}
   tags:
@@ -100,7 +96,6 @@ build_job_big_intel:
 
 test_job_single_node_batch:
   stage: test_batch
-  needs: [build_job_big_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${BIG_MACHINE_1}
     NUM_CPUS: "40"
@@ -123,7 +118,6 @@ test_job_single_node_batch:
 
 test_job_multi_node_batch:
   stage: test_batch
-  needs: [build_job_big_intel]
   variables:
     build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${BIG_MACHINE_1}
     NUM_CPUS: "80"
