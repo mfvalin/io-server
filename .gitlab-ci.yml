@@ -130,4 +130,4 @@ test_job_big_intel_multi_node:
     ORD_SOUMET_JN: io-server-big-multi-node
   script:
     - cd ${build_dir}
-    - aprun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write 1 10 6
+    # - aprun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write 1 10 6
