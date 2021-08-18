@@ -1131,7 +1131,11 @@ int32_t DCB_get_num_consumers(const distributed_circular_buffer_p buffer) {
 //    integer(C_INT64_T) :: capacity
 //  end function DCB_get_capacity_local_bytes
 //F_EnD
-int64_t DCB_get_capacity_local_bytes(const distributed_circular_buffer_p buffer) {
+//C_StArT
+int64_t DCB_get_capacity_local_bytes(const distributed_circular_buffer_p buffer
+)
+//C_EnD
+{
   if (is_producer(buffer))
     return buffer->local_header.capacity;
   return -1;

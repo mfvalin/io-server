@@ -34,13 +34,14 @@ void init_array(data_element* array, const int num_elements, const int rank) {
 }
 
 int fill_test(int argc, char** argv) {
-  const int NUM_BUFFER_ELEMENTS = 128;
-  const int NPTEST              = NUM_BUFFER_ELEMENTS * 2;
-  const int READ_DELAY_US       = 1000;
-  const int WRITE_DELAY_US      = 1000;
+  const int NUM_BUFFER_BYTES = 128 * 4;
+  const int NUM_TEST_ELEM    = NUM_BUFFER_BYTES / 4 * 2;
+  const int NUM_TEST_BYTES   = NUM_TEST_ELEM * 4;
+  const int READ_DELAY_US    = 1000;
+  const int WRITE_DELAY_US   = 1000;
 
-  data_element* local_data    = (data_element*)malloc(NPTEST * sizeof(data_element));
-  data_element* received_data = (data_element*)malloc(NPTEST * sizeof(data_element));
+  data_element* local_data    = (data_element*)malloc(NUM_TEST_BYTES);
+  data_element* received_data = (data_element*)malloc(NUM_TEST_BYTES);
 
   int num_errors = 0;
 
@@ -55,14 +56,14 @@ int fill_test(int argc, char** argv) {
   MPI_Win        window;
   data_element*  base_mem_ptr;
   const int      disp_unit   = sizeof(data_element);
-  const MPI_Aint window_size = NUM_BUFFER_ELEMENTS * disp_unit;
+  const MPI_Aint window_size = NUM_BUFFER_BYTES;
   MPI_Win_allocate_shared(window_size, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, &base_mem_ptr, &window);
 
   //---------------------------
   MPI_Barrier(MPI_COMM_WORLD);
   //---------------------------
 
-  circular_buffer_p  local_buffer = CB_from_pointer(base_mem_ptr, NUM_BUFFER_ELEMENTS);
+  circular_buffer_p  local_buffer = CB_from_pointer_bytes(base_mem_ptr, NUM_BUFFER_BYTES);
   circular_buffer_p* all_buffers  = NULL;
   const int          success      = (local_buffer != NULL);
   if (my_rank == 0) {
@@ -81,24 +82,24 @@ int fill_test(int argc, char** argv) {
   if (!success)
     num_errors++;
 
-  const int max_num_elements = CB_get_available_space(local_buffer);
-  const int capacity         = CB_get_capacity(local_buffer);
-  init_array(local_data, NPTEST, my_rank);
+  const size_t max_num_bytes = CB_get_available_space_bytes(local_buffer);
+  const size_t capacity      = CB_get_capacity_bytes(local_buffer);
+  init_array(local_data, NUM_TEST_ELEM, my_rank);
 
   if (my_rank != 0) {
-    if (capacity != max_num_elements) {
-      printf("Ahhhh inconsistency between free space (%d) and capacity (%d)!\n", max_num_elements, capacity);
+    if (capacity != max_num_bytes) {
+      printf("Ahhhh inconsistency between free space (%ld) and capacity (%ld)!\n", max_num_bytes, capacity);
       num_errors++;
     }
 
-    const int expected_error = CB_atomic_put(local_buffer, local_data, capacity + 1, CB_COMMIT);
+    const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT);
     if (expected_error != -1) {
       printf("Wrong return value after trying to put more than max into the buffer! %d\n", expected_error);
       num_errors++;
     }
 
-    const int num_free = CB_atomic_put(local_buffer, local_data, max_num_elements, CB_COMMIT);
-    if (num_free != 0)
+    const int status = CB_put(local_buffer, local_data, max_num_bytes, CB_COMMIT);
+    if (status != 0)
       num_errors++;
   }
 
@@ -117,11 +118,11 @@ int fill_test(int argc, char** argv) {
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
         sleep_us(READ_DELAY_US);
-        CB_atomic_get(all_buffers[i], received_data, NUM_BUFFER_ELEMENTS / 2, CB_COMMIT);
+        CB_get(all_buffers[i], received_data, NUM_BUFFER_BYTES / 2, CB_COMMIT);
       }
     }
     else {
-      CB_atomic_put(local_buffer, local_data + NUM_BUFFER_ELEMENTS, 1, CB_COMMIT);
+      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*4, CB_COMMIT);
       IO_timer_stop(&put_time);
 
       const double t = IO_time_ms(&put_time);
@@ -146,7 +147,7 @@ int fill_test(int argc, char** argv) {
 
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
-        CB_atomic_get(all_buffers[i], received_data, max_num_elements - NUM_BUFFER_ELEMENTS / 2 + 2, CB_COMMIT);
+        CB_get(all_buffers[i], received_data, max_num_bytes - NUM_BUFFER_BYTES / 2 + 2*4, CB_COMMIT);
         IO_timer_stop(&read_time);
         IO_timer_start(&read_time);
         const double t = IO_time_ms(&read_time);
@@ -155,7 +156,7 @@ int fill_test(int argc, char** argv) {
 
         //        printf("Read in %f ms\n", t);
 
-        const int expected_error = CB_atomic_get(all_buffers[i], received_data, capacity + 1, CB_COMMIT);
+        const int expected_error = CB_get(all_buffers[i], received_data, capacity + 1, CB_COMMIT);
         if (expected_error != -1) {
           printf("Wrong return code after trying to read more than max buffer size! (%d)\n", expected_error);
           num_errors++;
@@ -164,7 +165,7 @@ int fill_test(int argc, char** argv) {
     }
     else {
       sleep_us(WRITE_DELAY_US * my_rank);
-      CB_atomic_put(local_buffer, local_data, 1, CB_COMMIT);
+      CB_put(local_buffer, local_data, 1*4, CB_COMMIT);
     }
   }
 
@@ -173,7 +174,7 @@ int fill_test(int argc, char** argv) {
   //---------------------------
 
   if (my_rank != 0) {
-    if (CB_get_available_data(local_buffer) != 0)
+    if (CB_get_available_data_bytes(local_buffer) != 0)
       num_errors++;
   }
 

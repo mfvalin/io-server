@@ -171,6 +171,8 @@ int64_t DCB_get_available_space_bytes(
     distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
     int update_from_remote                //!< [in] Whether to look at the server to get the absolute latest num spaces
 );
+int64_t DCB_get_capacity_local_bytes(const distributed_circular_buffer_p buffer
+);
 int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [in]
 );
 int DCB_put_bytes(

@@ -2,12 +2,24 @@
 
 #include "io-server/circular_buffer.h"
 
-const int NUM_ELEMENTS = 200;
-const int NUM_CHARS = 60 * sizeof(data_element);
+// const int NUM_ELEMENTS = 200;
+const size_t NUM_CHARS = 64; // Gotta be a multiple of element size
+
+void check_message_length(const char* message, const size_t length)
+{
+    if (strlen(message) != length)
+    {
+        printf("Received wrong length! Got %ld, should be %ld\n", strlen(message), length);
+        exit(-1);
+    }
+}
 
 int main()
 {
-    circular_buffer_p cb = CB_create(NUM_ELEMENTS);
+    circular_buffer_p cb = CB_create_bytes(CB_MIN_BUFFER_SIZE);
+
+    const size_t capacity  = CB_get_capacity_bytes(cb);
+    const int    elem_size = CB_get_elem_size();
 
     if (cb == NULL) 
     {
@@ -17,10 +29,10 @@ int main()
 
     {
         int i = 1;
-        CB_atomic_put(cb, &i, 1, CB_COMMIT);
+        CB_put(cb, &i, sizeof(i), CB_COMMIT);
 
         int result;
-        CB_atomic_get(cb, &result, 1, CB_COMMIT);
+        CB_get(cb, &result, sizeof(result), CB_COMMIT);
 
         printf("result = %d\n", result);
         if (result != 1)
@@ -31,64 +43,58 @@ int main()
     }
 
     {
-        char base_message[NUM_CHARS + 6];
-        char* message = base_message + 2;
-        char received_message[NUM_CHARS + 6];
-        for (int i = 0; i < NUM_CHARS + 1; ++i)
+        char base_message[NUM_CHARS];
+        char* message = base_message;
+        char received_message[NUM_CHARS];
+
+        for (int i = 0; i < NUM_CHARS - 1; ++i)
             base_message[i] = 'a' + i % 26;
-        base_message[NUM_CHARS + 1] = '\0';
+        base_message[NUM_CHARS - 1] = '\0';
 
         printf("message:  %s\n", message);
 
         int result;
 
-        result = CB_atomic_put(cb, message, NUM_CHARS / sizeof(data_element) + 1, CB_COMMIT);
+        result = CB_put(cb, message, NUM_CHARS, CB_COMMIT);
         if (result < 0) return -1;
-        result = CB_atomic_get(cb, &received_message, NUM_CHARS / sizeof(data_element) + 1, CB_COMMIT);
+        result = CB_get(cb, &received_message, NUM_CHARS, CB_COMMIT);
         if (result < 0) return -1;
-        printf("received: %s (len = %d)\n", received_message, strlen(received_message));
-        if (strlen(received_message) != NUM_CHARS - 1)
-        {
-            printf("Received wrong length! Got %d, should be %d\n", strlen(received_message), NUM_CHARS - 1);
-            exit(-1);
-        }
+        printf("received: %s (len = %ld)\n", received_message, strlen(received_message));
+        check_message_length(received_message, NUM_CHARS - 1);
 
-        result = CB_atomic_put(cb, message + 1, (NUM_CHARS - 1) / sizeof(data_element) + 1, CB_COMMIT);
+        // Message minus 1 character
+        result = CB_put(cb, message + 1, NUM_CHARS - 1, CB_COMMIT);
         if (result < 0) return -1;
-        result = CB_atomic_get(cb, &received_message, (NUM_CHARS - 1) / sizeof(data_element) + 1, CB_COMMIT);
+        // Just peek, the exact number of characters
+        result = CB_get(cb, &received_message, NUM_CHARS - 1, CB_PEEK);
         if (result < 0) return -1;
-        printf("received: %s (len = %d)\n", received_message, strlen(received_message));
-        if (strlen(received_message) != NUM_CHARS - 2)
-        {
-            printf("Received wrong length! Got %d, should be %d\n", strlen(received_message), NUM_CHARS - 2);
-            exit(-1);
-        }
+        check_message_length(received_message, NUM_CHARS - 2);
 
-        result = CB_atomic_put(cb, message + 2, (NUM_CHARS - 2) / sizeof(data_element) + 1, CB_COMMIT);
+        // Retrieve message, ask for one extra byte
+        result = CB_get(cb, &received_message, NUM_CHARS, CB_COMMIT);
         if (result < 0) return -1;
-        result = CB_atomic_get(cb, &received_message, (NUM_CHARS - 2) / sizeof(data_element) + 1, CB_COMMIT);
-        if (result < 0) return -1;
-        printf("received: %s (len = %d)\n", received_message, strlen(received_message));
-        if (strlen(received_message) != NUM_CHARS - 3)
-        {
-            printf("Received wrong length! Got %d, should be %d\n", strlen(received_message), NUM_CHARS - 3);
-            exit(-1);
-        }
+        check_message_length(received_message, NUM_CHARS - 2);
 
-        result = CB_atomic_put(cb, message + 3, (NUM_CHARS - 3) / sizeof(data_element) + 1, CB_COMMIT);
-        if (result < 0) return -1;
-        result = CB_atomic_get(cb, &received_message, (NUM_CHARS - 3) / sizeof(data_element) + 1, CB_COMMIT);
-        if (result < 0) return -1;
-        printf("received: %s (len = %d)\n", received_message, strlen(received_message));
-        if (strlen(received_message) != NUM_CHARS - 4)
+        for (int i = 2; i < 8; ++i)
         {
-            printf("Received wrong length! Got %d, should be %d\n", strlen(received_message), NUM_CHARS - 4);
-            exit(-1);
+            // Message minus [i] characters
+            const size_t count = NUM_CHARS - i;
+            result = CB_put(cb, message + i, count, CB_COMMIT);
+            if (result < 0) return -1;
+
+            const size_t avail_space = CB_get_available_space_bytes(cb);
+            const size_t consumed_space = num_bytes_to_num_elem(count) * elem_size;
+            if (avail_space + consumed_space != capacity)
+            {
+                printf("Byte counts don't add up! Available %ld, consumed %ld, capacity %ld\n", avail_space, consumed_space, capacity);
+                return -1;
+            }
+
+            result = CB_get(cb, &received_message, count, CB_COMMIT);
+            if (result < 0) return -1;
+            check_message_length(received_message, count - 1);
         }
     }
-
-
-
 
     printf("Done.\n");
     return 0;

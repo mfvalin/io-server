@@ -29,21 +29,23 @@ end program test_circular_buffer_single_thread
 
 subroutine basic_test()
 
+  use iso_fortran_env, only: ERROR_UNIT
   use iso_c_binding
   use circular_buffer_module
+  use rpn_extra_module
   implicit none
 
-  integer, parameter :: BUFFER_SIZE = 5001;
+  integer(C_SIZE_T), parameter :: BUFFER_SIZE_BYTES = 5001 * 4;
 
-  integer, parameter :: NUM_ELEM = BUFFER_SIZE * 3;
-  integer, parameter :: STEP_SIZE = 4;
+  integer, parameter :: NUM_ELEM = BUFFER_SIZE_BYTES / 4 * 3;
+  integer(C_SIZE_T), parameter :: STEP_SIZE = 4;
 
   type(circular_buffer) :: circ_buffer
-  integer(DATA_ELEMENT), dimension(NUM_ELEM) :: local, local_out
+  integer, dimension(NUM_ELEM) :: local, local_out
   logical :: success
   integer :: i, num_elem_in, num_elem_free
   integer :: num_error
-  integer :: buffer_limit
+  integer(C_INT64_T) :: buffer_limit
 
   num_error = 0
   do i = 1, size(local)
@@ -51,7 +53,7 @@ subroutine basic_test()
   enddo
 
   local_out(:) = -1
-  success = circ_buffer % create(BUFFER_SIZE)
+  success = circ_buffer % create_bytes(BUFFER_SIZE_BYTES)
 
   if (.not. success) then
     num_error = num_error + 1
@@ -59,29 +61,54 @@ subroutine basic_test()
     return
   end if
 
-  buffer_limit = circ_buffer % get_num_spaces()
+  buffer_limit = circ_buffer % get_num_spaces(CB_KIND_INTEGER_4)
 
 !  call circ_buffer % print_header()
 
   do i = 1, NUM_ELEM, STEP_SIZE
-    num_elem_free = circ_buffer % atomic_put(local(i), STEP_SIZE, .true.)
-    num_elem_in = circ_buffer % get_num_elements()
+    success = circ_buffer % put(local(i), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
+    num_elem_in = circ_buffer % get_num_elements(CB_KIND_INTEGER_4)
 
     if (num_elem_in .ne. STEP_SIZE) then
       num_error = num_error + 1
-      print *, 'Wrong number of elements in buffer after adding data'
+      print *, 'Wrong number of elements in buffer after adding data', num_elem_in, STEP_SIZE
     end if
 
-    num_elem_free = circ_buffer % get_num_spaces()
+    num_elem_in = circ_buffer % get_num_elements(CB_KIND_CHAR)
+    if (num_elem_in .ne. STEP_SIZE * 4) then
+      num_error = num_error + 1
+      print *, 'Wrong number of elements (char) in buffer after adding data', num_elem_in, STEP_SIZE * 4
+    end if
+
+    num_elem_in = circ_buffer % get_num_elements(CB_KIND_INTEGER_8)
+    if (num_elem_in .ne. STEP_SIZE / 2) then
+      num_error = num_error + 1
+      print *, 'Wrong number of elements (int8) in buffer after adding data', num_elem_in, STEP_SIZE / 2
+    end if
+
+    num_elem_free = circ_buffer % get_num_spaces(CB_KIND_INTEGER_4)
     if (num_elem_free .ne. buffer_limit - STEP_SIZE) then
       num_error = num_error + 1
       print *, 'Wrong space available in buffer after adding data', num_elem_free, buffer_limit - STEP_SIZE
     end if
 
-    num_elem_in = circ_buffer % atomic_get(local_out(i), STEP_SIZE, .true.)
-    num_elem_free = circ_buffer % get_num_spaces()
+    num_elem_free = circ_buffer % get_num_spaces(CB_KIND_CHAR)
+    if (num_elem_free .ne. (buffer_limit - STEP_SIZE) * 4) then
+      num_error = num_error + 1
+      print *, 'Wrong space (char) available in buffer after adding data', num_elem_free, (buffer_limit - STEP_SIZE) * 4
+    end if
 
-    if (num_elem_in .ne. 0) then
+    num_elem_free = circ_buffer % get_num_spaces(CB_KIND_CHAR)
+    if (num_elem_free .ne. (buffer_limit - STEP_SIZE) / 2) then
+      num_error = num_error + 1
+      print *, 'Wrong space (real8) available in buffer after adding data', num_elem_free, (buffer_limit - STEP_SIZE) / 2
+    end if
+
+    success = circ_buffer % get(local_out(i), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
+    num_elem_in = circ_buffer % get_num_elements(CB_KIND_INTEGER_4)
+    num_elem_free = circ_buffer % get_num_spaces(CB_KIND_INTEGER_4)
+
+    if (num_elem_in .ne. 0 .or. .not. success) then
       num_error = num_error + 1
       print *, 'We read everything, but there still seems to be some data left!', i
     end if
@@ -97,8 +124,15 @@ subroutine basic_test()
     end if
   end do
 
+  ! write(*, '') 'joijoijojwqeewqrqwrq'
+  ! print *, 'Joijoijoijoijoj'
+  ! write(ERROR_UNIT, '') 'joijoijojwqeewqrqwrq'
+
   if (num_error > 0) then
     print *, 'AAAAAhhhhh we found errors when running the test!!', num_error
+    do i = 1, 10
+      print *, 'i = ', i
+    end do
     error stop 1
   else
     print *, 'All good for basic test (create, put, get, data, space)'

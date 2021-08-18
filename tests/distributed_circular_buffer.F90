@@ -20,13 +20,14 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
 module parameters
+  use ISO_C_BINDING
   implicit none
   public
 
-  integer, parameter :: NUM_BUFFER_ELEMENTS = 2044
-  integer, parameter :: NUM_DATA_ELEMENTS_SMALL = 10
-  integer, parameter :: NUM_DATA_ELEMENTS_LARGE = NUM_BUFFER_ELEMENTS * 2
-  integer, parameter :: STEP_SIZE = 5
+  integer(C_SIZE_T), parameter :: BUFFER_SIZE_BYTE = 2044 * 4
+  integer(C_SIZE_T), parameter :: NUM_DATA_ELEMENTS_SMALL = 10
+  integer(C_SIZE_T), parameter :: NUM_DATA_ELEMENTS_LARGE = BUFFER_SIZE_BYTE / 4 * 2
+  integer(C_SIZE_T), parameter :: STEP_SIZE = 5
   integer, parameter :: NUM_CONSUMERS = 2
 
   integer, parameter :: SECRET_TEST_VALUE = 123
@@ -59,9 +60,8 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
   interface
     subroutine init_array(array, rank)
-      import :: DATA_ELEMENT
       implicit none
-      integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
+      integer, dimension(:), intent(inout) :: array
       integer, intent(in) :: rank
     end subroutine init_array
   end interface
@@ -70,11 +70,13 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   integer, intent(in) :: rank
   integer :: num_errors
 
-  integer        :: i, i_prod
-  integer(C_INT) :: num_elements, num_producers, consumer_id, capacity
+  integer            :: i, i_prod
+  integer(C_INT)     :: num_producers, consumer_id
+  integer(C_INT64_T) :: num_elements, capacity
   integer :: first_prod, num_prod_local, last_prod
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small, expected_data_small
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large, expected_data_large
+  integer, dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small, expected_data_small
+  integer, dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large, expected_data_large
+  logical :: success
 
   num_errors = 0
   num_producers = buffer % get_num_producers()
@@ -85,7 +87,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   last_prod      = min(first_prod + num_prod_local, num_producers) - 1
 
   do i = 0, num_producers - 1
-    num_elements = buffer % get_num_elements(i)
+    num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
     if (num_elements .ne. 0) num_errors = num_errors + 1
   end do
 
@@ -99,7 +101,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   if (consumer_id == 0) then
     print *, 'DOING CHECKS'
     do i = 0, num_producers - 1
-      num_elements = buffer % get_num_elements(i)
+      num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
       if (num_elements .ne. 0) num_errors = num_errors + 1
     end do
   end if
@@ -112,29 +114,47 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   !---------------------------
   if (consumer_id == 0) then
     do i = 0, num_producers - 1
-      num_elements = buffer % get_num_elements(i)
+      num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
       if (num_elements .ne. 1) then
-        print *, 'There should be exactly 1 element!'
+        print *, 'There should be exactly 1 element!', num_elements
         num_errors = num_errors + 1
       end if
 
-      num_elements = buffer % peek(i, data_small, 1)
+      num_elements = buffer % get_num_elements(i, CB_KIND_CHAR)
+      if (num_elements .ne. 4) then 
+        print *, 'There should be exactly 4 characters', num_elements
+        num_errors = num_errors + 1
+        error stop 1
+      end if
+
+      num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_8)
+      if (num_elements .ne. 0) then 
+        print *, 'There should be no 8-byte integers', num_elements
+        num_errors = num_errors + 1
+        error stop 1
+      end if
+
+      success = buffer % peek_elems(i, data_small, 1_8, CB_KIND_INTEGER_4)
       if (data_small(1) .ne. SECRET_TEST_VALUE) then
         print *, 'Value seems wrong (after peeking)', data_small(1), SECRET_TEST_VALUE
         num_errors = num_errors + 1
       end if
-      if (num_elements .ne. 1) then
+
+      num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
+      if (num_elements .ne. 1 .or. .not. success) then
         print *, 'There should be exactly 1 element!'
         num_errors = num_errors + 1
       end if
 
       data_small(1) = -1
-      num_elements = buffer % get(i, data_small, 1, .false.)
+      success = buffer % get_elems(i, data_small, 1_8, CB_KIND_INTEGER_4, .false.)
       if (data_small(1) .ne. SECRET_TEST_VALUE) then
         print *, 'Value seems wrong (after reading)', data_small(1), SECRET_TEST_VALUE
         num_errors = num_errors + 1
       end if
-      if (num_elements .ne. 0) then
+
+      num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
+      if (num_elements .ne. 0 .or. .not. success) then
         print *, 'There should be exactly 1 element!'
         num_errors = num_errors + 1
       end if
@@ -152,8 +172,8 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
   if (consumer_id == 0) then
     do i = 0, num_producers - 1
-      num_elements = buffer % get(i, data_small, 0, .true.)
-      if (num_elements < 0) then
+      success = buffer % get_elems(i, data_small, 0_8, CB_KIND_INTEGER_4, .true.)
+      if (.not. success) then
         print *, 'ERROR, buffer%get returned negative! 0'
         error stop 1
       end if
@@ -169,7 +189,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   !---------------------------
 
   do i = 0, num_producers - 1
-    num_elements = buffer % get_num_elements(i)
+    num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
     if (num_elements .ne. NUM_DATA_ELEMENTS_SMALL) then
       num_errors = num_errors + 1
       print *, 'Wrong number of elements in buffer !!!!!!!!', rank, i, num_elements
@@ -183,9 +203,10 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   do i_prod = first_prod, last_prod
     call init_array(expected_data_small, i_prod)
 
-    num_elements = buffer % get(i_prod, data_small, NUM_DATA_ELEMENTS_SMALL, .true.)
+    success = buffer % get_elems(i_prod, data_small, NUM_DATA_ELEMENTS_SMALL, CB_KIND_INTEGER_4, .true.)
+    num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
 
-    if (num_elements .ne. 0) then
+    if (num_elements .ne. 0 .or. .not. success) then
       num_errors = num_errors + 1
       print *, 'Error, buffer should be empty but has ', num_elements
     end if
@@ -211,8 +232,8 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
     !end do
     do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
 
-      num_elements = buffer % get(i_prod, data_large(i : i + STEP_SIZE - 1), STEP_SIZE, .true.)
-      if (num_elements < 0) then
+      success = buffer % get_elems(i_prod, data_large(i : i + STEP_SIZE - 1), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
+      if (.not. success) then
         print *, 'ERROR, buffer%get returned negative! 1'
         error stop 1
       end if
@@ -225,7 +246,7 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
 
     end do
 
-    num_elements = buffer % get_num_elements(i_prod)
+    num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
     if (num_elements .ne. 0) then
       print *, 'Buffer is not empty after doing all the reads!!!', num_elements
       num_errors = num_errors + 1
@@ -243,22 +264,23 @@ function test_dcb_consumer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
   do i_prod = first_prod, last_prod
-    capacity = buffer % get_capacity(i_prod)
-    num_elements = buffer % get_num_elements(i_prod)
+    capacity = buffer % get_capacity(i_prod, CB_KIND_INTEGER_4)
+    num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
     if ((num_elements .ne. capacity) .or. (num_elements < 0)) then
       print *, 'Buffer should be completely full!', num_elements, capacity
       num_errors = num_errors + 1
     end if
 
     ! Should return -1
-    num_elements = buffer % get(i_prod, data_large, capacity + 1, .true.)
-    if (num_elements .ne. -1) then
+    success = buffer % get_elems(i_prod, data_large, capacity + 1, CB_KIND_INTEGER_4, .true.)
+    if (success) then
       print *, 'Wrong result when trying to extract more than capacity', num_elements
       num_errors = num_errors + 1
     end if
 
-    num_elements = buffer % get(i_prod, data_large, capacity, .true.)
-    if (num_elements .ne. 0) then
+    success = buffer % get_elems(i_prod, data_large, capacity, CB_KIND_INTEGER_4, .true.)
+    num_elements = buffer % get_num_elements(i, CB_KIND_INTEGER_4)
+    if (num_elements .ne. 0 .or. .not. success) then
       print *, 'Buffer is not empty after reading its entire content in one call!!!', num_elements
       num_errors = num_errors + 1
     end if
@@ -279,9 +301,8 @@ function test_dcb_producer(buffer, rank) result(num_errors)
 
   interface
     subroutine init_array(array, rank)
-      import :: DATA_ELEMENT
       implicit none
-      integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
+      integer, dimension(:), intent(inout) :: array
       integer, intent(in) :: rank
     end subroutine init_array
   end interface
@@ -292,18 +313,19 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   integer :: producer_id
   logical :: success
 
-  integer(C_INT) :: num_spaces, capacity
+  integer(C_INT64_T) :: num_spaces, capacity
   integer :: i
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small
-  integer(DATA_ELEMENT), dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large
+  integer, dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small
+  integer, dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large
 
   num_errors = 0
 
-  capacity = buffer % get_capacity()
+  capacity = buffer % get_capacity(CB_KIND_INTEGER_4)
   producer_id = buffer % get_producer_id()
 
-  print *, 'Capacity: ', capacity, buffer % get_num_spaces(.false.)
-  print *, '          ', buffer % get_num_spaces(.true.)
+  print *, 'Producer, rank = ', rank
+  print *, 'Capacity: ', capacity, buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
+  print *, '          ', buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
 
   !---------------------------
   call buffer % full_barrier()
@@ -311,9 +333,10 @@ function test_dcb_producer(buffer, rank) result(num_errors)
 
   print *, 'Partially putting a value'
   data_small(1) = SECRET_TEST_VALUE
-  num_spaces = buffer % put(data_small, 1, .false.)
+  success = buffer % put_elems(data_small, 1_8, CB_KIND_INTEGER_4, .false.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
 
-  if (num_spaces .ne. capacity - 1) then
+  if (num_spaces .ne. capacity - 1 .or. .not. success) then
     print *, 'Put something, but available space is wrong!', num_spaces, capacity - 1
     num_errors = num_errors + 1
   end if
@@ -327,11 +350,26 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   !---------------------------
 
   print *, 'Fully committing buffer content'
-  num_spaces = buffer % put(data_small, 0, .true.)
+  success = buffer % put_elems(data_small, 0_8, CB_KIND_INTEGER_4, .true.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
   print *, 'Fully committed buffer content'
   if (num_spaces .ne. capacity - 1) then
     print *, 'Put something, but available space is wrong!', num_spaces, capacity - 1
     num_errors = num_errors + 1
+  end if
+
+  num_spaces = buffer % get_num_spaces(CB_KIND_CHAR, .false.)
+  if (num_spaces .ne. (capacity - 1) * 4) then 
+    print *, 'Wrong number of spaces (char)', num_spaces
+    num_errors = num_errors + 1
+    error stop 1
+  end if
+
+  num_spaces = buffer % get_num_spaces(CB_KIND_REAL_8, .false.)
+  if (num_spaces .ne. (capacity - 1) / 2) then 
+    print *, 'Wrong number of spaces (real_8)', num_spaces
+    num_errors = num_errors + 1
+    error stop 1
   end if
 
   !---------------------------
@@ -342,7 +380,7 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  num_spaces = buffer % get_num_spaces(.true.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
   if (num_spaces .ne. capacity - 1) then
     print *, 'Consumer only peeked, available space is wrong', num_spaces, capacity - 1
     num_errors = num_errors + 1
@@ -356,16 +394,16 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
 
-  num_spaces = buffer % get_num_spaces(.true.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
   if (num_spaces .ne. capacity) then
     print *, 'Consumer removed everything, available space is wrong', num_spaces, capacity
     num_errors = num_errors + 1
   end if
 
   call init_array(data_small, producer_id)
-  num_spaces = buffer % put(data_small, NUM_DATA_ELEMENTS_SMALL, .true.)
+  success = buffer % put_elems(data_small, NUM_DATA_ELEMENTS_SMALL, CB_KIND_INTEGER_4, .true.)
 
-  if (num_spaces < 0) then
+  if (.not. success) then
     num_errors = num_errors + 1
     print *, 'Unable to insert stuff in the buffer!!!!!'
     error stop 1
@@ -383,7 +421,7 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
 
-  num_spaces = buffer % get_num_spaces(.true.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
   if (num_spaces .ne. capacity) then
     num_errors = num_errors + 1
     print *, 'There should be nothing in the buffer!'
@@ -394,9 +432,27 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   !---------------------------
 
   call init_array(data_large, producer_id)
-  do i = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
-    num_spaces = buffer % put(data_large(i:i + STEP_SIZE - 1), STEP_SIZE, .true.)
-    if (num_spaces < 0) then
+
+  ! Try putting char-sized elements
+  success = buffer % put_elems(data_large(1:STEP_SIZE), STEP_SIZE * 4, CB_KIND_CHAR, .true.)
+  if (.not. success) then
+    print *, 'Error using buffer%put'
+    error stop 1
+  end if
+
+  ! Try putting real8-sized elements
+  success = buffer % put_elems(data_large(STEP_SIZE + 1), STEP_SIZE - mod(STEP_SIZE, 2_8), CB_KIND_REAL_8, .true.)
+  if (mod(STEP_SIZE, 2_8) > 0) then 
+    success = buffer % put_elems(data_large(STEP_SIZE + STEP_SIZE), 1_8, CB_KIND_REAL_4, .true.) .and. success
+  end if
+  if (.not. success) then 
+      print *, 'Error using buffer%put'
+      error stop 1
+  end if
+
+  do i = STEP_SIZE * 2 + 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
+    success = buffer % put_elems(data_large(i:i + STEP_SIZE - 1), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
+    if (.not. success) then
       print *, 'Error using buffer%put'
       error stop 1
     end if
@@ -406,23 +462,24 @@ function test_dcb_producer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
 
-  num_spaces = buffer % get_num_spaces(.true.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
   if (num_spaces .ne. capacity) then
     num_errors = num_errors + 1
     print *, 'There should be nothing in the buffer!'
   end if
 
   ! Should return -1
-  num_spaces = buffer % put(data_large, capacity + 1, .true.)
-  if (num_spaces .ne. -1) then
+  success = buffer % put_elems(data_large, capacity + 1, CB_KIND_INTEGER_4, .true.)
+  if (success) then
     print *, 'Wrong return value when trying to put more than max capacity', num_spaces
     num_errors = num_errors + 1
   end if
 
   ! If call returns -1, we have a problem
-  num_spaces = buffer % put(data_large, capacity, .true.)
+  success = buffer % put_elems(data_large, capacity, CB_KIND_INTEGER_4, .true.)
+  num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
 
-  if (num_spaces .ne. 0) then
+  if (num_spaces .ne. 0 .or. .not. success) then
     print *, 'Error when filling buffer to capacity'
     num_errors = num_errors + 1
   end if
@@ -447,9 +504,8 @@ program test_distributed_circular_buffer
 
   interface
   subroutine init_array(array, rank)
-    import :: DATA_ELEMENT
     implicit none
-    integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
+    integer, dimension(:), intent(inout) :: array
     integer, intent(in) :: rank
   end subroutine init_array
   function test_dcb_channel(buffer) result(num_errors)
@@ -523,7 +579,7 @@ program test_distributed_circular_buffer
 
 
   ! Beginning of test
-  success = circ_buffer % create(dcb_comm, server_comm, num_producers, NUM_CONSUMERS, NUM_BUFFER_ELEMENTS)
+  success = circ_buffer % create_bytes(dcb_comm, server_comm, num_producers, NUM_CONSUMERS, BUFFER_SIZE_BYTE)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
@@ -585,10 +641,9 @@ program test_distributed_circular_buffer
 end program test_distributed_circular_buffer
 
 subroutine init_array(array, rank)
-  use circular_buffer_module, only: DATA_ELEMENT
   implicit none
 
-  integer(DATA_ELEMENT), dimension(:), intent(inout) :: array
+  integer, dimension(:), intent(inout) :: array
   integer, intent(in) :: rank
 
   integer :: i

@@ -58,8 +58,8 @@ module ioserver_functions
   end type
 
   type, public :: grid
-    integer :: id            ! grid id
-    integer :: size_i, size_j      ! horizontal dimensions of full grid
+    integer :: id             ! grid id
+    integer :: size_i, size_j ! horizontal dimensions of full grid
   end type
 
   type, public :: subgrid

@@ -26,11 +26,11 @@ module cb_plus_dcb_parameters
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
-  integer, parameter :: NUM_CB_ELEMENTS       = 1040                     ! Number of elements in each CB
-  integer, parameter :: CB_MESSAGE_SIZE       = 100                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND = 10000000                 ! How much total data to send (for each CB)
-  integer, parameter :: MAX_DCB_MESSAGE_SIZE  = CB_MESSAGE_SIZE * 500    ! Size of each data batch put in the DCB
-  integer, parameter :: NUM_DCB_ELEMENTS      = MAX_DCB_MESSAGE_SIZE * 5 ! Number of elements in each buffer of the DCB
+  integer(C_SIZE_T), parameter :: CB_SIZE_BYTES             = 1040 * 4;
+  integer,           parameter :: CB_MESSAGE_SIZE_INT       = 100              ! Size of each data batch put in a CB in number of integers
+  integer,           parameter :: CB_TOTAL_DATA_TO_SEND_INT = 10000000         ! How much total data to send (for each CB, in integers)
+  integer,           parameter :: MAX_DCB_MESSAGE_SIZE_INT  = CB_MESSAGE_SIZE_INT * 500        ! Size of each data batch put in the DCB
+  integer(C_SIZE_T), parameter :: DCB_SIZE_BYTES            = MAX_DCB_MESSAGE_SIZE_INT * 4 * 5 ! Number of bytes in each buffer of the DCB
 
   logical :: CHECK_CB_MESSAGES
   logical :: CHECK_DCB_MESSAGES
@@ -84,7 +84,7 @@ program pseudomodelandserver
   integer :: status, input
   integer :: me, nio_node
   type(MPI_Comm) :: comm
-  integer :: rank, size, nserv, noops
+  integer :: rank, size, nserv
   logical :: error
   character(len=128) :: arg
   type(memory_arena) :: ma
@@ -214,7 +214,7 @@ subroutine io_server_process()
 
   ! Create the DCB used for this test
   num_producers = allio_crs % size - server_crs % size
-  success = data_buffer % create(allio_crs % comm, server_crs % comm, num_producers, num_channels, NUM_DCB_ELEMENTS)
+  success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_producers, num_channels, DCB_SIZE_BYTES)
 
   if (.not. success) then
     write(6, *) 'Unable to create DCB (from SERVER process)'
@@ -261,8 +261,7 @@ end subroutine channel_process
 
 subroutine consumer_process(data_buffer)
   use cb_plus_dcb_parameters
-  use circular_buffer_module, only : DATA_ELEMENT
-  use distributed_circular_buffer_module, only : distributed_circular_buffer
+  use distributed_circular_buffer_module
   implicit none
 
   interface
@@ -277,12 +276,12 @@ subroutine consumer_process(data_buffer)
   integer, parameter :: WRITE_BUFFER_SIZE = 50000
 
   integer :: consumer_id, num_producers, num_consumers
-  integer :: i_producer, i_data_check, i_print
-  integer :: num_elements, message_size
-  integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: message, expected_message
-  integer(DATA_ELEMENT), dimension(WRITE_BUFFER_SIZE) :: file_write_buffer
+  integer :: i_producer, i_data_check
+  integer :: message_size
+  integer, dimension(MAX_DCB_MESSAGE_SIZE_INT) :: message, expected_message
+  integer, dimension(WRITE_BUFFER_SIZE) :: file_write_buffer
   integer :: file_write_position, write_size
-  logical :: finished
+  logical :: finished, success
   integer :: num_errors = 0
 
   logical, allocatable :: producer_activated(:)
@@ -303,7 +302,11 @@ subroutine consumer_process(data_buffer)
 
   ! Should receive one test signal
   do i_producer = consumer_id, num_producers - 1, num_consumers
-    num_elements = data_buffer % get(i_producer, message, 2, .true.)
+    success = data_buffer % get_elems(i_producer, message, 2_8, CB_KIND_INTEGER_4, .true.)
+    if (.not. success) then
+      print *, 'Could not even receive test signal!'
+      error stop 1
+    end if
     ! write (6, *) 'Received HI from relay #, local ID #, global rank #', i_producer, message(1), message(2)
     producer_activated(i_producer + 1) = .false.
     if (message(1) == 0) producer_activated(i_producer + 1) = .true.
@@ -323,17 +326,17 @@ subroutine consumer_process(data_buffer)
       if (.not. producer_activated(i_producer + 1)) cycle
 
       ! The buffer is empty, so it has not finished sending stuff. Just move on to the next
-      if (data_buffer % get_num_elements(i_producer) == 0) then
+      if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) == 0) then
         finished = .false.
         cycle
       end if
 
-      num_elements = data_buffer % peek(i_producer, message_size, 1)
+      success = data_buffer % peek_elems(i_producer, message_size, 1_8, CB_KIND_INTEGER_4)
 
       if (message_size > 0)  then
         ! There is something in the buffer!
         finished = .false.
-        num_elements = data_buffer % get(i_producer, message, message_size + 1, .true.)
+        success = data_buffer % get_elems(i_producer, message, INT(message_size + 1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
 
 
         write_size = message_size / 4
@@ -371,7 +374,7 @@ subroutine consumer_process(data_buffer)
 
   ! Final check on the buffers' content
   do i_producer = consumer_id, num_producers - 1, num_consumers
-    if (producer_activated(i_producer + 1) .and. (data_buffer % get_num_elements(i_producer) .ne. 1)) then
+    if (producer_activated(i_producer + 1) .and. (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 1)) then
       num_errors = num_errors + 1
       write (6, *) 'ERROR: buffer should be empty at the end of test'
     end if
@@ -394,12 +397,13 @@ subroutine model_pseudo_write(cb, array, n)
 
   type(jar) :: parcel
   integer :: status
+  logical :: success
   integer, dimension(:), pointer :: blind_array
 
   status = parcel % shape(array(2:n), n-1)
   JAR_DATA(parcel, blind_array)
-  status = cb % atomic_put(n-1, 1, .false.)
-  status = cb % atomic_put(blind_array, n-1, .true.)
+  success = cb % put(n-1, 1_8, CB_KIND_INTEGER_4, .false.)
+  success = cb % put(blind_array, INT(n-1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
   ! status = cb % atomic_put(array(1:n), n, .true.)
 end subroutine model_pseudo_write
 
@@ -411,18 +415,18 @@ subroutine model_process()
   use io_common_mod
   implicit none
 
-  integer               :: global_comm, global_rank, global_size
+  type(MPI_Comm)        :: global_comm
+  integer               :: global_rank, global_size
   type(comm_rank_size)  :: node_crs, local_compute_crs
   integer               :: local_compute_id
   integer               :: num_errors, ierr
   type(circular_buffer) :: data_buffer
   logical               :: success
-  integer               :: num_spaces
   character(len=8)      :: compute_name
   integer               :: bsize, bflags
   type(C_PTR)           :: tmp_ptr
 
-  integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: message
+  integer, dimension(CB_MESSAGE_SIZE_INT) :: message
 
   call get_local_world(global_comm, global_rank, global_size)
 
@@ -439,7 +443,7 @@ subroutine model_process()
   ! Create a single CB in our allocated space in shared memory
   write(compute_name,'(A4,I4.4)') "MCIO", local_compute_id
   tmp_ptr = ma % getblock(bsize, bflags, compute_name)
-  success = data_buffer % create(tmp_ptr, NUM_CB_ELEMENTS)
+  success = data_buffer % create_bytes(tmp_ptr, CB_SIZE_BYTES)
   if (.not. success) then
     num_errors = num_errors + 1
     write (6, *) 'AAAAHHHhhhh could not create CB from model PE ', node_crs % rank
@@ -451,30 +455,30 @@ subroutine model_process()
 
   ! Send a first test signal
   message(1) = global_rank
-  num_spaces = data_buffer % atomic_put(message, 1, .true.)
+  success = data_buffer % put(message, 1_8, CB_KIND_INTEGER_4, .true.)
 
   ! Now send a bunch of messages
   ! First item  = number of elements in message
   ! Second item = global rank of the sender
   ! Third item  = position at which we are in the message sequence (how many data elements sent so far)
-  message(1) = CB_MESSAGE_SIZE
+  message(1) = CB_MESSAGE_SIZE_INT
   message(2) = global_rank
   block
     integer :: i, j
-    do i = 0, CB_TOTAL_DATA_TO_SEND, CB_MESSAGE_SIZE - 3
+    do i = 0, CB_TOTAL_DATA_TO_SEND_INT, CB_MESSAGE_SIZE_INT - 3
       message(3) = i ! Where we at
       ! Prepare the data to send
-      do j = 1, CB_MESSAGE_SIZE - 3
+      do j = 1, CB_MESSAGE_SIZE_INT - 3
         message(j + 3) = compute_data_point(global_rank, i + j)
       end do
       ! Do the sending
-      call model_pseudo_write(data_buffer, message(:), CB_MESSAGE_SIZE)
+      call model_pseudo_write(data_buffer, message(:), CB_MESSAGE_SIZE_INT)
       ! num_spaces = data_buffer % atomic_put(message, CB_MESSAGE_SIZE, .true.)
 !      call sleep_us(50)
     end do
     ! We done. Send the stop signal
     message(1) = 0
-    num_spaces = data_buffer % atomic_put(message, 1, .true.)
+    success = data_buffer % put(message, 1_8, CB_KIND_INTEGER_4, .true.)
   end block
 
   if (num_errors > 0) then
@@ -490,12 +494,13 @@ end subroutine model_process
 subroutine io_relay_process()
   use ISO_C_BINDING
   use cb_plus_dcb_parameters
-  use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
+  use circular_buffer_module, only : circular_buffer
   use distributed_circular_buffer_module, only : distributed_circular_buffer
   use io_relay_mod
   implicit none
 
-  integer              :: global_comm, global_rank, global_size
+  type(MPI_Comm)       :: global_comm
+  integer              :: global_rank, global_size
   type(comm_rank_size) :: local_relay_crs, local_model_crs
   integer              :: num_local_compute, local_relay_id, num_local_relays, producer_id
   integer              :: ierr, i_compute, index, num_errors
@@ -522,7 +527,7 @@ subroutine io_relay_process()
   ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used to communicate with the server
-  success = data_buffer % create(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1)
+  success = data_buffer % create_bytes(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1_8)
   if (.not. success) then
     write(6, *) 'Unable to create DCB from RELAY process'
     error stop 1
@@ -539,7 +544,7 @@ subroutine io_relay_process()
     write(compute_name,'(A4,I4.4)') "MCIO", i_compute
 
     tmp_ptr = ma % getblock(bsize, bflags, compute_name)
-    success = local_data_buffers(index) % create(tmp_ptr)
+    success = local_data_buffers(index) % create_bytes(tmp_ptr)
 
     if (success) then
       index = index + 1
@@ -553,23 +558,22 @@ subroutine io_relay_process()
   block
     
     integer :: i_data_check
-    integer(DATA_ELEMENT), dimension(CB_MESSAGE_SIZE) :: cb_message, expected_message
-    integer(DATA_ELEMENT), dimension(MAX_DCB_MESSAGE_SIZE) :: dcb_message
-    integer :: current_message_size, model_message_size, blind_message_size
-    integer :: num_elements, num_spaces
+    integer, dimension(CB_MESSAGE_SIZE_INT) :: cb_message, expected_message
+    integer, dimension(MAX_DCB_MESSAGE_SIZE_INT) :: dcb_message
+    integer :: current_message_size, model_message_size
     logical :: finished = .false.
 
     ! Say hi to the consumer processes
     dcb_message(1) = local_relay_id
     dcb_message(2) = global_rank
-    num_spaces = data_buffer % put(dcb_message, 2, .true.)
+    success = data_buffer % put_elems(dcb_message, 2_8, CB_KIND_INTEGER_4, .true.)
 
     if (local_relay_id == 0) then ! only 1 relay per node sends output
 
       ! Get the initial test signal from each CB this relay is responsible for
       do i_compute = local_relay_id + 1, num_local_compute !, num_local_relays
         cb_message(:) = -1
-        num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, 1, .true.)
+        success = local_data_buffers(i_compute) % get(cb_message, 1_8, CB_KIND_INTEGER_4, .true.)
       end do
 
       ! The main loop
@@ -580,22 +584,22 @@ subroutine io_relay_process()
         do i_compute = local_relay_id + 1, num_local_compute !, num_local_relays
 
           ! The buffer is empty, so it has not finished sending stuff. Move on to the next CB
-          if (local_data_buffers(i_compute) % get_num_elements() == 0) then
+          if (local_data_buffers(i_compute) % get_num_elements(CB_KIND_INTEGER_4) == 0) then
             finished = .false.
             cycle
           end if
 
-          num_elements = local_data_buffers(i_compute) % peek(model_message_size, 1)
+          success = local_data_buffers(i_compute) % peek(model_message_size, 1_8, CB_KIND_INTEGER_4)
           if (model_message_size > 0) then
             ! There is something in the buffer!
             finished = .false.
 
             ! Read the content of the CB
-            num_elements = local_data_buffers(i_compute) % atomic_get(cb_message, model_message_size + 1, .true.)
+            success = local_data_buffers(i_compute) % get(cb_message, INT(model_message_size + 1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
 
             ! If the DCB message buffer is too full to contain that new package, flush it now
-            if (current_message_size + model_message_size + 1 > MAX_DCB_MESSAGE_SIZE) then
-              num_spaces = data_buffer % put(dcb_message, current_message_size, .true.)
+            if (current_message_size + model_message_size + 1 > MAX_DCB_MESSAGE_SIZE_INT) then
+              success = data_buffer % put_elems(dcb_message, INT(current_message_size, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
               current_message_size = 0
             end if
 
@@ -618,8 +622,7 @@ subroutine io_relay_process()
 
       dcb_message(current_message_size + 1) = 0 ! Put a 'stop' signal at the end of the DCB message buffer
       ! Send the stop signal along with the remaining data
-      num_spaces = data_buffer % put(dcb_message, current_message_size + 1, .true.)
-
+      success = data_buffer % put_elems(dcb_message, INT(current_message_size + 1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
     end if
   end block
 

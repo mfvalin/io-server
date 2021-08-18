@@ -31,41 +31,40 @@ subroutine shared_mem_test()
 
   use ISO_C_BINDING
   use mpi_f08
-  use circular_buffer_module, only : circular_buffer, DATA_ELEMENT
+  use circular_buffer_module
   implicit none
 
   interface
   subroutine init_array(array, rank)
-    use circular_buffer_module, only: DATA_ELEMENT
     implicit none
-    integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+    integer, dimension(:), intent(out) :: array
     integer, intent(in) :: rank
   end subroutine init_array
   end interface
 
-  integer, parameter :: NUM_BUFFER_ELEMENTS = 128
+  integer(C_SIZE_T), parameter :: BUFFER_SIZE_BYTE = 128 * 4
+  ! integer, parameter :: NUM_BUFFER_ELEMENTS = 128
   integer, parameter :: NUM_DATA_ELEMENTS = 10
   integer, parameter :: NPTEST = 200
-  integer, parameter :: STEP_SIZE = 5
+  integer(C_SIZE_T), parameter :: STEP_SIZE = 5
 
   integer(MPI_ADDRESS_KIND), parameter :: WINDOW_SIZE = 1024 * 1024
 
   type(circular_buffer) :: buffer_a, buffer_b
   type(C_PTR)           :: shmem_ptr_a, shmem_ptr_b
-  integer(DATA_ELEMENT) :: dummy_element
   logical               :: success, dummy_bool
 
-  integer(DATA_ELEMENT), dimension(NPTEST) :: local_data, received_data, source_data
+  integer, dimension(NPTEST) :: local_data, received_data, source_data
 
   type(C_PTR) :: base_mem_ptr, target_mem_ptr
   integer(KIND=MPI_ADDRESS_KIND) :: target_size
 
   integer :: my_rank, num_procs
-  integer :: i, n, errors, tmp_errors
+  integer :: i, errors, tmp_errors
   type(MPI_Win) :: window
-  integer :: disp_unit, target_disp_unit
+  integer :: target_disp_unit
   integer :: target_proc, source_proc
-  integer(C_INT) :: capacity
+  integer(C_INT64_T) :: capacity
 
   errors = 0
 
@@ -86,8 +85,7 @@ subroutine shared_mem_test()
 !  print *, 'This is PE', my_rank + 1, ' of', num_procs
 
   ! Allocate MPI window in shared memory
-  disp_unit = C_SIZEOF(dummy_element)
-  call MPI_Win_allocate_shared(WINDOW_SIZE, disp_unit, MPI_INFO_NULL, MPI_COMM_WORLD, base_mem_ptr, window)
+  call MPI_Win_allocate_shared(WINDOW_SIZE, 4, MPI_INFO_NULL, MPI_COMM_WORLD, base_mem_ptr, window)
   call MPI_Win_shared_query(window, target_proc, target_size, target_disp_unit, target_mem_ptr)  ! get my victim's base address
 
   ! Initialize local data
@@ -97,10 +95,10 @@ subroutine shared_mem_test()
 
   shmem_ptr_a  = transfer(base_mem_ptr, C_NULL_PTR)   ! pointer to my circular buffer
   shmem_ptr_b  = transfer(target_mem_ptr, C_NULL_PTR) ! pointer to my target's circular buffer
-  success = buffer_a % create(shmem_ptr_a, NUM_BUFFER_ELEMENTS)  ! create my circular buffer
-  dummy_bool = buffer_b % create(shmem_ptr_b)                      ! point to target's circular buffer
+  success = buffer_a % create_bytes(shmem_ptr_a, BUFFER_SIZE_BYTE) ! create my circular buffer
+  dummy_bool = buffer_b % create_bytes(shmem_ptr_b)                      ! point to target's circular buffer
 
-  capacity = buffer_a % get_capacity()
+  capacity = buffer_a % get_capacity(CB_KIND_INTEGER_4)
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
@@ -110,13 +108,13 @@ subroutine shared_mem_test()
     errors = errors + 1
   end if
 
-  if ((buffer_a % get_num_elements() .ne. 0) .or. (buffer_b % get_num_elements() .ne. 0)) then
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_b % get_num_elements(CB_KIND_INTEGER_4) .ne. 0)) then
     print *, 'GOT ERROR 0'
     errors = errors + 1
   end if
 
-  if (buffer_a % get_num_spaces() .ne. buffer_b % get_num_spaces()) then
-    print *, 'GOT ERROR: buffer spaces are ', buffer_a % get_num_spaces(), buffer_b % get_num_spaces()
+  if (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. buffer_b % get_num_spaces(CB_KIND_INTEGER_4)) then
+    print *, 'GOT ERROR: buffer spaces are ', buffer_a % get_num_spaces(CB_KIND_INTEGER_4), buffer_b % get_num_spaces(CB_KIND_INTEGER_4)
     errors = errors + 1
   end if
 
@@ -125,13 +123,13 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  n = buffer_b % atomic_put(local_data, STEP_SIZE, .false.) ! inject data into target's circular buffer
+  success = buffer_b % put(local_data, STEP_SIZE, CB_KIND_INTEGER_4, .false.) ! inject data into target's circular buffer
 
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  if (buffer_a % get_num_elements() .ne. 0) then
+  if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) then
     print *, 'GOT ERROR. We did not commit the transaction, but there is data in the buffer!'
     errors = errors + 1
   end if
@@ -140,37 +138,38 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  n = buffer_b % atomic_put(local_data, 0, .true.)
+  success = buffer_b % put(local_data, 0_8, CB_KIND_INTEGER_4, .true.)
 
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  if (buffer_a % get_num_elements() .ne. STEP_SIZE) then
+  if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. STEP_SIZE) then
     print *, 'GOT ERROR. We just committed the previous transaction, so there should be exactly that many elements: ', STEP_SIZE
     errors = errors + 1
   end if
 
-  n = buffer_a % peek(received_data, STEP_SIZE)
+  success = buffer_a % peek(received_data, STEP_SIZE, CB_KIND_INTEGER_4)
 
-  if ((buffer_a % get_num_elements() .ne. STEP_SIZE) .or. (n .ne. STEP_SIZE)) then
-    print *, 'GOT ERROR. We just peeked at the buffer, but the resulting number of elements is wrong!', n, STEP_SIZE
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. STEP_SIZE) .or. (.not. success)) then
+    print *, 'GOT ERROR. We just peeked at the buffer, but the resulting number of elements is wrong!', &
+             buffer_a % get_num_elements(CB_KIND_INTEGER_4), STEP_SIZE
     errors = errors + 1
   end if
 
-  n = buffer_a % atomic_get(received_data, STEP_SIZE, .false.)
-  if (buffer_a % get_num_elements() .ne. 0) then
-    print *, 'GOT ERROR. We just read the data, but it looks like the buffer is *not* empty', n
+  success = buffer_a % get(received_data, STEP_SIZE, CB_KIND_INTEGER_4, .false.)
+  if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) then
+    print *, 'GOT ERROR. We just read the data, but it looks like the buffer is *not* empty', buffer_a % get_num_elements(CB_KIND_INTEGER_4)
     errors = errors + 1
   end if
 
-  if (buffer_a % get_num_spaces() .ne. capacity - STEP_SIZE) then
+  if (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. capacity - STEP_SIZE) then
     print *, 'GOT ERROR. We only read the data without extracting it. The space should not be available'
     errors = errors + 1
   end if
 
-  n = buffer_a % atomic_get(received_data, 0, .true.)
-  if ((buffer_a % get_num_elements() .ne. 0) .or. (buffer_a % get_num_spaces() .ne. capacity)) then
+  success = buffer_a % get(received_data, 0_8, CB_KIND_INTEGER_4, .true.)
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. capacity)) then
     print *, 'GOT ERROR. Buffer should be completely empty'
     errors = errors + 1
   end if
@@ -181,20 +180,20 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  n = buffer_b % atomic_put(local_data, STEP_SIZE, .true.) ! inject data into target's circular buffer
+  success = buffer_b % put(local_data, STEP_SIZE, CB_KIND_INTEGER_4, .true.) ! inject data into target's circular buffer
 
   !--------------------------------------
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  n = buffer_a % atomic_get(received_data, STEP_SIZE - 1, .true.) ! get from my own buffer (put there by source_proc)
+  success = buffer_a % get(received_data, STEP_SIZE - 1, CB_KIND_INTEGER_4, .true.) ! get from my own buffer (put there by source_proc)
 
   if (.not. all(received_data(1:STEP_SIZE - 2) == source_data(1:STEP_SIZE - 2))) then
     print *, 'GOT ERROR, data put directly in buffer by neighbor process (first call)'
     errors = errors + 1
   end if
 
-  n = buffer_a % atomic_get(received_data(STEP_SIZE), 1, .true.)  ! get from my own buffer (remainder of what was put)
+  success = buffer_a % get(received_data(STEP_SIZE), 1_8, CB_KIND_INTEGER_4, .true.)  ! get from my own buffer (remainder of what was put)
 
   if (.not. all(received_data(1:STEP_SIZE - 2) == source_data(1:STEP_SIZE - 2))) then
     print *, 'GOT ERROR, data put directly in buffer by neighbor process (second call)'
@@ -207,8 +206,8 @@ subroutine shared_mem_test()
 
   do i = 1, NPTEST, STEP_SIZE  ! ring test with wraparound , make sure NPTEST > size of circular buffer
     if(my_rank == 0) then
-      n = buffer_b % atomic_put(local_data(i) , STEP_SIZE, .true.) ! send to next in ring
-      n = buffer_a % atomic_get(received_data(i), STEP_SIZE, .true.) ! then get from previous in ring
+      success = buffer_b % put(local_data(i) , STEP_SIZE, CB_KIND_INTEGER_4, .true.) ! send to next in ring
+      success = buffer_a % get(received_data(i), STEP_SIZE, CB_KIND_INTEGER_4, .true.) ! then get from previous in ring
 
       if (.not. all(local_data(i:i + STEP_SIZE - 1) == received_data(i:i + STEP_SIZE - 1))) then
         print *, 'GOT ERROR in ring data'
@@ -216,8 +215,8 @@ subroutine shared_mem_test()
       end if
 
     else
-      n = buffer_a % atomic_get(received_data(i) , STEP_SIZE, .true.) ! get from previous in ring
-      n = buffer_b % atomic_put(received_data(i) , STEP_SIZE, .true.) ! pass to next in ring
+      success = buffer_a % get(received_data(i) , STEP_SIZE, CB_KIND_INTEGER_4, .true.) ! get from previous in ring
+      success = buffer_b % put(received_data(i) , STEP_SIZE, CB_KIND_INTEGER_4, .true.) ! pass to next in ring
     endif
 
   enddo
@@ -225,7 +224,7 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  if ((buffer_a % get_num_elements() .ne. 0) .or. (buffer_b % get_num_elements() .ne. 0)) then
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_b % get_num_elements(CB_KIND_INTEGER_4) .ne. 0)) then
     print *, 'GOT ERROR, there is some data left after the entire ring transmission is over'
     errors = errors + 1
   end if
@@ -256,10 +255,9 @@ subroutine shared_mem_test()
 end subroutine shared_mem_test
 
 subroutine init_array(array, rank)
-  use circular_buffer_module, only: DATA_ELEMENT
   implicit none
 
-  integer(DATA_ELEMENT), dimension(:), intent(out) :: array
+  integer, dimension(:), intent(out) :: array
   integer, intent(in) :: rank
 
   integer :: i

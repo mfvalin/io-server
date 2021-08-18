@@ -164,7 +164,7 @@ or
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
-static const size_t MIN_CIRC_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
+static const size_t CB_MIN_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
 
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
@@ -260,6 +260,8 @@ static inline double num_elem_to_kb(const size_t num_elements) {
   return num_elements * sizeof(data_element) / 1024.0;
 }
 
+int CB_get_elem_size(
+);
 //! Print buffer header (to help debugging)
 void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to print
 );

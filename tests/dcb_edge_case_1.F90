@@ -6,7 +6,7 @@ module dcb_edge_case_1_mod
 
   public
 
-  integer, parameter :: NUM_CB_ELEMENTS = 200
+  integer(C_SIZE_T), parameter :: NUM_CB_BYTES = 200 * 4
 
 contains
 
@@ -24,25 +24,25 @@ contains
     implicit none
     type(distributed_circular_buffer), intent(inout) :: dcb
 
-    integer :: capacity 
+    integer(C_INT64_T) :: capacity 
     integer, dimension(:), allocatable :: msg
-    integer :: num
+    logical :: success
 
-    capacity = dcb % get_capacity(0)
+    capacity = dcb % get_capacity(0, CB_KIND_INTEGER_4)
     allocate(msg(capacity))
     ! print *, '(Consumer) capacity: ', capacity
     !------------------------
     call dcb % full_barrier()
     !------------------------
-    num = dcb % get(0, msg, capacity, .true.)
-    if (num < 0) then
+    success = dcb % get_elems(0, msg, capacity, CB_KIND_INTEGER_4, .true.)
+    if (.not. success) then
       print *, 'AAAhhh error with get()'
       error stop 1
     end if
     !------------------------
     call dcb % full_barrier()
     !------------------------
-    num = dcb % get(0, msg, 1, .true.)
+    success = dcb % get_elems(0, msg, 1_8, CB_KIND_INTEGER_4, .true.)
 
     call dcb % print(.true.)
     
@@ -53,11 +53,11 @@ contains
     type(distributed_circular_buffer), intent(inout) :: dcb
 
     integer, dimension(:), allocatable :: msg
-    integer :: capacity
-    integer :: num_spaces
+    integer(C_INT64_T) :: capacity, num_spaces
+    logical :: success
     integer :: i
 
-    capacity = dcb % get_capacity()
+    capacity = dcb % get_capacity(CB_KIND_INTEGER_4)
     ! print *, '(Producer) capacity: ', capacity
     allocate(msg(capacity))
 
@@ -66,8 +66,7 @@ contains
     msg(:) = 1
     msg(capacity) = 123
 
-    num_spaces = dcb % get_num_spaces(.false.)
-    
+    num_spaces = dcb % get_num_spaces(CB_KIND_INTEGER_4, .false.)
     if (num_spaces .ne. capacity) then
       print *, 'Buffer is empty, but num spaces != capacity!!!!'
       error stop 1
@@ -75,7 +74,8 @@ contains
 
     ! Fill the buffer so that the internal pointers (indices) reach exactly their upper limit
     do i = 1, capacity
-      num_spaces = dcb % put(msg(i), 1, .true.)
+      success = dcb % put_elems(msg(i), 1_8, CB_KIND_INTEGER_4, .true.)
+      num_spaces = dcb % get_num_spaces(CB_KIND_INTEGER_4, .false.)
       if (num_spaces .ne. capacity - i) then
         print *, 'Wrong number of spaces left...', num_spaces, capacity - i
         call dcb % print(.false.)
@@ -85,7 +85,7 @@ contains
     !------------------------
     call dcb % full_barrier()
     !------------------------
-    num_spaces = dcb % put(321, 1, .true.)
+    success = dcb % put_elems(321, 1_8, CB_KIND_INTEGER_4, .true.)
     !------------------------
     call dcb % full_barrier()
     !------------------------
@@ -118,10 +118,10 @@ program dcb_edge_case_1
   ! Create the communicators (needed for the server only)
   if (global_rank == 0 .or. global_rank == 1) then
     call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create(MPI_COMM_WORLD, server_comm, 1, 1, NUM_CB_ELEMENTS)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, 1, 1, NUM_CB_BYTES)
   else if (global_rank == 2) then
     call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm)
-    success = dcb % create(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0, 0)
+    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0, 0_8)
   else
     print *, 'Error'
     error stop 1

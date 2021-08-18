@@ -31,6 +31,8 @@ module distributed_circular_buffer_module
 
   private
 
+  public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8
+
   !> A set of FIFO queues used by multiple pairs of processes, with their data stored on a single one of these processes
   type, public :: distributed_circular_buffer
     private
@@ -285,7 +287,7 @@ contains
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer,                            intent(in)    :: type_id
-    integer(C_INT) :: num_elements
+    integer(C_INT64_T) :: num_elements
     num_elements = DCB_get_capacity_local_bytes(this % c_buffer) / get_type_size(type_id)
   end function get_capacity_local
 
@@ -294,7 +296,7 @@ contains
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT),                     intent(in)    :: buffer_id
     integer       ,                     intent(in)    :: type_id
-    integer(C_INT) :: num_elements
+    integer(C_INT64_T) :: num_elements
     num_elements = DCB_get_capacity_server_bytes(this % c_buffer, buffer_id) / get_type_size(type_id)
   end function get_capacity_server
 

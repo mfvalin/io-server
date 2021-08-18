@@ -131,7 +131,7 @@
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
-static const size_t MIN_CIRC_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
+static const size_t CB_MIN_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
 
 //!> circular buffer management variables
 //!> <br>in == out means buffer is empty
@@ -236,6 +236,14 @@ static const int CB_SPACE_CHECK_DELAY_US = 10;
 
 int CB_check_integrity(const circular_buffer_p buffer);
 
+//C_StArT
+int CB_get_elem_size(
+                    )
+//C_EnD
+{ 
+  return sizeof(data_element);
+}
+
 //F_StArT
 //  subroutine CB_print_header(buffer) bind(C, name = 'CB_print_header')
 //    import :: C_PTR
@@ -318,7 +326,7 @@ circular_buffer_p CB_init_bytes(
     return NULL;
   }
 
-  if (num_bytes < MIN_CIRC_BUFFER_SIZE) {
+  if (num_bytes < CB_MIN_BUFFER_SIZE) {
     printf("ERROR: not requesting enough elements for circular_buffer initialization!\n");
     return NULL; // area is too small
   }
@@ -382,7 +390,7 @@ circular_buffer_p CB_create_shared_bytes(
 {
   *shmid = -1;
 
-  if (num_bytes < MIN_CIRC_BUFFER_SIZE)
+  if (num_bytes < CB_MIN_BUFFER_SIZE)
     return NULL;
 
   int id = shmget(IPC_PRIVATE, num_bytes, IPC_CREAT); // create shared memory segment
@@ -443,7 +451,7 @@ circular_buffer_p CB_create_bytes(size_t num_bytes //!< [in]  size in bytes of t
                                  )
 //C_EnD
 {
-  if (num_bytes < MIN_CIRC_BUFFER_SIZE)
+  if (num_bytes < CB_MIN_BUFFER_SIZE)
     return NULL;
   circular_buffer_p buffer = (circular_buffer_p)malloc(num_bytes);
   return CB_init_bytes(buffer, num_bytes);
@@ -470,7 +478,7 @@ circular_buffer_p CB_from_pointer_bytes(
     )
 //C_EnD
 {
-  if (num_bytes < MIN_CIRC_BUFFER_SIZE) {
+  if (num_bytes < CB_MIN_BUFFER_SIZE) {
     printf("NOT ASKING FOR A BIG ENOUGH CIRCULAR BUFFER\n");
     return NULL;
   }
