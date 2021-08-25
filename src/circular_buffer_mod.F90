@@ -242,7 +242,7 @@ contains
   end function get
 
   !> \brief Wait until num_elements of type type_id are available, then insert from src array
-  !> success = cb\%atomic_put(src, num_elements, type_id, commit_transaction)
+  !> success = cb\%put(src, num_elements, type_id, commit_transaction)
 #define IgnoreTypeKindRank src
 #define ExtraAttributes , target
   function put(this, src, num_elements, type_id, commit_transaction) result(success)

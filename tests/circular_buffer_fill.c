@@ -98,9 +98,12 @@ int fill_test(int argc, char** argv) {
       num_errors++;
     }
 
-    const int status = CB_put(local_buffer, local_data, max_num_bytes, CB_COMMIT);
+    const int status = CB_put(local_buffer, local_data, capacity, CB_COMMIT);
     if (status != 0)
+    {
+      printf("ERROR put failed (capacity)\n");
       num_errors++;
+    }
   }
 
   //---------------------------
@@ -129,7 +132,10 @@ int fill_test(int argc, char** argv) {
       //      printf("Put data after %f ms (rank %d)\n", t, my_rank);
 
       if (t * 1000 < READ_DELAY_US * my_rank)
+      {
+        printf("Error in delay (READ)\n");
         num_errors++;
+      }
     }
   }
 
@@ -152,7 +158,10 @@ int fill_test(int argc, char** argv) {
         IO_timer_start(&read_time);
         const double t = IO_time_ms(&read_time);
         if (t * 1000 < WRITE_DELAY_US * i)
+        {
+          printf("Error in delay! (WRITE)\n");
           num_errors++;
+        }
 
         //        printf("Read in %f ms\n", t);
 
@@ -175,7 +184,10 @@ int fill_test(int argc, char** argv) {
 
   if (my_rank != 0) {
     if (CB_get_available_data_bytes(local_buffer) != 0)
+    {
+      printf("Should be 0 available bytes!!\n");
       num_errors++;
+    }
   }
 
   //---------------------------

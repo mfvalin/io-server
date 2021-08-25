@@ -65,7 +65,8 @@ subroutine basic_test()
 
 !  call circ_buffer % print_header()
 
-  do i = 1, NUM_ELEM, STEP_SIZE
+  ! do i = 1, NUM_ELEM, STEP_SIZE
+  do i = 1, 2, STEP_SIZE
     success = circ_buffer % put(local(i), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
     num_elem_in = circ_buffer % get_num_elements(CB_KIND_INTEGER_4)
 
@@ -98,7 +99,7 @@ subroutine basic_test()
       print *, 'Wrong space (char) available in buffer after adding data', num_elem_free, (buffer_limit - STEP_SIZE) * 4
     end if
 
-    num_elem_free = circ_buffer % get_num_spaces(CB_KIND_CHAR)
+    num_elem_free = circ_buffer % get_num_spaces(CB_KIND_REAL_8)
     if (num_elem_free .ne. (buffer_limit - STEP_SIZE) / 2) then
       num_error = num_error + 1
       print *, 'Wrong space (real8) available in buffer after adding data', num_elem_free, (buffer_limit - STEP_SIZE) / 2
@@ -124,15 +125,8 @@ subroutine basic_test()
     end if
   end do
 
-  ! write(*, '') 'joijoijojwqeewqrqwrq'
-  ! print *, 'Joijoijoijoijoj'
-  ! write(ERROR_UNIT, '') 'joijoijojwqeewqrqwrq'
-
   if (num_error > 0) then
     print *, 'AAAAAhhhhh we found errors when running the test!!', num_error
-    do i = 1, 10
-      print *, 'i = ', i
-    end do
     error stop 1
   else
     print *, 'All good for basic test (create, put, get, data, space)'

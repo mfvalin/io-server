@@ -161,6 +161,12 @@ typedef common_server_header* common_server_header_p;
 
 // Forward declarations
 static inline void print_instance(const circular_buffer_instance_p instance);
+//C_StArT
+void DCB_delete(distributed_circular_buffer_p);
+void DCB_print(distributed_circular_buffer_p, int32_t);
+void DCB_full_barrier(distributed_circular_buffer_p buffer);
+int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
+//C_EnD
 
 //! @{ @name Various size calculators
 
@@ -239,16 +245,28 @@ static inline int check_instance_consistency(const circular_buffer_instance_p in
   }
 
   if (instance->capacity != CB_get_capacity_bytes(&instance->circ_buffer))
+  {
+    // printf("Invalid b/c wrong instance capacity (%ld, but CB has %ld)\n", instance->capacity, CB_get_capacity_bytes(&instance->circ_buffer));
     return -1;
+  }
 
   if (instance->target_rank < 0)
+  {
+    // printf("Invalid rank\n");
     return -1;
+  }
 
   if (instance->id < 0)
+  {
+    // printf("Invalid instance ID\n");
     return -1;
+  }
 
   if (CB_check_integrity(&instance->circ_buffer) < 0)
+  {
+    // printf("Invalid b/c CB integrity check failed\n");
     return -1;
+  }
 
   return 0;
 }
@@ -599,7 +617,7 @@ static int64_t DCB_wait_data_available_bytes(
     const size_t num_requested_bytes //!< [in] Number of bytes we want to read
 ) {
   // Function inputs and buffer consistency checks
-  if (buffer == NULL || is_producer(buffer))
+  if (buffer == NULL || !is_consumer(buffer))
     return -1;
 
   const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
@@ -617,21 +635,21 @@ static int64_t DCB_wait_data_available_bytes(
   // Update stats
   instance->circ_buffer.stats.total_read_wait_time_ms += num_waits * DCB_DATA_CHECK_DELAY_US / 1000.0;
 
-  return num_available_bytes;
+  return (int64_t)num_available_bytes;
 }
 
 //! Initialize the given circular buffer instance, including the circular_buffer it contains
-static inline int init_circular_buffer_instance_bytes(
-    circular_buffer_instance_p instance, //!< Buffer instance we want to init
-    const int                  id,       //!< ID of the buffer instance
-    const size_t               num_bytes //!< How many bytes are taken by the circular buffer
+static inline int init_circular_buffer_instance(
+    circular_buffer_instance_p instance,    //!< Buffer instance we want to init
+    const int                  id,          //!< ID of the buffer instance
+    const size_t               num_elements //!< How many elements are taken by the circular buffer
 ) {
   instance->target_rank = -1;
   instance->id          = id;
   instance->dummy       = NULL;
   instance->capacity    = 0;
 
-  if (CB_init_bytes(&instance->circ_buffer, num_bytes) == NULL)
+  if (CB_init_bytes(&instance->circ_buffer, num_elements * sizeof(data_element)) == NULL)
     return -1;
 
   instance->capacity = CB_get_capacity_bytes(&instance->circ_buffer);
@@ -651,14 +669,21 @@ static inline void print_instance(const circular_buffer_instance_p instance) {
   printf(
       "Num bytes: %ld, num spaces: %ld\n"
       "Target rank: %ld\n"
+      "Instance ID %d\n"
       "Capacity %ld\n",
-      get_available_data_bytes(instance), get_available_space_bytes(instance), (int64_t)instance->target_rank,
+      get_available_data_bytes(instance), get_available_space_bytes(instance), (int64_t)instance->target_rank, instance->id,
       instance->capacity);
   CB_print_header(&instance->circ_buffer);
   for (uint64_t i = 0; i < sizeof(circular_buffer_instance); ++i) {
     if (i % 8 == 0)
       printf("\n");
+
     printf("%03d ", ((unsigned char*)instance)[i]);
+
+    if (i% 8 == 7) {
+      const uint32_t* pos = (const uint32_t*) &(((const unsigned char*)instance)[i-8]);
+      printf(" -- %11d %11d (%ld)", pos[0], pos[1], ((uint64_t*)pos)[0]);
+    }
   }
   printf("\n");
 }
@@ -680,14 +705,6 @@ static inline void send_channel_signal(distributed_circular_buffer_p buffer, con
 //! @}
 
 //! @{ \name Distributed circular buffer public interface
-
-// Forward declarations
-//C_StArT
-void DCB_delete(distributed_circular_buffer_p);
-void DCB_print(distributed_circular_buffer_p, int32_t);
-void DCB_full_barrier(distributed_circular_buffer_p buffer);
-int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
-//C_EnD
 
 //F_StArT
 //  subroutine DCB_sync_window(buffer) BIND(C, name = 'DCB_sync_window')
@@ -848,7 +865,7 @@ distributed_circular_buffer_p DCB_create_bytes(
     // Initialize the individual buffers
     for (int i = 0; i < num_producers; i++) {
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
-      init_circular_buffer_instance_bytes(buffer_instance, i, num_elem_in_circ_buffer);
+      init_circular_buffer_instance(buffer_instance, i, num_elem_in_circ_buffer);
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
     }
   }
@@ -1284,7 +1301,7 @@ int DCB_put_bytes(
 
   // First segment
   const size_t num_elem_segment_1 = num_elements > (limit - in_index) ? (limit - in_index) : num_elements;
-  const size_t num_bytes_1        = num_elem_segment_1 <= num_elements ? num_bytes : num_elem_segment_1 * sizeof(data_element);
+  const size_t num_bytes_1        = num_elem_segment_1 < num_elements ? num_elem_segment_1 * sizeof(data_element) : num_bytes;
   {
     const int fractional = num_bytes_1 != num_elem_segment_1 * sizeof(data_element);
 
@@ -1385,7 +1402,7 @@ int DCB_get_bytes(
 
   // 1st segment
   const size_t num_elem_segment_1 = num_elements > (limit - out_index) ? (limit - out_index) : num_elements;
-  const size_t num_bytes_1    = num_elem_segment_1 <= num_elements ? num_bytes : num_elem_segment_1 * sizeof(data_element);
+  const size_t num_bytes_1        = num_elem_segment_1 < num_elements ? num_elem_segment_1 * sizeof(data_element) : num_bytes;
   copy_bytes(dest_data, (void*)(buffer_data + out_index), num_bytes_1);
 
   // Update temporary extraction pointer
@@ -1461,23 +1478,37 @@ int DCB_check_integrity(
     int                                 verbose //!< [in] Whether to display certain information in case of failure
 ) {
   if (buffer == NULL) {
-    printf("Buffer pointer is NULL!\n");
+    if (verbose) printf("Buffer pointer is NULL!\n");
     return -1;
   }
 
   if ((buffer->producer_id >= 0) + (buffer->channel_id >= 0) + (buffer->consumer_id >= 0) != 1) {
-    printf("Inconsistency in DCB IDs\n");
+    if (verbose) printf("Inconsistency in DCB IDs\n");
     return -1;
   }
 
   if (is_producer(buffer)) {
     if (check_instance_consistency(&buffer->local_header) != 0) {
-      printf("Local instance failed integrity check!\n");
+      if (verbose) printf("Local instance %d failed integrity check!\n", buffer->producer_id);
       return -1;
     }
   }
   else if (is_consumer(buffer)) {
     for (int i = 0; i < buffer->num_producers; ++i) {
+
+      // Check whether the limit of this CB points to the beginning of the next CB
+      if (i < buffer->num_producers - 1) {
+        const circular_buffer_instance_p current_instance = get_circular_buffer_instance(buffer, i);
+        const circular_buffer_instance_p next_instance    = get_circular_buffer_instance(buffer, i+1);
+        const data_element* end_of_buffer = current_instance->circ_buffer.data + current_instance->circ_buffer.m.limit;
+
+        if ((void*)end_of_buffer != (void*)next_instance) {
+          printf("AAAHHHHhhh end of CB %d (%ld) does not match with start of CB %d (%ld)\n", i, (uint64_t)end_of_buffer, i + 1, (uint64_t)next_instance);
+          return -1;
+        }
+      }
+
+      // Check consistency of that particular buffer
       if (DCB_check_instance_integrity(buffer, i) != 0)
         return -1;
     }

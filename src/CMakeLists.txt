@@ -78,8 +78,8 @@ target_compile_options(
    $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
-   $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416 -trackback>
-   -g -O0
+   $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>
+   #-g -O0
 )
 
 install(TARGETS ${PROJECT_NAME})

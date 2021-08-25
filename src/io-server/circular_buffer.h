@@ -166,21 +166,24 @@ or
 
 static const size_t CB_MIN_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
 
-//!> circular buffer management variables
-//!> <br>in == out means buffer is empty
-//!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
+//! Circular buffer management variables
+//! Only use 64-bit members in that struct. Better for alignment
+//! <br>in == out means buffer is empty
+//! <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
   uint64_t version; //!< version marker
   uint64_t first;   //!< should be 0, because the feature has not been implemented yet
   uint64_t in[2];   //!< Start inserting data at data[in]
   uint64_t out[2];  //!< Start reading data at data[out]
-  uint64_t limit;   //!< size of data buffer (last available index + 1)
+  uint64_t limit;   //!< Size of data buffer (last available index + 1)
+  uint64_t capacity_byte; //!< Size of data buffer in bytes
 } fiol_management;
 
 //! pointer to circular buffer management part
 typedef fiol_management* fiol_management_p;
 
 //! Set of statistics we want to record as a circular buffer is used
+//! Only use 64-bit members in that struct. Better for alignment
 typedef struct {
   uint64_t num_reads;
   uint64_t num_read_elems;

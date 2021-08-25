@@ -8,6 +8,7 @@
 // These numbers 
 const size_t NUM_BUFFER_BYTES = 180 * 4;
 const size_t NUM_CHARS = 60 * 4;
+const int NUM_MESSAGES = 12; // Need a number that will go through every fraction of an 8-byte element size, and a little bit more
 
 void check_msg_length(const char* msg, const size_t length)
 {
@@ -30,11 +31,24 @@ void consumer_process(distributed_circular_buffer_p dcb)
 
     int result;
 
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < NUM_MESSAGES; ++i)
     {
+        for (int j = 0; j < NUM_MESSAGES; ++j)
+            peeked[j] = '\0';
+
+        // Check read of a partial element (that it copies exactly the number of bytes asked)
+        result = DCB_get_bytes(dcb, 0, peeked, i, CB_PEEK);
+        if (result != 0) exit(-1);
+        check_msg_length(peeked, i);
+
+        // Peek exact message size
         result = DCB_get_bytes(dcb, 0, peeked, NUM_CHARS - i, CB_PEEK);
         if (result != 0) exit(-1);
-        result = DCB_get_bytes(dcb, 0, message, NUM_CHARS, CB_COMMIT);
+        check_msg_length(peeked, NUM_CHARS - i - 1);
+
+        // Extract message, rounding the number of bytes up to the size of an element (this should NOT affect the next message)
+        const size_t round_num = ((NUM_CHARS - i + sizeof(data_element) - 1) / sizeof(data_element)) * sizeof(data_element);
+        result = DCB_get_bytes(dcb, 0, message, round_num, CB_COMMIT);
         if (result != 0) exit(-1);
         printf("received: %s (len = %ld)\n", message, strlen(message));
         check_msg_length(message, NUM_CHARS - i - 1);
@@ -53,13 +67,13 @@ void producer_process(distributed_circular_buffer_p dcb)
     size_t total_sent = 0;
     const int64_t capacity = DCB_get_capacity_local_bytes(dcb);
 
-    if (capacity != NUM_BUFFER_BYTES)
+    if (capacity < NUM_BUFFER_BYTES || capacity > NUM_BUFFER_BYTES + 8)
     {
-        printf("AAAHHHHH wrong capacity!\n");
+        printf("AAAHHHHH wrong capacity! Asked for %ld, got %ld\n", NUM_BUFFER_BYTES, capacity);
         exit(-1);
     }
 
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < NUM_MESSAGES; ++i)
     {
         const size_t count = NUM_CHARS - i;
 

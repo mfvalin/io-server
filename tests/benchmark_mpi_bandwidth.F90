@@ -23,7 +23,7 @@ contains
     logical :: am_server_node
 
     integer :: global_rank,  node_root_global_rank
-    integer :: ierr
+    ! integer :: ierr
 
     call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
     call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
@@ -86,6 +86,9 @@ contains
     real :: total_data, total_data_kb, total_data_mb, total_data_gb
     real :: total_per_s, mb_per_s, gb_per_s
     real :: time_s, time_ms
+
+    if (channel_count < 0) then
+    end if
 
     time_ms = time
     time_s = time_ms / 1000.0
@@ -216,6 +219,8 @@ contains
 
     real, dimension(num_msg_sizes) :: rates
 
+    if (global_rank < 0) print *, num_relays, msg_count
+
     call MPI_Comm_rank(msg_comm, rank)
 
     if (rank == 0) then
@@ -258,14 +263,14 @@ program mpi_bandwidth
   integer(MPI_ADDRESS_KIND) :: offset, window_size
   integer, dimension(MAX_MESSAGE_SIZE) :: relay_buffer
 
-  type(io_timer) :: small_timer, medium_timer, large_timer
-  real(C_DOUBLE) :: total_time
+  ! type(io_timer) :: small_timer, medium_timer, large_timer
+  ! real(C_DOUBLE) :: total_time
 
   integer, parameter :: NUM_MESSAGE_SIZES = 6
   integer, dimension(NUM_MESSAGE_SIZES) :: message_sizes
-  real, dimension(NUM_MESSAGE_SIZES)    :: rates
-  integer :: num_messages, num_channels
-  integer :: i, i_num_channel
+  ! real, dimension(NUM_MESSAGE_SIZES)    :: rates
+  integer :: num_messages !, num_channels
+  ! integer :: i, i_num_channel
 
   integer, parameter :: NUM_CHANNEL_COUNTS = 8
   integer, dimension(NUM_CHANNEL_COUNTS) :: channel_counts

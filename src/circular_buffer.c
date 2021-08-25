@@ -133,21 +133,24 @@
 
 static const size_t CB_MIN_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
 
-//!> circular buffer management variables
-//!> <br>in == out means buffer is empty
-//!> <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
+//! Circular buffer management variables
+//! Only use 64-bit members in that struct. Better for alignment
+//! <br>in == out means buffer is empty
+//! <br>in == out-1 (or in=limit-1 && out==0) means buffer is full
 typedef struct {
   uint64_t version; //!< version marker
   uint64_t first;   //!< should be 0, because the feature has not been implemented yet
   uint64_t in[2];   //!< Start inserting data at data[in]
   uint64_t out[2];  //!< Start reading data at data[out]
-  uint64_t limit;   //!< size of data buffer (last available index + 1)
+  uint64_t limit;   //!< Size of data buffer (last available index + 1)
+  uint64_t capacity_byte; //!< Size of data buffer in bytes
 } fiol_management;
 
 //! pointer to circular buffer management part
 typedef fiol_management* fiol_management_p;
 
 //! Set of statistics we want to record as a circular buffer is used
+//! Only use 64-bit members in that struct. Better for alignment
 typedef struct {
   uint64_t num_reads;
   uint64_t num_read_elems;
@@ -258,9 +261,9 @@ void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to prin
 //C_EnD
 {
   printf(
-      "version %ld, first %ld, in %ld, in partial %ld, out %ld, out partial %ld, limit %ld\n", (long)b->m.version,
+      "version %ld, first %ld, in %ld, in partial %ld, out %ld, out partial %ld, limit %ld, capacity (bytes) %ld\n", (long)b->m.version,
       (long)b->m.first, (long)b->m.in[CB_FULL], (long)b->m.in[CB_PARTIAL], (long)b->m.out[CB_FULL],
-      (long)b->m.out[CB_PARTIAL], (long)b->m.limit);
+      (long)b->m.out[CB_PARTIAL], (long)b->m.limit, (long)b->m.capacity_byte);
 }
 
 //F_StArT
@@ -327,10 +330,9 @@ circular_buffer_p CB_init_bytes(
   }
 
   if (num_bytes < CB_MIN_BUFFER_SIZE) {
-    printf("ERROR: not requesting enough elements for circular_buffer initialization!\n");
+    printf("ERROR: not requesting enough elements for circular_buffer initialization! Requested %ld, but min buffer size is %ld bytes\n", num_bytes, CB_MIN_BUFFER_SIZE);
     return NULL; // area is too small
   }
-
 
   p->m.version         = FIOL_VERSION;
   p->m.first           = 0;
@@ -345,6 +347,7 @@ circular_buffer_p CB_init_bytes(
   const data_element header_size  = num_bytes_to_num_elem(sizeof(circular_buffer));
 
   p->m.limit = num_elements - header_size;
+  p->m.capacity_byte = (p->m.limit - 1) * sizeof(data_element);
 
   p->stats.num_reads               = 0;
   p->stats.num_read_elems          = 0;
@@ -569,7 +572,7 @@ int64_t CB_wait_space_available_bytes(
   if (CB_check_integrity(p) != 0)
     return -1;
 
-  if (num_bytes_wanted >= p->m.limit * sizeof(data_element))
+  if (num_bytes_wanted > p->m.capacity_byte)
     return -1;
 
   size_t num_available = CB_get_available_space_bytes(p);
@@ -609,7 +612,7 @@ int64_t CB_wait_data_available_bytes(
   if (CB_check_integrity(p) != 0)
     return -1;
 
-  if (num_bytes_wanted >= p->m.limit * sizeof(data_element))
+  if (num_bytes_wanted > p->m.capacity_byte)
     return -1;
 
   size_t num_available = CB_get_available_data_bytes(p);
@@ -668,7 +671,7 @@ int CB_get(
   const size_t num_elements = num_bytes_to_num_elem(num_bytes);
 
   const size_t num_elem_1  = num_elements > (limit - out) ? (limit - out) : num_elements;
-  const size_t num_bytes_1 = num_elem_1 <= num_elements ? num_bytes : num_elem_1 * sizeof(data_element);
+  const size_t num_bytes_1 = num_elem_1 < num_elements ? num_elem_1 * sizeof(data_element) : num_bytes;
   copy_bytes(dest, (void*)(data + out), num_bytes_1);
   out += num_elem_1;
 
@@ -742,8 +745,8 @@ int CB_put(
 
   const size_t num_elements = num_bytes_to_num_elem(num_bytes);
 
-  const size_t num_elem_1 = num_elements > (limit - current_in) ? (limit - current_in) : num_elements;
-  const size_t num_bytes_1 = num_elem_1 <= num_elements ? num_bytes : num_elem_1 * sizeof(data_element);
+  const size_t num_elem_1  = num_elements > (limit - current_in) ? (limit - current_in) : num_elements;
+  const size_t num_bytes_1 = num_elem_1 < num_elements ? num_elem_1 * sizeof(data_element) : num_bytes;
   copy_bytes((void*)(data + current_in), src, num_bytes_1);
   current_in += num_elem_1;
 
