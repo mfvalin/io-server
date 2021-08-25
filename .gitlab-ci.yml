@@ -20,7 +20,7 @@ stages:
 configure_job_regular_intel:
   stage: configure
   variables:
-  build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+    build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
   script:
     - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
     - mkdir -pv ${build_dir}
@@ -30,7 +30,7 @@ configure_job_regular_intel:
 build_job_regular_intel:
   stage: build
   variables:
-  build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+    build_dir: /home/vma000/ci-builds/io-server/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
   script:
     - source /home/vma000/space_ords/ci-admin-bundle/environments/eccc-setup-intel.sh
     - cd ${build_dir}
