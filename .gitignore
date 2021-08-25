@@ -4,5 +4,6 @@ CMakeLists.txt.user
 .vscode
 
 *.swp
+*.mod
 
 
