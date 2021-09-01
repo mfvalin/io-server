@@ -85,7 +85,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
-  type(block_meta)     :: meta
+  ! type(block_meta)     :: meta
   type(block_meta_f08) :: blk_meta                     ! metadata for allocated block (Fortran style with bound procedures)
   type(block_meta_f08), dimension(128) :: metas
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata

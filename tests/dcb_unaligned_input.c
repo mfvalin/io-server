@@ -125,6 +125,7 @@ int main(int argc, char** argv)
         return -1;
 
     DCB_delete(dcb);
+    MPI_Finalize();
 
     return 0;
 }
