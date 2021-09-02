@@ -82,6 +82,7 @@
 // #include <immintrin.h>
 
 #include "io-server/shmem_arena.h"
+#include "io-server/rpn_extra.h"
 
 // memory arena definitions follow, they should already have been included from shmem_arena.h
 
@@ -426,14 +427,14 @@ void *shmem_block_find_wait(
 //C_EnD
 {
   void *p = NULL;
-  useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
+  int delay = 1000;  // 1000 microseconds = 1 millisecond
   shmem_arena *ma = (shmem_arena *) mem;
 
   if((ma->owner & 0x80000000u) == 0) return NULL;  // not a 64 bit arena
 
   p = shmem_block_find(mem, size, flags, name);     // does the block exist ?
   while(p == NULL && timeout > 0) {                  // no, sleep a bit and retry
-    usleep(delay); timeout --;                       // decrement timeout
+    rpn_usleep(delay); timeout --;                  // decrement timeout
     p = shmem_block_find(mem, size, flags, name);   // does the block exist ?
   }
 // fprintf(stderr,"timeout = %d\n",timeout);

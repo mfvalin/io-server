@@ -82,13 +82,14 @@
 //C_EnD
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/types.h>
+#include <unistd.h>
 // #include <immintrin.h>
 
 #include "io-server/memory_arena.h"
+#include "io-server/rpn_extra.h"
 
 // memory arena definitions follow, they should already have been included from memory_arena.h
 
@@ -850,14 +851,14 @@ void *memory_block_find_wait(
 //C_EnD
 {
   void *p = NULL;
-  useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
+  int delay = 1000;  // 1000 microseconds = 1 millisecond
   memory_arena *ma = (memory_arena *) mem;
 
   if((ma->owner & 0x40000000u) == 0) return NULL;  // not a 32 bit arena
 
   p = memory_block_find(mem, size, flags, name);     // does the block exist ?
   while(p == NULL && timeout > 0) {                  // no, sleep a bit and retry
-    usleep(delay); timeout --;                       // decrement timeout
+    rpn_usleep(delay); timeout --;                   // decrement timeout
     p = memory_block_find(mem, size, flags, name);   // does the block exist ?
   }
 // fprintf(stderr,"timeout = %d\n",timeout);
@@ -877,14 +878,14 @@ void *memory_block_find_64_wait(
 //C_EnD
 {
   void *p = NULL;
-  useconds_t delay = 1000;  // 1000 microseconds = 1 millisecond
+  int delay = 1000;  // 1000 microseconds = 1 millisecond
   memory_arena_64 *ma = (memory_arena_64 *) mem;
 
   if((ma->owner & 0x80000000u) == 0) return NULL;  // not a 32 bit arena
 
-  p = memory_block_find_64(mem, size, flags, name);     // does the block exist ?
+  p = memory_block_find_64(mem, size, flags, name);  // does the block exist ?
   while(p == NULL && timeout > 0) {                  // no, sleep a bit and retry
-    usleep(delay); timeout --;                       // decrement timeout
+    rpn_usleep(delay); timeout --;                      // decrement timeout
     p = memory_block_find_64(mem, size, flags, name);   // does the block exist ?
   }
 // fprintf(stderr,"timeout = %d\n",timeout);

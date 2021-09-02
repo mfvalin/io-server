@@ -112,5 +112,9 @@ static inline void lock_reset(int* location) {
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );
+static inline void rpn_usleep(const int num_us)
+{
+  sleep_us(num_us);
+}
 
 #endif // IO_SERVER_rpn_extra_GEN_H

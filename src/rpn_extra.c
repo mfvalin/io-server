@@ -80,6 +80,13 @@ void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
   nanosleep(&ts, NULL);
 }
 
+//C_StArT
+static inline void rpn_usleep(const int num_us)
+{
+  sleep_us(num_us);
+}
+//C_EnD
+
 //F_StArT
 //  subroutine free_c_ptr(ptr) BIND(C, name = 'free_c_ptr')
 //    import :: C_PTR

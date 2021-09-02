@@ -2,6 +2,7 @@
 #define IO_SERVER_CB_DATA_H_
 
 #ifndef IN_FORTRAN_CODE
+#include <stdint.h>
 typedef int32_t data_element; //!< Type of individual elements stored in a circular buffer type container
 #else
 integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element

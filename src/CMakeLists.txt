@@ -72,6 +72,8 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${LIBRARY_DIR}/mod)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE _POSIX_C_SOURCE=199309L)
+
 target_compile_options(
    ${PROJECT_NAME}
    PUBLIC

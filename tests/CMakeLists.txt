@@ -70,6 +70,7 @@ function(gen_test_target)
    get_target_property(LIBRARY_DIR ${TEST_TARGET} BINARY_DIR)
    set_target_properties(${TEST_TARGET} PROPERTIES Fortran_MODULE_DIRECTORY ${LIBRARY_DIR}/mod)
    target_include_directories(${TEST_TARGET} INTERFACE ${LIBRARY_DIR}/mod)
+   target_compile_definitions(${TEST_TARGET} PRIVATE _POSIX_C_SOURCE=199309L)
 
    # Libraries
    foreach(LIB ${GEN_TEST_LIBRARIES})
@@ -82,6 +83,7 @@ endfunction()
 set(TEST_HELPER_LIB test_helper)
 add_library(${TEST_HELPER_LIB} STATIC ${TEST_HELPER_FILES})
 target_include_directories(${TEST_HELPER_LIB} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+target_compile_definitions(${TEST_HELPER_LIB} PRIVATE _POSIX_C_SOURCE=199309L)
 
 # Where to put test library modules
 get_target_property(LIBRARY_DIR ${TEST_HELPER_LIB} BINARY_DIR)
