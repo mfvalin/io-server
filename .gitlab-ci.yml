@@ -45,7 +45,8 @@ test_job_regular_gnu_single_node:
     ORD_SOUMET_C: "${NUM_CPUS}"
     ORD_SOUMET_W: "30"
     ORD_SOUMET_JN: io-server-regular-single-node
-    ORD_SOUMET_TMPFS: "1024"
+    ORD_SOUMET_M: "2048M"
+    ORD_SOUMET_TMPFS: "1024M"
   script:
     - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
     - cd ${build_dir}
@@ -124,7 +125,6 @@ configure_job_big_intel:
     - login_node
   script:
     - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
-    - echo "RPN_CI_BASE_DIR = ${RPN_CI_BASE_DIR}, BIG_MACHINE_2 = ${BIG_MACHINE_2}, BIG_MACHINE_1 = ${BIG_MACHINE_1}"
     - mkdir -pv ${build_dir}
     - cd ${build_dir}
     - pwd
