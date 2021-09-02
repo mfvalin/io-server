@@ -123,6 +123,7 @@ configure_job_big_intel:
     - login_node
   script:
     - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
+    - echo "RPN_CI_BASE_DIR = ${RPN_CI_BASE_DIR}"
     - mkdir -pv ${build_dir}
     - cd ${build_dir}
     - pwd
