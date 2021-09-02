@@ -150,7 +150,7 @@ test_job_big_intel_single_node:
   variables:
     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
     NUM_CPUS: "40"
-    ORD_SOUMET_MACH: ${BIG_MACHINE_2}
+    ORD_SOUMET_MACH: ${BIG_MACHINE_1}
     ORD_SOUMET_C: "${NUM_CPUS}"
     ORD_SOUMET_W: "30"
     ORD_SOUMET_JN: io-server-big-single-node
@@ -173,7 +173,7 @@ test_job_big_intel_multi_node:
   variables:
     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
     NUM_CPUS: "80"
-    ORD_SOUMET_MACH: ${BIG_MACHINE_2}
+    ORD_SOUMET_MACH: ${BIG_MACHINE_1}
     ORD_SOUMET_C: "${NUM_CPUS}x1"
     ORD_SOUMET_W: "30"
     ORD_SOUMET_JN: io-server-big-multi-node
