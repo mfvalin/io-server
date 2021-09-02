@@ -261,7 +261,7 @@ program mpi_bandwidth
   integer, pointer, dimension(:, :) :: shared_buffer
 
   integer(MPI_ADDRESS_KIND) :: offset, window_size
-  integer, dimension(MAX_MESSAGE_SIZE) :: relay_buffer
+  integer, dimension(:), allocatable :: relay_buffer
 
   ! type(io_timer) :: small_timer, medium_timer, large_timer
   ! real(C_DOUBLE) :: total_time
@@ -274,6 +274,8 @@ program mpi_bandwidth
 
   integer, parameter :: NUM_CHANNEL_COUNTS = 8
   integer, dimension(NUM_CHANNEL_COUNTS) :: channel_counts
+
+  allocate(relay_buffer(MAX_MESSAGE_SIZE))
 
   message_sizes(1) = 500
   message_sizes(2) = 5000
@@ -390,6 +392,7 @@ program mpi_bandwidth
 
 777 continue
   call MPI_Finalize()
+  deallocate(relay_buffer)
 
 end program mpi_bandwidth
 

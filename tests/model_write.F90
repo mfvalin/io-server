@@ -371,8 +371,8 @@ subroutine consumer_process(data_buffer, consumer_comm)
   integer :: i_producer, i_data_check
   integer(C_INT64_T) :: num_elements
   integer :: message_size
-  integer, dimension(MAX_DCB_MESSAGE_SIZE_INT) :: message, expected_message
-  integer, dimension(WRITE_BUFFER_SIZE)        :: file_write_buffer
+  integer, dimension(:), allocatable :: message, expected_message
+  integer, dimension(:), allocatable :: file_write_buffer
   integer :: file_write_position, write_size
   logical :: finished, success
   integer :: num_errors
@@ -391,6 +391,10 @@ subroutine consumer_process(data_buffer, consumer_comm)
   character(len=14) :: file_name
 
   JAR_DECLARE(data_jar)
+
+  allocate(message(MAX_DCB_MESSAGE_SIZE_INT))
+  allocate(expected_message(MAX_DCB_MESSAGE_SIZE_INT))
+  allocate(file_write_buffer(WRITE_BUFFER_SIZE))
 
   num_errors = 0
 
@@ -554,6 +558,10 @@ subroutine consumer_process(data_buffer, consumer_comm)
     write (6, *) 'Terminating with error from SERVER (consumer) process'
     error stop 1
   end if
+
+  deallocate(message)
+  deallocate(expected_message)
+  deallocate(file_write_buffer)
 
 end subroutine consumer_process
 
@@ -737,8 +745,8 @@ subroutine io_relay_process()
     integer :: i_data_check
     integer :: current_message_size, model_message_size
     logical :: finished = .false.
-    integer, dimension(CB_MESSAGE_SIZE_INT)      :: cb_message, expected_message
-    integer, dimension(MAX_DCB_MESSAGE_SIZE_INT) :: dcb_message
+    integer, dimension(CB_MESSAGE_SIZE_INT) :: cb_message, expected_message
+    integer, dimension(:), allocatable      :: dcb_message
 
     integer, dimension(:), pointer :: f_data
     type(C_PTR) :: c_data
@@ -747,6 +755,8 @@ subroutine io_relay_process()
     type(model_record) :: record
     integer :: jar_status, jar_num_elem
     JAR_DECLARE(data_jar)
+
+    allocate(dcb_message(MAX_DCB_MESSAGE_SIZE_INT))
 
     ! Say hi to the consumer processes
     dcb_message(1) = local_relay_id
@@ -853,6 +863,8 @@ subroutine io_relay_process()
       success = data_buffer % put_elems(dcb_message, INT(current_message_size + 1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
 
     end if
+
+    deallocate(dcb_message)
   end block
 
   call data_buffer % delete()

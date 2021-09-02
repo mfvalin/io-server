@@ -14,7 +14,7 @@ program disk_bandwidth
   integer, parameter :: TOTAL_DATA_GB = 20
   integer, parameter :: MAX_BUFFER_SIZE_KB = 5000
   integer, parameter :: NUM_BUFFER_ELEMENTS = MAX_BUFFER_SIZE_KB * 1000 / 4
-  integer, dimension(NUM_BUFFER_ELEMENTS) :: buffer
+  integer, dimension(:), allocatable :: buffer
   integer :: process_data_kb, num_writes
 
   real :: total_time
@@ -29,6 +29,8 @@ program disk_bandwidth
 
   integer           :: file_unit
   character(len=14) :: file_name
+
+  allocate(buffer(NUM_BUFFER_ELEMENTS))
 
   call MPI_Init()
   call MPI_Comm_rank(MPI_COMM_WORLD, rank)
@@ -102,4 +104,5 @@ program disk_bandwidth
   end do
 
   call MPI_Finalize()
+  deallocate(buffer)
 end program disk_bandwidth

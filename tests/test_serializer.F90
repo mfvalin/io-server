@@ -76,7 +76,7 @@ subroutine test_pickling
   type(machin1) :: a1, x1
   type(machin2), dimension(4) :: a2, x2
   integer, dimension(:), pointer :: blind_array
-  type(C_PTR) :: c_blind_array
+  ! type(C_PTR) :: c_blind_array
   logical :: success
 
   print *,'==========================================================='
@@ -185,7 +185,7 @@ subroutine test_pickling
 1 format(A,10I8)
 2 format(A15,30Z9.8)
 
-9 stop
+  stop
 end subroutine test_pickling
 
 subroutine pass_through(blind_array, n)    !  integer array inbound, jar outbound

@@ -65,6 +65,11 @@ function(gen_test_target)
 
    # The target
    add_executable(${TEST_TARGET} ${GEN_TEST_SOURCES})
+   target_compile_options(
+      ${TEST_TARGET}
+      PRIVATE
+      $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wno-integer-division>
+      )
 
    # Modules
    get_target_property(LIBRARY_DIR ${TEST_TARGET} BINARY_DIR)
