@@ -41,7 +41,7 @@ test_job_regular_gnu_single_node:
   variables:
     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
     NUM_CPUS: "40"
-    OMPI_MCA_opal_cuda_support: 0
+    OMPI_MCA_opal_cuda_support: "0"
 
     ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
     ORD_SOUMET_C: "${NUM_CPUS}"
