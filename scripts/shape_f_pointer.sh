@@ -113,7 +113,7 @@ function ${RI}${L}${D}D_bm(p, bm) result(status)  ! fortran pointer to metadata 
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, ${D}                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
