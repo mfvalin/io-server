@@ -542,7 +542,7 @@ size_t CB_get_available_data_bytes(const circular_buffer_p buffer //!< [in] The 
 //C_StArT
 //! Compute the maximum number of bytes the buffer can hold
 size_t CB_get_capacity_bytes(const circular_buffer_p buffer //!< [in] The buffer we want to query
-                                  )
+                            )
 //C_EnD
 {
   return (buffer->m.limit - buffer->m.first - 1) * sizeof(data_element);

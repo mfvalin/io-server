@@ -350,7 +350,6 @@ void memory_arena_print_status(
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena *ma = (memory_arena *) mem;
   symtab_entry *sym = ma->t;
-  int i, j, sane;
   char name[9];
   uint64_t dname, size64;
   uint64_t *dataptr64;
@@ -364,7 +363,7 @@ void memory_arena_print_status(
     return;
   }
   fprintf(stdout,"\n==============================================\n");
-  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me - 1 , ma);  // me -1 is the id
+  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me - 1 , (void*)ma);  // me -1 is the id
   fprintf(stdout,"owner       = %8.8x\n",owner - 1);                     // id + 1 was stored, print id
   fprintf(stdout,"max entries = %d\n",ma->max_entries);
   fprintf(stdout,"max size    = %d\n",ma->arena_size);
@@ -372,24 +371,25 @@ void memory_arena_print_status(
   fprintf(stdout,"first free  = %d\n",ma->first_free);
 
   fprintf(stdout,"\nSymbol table\n");
-  for(i = 0 ; i < ma->n_entries ; i++){
+  for(unsigned int i = 0 ; i < ma->n_entries ; i++){
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
     bh = (block_header *) (dataptr64);
     bt = (block_tail   *) (dataptr64 + BlockHeaderSize64 + size64);
     bhnext = (block_header *) (dataptr64 + BlockHeaderSize64 + size64 + BlockTailSize64);
     dname = sym[i].data_name;
-    sane = ( bh->sign == 0xBEEFF00D ) & 
+    const int sane =
+           ( bh->sign == 0xBEEFF00D ) & 
            ( bt->sign == 0xDEADBEEF ) & 
            (i == bh->ix) & 
            (bt->bwd == sym[i].data_index) &
            (bh->nwd == sym[i].data_size) &
            (bh->fwd == sym[i].data_index + sym[i].data_size + BlockHeaderSize64 + BlockTailSize64) ;
-    for(j = 0; j < 9 ; j++) {
+    for(int j = 0; j < 9 ; j++) {
       name[j] = '\0';
       if( 0 == (dname >> 56) ) dname <<= 8;
     }
-    for(j = 0; j < 8 ; j++) {
+    for(int j = 0; j < 8 ; j++) {
       name[j] = dname >> 56;
       dname <<= 8;
     }
@@ -413,7 +413,6 @@ void memory_arena_64_print_status(
   uint64_t *mem64 = (uint64_t *) mem;
   memory_arena_64 *ma = (memory_arena_64 *) mem;
   symtab_entry_64 *sym = ma->t;
-  int i, j, sane;
   char name[9];
   uint64_t dname, size64;
   uint64_t *dataptr64;
@@ -427,7 +426,7 @@ void memory_arena_64_print_status(
     return;
   }
   fprintf(stdout,"\n==============================================\n");
-  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me64 - 1 , ma);  // me64 -1 is the id
+  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me64 - 1 , (void*)ma);  // me64 -1 is the id
   fprintf(stdout,"owner       = %8.8lx\n",owner64 - 1);                     // id + 1 was stored, print id
   fprintf(stdout,"max entries = %d\n",ma->max_entries);
   fprintf(stdout,"max size    = %ld\n",ma->arena_size);
@@ -435,24 +434,25 @@ void memory_arena_64_print_status(
   fprintf(stdout,"first free  = %ld\n",ma->first_free);
 
   fprintf(stdout,"\nSymbol table\n");
-  for(i = 0 ; i < ma->n_entries ; i++){
+  for(unsigned int i = 0 ; i < ma->n_entries ; i++){
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
     bh = (block_header_64 *) (dataptr64);
     bt = (block_tail_64   *) (dataptr64 + BlockHeader64Size64 + size64);
     bhnext = (block_header_64 *) (dataptr64 + BlockHeader64Size64 + size64 + BlockTail64Size64);
     dname = sym[i].data_name;
-    sane = ( bh->sign == 0xBEEFF00D ) & 
+    const int sane =
+           ( bh->sign == 0xBEEFF00D ) & 
            ( bt->sign == 0xDEADBEEF ) & 
            (i == bh->ix) & 
            (bt->bwd == sym[i].data_index) &
            (bh->nwd == sym[i].data_size) &
            (bh->fwd == sym[i].data_index + sym[i].data_size + BlockHeader64Size64 + BlockTail64Size64) ;
-    for(j = 0; j < 9 ; j++) {
+    for(int j = 0; j < 9 ; j++) {
       name[j] = '\0';
       if( 0 == (dname >> 56) ) dname <<= 8;
     }
-    for(j = 0; j < 8 ; j++) {
+    for(int j = 0; j < 8 ; j++) {
       name[j] = dname >> 56;
       dname <<= 8;
     }
@@ -501,13 +501,12 @@ uint32_t memory_arena_init(
   symtab_entry *sym = ma->t;
   uint64_t size64 = size >> 3 ;  // round size down to 64 bit element size
   uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
-  int i;
   if(ma->owner != 0) {
-    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner & 0x3FFFFFFF);
+    fprintf(stderr,"ma init %p, already owned by id = %d\n", (void*)ma, ma->owner & 0x3FFFFFFF);
     return (ma->owner & 0x3FFFFFFF);                           // area already initialized, return id of initializer
   }else{
 //     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
-    fprintf(stderr," DEBUG: ma init %p, not owned, ", ma);
+    fprintf(stderr," DEBUG: ma init %p, not owned, ", (void*)ma);
   }
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory arena
@@ -520,7 +519,7 @@ uint32_t memory_arena_init(
   ma->n_entries = 0;
   ma->arena_size = size32;
 
-  for(i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
+  for(uint32_t i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
     sym[i].lock       = 0;
     sym[i].flags      = 0;
     sym[i].data_index = 0;
@@ -530,10 +529,10 @@ uint32_t memory_arena_init(
 
   ma->owner = me | 0x40000000u;  // flag area as initialized by me
 
-  i = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
-// fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
-fprintf(stderr," UNlocked and owned now by id = %d\n", me - 1);
-  return i ;
+  const uint32_t val = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
+  // fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
+  fprintf(stderr," UNlocked and owned now by id = %d\n", me - 1);
+  return val;
 }
 //C_StArT
 //! dump arena header and symbol table (description of contents of memory arena)<br>
@@ -549,14 +548,13 @@ uint32_t memory_arena_64_init(
   memory_arena_64 *ma = (memory_arena_64 *) mem;
   symtab_entry_64 *sym = ma->t;
   uint64_t size64 = size >> 3 ;  // round size down to 64 bit element size
-  uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
-  int i;
+  // uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
   if(ma->owner != 0) {
-    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner & 0x3FFFFFFF);
+    fprintf(stderr,"ma init %p, already owned by id = %d\n", (void*)ma, ma->owner & 0x3FFFFFFF);
     return (ma->owner & 0x3FFFFFFF);                           // area already initialized, return id of initializer
   }else{
 //     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
-    fprintf(stderr," DEBUG: ma init %p, not owned, ", ma);
+    fprintf(stderr," DEBUG: ma init %p, not owned, ", (void*)ma);
   }
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me64) != 0); // lock memory arena
@@ -570,7 +568,7 @@ uint32_t memory_arena_64_init(
 //   ma->arena_size = size32;
   ma->arena_size = size64;
 
-  for(i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
+  for(uint32_t i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
     sym[i].lock       = 0;
     sym[i].flags      = 0;
     sym[i].data_index = 0;
@@ -580,10 +578,10 @@ uint32_t memory_arena_64_init(
 
   ma->owner = me64 | 0x80000000u;  // flag area as initialized by me64
 
-  i = __sync_val_compare_and_swap(&(ma->lock), me64, 0); // unlock memory arena and return my id
-// fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me64);
-fprintf(stderr," UNlocked and owned now by id = %d\n", me64 - 1);
-  return i ;
+  const uint32_t val = __sync_val_compare_and_swap(&(ma->lock), me64, 0); // unlock memory arena and return my id
+  // fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me64);
+  fprintf(stderr," UNlocked and owned now by id = %d\n", me64 - 1);
+  return val;
 }
 
 //F_StArT
@@ -1416,7 +1414,7 @@ void *master_arena_create_shared(
   MA->arena_sz   = size >> 1;             // 64 bit units
   MA->arena_name = block_name((unsigned char *)"MaStEr");  // special name
   
-printf("MA = %p, id = %d\n",MA, MA->arena_id);
+  printf("MA = %p, id = %d\n", (void*)MA, MA->arena_id);
   err = master_arena_init(shmaddr, nsym, size);
   if(err < 0) return NULL;
   MA->me[0].arena_id   = MA->arena_id;                    // segment id

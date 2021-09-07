@@ -996,6 +996,7 @@ end function IOserver_int_finalize
 function IOserver_int_init(nio_node, app_class) result(status)
 !! F_EnD
   use ioserver_internal_mod
+  use c_binding_extras_module
 !! F_StArT
 !!import :: C_FUNPTR, MPI_Comm
   implicit none
@@ -1022,7 +1023,6 @@ function IOserver_int_init(nio_node, app_class) result(status)
   integer(C_SIZE_T) :: cb_size
   integer :: sz32
   logical :: ok
-#include <io-server/iso_c_binding_extras.hf>
 
   interface
     function sleep(nsec) result(left) BIND(C,name='sleep')
@@ -1226,7 +1226,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
       !  allocate nominal heap and circular buffers (8K elements)
       ! 85%  of per PE size for the heap
       write(heap_name  ,'(A5,I3.3)') "RHEAP",mem % pe(smp_rank)%rank
-      sz32 = shmsz64 * 0.85 / 4                              ! Heap size in 32-bit elements
+      sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32, heap_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       temp_ptr = local_heap % create(temp_ptr, sz32)         ! allocate local heap
@@ -1236,8 +1236,8 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
       !  4%  of per PE size for inbound circular buffer
       write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(smp_rank)%rank
-      cb_size = shmsz64 * 0.04                               ! 4% for model-bound CB (in bytes)
-      sz32    = cb_size / 4                                  ! Size in 32-bit elements
+      cb_size = INT(shmsz64 * 0.04_8, 4)                     ! 4% for model-bound CB (in bytes)
+      sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32, cioin_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_in % create_bytes(temp_ptr, cb_size)
@@ -1246,8 +1246,8 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
       !  10%  of per PE size for outbound circular buffer
       write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(smp_rank)%rank + 1000
-      cb_size = shmsz64 * 0.1                                ! 10% for relay-bound CB (in bytes)
-      sz32    = cb_size / 4                                  ! Size in 32-bit elements
+      cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound CB (in bytes)
+      sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32 / 4, cioout_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       ok = local_cio_out % create_bytes(temp_ptr, cb_size)
@@ -1267,7 +1267,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
       ! 85%  of per PE size for the heap
       write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(smp_rank)%rank
-      sz32 = shmsz64 * 0.85 / 4                              ! Heap size in number of 32-bit elements
+      sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in number of 32-bit elements
       temp_ptr = local_arena % newblock(sz32, heap_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, heap_name, sz32)
@@ -1278,8 +1278,8 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
       !  4%  of per PE size for relay -> compute circular buffer
       write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(smp_rank)%rank
-      cb_size = shmsz64 * 0.04                               ! Size in bytes, model-bound CB
-      sz32 = cb_size / 4                                     ! Size in number of 32-bit elements
+      cb_size = INT(shmsz64 * 0.04_8, 4)                     ! Size in bytes, model-bound CB
+      sz32    = INT(cb_size / 4,      4)                     ! Size in number of 32-bit elements
       temp_ptr = local_arena % newblock(sz32, cioin_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, cioin_name, sz32)
@@ -1289,8 +1289,8 @@ function IOserver_int_init(nio_node, app_class) result(status)
 
       ! 10%  of per PE size for compute -> relay circular buffer
       write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(smp_rank)%rank + 1000
-      cb_size = shmsz64 * 0.1                                ! 10% for relay-bound circular buffer (in bytes)
-      sz32 = cb_size / 4                                     ! Size in 32-bit elements
+      cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound circular buffer (in bytes)
+      sz32    = INT(cb_size / 4,     4)                      ! Size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32 / 4, cioout_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
@@ -1456,7 +1456,7 @@ subroutine RPN_MPI_Win_allocate_shared(wsize, disp_unit_, info, comm, baseptr, w
   call MPI_Comm_rank(comm, myrank, ierror)
   call MPI_Comm_size(comm, thesize, ierror)
   allocate(hostids(thesize))
-  hostid = c_get_hostid()
+  hostid = INT(c_get_hostid(), 4)
   call MPI_Allgather(hostid, 1, MPI_INTEGER, hostids, 1, MPI_INTEGER, comm, ierror)
   do i = 1, thesize
     if(hostids(i) .ne. hostid) return   ! ERROR, hostid MUST be the same everywhere

@@ -77,7 +77,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE _POSIX_C_SOURCE=199309L)
 target_compile_options(
    ${PROJECT_NAME}
    PUBLIC
-   $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra -Werror>
+   $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra -Werror -Wno-error=pedantic -Wno-error=unused-function>
    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>

@@ -58,6 +58,12 @@ contains
     integer :: i
 
     capacity = dcb % get_capacity(CB_KIND_INTEGER_4)
+
+    if (capacity < 0) then
+      print *, 'AAAhhh capacity is bad!'
+      error stop 1
+    end if
+
     ! print *, '(Producer) capacity: ', capacity
     allocate(msg(capacity))
 
@@ -73,7 +79,7 @@ contains
     end if
 
     ! Fill the buffer so that the internal pointers (indices) reach exactly their upper limit
-    do i = 1, capacity
+    do i = 1, int(capacity, 4)
       success = dcb % put_elems(msg(i), 1_8, CB_KIND_INTEGER_4, .true.)
       num_spaces = dcb % get_num_spaces(CB_KIND_INTEGER_4, .false.)
       if (num_spaces .ne. capacity - i) then

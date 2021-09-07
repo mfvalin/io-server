@@ -579,7 +579,7 @@ static inline size_t get_available_space_from_remote_bytes(
 //! initially, that copy is updated. If there is an error, returns -1.
 static int64_t DCB_wait_space_available_bytes(
     distributed_circular_buffer_p buffer,             //!< [in] Pointer to the distributed buffer we're waiting for
-    const int                     num_requested_bytes //!< [in] Needed number of available bytes
+    const size_t                  num_requested_bytes //!< [in] Needed number of available bytes
 ) {
   // Function inputs and buffer consistency checks
   if (buffer == NULL || !is_producer(buffer))

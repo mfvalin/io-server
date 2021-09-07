@@ -83,9 +83,11 @@ contains
     integer, intent(in)        :: num_relays, channel_count
     integer, intent(in)        :: msg_size, msg_count
 
-    real :: total_data, total_data_kb, total_data_mb, total_data_gb
-    real :: total_per_s, mb_per_s, gb_per_s
-    real :: time_s, time_ms
+    real :: gb_per_s
+
+    real(8) :: total_data, total_data_kb, total_data_mb, total_data_gb
+    real(8) :: total_per_s, mb_per_s
+    real(8) :: time_s, time_ms
 
     if (channel_count < 0) then
     end if
@@ -100,7 +102,7 @@ contains
 
     total_per_s = total_data / time_s
     mb_per_s = total_per_s / (1024.0 * 1024.0)
-    gb_per_s = mb_per_s / 1024.0
+    gb_per_s = real(mb_per_s / 1024.0, 4)
 
     ! print *, ''
     ! print '(A20)', 'Results'

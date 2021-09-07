@@ -102,10 +102,10 @@ typedef data_element heap_element ;
 #define MAX_HEAPS 64
 
 //!> HEAD marker below block
-#define HEAD 0xCAFEFADE
+const heap_element HEAD = 0xCAFEFADE;
 
 //!> TAIL marker above block
-#define TAIL 0xBEBEFADA
+const heap_element TAIL = 0xBEBEFADA;
 
 //!> heap statistics
 typedef struct{

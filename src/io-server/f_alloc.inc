@@ -45,7 +45,6 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -84,7 +83,6 @@ function I15D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -96,7 +94,7 @@ function I15D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -111,7 +109,6 @@ function bm_I15D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -149,7 +146,6 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -188,7 +184,6 @@ function I14D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -200,7 +195,7 @@ function I14D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -215,7 +210,6 @@ function bm_I14D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -253,7 +247,6 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -292,7 +285,6 @@ function I13D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -304,7 +296,7 @@ function I13D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -319,7 +311,6 @@ function bm_I13D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -357,7 +348,6 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -396,7 +386,6 @@ function I12D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -408,7 +397,7 @@ function I12D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -423,7 +412,6 @@ function bm_I12D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -461,7 +449,6 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -500,7 +487,6 @@ function I11D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -512,7 +498,7 @@ function I11D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -527,7 +513,6 @@ function bm_I11D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -565,7 +550,6 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -604,7 +588,6 @@ function I25D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -616,7 +599,7 @@ function I25D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -631,7 +614,6 @@ function bm_I25D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -669,7 +651,6 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -708,7 +689,6 @@ function I24D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -720,7 +700,7 @@ function I24D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -735,7 +715,6 @@ function bm_I24D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -773,7 +752,6 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -812,7 +790,6 @@ function I23D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -824,7 +801,7 @@ function I23D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -839,7 +816,6 @@ function bm_I23D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -877,7 +853,6 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -916,7 +891,6 @@ function I22D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -928,7 +902,7 @@ function I22D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -943,7 +917,6 @@ function bm_I22D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -981,7 +954,6 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1020,7 +992,6 @@ function I21D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1032,7 +1003,7 @@ function I21D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1047,7 +1018,6 @@ function bm_I21D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1085,7 +1055,6 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1124,7 +1093,6 @@ function I45D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1136,7 +1104,7 @@ function I45D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1151,7 +1119,6 @@ function bm_I45D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1189,7 +1156,6 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1228,7 +1194,6 @@ function I44D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1240,7 +1205,7 @@ function I44D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1255,7 +1220,6 @@ function bm_I44D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1293,7 +1257,6 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1332,7 +1295,6 @@ function I43D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1344,7 +1306,7 @@ function I43D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1359,7 +1321,6 @@ function bm_I43D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1397,7 +1358,6 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1436,7 +1396,6 @@ function I42D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1448,7 +1407,7 @@ function I42D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1463,7 +1422,6 @@ function bm_I42D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1501,7 +1459,6 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1540,7 +1497,6 @@ function I41D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1552,7 +1508,7 @@ function I41D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1567,7 +1523,6 @@ function bm_I41D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1605,7 +1560,6 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1644,7 +1598,6 @@ function I85D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1656,7 +1609,7 @@ function I85D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1671,7 +1624,6 @@ function bm_I85D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1709,7 +1661,6 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1748,7 +1699,6 @@ function I84D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1760,7 +1710,7 @@ function I84D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1775,7 +1725,6 @@ function bm_I84D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1813,7 +1762,6 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1852,7 +1800,6 @@ function I83D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1864,7 +1811,7 @@ function I83D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1879,7 +1826,6 @@ function bm_I83D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1917,7 +1863,6 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -1956,7 +1901,6 @@ function I82D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -1968,7 +1912,7 @@ function I82D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -1983,7 +1927,6 @@ function bm_I82D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2021,7 +1964,6 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -2060,7 +2002,6 @@ function I81D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2072,7 +2013,7 @@ function I81D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2087,7 +2028,6 @@ function bm_I81D(p, bm, strict) result(status)  ! metadata to pointer translatio
   integer :: status
 
   integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2124,7 +2064,6 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2163,7 +2102,6 @@ function R45D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2176,7 +2114,7 @@ function R45D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2190,7 +2128,6 @@ function bm_R45D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2228,7 +2165,6 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2267,7 +2203,6 @@ function R44D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2280,7 +2215,7 @@ function R44D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2294,7 +2229,6 @@ function bm_R44D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2332,7 +2266,6 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2371,7 +2304,6 @@ function R43D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2384,7 +2316,7 @@ function R43D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2398,7 +2330,6 @@ function bm_R43D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2436,7 +2367,6 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2475,7 +2405,6 @@ function R42D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2488,7 +2417,7 @@ function R42D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2502,7 +2431,6 @@ function bm_R42D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2540,7 +2468,6 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2579,7 +2506,6 @@ function R41D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2592,7 +2518,7 @@ function R41D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2606,7 +2532,6 @@ function bm_R41D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2644,7 +2569,6 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2683,7 +2607,6 @@ function R85D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2696,7 +2619,7 @@ function R85D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2710,7 +2633,6 @@ function bm_R85D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2748,7 +2670,6 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2787,7 +2708,6 @@ function R84D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2800,7 +2720,7 @@ function R84D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2814,7 +2734,6 @@ function bm_R84D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2852,7 +2771,6 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2891,7 +2809,6 @@ function R83D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -2904,7 +2821,7 @@ function R83D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -2918,7 +2835,6 @@ function bm_R83D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -2956,7 +2872,6 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -2995,7 +2910,6 @@ function R82D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -3008,7 +2922,7 @@ function R82D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -3022,7 +2936,6 @@ function bm_R82D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
@@ -3060,7 +2973,6 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
 
   nullify(p)                        ! in case of allocation failure
@@ -3099,7 +3011,6 @@ function R81D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, ix
 
@@ -3112,7 +3023,7 @@ function R81D_bm(p, bm) result(status)  ! fortran pointer to metadata translatio
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -3126,7 +3037,6 @@ function bm_R81D(p, bm, strict) result(status)  ! metadata to pointer translatio
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
   integer, parameter :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 

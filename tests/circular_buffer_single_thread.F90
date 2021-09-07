@@ -42,9 +42,10 @@ subroutine basic_test()
 
   type(circular_buffer) :: circ_buffer
   integer, dimension(NUM_ELEM) :: local, local_out
-  logical :: success
-  integer :: i, num_elem_in, num_elem_free
-  integer :: num_error
+  logical            :: success
+  integer            :: i
+  integer(C_INT64_T) :: num_elem_in, num_elem_free
+  integer            :: num_error
   integer(C_INT64_T) :: buffer_limit
 
   num_error = 0

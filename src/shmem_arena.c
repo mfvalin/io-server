@@ -222,7 +222,6 @@ void shmem_arena_print_status(
   uint64_t *mem64 = (uint64_t *) mem;
   shmem_arena *ma = (shmem_arena *) mem;
   symtab_entry_64 *sym = ma->t;
-  int i, j, sane;
   char name[9];
   uint64_t dname, size64;
   uint64_t *dataptr64;
@@ -236,7 +235,7 @@ void shmem_arena_print_status(
     return;
   }
   fprintf(stdout,"\n==============================================\n");
-  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me - 1 , ma);  // me -1 is the id
+  fprintf(stdout,"Arena Header, id = %d, address = %p\n", me - 1 , (void*)ma);  // me -1 is the id
   fprintf(stdout,"owner       = %8.8lx\n",owner64 - 1);                     // id + 1 was stored, print id
   fprintf(stdout,"max entries = %d\n",ma->max_entries);
   fprintf(stdout,"max size    = %ld bytes\n",ma->arena_size*sizeof(uint64_t));
@@ -244,24 +243,25 @@ void shmem_arena_print_status(
   fprintf(stdout,"first free  = byte(%ld)\n",ma->first_free*sizeof(uint64_t));
 
   fprintf(stdout,"\nSymbol table\n");
-  for(i = 0 ; i < ma->n_entries ; i++){
+  for(unsigned int i = 0 ; i < ma->n_entries ; i++){
     size64 = sym[i].data_size;
     dataptr64 = sym[i].data_index + mem64; 
     bh = (block_header_64 *) (dataptr64);
     bt = (block_tail_64   *) (dataptr64 + BlockHeader64Size64 + size64);
     bhnext = (block_header_64 *) (dataptr64 + BlockHeader64Size64 + size64 + BlockTail64Size64);
     dname = sym[i].data_name;
-    sane = ( bh->sign == 0xBEEFF00D ) & 
+    const int sane =
+           ( bh->sign == 0xBEEFF00D ) & 
            ( bt->sign == 0xDEADBEEF ) & 
            (i == bh->ix) & 
            (bt->bwd == sym[i].data_index) &
            (bh->nwd == sym[i].data_size) &
            (bh->fwd == sym[i].data_index + sym[i].data_size + BlockHeader64Size64 + BlockTail64Size64) ;
-    for(j = 0; j < 9 ; j++) {
+    for(int j = 0; j < 9 ; j++) {
       name[j] = '\0';
       if( 0 == (dname >> 56) ) dname <<= 8;
     }
-    for(j = 0; j < 8 ; j++) {
+    for(int j = 0; j < 8 ; j++) {
       name[j] = dname >> 56;
       dname <<= 8;
     }
@@ -300,14 +300,13 @@ uint32_t shmem_arena_init(
   shmem_arena *ma = (shmem_arena *) mem;
   symtab_entry_64 *sym = ma->t;
   uint64_t size64 = size >> 3 ;  // round size down to 64 bit element size
-  uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
-  int i;
+  // uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
   if(ma->owner != 0) {
-    fprintf(stderr,"ma init %p, already owned by id = %d\n", ma, ma->owner & 0x3FFFFFFF);
+    fprintf(stderr,"ma init %p, already owned by id = %d\n", (void*)ma, ma->owner & 0x3FFFFFFF);
     return (ma->owner & 0x3FFFFFFF);                           // area already initialized, return id of initializer
   }else{
 //     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
-    fprintf(stderr," DEBUG: ma init %p, not owned, ", ma);
+    fprintf(stderr," DEBUG: ma init %p, not owned, ", (void*)ma);
   }
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory arena
@@ -321,7 +320,7 @@ uint32_t shmem_arena_init(
 //   ma->arena_size = size32;
   ma->arena_size = size64;
 
-  for(i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
+  for(uint32_t i = 0 ; i < nsym ; i++){   // initialize symbol table to null values
     sym[i].lock       = 0;
     sym[i].flags      = 0;
     sym[i].data_index = 0;
@@ -331,10 +330,10 @@ uint32_t shmem_arena_init(
 
   ma->owner = me | 0x80000000u;  // flag area as initialized by me
 
-  i = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
-// fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
-fprintf(stderr," UNlocked and owned now by id = %d\n", me - 1);
-  return i ;
+  const uint32_t val = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
+  // fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
+  fprintf(stderr," UNlocked and owned now by id = %d\n", me - 1);
+  return val;
 }
 
 

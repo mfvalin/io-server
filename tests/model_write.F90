@@ -179,7 +179,7 @@ program pseudomodelandserver
   type(memory_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
 
-  integer, parameter :: NUM_NODES = 3
+  ! integer, parameter :: NUM_NODES = 3
   logical :: server_node, single_node
   integer :: node_rank
 
