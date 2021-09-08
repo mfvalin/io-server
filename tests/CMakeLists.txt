@@ -13,6 +13,7 @@ set(TEST_SOURCES
    model_write.F90
    pseudo-model.F90
 #   pseudo-server.F90
+   put_error.F90
 #   small_dcb_test.c
    test_memory_arena.F90
    test_serializer.F90
@@ -131,6 +132,9 @@ add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLA
 
 get_test_name(dcb_unaligned_input.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(put_error.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} -oversubscribe ${MPIEXEC_NUMPROC_FLAG} 40 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 #get_test_name(test_shmem_heap.F90 TEST_TARGET)
 #add_test(NAME ${TEST_TARGET}_base COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 0)

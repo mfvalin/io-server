@@ -58,6 +58,7 @@ test_job_regular_intel_single_node:
     - mpirun -n 3           ${build_dir}/tests/io_server_dcb_edge_case_1
     - mpirun -n 3           ${build_dir}/tests/io_server_dcb_unaligned_input
     # - mpirun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write                 1 2 2
+    - mpirun -oversubscribe -n 160  ${build_dir}/tests/io_server_put_error
 
 test_job_regular_intel_multi_node:
   stage: test_batch
@@ -120,6 +121,7 @@ test_job_big_intel_single_node:
     - aprun -n 3           ${build_dir}/tests/io_server_dcb_edge_case_1
     - aprun -n 3           ${build_dir}/tests/io_server_dcb_unaligned_input
     # - aprun -n ${NUM_CPUS} ${build_dir}/tests/io_server_model_write                 1 2 2
+    - aprun -n 160         ${build_dir}/tests/io_server_put_error
 
 test_job_big_intel_multi_node:
   stage: test_batch
