@@ -347,6 +347,121 @@ subroutine channel_process(data_buffer)
 
 end subroutine channel_process
 
+subroutine process_message()
+end subroutine process_message
+
+function receive_message(dcb, producer_id) result(finished)
+  use distributed_circular_buffer_module
+  use ioserver_functions
+  use model_write_parameters
+  implicit none
+  type(distributed_circular_buffer), intent(inout) :: dcb
+  integer, intent(in) :: producer_id
+  logical :: finished
+
+  type(message_header) :: header
+  type(model_record)   :: record
+  logical :: success
+  integer :: i_data_check
+  integer :: message_size, end_cap
+  integer(C_INT64_T) :: num_elements, num_data
+  
+  character(len=1), dimension(:), pointer :: filename
+  integer, dimension(:), allocatable, save :: model_data
+  integer, dimension(:), allocatable, save :: expected_data
+
+  if (.not. allocated(model_data)) allocate(model_data(MAX_DCB_MESSAGE_SIZE_INT))
+  if (.not. allocated(expected_data)) allocate(expected_data(CB_MESSAGE_SIZE_INT))
+
+  print *, 'Receiving a message'
+  finished = .false.
+
+  success = dcb % peek_elems(producer_id, message_size, 1_8, CB_KIND_INTEGER_4)
+
+  if (.not. success) then
+    print *, 'Error after peeking into DCB'
+    error stop 1
+  end if
+
+  if (message_size > MAX_DCB_MESSAGE_SIZE_INT) then
+    print *, 'Message is larger than what we can deal with. That is problematic.'
+    print *, 'Message size: ', message_size
+    num_elements = dcb % get_capacity(producer_id, CB_KIND_INTEGER_4)
+    print *, 'capacity     = ', num_elements
+    print *, 'producer id  = ', producer_id
+    error stop 1
+  end if
+
+  success = dcb % get_elems(producer_id, header, message_header_size_int(), CB_KIND_INTEGER_4, .true.)
+
+  if (.not. success) then
+    print *, 'ERROR getting message header from DCB'
+    error stop 1
+  end if
+
+  print '(A, I8, A, I3, A, I3, A, I8, A, I5)', &
+    'Got header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream, ', tag ', header % tag, ', rank ', header % sender_global_rank
+
+  !-------
+  ! Data
+  if (header % command == MSG_COMMAND_DATA) then
+    print *, 'Got DATA message'
+    success = dcb % get_elems(producer_id, record, model_record_size_int(), CB_KIND_INTEGER_4, .true.)
+    if (.not. success) then
+      print *, 'Error reading record'
+      error stop 1
+    end if
+
+    ! TODO manage compression + other metadata
+
+    num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size (tkr) into account
+    success = dcb % get_elems(producer_id, model_data, num_data, CB_KIND_INTEGER_4, .true.)
+
+    if (CHECK_DCB_MESSAGES) then
+      do i_data_check = 1, int(num_data, 4)
+          expected_data(i_data_check) = compute_data_point(header % sender_global_rank, record % tag, i_data_check)
+      end do
+      if (.not. all(expected_data(1:num_data) == model_data(1:num_data))) then
+        print *, 'Expected: ', expected_data(1:num_data)
+        print *, 'Received: ', model_data(1:num_data)
+        error stop 1
+      end if
+    end if
+
+  !---------------
+  ! Open a file
+  else if (header % command == MSG_COMMAND_OPEN_FILE) then
+    allocate(filename(header % length))
+    print *, 'Got OPEN message'
+    success = dcb % get_elems(producer_id, filename, INT(header % length, kind=8), CB_KIND_CHAR, .true.)
+    print *, 'Opening a file named ', filename
+
+  !----------------
+  ! Misc. message
+  else if (header % command == MSG_COMMAND_DUMMY) then
+    print *, 'Got a DUMMY message!'
+
+  !-----------------------------------
+  ! Stop receiving from this producer
+  else if (header % command == MSG_COMMAND_STOP) then
+    print *, 'Got a STOP message'
+    finished = .true.
+
+  !------------
+  ! Big no-no
+  else
+    print *, 'ERROR Unhandled message type!', header % command
+    error stop 1
+  end if
+
+  success = dcb % get_elems(producer_id, end_cap, 1_8, CB_KIND_INTEGER_4, .true.)
+  if (end_cap .ne. header % length) then
+    print *, 'Discrepancy between message length and end cap', header % length, end_cap
+    error stop 1
+  end if
+
+end function receive_message
+
 subroutine consumer_process(data_buffer, consumer_comm)
   use mpi_f08
   use model_write_parameters
@@ -360,6 +475,13 @@ subroutine consumer_process(data_buffer, consumer_comm)
       import :: C_LONG
       integer(C_LONG) :: h
     end function c_gethostid
+    function receive_message(dcb, producer_id) result(finished)
+      import :: distributed_circular_buffer
+      implicit none
+      type(distributed_circular_buffer), intent(inout) :: dcb
+      integer, intent(in) :: producer_id
+      logical :: finished
+    end function receive_message
   end interface
 
   type(distributed_circular_buffer), intent(inout) :: data_buffer
@@ -368,20 +490,14 @@ subroutine consumer_process(data_buffer, consumer_comm)
   integer, parameter :: WRITE_BUFFER_SIZE = 50000
 
   integer :: consumer_id, num_producers, num_consumers, producer_id
-  integer :: i_producer, i_data_check
-  integer(C_INT64_T) :: num_elements
+  integer :: i_producer
   integer :: message_size
   integer, dimension(:), allocatable :: message, expected_message
   integer, dimension(:), allocatable :: file_write_buffer
   integer :: file_write_position, write_size
-  logical :: finished, success
+  logical :: finished, producer_finished
   integer :: num_errors
   integer :: num_active_producers
-  integer :: num_data, data_start
-  type(model_record) :: record
-  integer :: jar_status, jar_num_elem, old_record_length
-  integer :: dummy_integer
-  ! integer :: assembly_status
 
   ! type(grid_assembly) :: partial_grids
 
@@ -389,8 +505,6 @@ subroutine consumer_process(data_buffer, consumer_comm)
 
   integer           :: file_unit
   character(len=14) :: file_name
-
-  JAR_DECLARE(data_jar)
 
   allocate(message(MAX_DCB_MESSAGE_SIZE_INT))
   allocate(expected_message(MAX_DCB_MESSAGE_SIZE_INT))
@@ -414,9 +528,9 @@ subroutine consumer_process(data_buffer, consumer_comm)
   if (consumer_id == 0) then
     ! Should receive one test signal
     do i_producer = 0, num_producers - 1
-      success = data_buffer % get_elems(i_producer, message, 2_8, CB_KIND_INTEGER_4, .true.)
-      write (6, *) 'Received HI from relay #', i_producer, message(1), message(2)
-      if (message(1) == 0) then
+      finished = receive_message(data_buffer, i_producer)
+      print *, 'Received acknowledge message from producer ', i_producer, finished
+      if (.not. finished) then
         num_active_producers = num_active_producers + 1
         active_producers(num_active_producers) = i_producer
       end if
@@ -437,6 +551,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
     do i_producer = consumer_id + 1, num_active_producers, num_consumers
 
       producer_id = active_producers(i_producer)
+      if (producer_id < 0) cycle
 
       ! The buffer is empty, so it has not finished sending stuff. Just move on to the next
       if (data_buffer % get_num_elements(producer_id, CB_KIND_INTEGER_4) == 0) then
@@ -444,60 +559,14 @@ subroutine consumer_process(data_buffer, consumer_comm)
         cycle
       end if
 
-      success = data_buffer % peek_elems(producer_id, message_size, 1_8, CB_KIND_INTEGER_4)
-
-      if (.not. success) then
-        print *, 'Error after peeking into DCB'
-        error stop 1
-      end if
-
-      if (message_size > MAX_DCB_MESSAGE_SIZE_INT) then
-        print *, 'Message is larger than what we can deal with. That is problematic.'
-        print *, 'Message size: ', message_size
-        print *, 'num_elements = ', num_elements
-        num_elements = data_buffer % get_capacity(producer_id, CB_KIND_INTEGER_4)
-        print *, 'capacity     = ', num_elements
-        print *, 'producer id  = ', producer_id
-        success = data_buffer % peek_elems(producer_id, record, INT(storage_size(record) / storage_size(dummy_integer), C_SIZE_T), CB_KIND_INTEGER_4)
-        print '(A12, I5, I6, I4, I5, I5, I5, I5, I5, I5, I5, I5, I4, I4, I6, I5, I5)', 'Record info: ', &
-          record % record_length, record % tag, record % stream, &
-          record % ni, record % nj, record % gnignj, &
-          record % grid_size_i, record % grid_size_j, record % output_grid, record % i0, record % j0, &
-          record % nk, record % nvar, record % type_kind_rank, &
-          record % csize, record % msize
-        error stop 1
+      producer_finished = receive_message(data_buffer, producer_id)
+      if (producer_finished) then
+        active_producers(i_producer) = -1
+      else
+        finished = .false.
       end if
 
       if (message_size > 0)  then
-        ! There is something in the buffer!
-        finished = .false.
-        success = data_buffer % get_elems(producer_id, message, INT(message_size, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
-
-        if (.not. success) then
-          print *, 'Error after reading data from DCB'
-          error stop 1
-        end if
-
-        jar_status   = JAR_FREE(data_jar)
-        jar_status   = data_jar % shape(message, message_size)
-        jar_num_elem = JAR_GET_ITEM(data_jar, record)
-        jar_num_elem = JAR_GET_ITEM(data_jar, old_record_length)
-
-        num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size (tkr) into account
-
-        ! print '(A12, I5, I6, I4, I5, I5, I5, I5, I5, I5, I5, I5, I4, I4, I6, I5, I5)', 'Record info: ', &
-        !   record % record_length, record % tag, record % stream, &
-        !   record % ni, record % nj, record % gnignj, &
-        !   record % grid_size_i, record % grid_size_j, record % output_grid, record % i0, record % j0, &
-        !   record % nk, record % nvar, record % type_kind_rank, &
-        !   record % csize, record % msize
-
-        ! Sanity check
-        if (num_data .ne. record % record_length - old_record_length - 1) then
-          print *, 'Record length is not equal to old length + num data. Aborting.'
-          print *, old_record_length, num_data, record % record_length
-          error stop 1
-        end if
 
         ! call partial_grids % put_data(record, 1, message(old_record_length + 1:))
 
@@ -511,6 +580,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
         file_write_position = file_write_position + write_size
       else if (message_size == 0) then
         ! The buffer will not send anything more
+        print *, 'Got STOP signal from producer ', producer_id
       else
         ! This should not happen
         write (6, *) 'message_size: ', message_size
@@ -519,38 +589,21 @@ subroutine consumer_process(data_buffer, consumer_comm)
         error stop 1
       end if
 
-      if (CHECK_DCB_MESSAGES) then
-        jar_status   = JAR_FREE(data_jar)
-        jar_status   = data_jar % shape(message, message_size)
-        jar_num_elem = JAR_GET_ITEM(data_jar, record)
-
-        num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
-        data_start = record % record_length - num_data + 1
-        expected_message(1) = message(data_start)
-        do i_data_check = 2, num_data
-           expected_message(i_data_check) = compute_data_point(message(data_start), record % tag, i_data_check)
-        end do
-        if (.not. all(expected_message(1:num_data) == message(data_start:data_start + num_data))) then
-          num_errors = num_errors + 1
-          print *, 'Expected: ', expected_message(1:num_data)
-          print *, 'Received: ', message(data_start:data_start + num_data)
-          error stop 1
-        end if
-      end if
 
     end do
   end do
+
+  print *, 'Server done receiving', consumer_id
 
   write(file_unit) file_write_buffer(1:file_write_position)
   close(file_unit)
   file_write_position = 1
 
   ! Final check on the buffers' content
-  do i_producer = consumer_id + 1, num_active_producers, num_consumers
-    producer_id = active_producers(i_producer)
-    if (data_buffer % get_num_elements(producer_id, CB_KIND_INTEGER_4) .ne. 1) then
-      num_errors = num_errors + 1
-      write (6, *) 'ERROR: buffer should be empty at the end of test'
+  do i_producer = consumer_id + 1, num_active_producers - 1, num_consumers
+    if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 0) then
+      num_errors = num_errors + 1 
+      write (6, *) 'ERROR: buffer should be empty at the end of test', data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4), i_producer
     end if
   end do
 
@@ -575,8 +628,8 @@ subroutine model_process()
   use io_common_mod
   implicit none
 
-  type(comm_rank_size)  :: node_crs, local_compute_crs
-  integer               :: local_compute_id
+  type(comm_rank_size)  :: node_crs, local_compute_crs, all_crs
+  integer               :: local_compute_id, global_rank
   integer               :: num_errors
   type(circular_buffer) :: data_buffer
   logical               :: success
@@ -596,7 +649,7 @@ subroutine model_process()
 
   node_heap = ioserver_heap(0)
 
-  f_status = results_file % open('model_write_results')
+  f_status = results_file % open('model_write_results_')
   if (f_status .ne. 0) then
     print *, 'Unable to open model file!!!!'
     error stop 1
@@ -609,19 +662,22 @@ subroutine model_process()
   local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
+  all_crs = IOserver_get_crs(NO_COLOR)
+  global_rank = all_crs % rank
+
   ! print *, 'MODEL, local compute id: ', local_compute_id
 
   data_buffer = IOserver_get_cio_out()
-  if (data_buffer % get_capacity(CB_KIND_INTEGER_4) .ne. data_buffer % get_num_spaces(CB_KIND_INTEGER_4)) then
-    print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh'
-    error stop 1
-  end if
+  ! if (data_buffer % get_capacity(CB_KIND_INTEGER_4) .ne. data_buffer % get_num_spaces(CB_KIND_INTEGER_4)) then
+  !   print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh', data_buffer % get_capacity(CB_KIND_INTEGER_4), data_buffer % get_num_spaces(CB_KIND_INTEGER_4)
+  !   error stop 1
+  ! end if
 
   ! NODE barrier to signal RELAY processes that the CB (from each MODEL) is ready
   call MPI_Barrier(node_crs % comm)
 
   ! Send a first test signal
-  success = data_buffer % put(local_compute_id, 1_8, CB_KIND_INTEGER_4, .true.)
+  ! success = data_buffer % put(local_compute_id, 1_8, CB_KIND_INTEGER_4, .true.)
 
   ! Init area info
   my_grid % i0 = local_compute_id * CB_MESSAGE_SIZE_INT + 1
@@ -652,9 +708,9 @@ subroutine model_process()
         ! error stop 2
       end do
 
-      msg_array(1) = local_compute_id
-      do j = 2, CB_MESSAGE_SIZE_INT
-        msg_array(j) = compute_data_point(local_compute_id, i + 2, j)
+      ! Using i + 2 b/c tag is incremented when opening a file
+      do j = 1, CB_MESSAGE_SIZE_INT
+        msg_array(j) = compute_data_point(global_rank, i + 2, j)
       end do
 
       ! if (local_compute_id == 0) then
@@ -664,7 +720,7 @@ subroutine model_process()
       f_status = results_file % write(msg_array_info, my_grid, input_grid, output_grid)
 
       if (f_status .ne. 0) then
-        print *, 'ERROR while trying to do a WRITE'
+        print *, 'ERROR while trying to do a WRITE', f_status
         error stop 1
       end if
 
@@ -675,7 +731,7 @@ subroutine model_process()
     success = data_buffer % put(0, 1_8, CB_KIND_INTEGER_4, .true.)
   end block
 
-  f_status = results_file % close()
+  f_status = results_file % close() ! TODO implement that function so that it can send the stop signal
   if (f_status .ne. 0) then
     print *, 'Unable to close model file!!!!'
     error stop 1
@@ -743,41 +799,62 @@ subroutine io_relay_process()
   block
     
     integer :: i_data_check
-    integer :: current_message_size, model_message_size
+    integer :: total_message_size, model_message_size, end_cap, content_size
     logical :: finished = .false.
     integer, dimension(CB_MESSAGE_SIZE_INT) :: cb_message, expected_message
-    integer, dimension(:), allocatable      :: dcb_message
+    ! integer, dimension(:), allocatable      :: dcb_message
 
     integer, dimension(:), pointer :: f_data
     type(C_PTR) :: c_data
     integer :: num_data
 
-    type(model_record) :: record
-    integer :: jar_status, jar_num_elem
-    JAR_DECLARE(data_jar)
+    type(model_record)   :: record
+    type(message_header) :: header
+    type(jar)            :: dcb_message_jar
+    integer              :: jar_ok, num_jar_elem
+    integer, dimension(:), pointer :: dcb_message
 
-    allocate(dcb_message(MAX_DCB_MESSAGE_SIZE_INT))
+    ! allocate(dcb_message(MAX_DCB_MESSAGE_SIZE_INT))
+
+    jar_ok = dcb_message_jar % new(MAX_DCB_MESSAGE_SIZE_INT)
+    if (jar_ok .ne. 0) then
+      print *, 'Could not create jar to contain DCB message...'
+      error stop 1
+    end if
+
+    dcb_message => dcb_message_jar % raw_array()
 
     ! Say hi to the consumer processes
-    dcb_message(1) = local_relay_id
-    dcb_message(2) = global_rank
-    success = data_buffer % put_elems(dcb_message, 2_8, CB_KIND_INTEGER_4, .true.)
+    header % length  = 0
+    if (local_relay_id == 0) then
+      header % command = MSG_COMMAND_DUMMY
+    else
+      header % command = MSG_COMMAND_STOP
+    end if
+    success = data_buffer % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .true.)
+    success = data_buffer % put_elems(0, 1_8, CB_KIND_INTEGER_4, .true.) .and. success ! Append size
+
+    if (.not. success) then
+      print *, 'ERROR saying HI to the consumer...'
+      error stop 1
+    end if
 
     if (local_relay_id == 0) then ! only 1 relay per node sends output
 
       ! Get the initial test signal from each CB this relay is responsible for
-      do i_compute = 0, num_local_compute - 1 !, num_local_relays
-        cb_message(:) = -1
-        success = c_cio_out(i_compute) % get(cb_message, 1_8, CB_KIND_INTEGER_4, .true.)
-        if (.not. success) then
-          print *, 'ERROR in relay. atomic_get returned a negative value'
-          error stop 1
-        end if
-      end do
+      ! do i_compute = 0, num_local_compute - 1 !, num_local_relays
+      !   cb_message(:) = -1
+      !   success = c_cio_out(i_compute) % get(cb_message, 1_8, CB_KIND_INTEGER_4, .true.)
+      !   if (.not. success) then
+      !     print *, 'ERROR in relay. atomic_get returned a negative value'
+      !     error stop 1
+      !   end if
+      ! end do
 
       ! The main loop
+      call dcb_message_jar % reset()
+      ! print *, 'Jar high = ', dcb_message_jar % high()
       expected_message(:) = -1
-      current_message_size = 0
       do while (.not. finished)
         finished = .true.
         do i_compute = 0, num_local_compute - 1
@@ -794,77 +871,142 @@ subroutine io_relay_process()
             finished = .false.
 
             ! Read the content of the CB
-            success = c_cio_out(i_compute) % get(cb_message, INT(model_message_size + 1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
 
+            success = c_cio_out(i_compute) % get(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) ! Header
             if (.not. success) then
-              print *, 'ERROR when getting stuff from CIO_OUT', i_compute
+              print *, 'ERROR when getting message header from CIO_OUT', i_compute
+              error stop 1
             end if
 
-            jar_status   = JAR_FREE(data_jar)
-            jar_status   = data_jar % shape(cb_message, model_message_size + 1)
-            jar_num_elem = JAR_GET_ITEM(data_jar, record)
+            ! print '(A, I8, A, I3, A, I3, A, I8, A, I5)', &
+            !   'Got header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream, ', tag ', header % tag, ', rank ', header % sender_global_rank
 
-            c_data = ptr_translate_from(record % data, MODEL_COLOR, i_compute)
-            num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
-            call c_f_pointer(c_data, f_data, [num_data])
-            ! print *, 'f_data: ', f_data, num_data
+            if (header % command == MSG_COMMAND_DATA) then
+              success = c_cio_out(i_compute) % get(record, model_record_size_int(), CB_KIND_INTEGER_4, .false.) ! Record 
+              success = c_cio_out(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
 
-            ! print '(A12, I4, I5, I3, I4, I4, I4, I4, I4, I4, I4, I3, I3, I4, I4)', 'Record info: ', &
-            !   record % record_length, record % tag, record % stream, &
-            !   record % ni, record % nj, record % gnignj, &
-            !   record % gin, record % gout, record % i0, record % j0, &
-            !   record % nk, record % nvar, record % csize, record % msize
+              if (.not. success) then
+                print *, 'ERROR Could not get record from data message'
+                error stop 1
+              end if
 
-            cb_message(1) = record % record_length + num_data + 1
+              if (record % record_length .ne. end_cap .or. (record % record_length .ne. header % length)) then
+                print *, 'We have a problem with message size (end cap does not match)'
+                error stop 1
+              end if
+
+              ! TODO take compression meta and other meta stuff into account
+
+              c_data = ptr_translate_from(record % data, MODEL_COLOR, i_compute)
+              num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
+              call c_f_pointer(c_data, f_data, [num_data])
+              
+              ! print *, 'f_data: ', f_data, num_data
+              ! print '(A12, I4, I5, I3, I4, I4, I4, I4, I4, I4, I4, I3, I3, I4, I4)', 'Record info: ', &
+              !   record % record_length, record % tag, record % stream, &
+              !   record % ni, record % nj, record % gnignj, &
+              !   record % gin, record % gout, record % i0, record % j0, &
+              !   record % nk, record % nvar, record % csize, record % msize
+
+              if (CHECK_CB_MESSAGES) then
+                do i_data_check = 1, num_data
+                  expected_message(i_data_check) = compute_data_point(header % sender_global_rank, record % tag, i_data_check)
+                end do
+                ! if (i_compute == 0) then
+                !   print *, 'Got ', f_data(1:3), transfer(record % data, tmp)
+                ! end if
+                if (.not. all(expected_message(1:num_data) == f_data(:))) then
+                  num_errors = num_errors + 1
+                  print *, 'Expected: ', expected_message(1:num_data / 100 + 3)
+                  print *, 'Received: ', f_data(:num_data / 100 + 3)
+                  print *, 'i_compute, tag: ', i_compute, record % tag
+                  error stop 1
+                end if
+              end if
+
+              record % record_length = record % record_length + num_data
+              header % length = record % record_length
+              total_message_size = INT(message_header_size_int(), kind=4) + record % record_length + 1
+
+            else
+              content_size = header % length
+              if (header % command == MSG_COMMAND_OPEN_FILE) content_size = num_char_to_num_int(header % length)
+
+              total_message_size = INT(message_header_size_int(), kind=4) + content_size + 1
+            end if
 
             ! If the DCB message buffer is too full to contain that new package, flush it now
-            if (current_message_size + model_message_size + 1 + num_data > MAX_DCB_MESSAGE_SIZE_INT) then
-              success = data_buffer % put_elems(dcb_message, INT(current_message_size, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
-              current_message_size = 0
-            end if
+            if (dcb_message_jar % high() > MAX_DCB_MESSAGE_SIZE_INT) then
+              print *, 'Sending data ', dcb_message_jar % high()
+              success = data_buffer % put_elems(dcb_message, INT(dcb_message_jar % high(), C_SIZE_T), CB_KIND_INTEGER_4, .true.)
+              call dcb_message_jar % reset()
 
-            ! Copy the CB message header to the DCB message buffer
-            dcb_message(current_message_size + 1: current_message_size + model_message_size + 1) = cb_message(1:model_message_size + 1)
-            current_message_size = current_message_size + model_message_size + 1
-
-            ! Copy the data to the DCB message buffer
-            dcb_message(current_message_size + 1: current_message_size + num_data) = f_data(:)
-            current_message_size = current_message_size + num_data
-
-            if (CHECK_CB_MESSAGES) then
-              expected_message(1) = i_compute
-              do i_data_check = 2, num_data
-                expected_message(i_data_check) = compute_data_point(i_compute, record % tag, i_data_check)
-              end do
-              ! if (i_compute == 0) then
-              !   print *, 'Got ', f_data(1:3), transfer(record % data, tmp)
-              ! end if
-              if (.not. all(expected_message(1:num_data) == f_data(:))) then
-                num_errors = num_errors + 1
-                print *, 'Expected: ', expected_message(1:num_data / 100 + 3)
-                print *, 'Received: ', f_data(:num_data / 100 + 3)
-                print *, 'i_compute, tag: ', i_compute, record % tag
+              if (.not. success) then
+                print *, 'ERROR sending message from relay to server!'
                 error stop 1
               end if
             end if
 
-            f_data(2) = -1
-            h_status = c_heaps(i_compute) % free(c_data)
-            if (h_status .ne. 0) then
-              print*, 'Unable to free heap data (from RELAY)'
-            end if
+            ! Copy the message header
+            num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
+            ! print *, '(header) Jar high = ', dcb_message_jar % high()
 
+            if (header % command == MSG_COMMAND_DATA) then
+              num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record)
+              ! print *, '(record) Jar high = ', dcb_message_jar % high()
+
+              !TODO compression and other meta
+
+
+              ! The data
+              num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))
+              ! print *, '(data)   Jar high = ', dcb_message_jar % high()
+
+              ! End cap
+              num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record % record_length)
+              ! print *, '(r len)  Jar high = ', dcb_message_jar % high()
+
+              f_data(2) = -1
+              h_status = c_heaps(i_compute) % free(c_data)
+              if (h_status .ne. 0) then
+                print*, 'Unable to free heap data (from RELAY)'
+                error stop 1
+              end if
+
+            else
+              success = c_cio_out(i_compute) % get(cb_message, int(content_size, kind=8), CB_KIND_INTEGER_4, .true.)
+              success = c_cio_out(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
+              num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:content_size))
+              ! print *, '(cmd d)  Jar high = ', dcb_message_jar % high()
+              num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header % length)
+              ! print *, '(cmdlen) Jar high = ', dcb_message_jar % high()
+            end if
           end if
         end do
       end do
 
-      dcb_message(current_message_size + 1) = 0 ! Put a 'stop' signal at the end of the DCB message buffer
-      ! Send the stop signal along with the remaining data
-      success = data_buffer % put_elems(dcb_message, INT(current_message_size + 1, C_SIZE_T), CB_KIND_INTEGER_4, .true.)
+      ! Send the remaining data
+      print *, 'Sending remaining data: ', dcb_message_jar % high()
+      success = data_buffer % put_elems(dcb_message, INT(dcb_message_jar % high(), C_SIZE_T), CB_KIND_INTEGER_4, .true.)
 
+      if (.not. success) then
+        print *, 'ERROR sending remaining data!'
+        error stop 1
+      end if
+
+      ! Send a stop signal
+      print *, 'Relay sending STOP signal'
+      header % length = 0
+      header % command = MSG_COMMAND_STOP
+      success = data_buffer % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .true.)
+      success = data_buffer % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+
+      if (.not. success) then
+        print *, 'Could not send a stop signal!!!'
+      end if
     end if
 
-    deallocate(dcb_message)
+    ! deallocate(dcb_message)
   end block
 
   call data_buffer % delete()

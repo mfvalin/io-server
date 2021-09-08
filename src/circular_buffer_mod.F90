@@ -31,7 +31,7 @@ module circular_buffer_module
 
   private
 
-  public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8
+  public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8, num_char_to_num_int
 
   !> \brief circular_buffer user defined type
   type, public :: circular_buffer

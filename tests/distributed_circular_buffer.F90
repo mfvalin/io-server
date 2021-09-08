@@ -121,6 +121,12 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
       end if
     end do
 
+    num_elements = buffer % get_num_elements(-1, CB_KIND_INTEGER_4) ! Should return an error
+    if (num_elements >= 0) then
+      print *, 'Invalid buffer ID still returned a valid number of elements', num_elements
+      error stop 1
+    end if
+
     ! Check that the buffers have the requested capacity (+/- one 8-byte element)
     do i_prod = 0, num_producers - 1
       capacity = buffer % get_capacity(i_prod, CB_KIND_CHAR)

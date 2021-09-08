@@ -901,13 +901,13 @@ void CB_print_stats(
 
   char total_in_s[8], avg_in_s[8], total_out_s[8], avg_out_s[8], read_per_sec_s[8], write_per_sec_s[8], max_fill_s[8];
 
-  const double avg_in  = num_writes > 0 ? (double)stats->num_write_elems * sizeof(data_element) / num_writes : 0.0;
-  const double avg_out = num_reads > 0 ? (double)stats->num_read_elems * sizeof(data_element) / num_reads : 0.0;
+  const double avg_bytes_in  = num_writes > 0 ? (double)stats->num_write_elems * sizeof(data_element) / num_writes : 0.0;
+  const double avg_bytes_out = num_reads > 0 ? (double)stats->num_read_elems * sizeof(data_element) / num_reads : 0.0;
 
   readable_element_count(stats->num_write_elems * sizeof(data_element), total_in_s);
-  readable_element_count(avg_in, avg_in_s);
+  readable_element_count(avg_bytes_in, avg_in_s);
   readable_element_count(stats->num_read_elems * sizeof(data_element), total_out_s);
-  readable_element_count(avg_out, avg_out_s);
+  readable_element_count(avg_bytes_out, avg_out_s);
 
   const double avg_wait_w       = num_writes > 0 ? (double)stats->total_write_wait_time_ms / num_writes : 0.0;
   const double avg_wait_r       = num_reads > 0 ? (double)stats->total_read_wait_time_ms / num_reads : 0.0;
@@ -929,7 +929,7 @@ void CB_print_stats(
            "rank "
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) |"
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) | "
-           "max fill (%%) | frac. writes/reads (%%)\n");
+           "max fill (%%)  | frac. writes/reads (%%)\n");
   }
 
   printf(

@@ -40,7 +40,7 @@ module ioserver_functions
   type :: server_file
     private
     integer    :: version = VERSION    ! version marker, used to check version coherence
-    integer    :: fd = -1              ! file number for internal use
+    integer    :: stream_id = -1       ! File ID, for internal use
     character(len=1), dimension(:), pointer :: name => NULL()
     type(heap) :: h
     logical    :: debug = .false.      ! debug mode at the file level
@@ -94,14 +94,29 @@ module ioserver_functions
     integer(C_INT) :: type_kind_rank
     type(C_PTR)    :: data
     integer(C_INT) :: csize, msize
-  end type
+  end type model_record
+
+  type, public :: message_header
+    integer(C_INT) :: length  = -1
+    integer(C_INT) :: command = -1
+    integer(C_INT) :: stream  = -1
+    integer(C_INT) :: tag     = -1
+    integer(C_INT) :: sender_global_rank = -1
+  end type message_header
+
+  integer, parameter :: MSG_COMMAND_DATA        = 0
+  integer, parameter :: MSG_COMMAND_DUMMY       = 1
+  integer, parameter :: MSG_COMMAND_OPEN_FILE   = 2
+  integer, parameter :: MSG_COMMAND_CLOSE_FILE  = 3
+  integer, parameter :: MSG_COMMAND_STOP        = 4
+  integer, parameter :: MSG_COMMAND_ACKNOWLEDGE = 5
 
   private  :: file_tag_seq, file_open_seq, local_heap, initialized    
   private  :: cio_in, cio_out
 !   private gdt, MAXGRIDS
 
   logical                :: initialized = .false.
-  integer                :: file_tag_seq = 0
+  integer                :: file_tag_seq  = 0
   integer                :: file_open_seq = 0
   type(heap)             :: local_heap   ! type is self initializing
   type(circular_buffer)  :: cio_in       ! type is self initializing
@@ -134,6 +149,56 @@ module ioserver_functions
 
   end function set_io_debug
 
+  function message_header_size_int()
+    implicit none
+    integer(C_INT64_T) :: message_header_size_int
+
+    type(message_header) :: dummy_header
+    integer(kind=4) :: dummy_int
+
+    message_header_size_int = storage_size(dummy_header) / storage_size(dummy_int)
+  end function message_header_size_int
+
+  function model_record_size_int()
+    implicit none
+    integer(C_INT64_T) :: model_record_size_int
+
+    type(model_record) :: dummy_record
+    integer(kind=4) :: dummy_int
+
+    model_record_size_int = storage_size(dummy_record) / storage_size(dummy_int)
+  end function model_record_size_int
+
+  function cmeta_size_int()
+    implicit none
+    integer(C_INT64_T) :: cmeta_size_int
+
+    type(cmeta) :: dummy_cmeta
+    integer(kind=4) :: dummy_int
+
+    cmeta_size_int = storage_size(dummy_cmeta) / storage_size(dummy_int)
+  end function cmeta_size_int
+
+  function send_server_bound_message(message, msg_size) result(success)
+    implicit none
+    integer, intent(in) :: msg_size
+    integer, dimension(msg_size), intent(in) :: message
+
+    logical :: success
+
+    type(message_header) :: header
+
+    success = .false.
+
+    header % length  = msg_size
+    header % command = MSG_COMMAND_DUMMY
+
+    success = cio_out % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+    success = cio_out % put(message, int(msg_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    success = cio_out % put(msg_size, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+
+  end function send_server_bound_message
+
   function set_file_debug(this, dbg) result(status)
     implicit none
     class(server_file), intent(INOUT) :: this
@@ -160,7 +225,7 @@ module ioserver_functions
     logical :: status
 
     status = file_version_is_valid(this)
-    status = status .and. (this % fd > 0) 
+    status = status .and. (this % stream_id > 0) 
     status = status .and. associated(this % name)
 
   end function file_is_open
@@ -251,33 +316,49 @@ module ioserver_functions
   function ioserver_open(this, name) result(status)
     implicit none
     class(server_file), intent(INOUT) :: this
-    character(len=*), intent(IN) :: name
+    character(len=*),   intent(IN)    :: name
     integer :: status
+
     integer :: lname
     type(C_PTR) :: p
+    type(message_header) :: header
+    logical :: success
 
     status = -1
-    if(.not. file_version_is_valid(this) ) return ! wrong version
-    if(file_is_open(this) )        return ! already open
+    success = .false.
+
+    if (.not. file_version_is_valid(this)) return ! wrong version
+    if (file_is_open(this))                return ! already open
 
     call bump_ioserver_tag(this, .true.)
-    lname = len(trim(name))
-    allocate(this % name(lname))
-    this % name(1:lname) = transfer(trim(name), this % name)
-    print *,"'",this % name(1:lname),"'"
 
-    if(.not. C_ASSOCIATED(local_heap % ptr()) ) then
-      print *,'locating local heap'
-    endif
+    this % stream_id = file_open_seq
+
+    lname = len(trim(name)) + 1
+    allocate(this % name(lname))
+    this % name(1:lname) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
+
+    ! if(.not. C_ASSOCIATED(local_heap % ptr()) ) then
+    !   print *,'locating local heap'
+    ! endif
     this % h = local_heap                 ! associate heap to file
     p = this % h % ptr()
     if(C_ASSOCIATED(p)) then 
-      print *,' p is defined'
+      ! print *,' p is defined'
     else
       print *,' p is NULL'
     endif
 
-    status = 0
+    header % length  = lname
+    header % command = MSG_COMMAND_OPEN_FILE
+    header % stream  = this % stream_id
+    header % tag     = file_tag_seq
+
+    success = cio_out % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+    success = cio_out % put(this % name, int(lname, kind=8), CB_KIND_CHAR, .false.) .and. success
+    success = cio_out % put(lname, 1_8, CB_KIND_INTEGER_4, .true.) .and. success       ! Append length and commit message
+
+    if (success) status = 0
   end function ioserver_open
 
   function ioserver_close(this) result(status)
@@ -286,11 +367,11 @@ module ioserver_functions
     integer :: status
 
     status = -1
-    if(this % fd <= 0)                return    ! not open
+    if(this % stream_id <= 0)                return    ! not open
     if(.not. associated(this % name)) return    ! not open
 
     call bump_ioserver_tag(this)
-    this % fd = -1
+    this % stream_id = -1
     deallocate(this % name)
     status = 0
   end function ioserver_close
@@ -307,19 +388,23 @@ module ioserver_functions
 
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
     type(jar),   intent(IN), optional :: meta             ! metadata associated with data (carried serialized and blindly)
+    type(comm_rank_size) :: all_crs
 
-    integer :: status, n
-    type(model_record) :: rec
+    integer :: status
+    type(model_record)   :: rec
+    type(message_header) :: header
     integer(C_INT), dimension(:), pointer :: metadata
     integer(C_INT) :: low, high
     type(C_PTR) :: p
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
     integer(C_INT) :: tkr
     integer(C_SIZE_T) :: o
-    logical :: dimok, success
+    logical :: dim_ok, success
 
     status = -1
-    if(this % fd <= 0) return
+    if(this % stream_id <= 0) return
+
+    all_crs = IOserver_get_crs(NO_COLOR)
 
     ! transmission layout for circular buffer (compute PE -> relay PE) :
     ! length                 (32 bits)
@@ -341,15 +426,15 @@ module ioserver_functions
 !
     call block_meta_internals(mydata, p, d, tkr, o)        ! grep block_meta private contents
     ! check that dimensions in area are consistent with metadata
-    dimok = d(1) == area % ni .and. d(2) == area % nj .and. d(3) == area % nk .and. d(4) == area % nv
+    dim_ok = d(1) == area % ni .and. d(2) == area % nj .and. d(3) == area % nk .and. d(4) == area % nv
 
-    if(.not. dimok) return
+    if(.not. dim_ok) return
 
     call bump_ioserver_tag(this)
     rec % csize = 0
     rec % msize = 0
     if(present(cprs)) then
-      rec % csize = storage_size(cprs) / storage_size(n)
+      rec % csize = int(cmeta_size_int(), kind=4)
     endif
     if(present(meta)) then
       low = meta % low()
@@ -357,11 +442,11 @@ module ioserver_functions
       rec % msize =  high - low       ! useful number of elements
       metadata    => meta % array()
     endif
-    rec % record_length = storage_size(rec) / storage_size(n)
+    rec % record_length = int(model_record_size_int(), kind=4)
     rec % record_length = rec % record_length + rec % csize
     rec % record_length = rec % record_length + rec % msize
     rec % tag           = file_tag_seq
-    rec % stream        = this % fd
+    rec % stream        = this % stream_id
     rec % ni            = area % ni
     rec % nj            = area % nj
     rec % grid_size_i   = grid_in % size_i
@@ -374,9 +459,14 @@ module ioserver_functions
     rec % nvar          = area % nv
     rec % type_kind_rank = tkr
     rec % data          = p
+
+    header % length  = rec % record_length
+    header % command = MSG_COMMAND_DATA
+    header % sender_global_rank = all_crs % rank
 !
     success = .true.
-    success = cio_out % put( rec, int(storage_size(rec) / storage_size(n), kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    success = cio_out % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) .and. success
+    success = cio_out % put(rec, model_record_size_int(), CB_KIND_INTEGER_4, .false.)      .and. success
     if(present(cprs)) success = cio_out % put(cprs, int(rec % csize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
     ! only send useful part of metadata jar (if supplied)
     if(present(meta)) success = cio_out % put(metadata(low + 1 : high), int(rec % msize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
@@ -391,7 +481,7 @@ module ioserver_functions
     integer :: status
 
     status = -1
-    if(this % fd <= 0) return
+    if (this % stream_id <= 0) return
     call bump_ioserver_tag(this)
 
     status = 0
