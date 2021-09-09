@@ -1050,7 +1050,7 @@ int64_t DCB_get_available_data_bytes(
     )
 //C_EnD
 {
-  if (buffer != NULL && is_consumer(buffer) && buffer_id < buffer->num_producers)
+  if (buffer != NULL && is_consumer(buffer) && buffer_id < buffer->num_producers && buffer_id >= 0)
     return (int64_t)get_available_data_bytes(get_circular_buffer_instance(buffer, buffer_id));
   return -1;
 }
