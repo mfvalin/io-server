@@ -76,7 +76,7 @@ end module cb_plus_dcb_parameters
 program pseudomodelandserver
   use ISO_C_BINDING
   use ioserver_functions
-  use memory_arena_mod
+  use shmem_arena_mod
   use cb_plus_dcb_parameters
   implicit none
   external io_relay_process
@@ -87,7 +87,7 @@ program pseudomodelandserver
   integer :: rank, size, nserv
   logical :: error
   character(len=128) :: arg
-  type(memory_arena) :: ma
+  type(shmem_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
 
   ! integer, parameter :: NUM_NODES = 3

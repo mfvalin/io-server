@@ -32,7 +32,7 @@
 #include "io-server/circular_buffer.h"
 //C_EnD
 
-#include "io-server/memory_arena.h"
+#include "io-server/shmem_arena.h"
 #include "io-server/timer.h"
 
 static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INT
@@ -838,7 +838,7 @@ distributed_circular_buffer_p DCB_create_bytes(
   // Root only: allocate shared DCB memory on the server, initialize the common header and send memory info to other server processes
   if (is_root(buffer)) {
     int id           = -1;
-    buffer->raw_data = memory_allocate_shared(&id, win_total_size);
+    buffer->raw_data = shmem_allocate_shared(&id, win_total_size);
     if (buffer->raw_data == NULL) {
       printf("Error when allocating shared memory for DCB\n");
       return NULL;
@@ -853,7 +853,7 @@ distributed_circular_buffer_p DCB_create_bytes(
   if (is_on_server(buffer) && !is_root(buffer)) {
     int id;
     MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Receive shared mem info from root process
-    buffer->raw_data = memory_address_from_id(id);
+    buffer->raw_data = shmem_address_from_id(id);
 
     // Set channel ranks in common header
     if (is_channel(buffer)) {

@@ -88,19 +88,17 @@ program pseudomodelandserver
   use mpi_f08
 
   use ioserver_functions
-  use memory_arena_mod
   use model_write_parameters
   implicit none
   external io_relay_process
   external io_server_process
   integer :: status, input
-  integer :: me, nio_node
+  integer :: nio_node
 
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv !, noops
   logical :: error
   character(len=128) :: arg
-  type(memory_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
 
   ! integer, parameter :: NUM_NODES = 3
@@ -143,7 +141,6 @@ program pseudomodelandserver
   read(arg,*) nio_node                    ! number of relay processes per node
 
   call get_local_world(comm, rank, size)
-  me = ma % setid(rank)
   error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
   if(error) then
     write(6,*)'ERROR: bad window sizes'
@@ -229,30 +226,16 @@ subroutine io_server_process()
 
   ! Create the DCB used for this test
   data_buffer = IOserver_get_dcb()
-  ! success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_channels, DCB_SIZE_BYTES)
 
-  ! if (.not. success) then
-  !   write(6, *) 'Unable to create DCB (from SERVER process)'
-  !   error stop 1
-  ! end if
   consumer_crs = IOserver_get_crs(SERVER_COLOR + NODE_COLOR)
 
   ! Choose what to do based on whether we are a consumer or a channel process
   if (data_buffer % get_consumer_id() >= 0) then
-    ! call MPI_Comm_split(server_crs % comm, 0, data_buffer % get_consumer_id(), consumer_comm)
     call consumer_process(data_buffer, consumer_crs % comm)
-  ! else if (data_buffer % get_channel_id() >= 0) then
-  !   call MPI_Comm_split(server_crs % comm, 1, data_buffer % get_channel_id(), consumer_comm)
-  !   call channel_process(data_buffer)
   else
     write(6, *) 'We have a problem'
     error stop 1
   end if
-
-  ! call data_buffer % delete()
-
-  ! call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
-  ! call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 

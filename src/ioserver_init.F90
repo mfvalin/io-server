@@ -11,6 +11,10 @@
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 !  Lesser General Public License for more details.
 !
+! Authors:
+!     M. Valin,   Recherche en Prevision Numerique, 2020/2021
+!     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
+!
 !! F_EnD
 module ioserver_constants
   use ISO_C_BINDING
@@ -105,7 +109,7 @@ module ioserver_memory_mod
 
   type(circular_buffer), dimension(:), allocatable, target :: circ_buffer_in   ! The CB objects belonging to compute PEs (inbound)
   type(circular_buffer), dimension(:), allocatable, target :: circ_buffer_out  ! The CB objects belonging to compute PEs (outbound)
-  type(heap),            dimension(:), allocatable, target :: node_heaps       ! Shared memory heaps belonging to compute PEs
+  type(heap),            dimension(:), allocatable, target :: local_heaps      ! Shared memory heaps belonging to compute PEs
 
   contains
 
@@ -127,7 +131,7 @@ module ioserver_memory_mod
 
     allocate(circ_buffer_in(0:max_smp_pe))     ! size is overkill but it is easier
     allocate(circ_buffer_out(0:max_smp_pe))    ! size is overkill but it is easier
-    allocate(node_heaps(0:max_smp_pe))         ! size is overkill but it is easier
+    allocate(local_heaps(0:max_smp_pe))        ! size is overkill but it is easier
 
     initialized = .true.
   end subroutine ioserver_memory_mod_init
@@ -178,7 +182,7 @@ module ioserver_internal_mod
   use ISO_C_BINDING
   use ioserver_constants
   use shmem_heap
-  use memory_arena_mod
+  use shmem_arena_mod
   use circular_buffer_module
   use distributed_circular_buffer_module
   use ioserver_memory_mod
@@ -266,11 +270,12 @@ module ioserver_internal_mod
   type(C_PTR), bind(C, name='LocalCiooutPtr')  :: local_cioout_ptr
   integer(C_INT), dimension(:), pointer        :: cioout_ptr
 
-  type(memory_arena)     :: local_arena          ! local memory arena
+  type(shmem_arena)     :: local_arena          ! local memory arena
   type(heap)             :: local_heap           ! local heap (located in memory arena)
   type(circular_buffer)  :: local_cio_in         ! inbound circular buffer  (located in memory arena)
   type(circular_buffer)  :: local_cio_out        ! outbound circular buffer  (located in memory arena)
   type(distributed_circular_buffer) :: local_dcb ! Distributed circular buffer for communication b/w relay and server processes
+  type(heap)             :: node_heap            ! On server node only. Heap that everyone there can use
 
   integer(C_SIZE_T), parameter :: DCB_SIZE = 4 * MBYTE ! Size of each CB within the DCB
 
@@ -413,15 +418,15 @@ subroutine fetch_node_shmem_structs()
       new        = transfer(my_base, new)
       new        = new + mem % pe(i) % heap
       local_addr = transfer(new, local_addr)
-      temp       = node_heaps(target_rank) % clone(local_addr)
+      temp       = local_heaps(target_rank) % clone(local_addr)
 
-      num_heaps = node_heaps(target_rank) % register(local_addr)
+      num_heaps = local_heaps(target_rank) % register(local_addr)
       if (num_heaps < 0) then
         print *, 'ERROR: Could not register other PE heap locally', i
         error stop 1
       end if
 
-      call node_heaps(target_rank) % set_base(my_base)
+      call local_heaps(target_rank) % set_base(my_base)
     end if
   end do
 end subroutine fetch_node_shmem_structs

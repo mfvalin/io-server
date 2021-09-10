@@ -63,7 +63,7 @@ program pseudomodelandserver
   use ISO_C_BINDING
   use helpers
   use ioserver_functions
-  use memory_arena_mod
+  use shmem_arena_mod
   implicit none
   external io_relay_fn, io_server_out, compute_fn
   integer :: status
@@ -72,7 +72,7 @@ program pseudomodelandserver
   integer :: noderank, nodesize
   logical :: error
   character(len=128) :: arg
-  type(memory_arena) :: ma
+  type(shmem_arena) :: ma
   type(comm_rank_size) :: server_crs, fullnode_crs, model_crs
 
   call mpi_init(status)
@@ -210,11 +210,11 @@ subroutine compute_fn()
   use ISO_C_BINDING
   use helpers
   use ioserver_functions
-  use memory_arena_mod
+  use shmem_arena_mod
   implicit none
   type(MPI_Comm) :: model, allio, relay, server, modelio, nodecom !, nio_node, me
   integer :: rank, size, noderank, nodesize !, comm, navail, ierr
-  type(memory_arena) :: ma
+  type(shmem_arena) :: ma
   type(comm_rank_size) :: model_crs, relay_crs !, local_crs 
   type(comm_rank_size) :: modelio_crs, allio_crs, server_crs, nodecom_crs
   type(C_PTR) :: p_relay, temp

@@ -8,7 +8,7 @@ contains
   ! given to that process is taken into account.
   subroutine RPN_allocate_shared(wsize, comm, baseptr)
     use ISO_C_BINDING
-    use memory_arena_mod
+    use shmem_arena_mod
     use mpi_f08
     implicit none
     INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize
@@ -43,11 +43,11 @@ contains
 
     if(myrank == 0) then
         siz = wsize
-        p = memory_allocate_shared(shmid, siz)
+        p = shmem_allocate_shared(shmid, siz)
     endif
     call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, comm)
     if(myrank .ne. 0) then
-        p = memory_address_from_id(shmid)
+        p = shmem_address_from_id(shmid)
     endif
     baseptr = transfer(p, baseptr)
   end subroutine RPN_allocate_shared

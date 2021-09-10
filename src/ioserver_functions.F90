@@ -520,7 +520,7 @@ end subroutine ioserver_functions_demo
 ! general information useful to io relay processes and server processes
 module io_common_mod
   use ISO_C_BINDING
-  use memory_arena_mod
+  use shmem_arena_mod
   use ioserver_functions
   implicit none
 
@@ -542,7 +542,7 @@ module io_common_mod
   type(C_PTR) :: p_server = C_NULL_PTR     ! memory shared between server PEs
   integer(C_INTPTR_T) :: sz_server = 0     ! size in bytes of above 
 
-  type(memory_arena) :: ma                 ! local memory arena, contains heaps and circular buffers (relay+compute)
+  type(shmem_arena) :: ma                  ! local memory arena, contains heaps and circular buffers (relay+compute)
 
 end module io_common_mod
 !
@@ -598,7 +598,7 @@ module io_relay_mod
 
     c_cio_out => circ_buffer_out
     c_cio_in  => circ_buffer_in
-    c_heaps   => node_heaps
+    c_heaps   => local_heaps
 
     initialized = .true.
   end subroutine io_relay_mod_init

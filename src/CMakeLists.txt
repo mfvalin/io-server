@@ -8,16 +8,16 @@ file(GLOB PROJECT_F_FILES *.F90 *.F *.f *.f90)
 set(C_TO_INC_FILES
   circular_buffer.c
   distributed_circular_buffer.c
-  memory_arena.c
   rpn_extra.c
+  shmem_arena.c
   timer.c
 )
 
 set(C_TO_H_FILES
   circular_buffer.c
   distributed_circular_buffer.c
-  memory_arena.c
   rpn_extra.c
+  shmem_arena.c
   shmem_heap.c
   timer.c
 )
