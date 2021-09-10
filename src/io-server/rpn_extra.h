@@ -109,6 +109,11 @@ static inline void lock_set(int* location) {
 static inline void lock_reset(int* location) {
   *(volatile int*)location = 0;
 }
+
+static inline int lock_is_set(int* location) {
+  const int value = *(volatile int*)location;
+  return value;
+}
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );

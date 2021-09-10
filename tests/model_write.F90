@@ -32,88 +32,12 @@ module model_write_parameters
   integer,           parameter :: MAX_DCB_MESSAGE_SIZE_INT  = CB_MESSAGE_SIZE_INT * 500        ! Size of each data batch put in the DCB
   integer(C_SIZE_T), parameter :: DCB_SIZE_BYTES            = MAX_DCB_MESSAGE_SIZE_INT * 4 * 5 ! Number of elements in each buffer of the DCB
 
-  integer, parameter :: MAX_ASSEMBLY_LINES = 20
-
   logical :: CHECK_CB_MESSAGES
   logical :: CHECK_DCB_MESSAGES
 
   integer :: num_channels
 
-  type, private :: grid_assembly_line
-    integer :: tag = -1
-    integer :: file_unit
-    integer, dimension(:, :), allocatable :: data
-    integer(kind=8) :: missing_data = -1
-  end type
-
-  type, public :: grid_assembly
-    type(grid_assembly_line), dimension(MAX_ASSEMBLY_LINES) :: lines
-
-    contains
-    procedure :: put_data => grid_assembly_put_data
-  end type
-
 contains
-
-  function grid_assembly_put_data(this, record, entry_size, subgrid_data) result(status)
-    implicit none
-    class(grid_assembly), intent(inout) :: this
-    class(model_record),  intent(in)    :: record
-    ! integer, intent(in) :: tag
-    ! integer, intent(in) :: start_i, start_j
-    ! integer, intent(in) :: num_i, num_j
-    ! integer, intent(in) :: total_size_i, total_size_j
-    integer, intent(in) :: entry_size
-    integer, intent(in), dimension(record % ni, record % nj * entry_size) :: subgrid_data
-
-    integer :: status
-
-    integer :: i_line, line_id, free_line_id
-    integer :: i0, i1, j0, j1
-
-    status       = -1
-    line_id      = -1
-    free_line_id = -1
-    do i_line = 1, MAX_ASSEMBLY_LINES
-      if (this % lines(i_line) % tag == record % tag) then
-        line_id = i_line
-        exit
-      else if (this % lines(i_line) % tag == -1 .and. free_line_id == -1) then
-        free_line_id = i_line
-      end if
-    end do
-    
-    if (line_id == -1) then
-      if (free_line_id .ne. -1) then
-        line_id = free_line_id
-        print *, 'Starting assembly for a new grid! Tag = ', record % tag, line_id, free_line_id
-        this % lines(line_id) % tag = record % tag
-        this % lines(line_id) % file_unit = record % stream
-        allocate(this % lines(line_id) % data(record % grid_size_i, record % grid_size_j * entry_size))
-        this % lines(line_id) % missing_data = record % grid_size_i * record % grid_size_j * entry_size
-      else
-        print *, 'We have reached the maximum number of grids being assembled! Quitting.'
-        error stop 1
-        return
-      end if
-    end if
-
-    i0 = record % i0
-    i1 = i0 + record % ni - 1
-    j0 = record % j0 * entry_size
-    j1 = j0 + (record % nj - 1) * entry_size
-    ! print *, 'si, sj, ni, nj', start_i, start_j, num_i, num_j
-    ! print *, 'Writing to ', i0, i1, j0, j1, entry_size
-    this % lines(line_id) % data(i0:i1, j0:j1) = subgrid_data(:,:)
-    this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - record % ni * record % nj * entry_size
-
-    if (this % lines(line_id) % missing_data == 0) then
-      print *, 'Completed a grid! Gotta write it down now'
-      status = line_id
-    else
-      status = 0
-    end if
-  end function grid_assembly_put_data
 
   function compute_data_point(compute_rank, tag, index) result(data_point)
     implicit none
@@ -252,8 +176,12 @@ program pseudomodelandserver
     ! =============================================================================================
     ! nio_node = -1
     if (node_rank < nserv) then
-      call set_IOserver_server(io_server_process)
-      status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
+      if (node_rank < nserv - num_channels) then
+        call set_IOserver_server(io_server_process)
+        status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
+      else
+        status = ioserver_init(nio_node, 'C') ! This should never return
+      end if
     else 
       if (single_node) then
         !--------------------------------------------------------------
@@ -279,7 +207,6 @@ program pseudomodelandserver
   call mpi_finalize(status)
 end program
 
-
 subroutine io_server_process()
   use mpi_f08
   use model_write_parameters
@@ -287,42 +214,45 @@ subroutine io_server_process()
   use io_server_mod
   implicit none
 
-  type(MPI_Comm) :: global_comm, consumer_comm
+  type(comm_rank_size) :: consumer_crs
+  type(MPI_Comm) :: global_comm !, consumer_comm
   integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
-  logical :: success
-  integer :: num_producers
+  ! logical :: success
+  ! integer :: num_producers
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
 
+
   ! write(6, *) 'SERVER process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
-  num_producers = allio_crs % size - server_crs % size
-  success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_producers, num_channels, DCB_SIZE_BYTES)
+  data_buffer = IOserver_get_dcb()
+  ! success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_channels, DCB_SIZE_BYTES)
 
-  if (.not. success) then
-    write(6, *) 'Unable to create DCB (from SERVER process)'
-    error stop 1
-  end if
+  ! if (.not. success) then
+  !   write(6, *) 'Unable to create DCB (from SERVER process)'
+  !   error stop 1
+  ! end if
+  consumer_crs = IOserver_get_crs(SERVER_COLOR + NODE_COLOR)
 
   ! Choose what to do based on whether we are a consumer or a channel process
   if (data_buffer % get_consumer_id() >= 0) then
-    call MPI_Comm_split(server_crs % comm, 0, data_buffer % get_consumer_id(), consumer_comm)
-    call consumer_process(data_buffer, consumer_comm)
-  else if (data_buffer % get_channel_id() >= 0) then
-    call MPI_Comm_split(server_crs % comm, 1, data_buffer % get_channel_id(), consumer_comm)
-    call channel_process(data_buffer)
+    ! call MPI_Comm_split(server_crs % comm, 0, data_buffer % get_consumer_id(), consumer_comm)
+    call consumer_process(data_buffer, consumer_crs % comm)
+  ! else if (data_buffer % get_channel_id() >= 0) then
+  !   call MPI_Comm_split(server_crs % comm, 1, data_buffer % get_channel_id(), consumer_comm)
+  !   call channel_process(data_buffer)
   else
     write(6, *) 'We have a problem'
     error stop 1
   end if
 
-  call data_buffer % delete()
+  ! call data_buffer % delete()
 
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
+  ! call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
+  ! call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 
@@ -399,8 +329,8 @@ function receive_message(dcb, producer_id) result(finished)
     error stop 1
   end if
 
-  print '(A, I8, A, I3, A, I3, A, I8, A, I5)', &
-    'Got header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream, ', tag ', header % tag, ', rank ', header % sender_global_rank
+  ! print '(A, I8, A, I3, A, I3, A, I8, A, I5)', &
+  !   'Got header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream, ', tag ', header % tag, ', rank ', header % sender_global_rank
 
   !-------
   ! Data
@@ -765,7 +695,7 @@ subroutine io_relay_process()
   integer              :: i_compute, index, num_errors
   integer :: h_status
 
-  logical :: success = .false.
+  logical :: success
   type(distributed_circular_buffer) :: data_buffer
 
   call io_relay_mod_init()
@@ -782,11 +712,7 @@ subroutine io_relay_process()
   ! print *, 'RELAY, local relay id: ', local_relay_id
 
   ! Create the DCB used to communicate with the server
-  success = data_buffer % create_bytes(allio_crs % comm, MPI_COMM_NULL, -1, -1, 0_8)
-  if (.not. success) then
-    write(6, *) 'Unable to create DCB from RELAY process'
-    error stop 1
-  end if
+  data_buffer = IOserver_get_dcb()
 
   producer_id = data_buffer % get_producer_id()
 
@@ -1009,9 +935,6 @@ subroutine io_relay_process()
     ! deallocate(dcb_message)
   end block
 
-  call data_buffer % delete()
-
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
   if (local_relay_id == 0) then
     call c_heaps(0) % dumpinfo()
@@ -1019,8 +942,6 @@ subroutine io_relay_process()
       call c_cio_out(i_compute) % print_stats(producer_id * 100 + i_compute, i_compute == 0)
     end do
   end if
-
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from RELAY process'

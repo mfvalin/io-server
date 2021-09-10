@@ -59,7 +59,37 @@ static inline void lock_set(int* location) {
 static inline void lock_reset(int* location) {
   *(volatile int*)location = 0;
 }
+
+static inline int lock_is_set(int* location) {
+  const int value = *(volatile int*)location;
+  return value;
+}
 //C_EnD
+
+//F_StArT
+//  subroutine lock_set(location) BIND(C, name = 'lock_set_F')
+//    import :: C_PTR
+//    type(C_PTR), intent(IN), value :: location
+//  end subroutine lock_set
+//F_EnD
+void lock_set_F(int* location) { lock_set(location); }
+
+//F_StArT
+//  subroutine lock_reset(location) BIND(C, name = 'lock_reset_F')
+//    import :: C_PTR
+//    type(C_PTR), intent(IN), value :: location
+//  end subroutine lock_reset
+//F_EnD
+void lock_reset_F(int* location) { lock_reset(location); }
+
+//F_StArT
+//  function lock_is_set(location) BIND(C, name = 'lock_is_set_F')
+//    import :: C_PTR, C_INT
+//    type(C_PTR), intent(IN), value :: location
+//    integer(C_INT) :: lock_is_set
+//  end function lock_is_set
+//F_EnD
+int lock_is_set_F(int* location) { return lock_is_set(location); }
 
 //F_StArT
 //  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')

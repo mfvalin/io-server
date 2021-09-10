@@ -124,10 +124,10 @@ program dcb_edge_case_1
   ! Create the communicators (needed for the server only)
   if (global_rank == 0 .or. global_rank == 1) then
     call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, 1, 1, NUM_CB_BYTES)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, 1, NUM_CB_BYTES)
   else if (global_rank == 2) then
     call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0, 0_8)
+    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0_8)
   else
     print *, 'Error'
     error stop 1

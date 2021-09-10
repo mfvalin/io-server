@@ -102,12 +102,12 @@ int main(int argc, char** argv)
     if (global_rank == 0 || global_rank == 1) {
         MPI_Comm server_comm;
         MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, &server_comm);
-        dcb = DCB_create_bytes(MPI_COMM_WORLD, server_comm, 1, 1, NUM_BUFFER_BYTES);
+        dcb = DCB_create_bytes(MPI_COMM_WORLD, server_comm, 1, NUM_BUFFER_BYTES);
     }
     else {
         MPI_Comm producer_comm;
         MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, &producer_comm);
-        dcb = DCB_create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0, 0);
+        dcb = DCB_create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0);
     }
 
     if (dcb == NULL) {

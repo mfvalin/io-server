@@ -205,7 +205,6 @@ subroutine io_server_process()
   integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
   logical :: success
-  integer :: num_producers
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
@@ -213,8 +212,7 @@ subroutine io_server_process()
   ! write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
-  num_producers = allio_crs % size - server_crs % size
-  success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_producers, num_channels, DCB_SIZE_BYTES)
+  success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_channels, DCB_SIZE_BYTES)
 
   if (.not. success) then
     write(6, *) 'Unable to create DCB (from SERVER process)'
@@ -535,7 +533,7 @@ subroutine io_relay_process()
   ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used to communicate with the server
-  success = data_buffer % create_bytes(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1_8)
+  success = data_buffer % create_bytes(allio_crs % comm, MPI_COMM_NULL, -1, -1_8)
   if (.not. success) then
     write(6, *) 'Unable to create DCB from RELAY process'
     error stop 1

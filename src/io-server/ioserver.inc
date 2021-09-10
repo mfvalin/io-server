@@ -90,6 +90,11 @@ import :: circular_buffer
 type(circular_buffer) :: cio
 end function IOserver_get_cio_out
 
+function IOserver_get_dcb() result(dcb)
+import :: distributed_circular_buffer
+type(distributed_circular_buffer) :: dcb
+end function IOserver_get_dcb
+
 subroutine IOserver_debug(mode) BIND(C,name='IOserver_debug')   ! set io server debug mode
 import :: C_INT
 integer(C_INT), intent(IN), value :: mode

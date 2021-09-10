@@ -37,6 +37,19 @@
 !******************************************************************************
 
 interface
+subroutine lock_set(location) BIND(C, name = 'lock_set_F')
+import :: C_PTR
+type(C_PTR), intent(IN), value :: location
+end subroutine lock_set
+subroutine lock_reset(location) BIND(C, name = 'lock_reset_F')
+import :: C_PTR
+type(C_PTR), intent(IN), value :: location
+end subroutine lock_reset
+function lock_is_set(location) BIND(C, name = 'lock_is_set_F')
+import :: C_PTR, C_INT
+type(C_PTR), intent(IN), value :: location
+integer(C_INT) :: lock_is_set
+end function lock_is_set
 subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 import :: C_INT
 implicit none

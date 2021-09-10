@@ -15,6 +15,7 @@ module ioserver_functions
   use ISO_C_BINDING
   use shmem_heap
   use circular_buffer_module
+  use distributed_circular_buffer_module
   use ioserver_constants
   implicit none
 #if ! defined(VERSION)
@@ -462,6 +463,8 @@ module ioserver_functions
 
     header % length  = rec % record_length
     header % command = MSG_COMMAND_DATA
+    header % stream  = this % stream_id
+    header % tag     = file_tag_seq
     header % sender_global_rank = all_crs % rank
 !
     success = .true.

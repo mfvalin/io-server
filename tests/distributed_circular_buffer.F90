@@ -551,7 +551,7 @@ program test_distributed_circular_buffer
   integer, dimension(3, 1) :: incl_range
 
   type(distributed_circular_buffer) :: circ_buffer
-  integer :: num_producers, consumer_id, channel_id, producer_id
+  integer :: consumer_id, channel_id, producer_id
 
   ! Initialization
 
@@ -577,8 +577,6 @@ program test_distributed_circular_buffer
   call MPI_comm_rank(dcb_comm, rank)
   call MPI_comm_size(dcb_comm, comm_size)
 
-  num_producers = comm_size - 2*NUM_CONSUMERS;
-
   server_comm = MPI_COMM_NULL
   call MPI_Comm_group(dcb_comm, dcb_group)
 
@@ -590,9 +588,8 @@ program test_distributed_circular_buffer
     call MPI_Comm_create_group(dcb_comm, server_group, 0, server_comm)
   end if
 
-
   ! Beginning of test
-  success = circ_buffer % create_bytes(dcb_comm, server_comm, num_producers, NUM_CONSUMERS, BUFFER_SIZE_BYTE)
+  success = circ_buffer % create_bytes(dcb_comm, server_comm, NUM_CONSUMERS, BUFFER_SIZE_BYTE)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank

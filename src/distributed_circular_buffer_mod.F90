@@ -59,6 +59,7 @@ module distributed_circular_buffer_module
     procedure :: start_listening
     procedure :: server_barrier
     procedure :: full_barrier
+    final     :: dcb_finalize
   end type distributed_circular_buffer
 
 contains
@@ -79,11 +80,10 @@ contains
   end function is_valid
 
   !> Create and initialize a distributed circular buffer. See DCB_create_bytes
-  function create_bytes(this, communicator, server_communicator, num_producers, num_channels, num_bytes) result(is_valid)
+  function create_bytes(this, communicator, server_communicator, num_channels, num_bytes) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     type(MPI_Comm),    intent(in)                        :: communicator, server_communicator
-    integer(C_INT),    intent(in)                        :: num_producers
     integer(C_INT),    intent(in)                        :: num_channels
     integer(C_SIZE_T), intent(in)                        :: num_bytes
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
@@ -92,7 +92,7 @@ contains
       call this % delete()
     end if
 
-    this % c_buffer = DCB_create_bytes(communicator % mpi_val, server_communicator % mpi_val, num_producers, num_channels, num_bytes)
+    this % c_buffer = DCB_create_bytes(communicator % mpi_val, server_communicator % mpi_val, num_channels, num_bytes)
     is_valid = this % is_valid()
   end function create_bytes
 
@@ -318,5 +318,11 @@ contains
     class(distributed_circular_buffer), intent(inout) :: this
     call DCB_server_barrier(this % c_buffer)
   end subroutine server_barrier
+
+  subroutine dcb_finalize(this)
+    implicit none
+    type(distributed_circular_buffer), intent(inout) :: this
+    call this % delete()
+  end subroutine dcb_finalize
 
 end module distributed_circular_buffer_module
