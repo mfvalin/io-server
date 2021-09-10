@@ -204,7 +204,6 @@ subroutine io_server_process()
   type(MPI_Comm) :: global_comm
   integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
-  logical :: success
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
@@ -212,27 +211,15 @@ subroutine io_server_process()
   ! write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
-  success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_channels, DCB_SIZE_BYTES)
-
-  if (.not. success) then
-    write(6, *) 'Unable to create DCB (from SERVER process)'
-    error stop 1
-  end if
+  data_buffer = IOserver_get_dcb()
 
   ! Choose what to do based on whether we are a consumer or a channel process
   if (data_buffer % get_consumer_id() >= 0) then
     call consumer_process(data_buffer)
-  else if (data_buffer % get_channel_id() >= 0) then
-    call channel_process(data_buffer)
   else
     write(6, *) 'We have a problem'
     error stop 1
   end if
-
-  call data_buffer % delete()
-
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 
@@ -533,11 +520,7 @@ subroutine io_relay_process()
   ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used to communicate with the server
-  success = data_buffer % create_bytes(allio_crs % comm, MPI_COMM_NULL, -1, -1_8)
-  if (.not. success) then
-    write(6, *) 'Unable to create DCB from RELAY process'
-    error stop 1
-  end if
+  data_buffer = IOserver_get_dcb()
 
   producer_id = data_buffer % get_producer_id()
 
@@ -636,17 +619,11 @@ subroutine io_relay_process()
     deallocate(dcb_message)
   end block
 
-  call data_buffer % delete()
-
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
-
   if (local_relay_id == 0) then
     do i_compute = 1, num_local_compute
       call local_data_buffers(i_compute) % print_stats(producer_id * 100 + i_compute - 1, i_compute == 1)
     end do
   end if
-
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from RELAY process'
