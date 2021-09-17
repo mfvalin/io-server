@@ -85,18 +85,7 @@ or
 
 // remain consistent with io-server package
 
-// heap element (see data_element in common.h)<br>
-// if data_element is int32_t, "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
-// heap element is identical to data_element
-// typedef data_element heap_element
-
-//!> heap element (same as data_element)
-#if defined(DATA_ELEMENT_64)
-typedef int64_t heap_element ;
-#else
-typedef data_element heap_element ;
-#endif
-// #define heap_element data_element
+typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able to contain its own size)
 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 64

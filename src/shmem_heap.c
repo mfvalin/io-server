@@ -87,29 +87,13 @@
  \endverbatim
 */
 
-#include <io-server/shmem_heap.h>
-
-// the block that follows was extracted to io-server/shmem_heap.h
-#ifndef MAX_HEAPS
-
 // \cond DOXYGEN_SHOULD_SKIP_THIS
 //   C_StArT
 #include <io-server/cb_data.h>
 
 // remain consistent with io-server package
 
-// heap element (see data_element in common.h)<br>
-// if data_element is int32_t, "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
-// heap element is identical to data_element
-// typedef data_element heap_element
-
-//!> heap element (same as data_element)
-#if defined(DATA_ELEMENT_64)
-typedef int64_t heap_element ;
-#else
-typedef data_element heap_element ;
-#endif
-// #define heap_element data_element
+typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able to contain its own size)
 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 64
@@ -141,8 +125,6 @@ typedef  struct {
   } meta_c;
 //    C_EnD
 // \endcond
-
-#endif
 
 //!> number of registered heaps
 static int32_t nheaps = 0 ;
@@ -476,7 +458,7 @@ void *ShmemHeapInit(
   ){
 //  C_EnD
   heap_element *h = (heap_element *) addr ;
-  heap_element heap_sz ;
+  size_t heap_sz ;
   heap_stats *stats ;
 
   if(h == NULL) h = (heap_element *) malloc(sz) ;
@@ -545,12 +527,12 @@ int32_t ShmemHeapCheck(
 
     if(sz < 5 && sz > 0) return 3 ;             // valid size must be > 4
     if(h[cur+1] != HEAD || h[cur+sz-2] != TAIL){
-      printf("trampled block bounds marker(s), expected %8.8x %8.8x, found %8.8x %8.8x\n",
+      printf("trampled block bounds marker(s), expected %8.8lx %8.8lx, found %8.8lx %8.8lx\n",
              HEAD, TAIL, h[cur+1], h[cur+sz-2]);
       return 4 ; 
     }
     if(h[cur+sz-1] != sz) {                     // check tail size marker
-      printf("bad tail size marker, got %d, expected %d\n",h[cur+sz-1], sz);
+      printf("bad tail size marker, got %ld, expected %ld\n",h[cur+sz-1], sz);
       return 4 ;                                // tail size marker not consistent
     }
     if(h[cur] > 0){                             // free block
