@@ -50,12 +50,6 @@ foreach(C_FILE ${C_TO_H_FILES})
    list(APPEND PROJECT_INCLUDE_FILES ${OUT_FILE})
 endforeach(C_FILE)
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/io-server/ioserver.inc
-   COMMAND ${EXTRACT_FORTRAN_SCRIPT} ${CMAKE_CURRENT_SOURCE_DIR}/ioserver_init.F90 > ${CMAKE_CURRENT_SOURCE_DIR}/io-server/ioserver.inc
-   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ioserver_init.F90 ${EXTRACT_FORTRAN_SCRIPT}
-   )
-list(APPEND PROJECT_INCLUDE_FILES io-server/ioserver.inc)
-
 # A bunch of fortran function signatures
 set(F_ALLOC_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/shape_f_pointer.sh)
 add_custom_command(OUTPUT ${F_ALLOC_FILE} COMMAND ${F_ALLOC_SCRIPT} > ${F_ALLOC_FILE} DEPENDS ${F_ALLOC_SCRIPT})

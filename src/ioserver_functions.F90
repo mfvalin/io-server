@@ -17,11 +17,11 @@ module ioserver_functions
   use circular_buffer_module
   use distributed_circular_buffer_module
   use ioserver_constants
+  use ioserver_internal_mod
   implicit none
 #if ! defined(VERSION)
 #define VERSION 10000
 #endif
-  include 'io-server/ioserver.inc'
   private :: ioserver_int_init
 
   save
@@ -119,7 +119,6 @@ module ioserver_functions
   logical                :: initialized = .false.
   integer                :: file_tag_seq  = 0
   integer                :: file_open_seq = 0
-  type(heap)             :: local_heap   ! type is self initializing
   type(circular_buffer)  :: cio_in       ! type is self initializing
   type(circular_buffer)  :: cio_out      ! type is self initializing
   integer, parameter     :: ioserver_version = VERSION
@@ -255,10 +254,6 @@ module ioserver_functions
     type(heap) :: h
     type(heap) :: nh
     if(n == 0) then
-      if(.not. C_ASSOCIATED(local_heap % ptr()) ) then
-        print *,'initializing io relay heap'
-        local_heap = IOserver_get_heap()
-      endif
       h = local_heap
     else
       h = nh                  ! null heap
@@ -298,7 +293,6 @@ module ioserver_functions
 !     status = ioserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class)
     status = ioserver_int_init(nio_node, app_class)
     if(.not. initialized) then
-      local_heap  = IOserver_get_heap()
       cio_in      = IOserver_get_cio_in()
       cio_out     = IOserver_get_cio_out()
       initialized = .true.
