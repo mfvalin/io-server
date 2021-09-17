@@ -578,6 +578,7 @@ module io_relay_mod
 
   subroutine io_relay_mod_init()
     use ioserver_memory_mod
+    use ioserver_internal_mod, only: IOserver_get_relay_shmem
     implicit none
     type(C_PTR) :: temp
 
@@ -591,8 +592,7 @@ module io_relay_mod
     nodecom_crs  = IOserver_get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)   ! compute and relay PEs on THIS SMP NODE
     fullnode_crs = IOserver_get_crs(NODE_COLOR)                  ! all PEs on this SMP node
 
-    call IOSERVER_get_winmem(p_base, p_relay, p_server)
-    call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
+    p_relay = IOserver_get_relay_shmem()
 
     temp = ma%clone(p_relay)
 
@@ -630,6 +630,7 @@ module io_server_mod
   end function io_server_debug
 
   subroutine io_server_mod_init()
+    use ioserver_internal_mod, only: IOserver_get_relay_shmem
     implicit none
     type(C_PTR) :: temp
 
@@ -643,8 +644,7 @@ module io_server_mod
     nodecom_crs  = IOserver_get_crs(SERVER_COLOR + NODE_COLOR)   ! server PEs on THIS SMP NODE
     fullnode_crs = IOserver_get_crs(NODE_COLOR)
 
-    call IOSERVER_get_winmem(p_base, p_relay, p_server)
-    call IOSERVER_get_winsizes(sz_base, sz_relay, sz_server)
+    p_relay = IOserver_get_relay_shmem()
 
     temp = ma%clone(p_relay)
 

@@ -180,6 +180,7 @@ end module ioserver_memory_mod
 
 module ioserver_internal_mod
   use ISO_C_BINDING
+  use mpi_f08
   use ioserver_constants
   use shmem_heap
   use shmem_arena_mod
@@ -188,6 +189,7 @@ module ioserver_internal_mod
   use ioserver_memory_mod
   implicit none
 
+  ! private
   save
 
   !  ==========================================================================================
@@ -197,36 +199,30 @@ module ioserver_internal_mod
   integer :: disp_unit     = 4                   !  displacement unit in 1 sided windows (32 bits by default)
 
   ! control memory, shared by all PEs on a given SMP node (whether active PEs or NO-OP PEs)
-  type(C_PTR)         :: ctrl_shmem      = C_NULL_PTR !  address of main (control) shared memory area on this node
-  integer(C_INTPTR_T) :: ctrl_shmem_size = MBYTE      !  size of above, MUST BE AT LEAST the size of shared_memory
+  type(C_PTR)       :: ctrl_shmem      = C_NULL_PTR !  address of main (control) shared memory area on this node
+  integer(C_SIZE_T) :: ctrl_shmem_size = MBYTE      !  size of above, MUST BE AT LEAST the size of shared_memory
 
   ! used by relay PEs and server PEs for 1 sided communications, used as shared memory by server PEs on same node
-  type(C_PTR)         :: alliomem  = C_NULL_PTR     !  address of IO window (on all IO PEs) (same as server_shmem on server PEs)
-  integer(C_INTPTR_T) :: alliosiz  = MBYTE          !  size of above
-  type(MPI_Win)       :: alliowin  = MPI_WIN_NULL   !  1 sided window used by RELAY + SERVER PEs
-  type(MPI_Comm)      :: alliocom  = MPI_COMM_NULL  !  all IO PEs (model IO + IO server) (subset of all_comm)
-  integer             :: alliorank = -1             !  rank in alliocom
-  integer             :: alliosize = 0              !  population of alliocom
+  type(MPI_Comm)    :: allio_comm = MPI_COMM_NULL  !  all IO PEs (relay + server) (subset of all_comm)
+  integer           :: alliorank  = -1             !  rank in allio_comm
+  integer           :: alliosize  = 0              !  population of allio_comm
 
   ! information for model compute and IO relay PEs on a given SMP node
   ! shared memory used for heaps and circular buffers on a given SMP node
   ! (one heap and 2 circular buffers per compute PE)
   ! this memory is used for communications between IO relay and model compute PEs
-  type(C_PTR)         :: relay_shmem      = C_NULL_PTR     !  base address of relay+model PEs shared memory area
-  integer(C_INTPTR_T) :: relay_shmem_size = GBYTE          !  size of above
-  type(MPI_Comm)      :: relaycom         = MPI_COMM_NULL  !  communicator for model + relay PEs on same SMP node
-  integer             :: relayrank        = -1             !  rank in relaycom
-  integer             :: relaycom_size    = 0              !  population of relaycom
+  type(C_PTR)       :: relay_shmem      = C_NULL_PTR     !  base address of relay+model PEs shared memory area
+  integer(C_SIZE_T) :: relay_shmem_size = GBYTE          !  size of above
+  integer           :: relay_node_rank    = -1             !  rank in relaycom
+  integer           :: relay_node_size    = 0              !  population of relaycom
 
   ! shared memory on io server node(s), used by io server PEs to communicate
   ! used for 1 sided communications window between relay and server PEs
   ! not much memory (if any) is normally allocated on relay PEs for this purpose
-  type(C_PTR)         :: server_shmem       = C_NULL_PTR    !  base address of io server PEs shared memory area
-  integer(C_INTPTR_T) :: server_shmem_size  = GBYTE         !  size of above
-  type(MPI_Comm)      :: servercom          = MPI_COMM_NULL !  communicator for  server PEs on same SMP node
-  integer             :: serverrank         = -1            !  rank in servercom
-  integer             :: servercom_size     = 0             !  population of servercom
-
+  type(C_PTR)       :: server_shmem       = C_NULL_PTR    !  base address of io server PEs shared memory area
+  integer(C_SIZE_T) :: server_shmem_size  = 10 * GBYTE    !  size of above (we want a lot on the server)
+  integer           :: serverrank         = -1            !  rank in servercom
+  integer           :: servercom_size     = 0             !  population of servercom
 
   !  ==========================================================================================
   !                        communicators with no associated shared memory
@@ -247,10 +243,13 @@ module ioserver_internal_mod
   ! modelio_comm = model_comm   + iorelay_comm
   type(MPI_Comm) :: all_comm             = MPI_COMM_NULL  ! non NO-OP PEs               (all nodes) (subset of global_comm)
   type(MPI_Comm) :: modelio_comm         = MPI_COMM_NULL  ! model compute and relay PEs (all nodes) (subset of all_comm)
+  type(MPI_Comm) :: model_relay_smp_comm = MPI_COMM_NULL  ! model+relays on current node (subset of modelio_comm)
   type(MPI_Comm) :: model_comm           = MPI_COMM_NULL  ! model compute PEs           (all nodes) (subset of all_comm and modelio_comm)
   type(MPI_Comm) :: iorelay_comm         = MPI_COMM_NULL  ! relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
   type(MPI_Comm) :: server_comm          = MPI_COMM_NULL  ! IO server PEs               (subset of all_comm)
-  type(MPI_Comm) :: server_consumer_comm = MPI_COMM_NULL  ! Server PEs that consume relay data (subset of server_comm)
+  type(MPI_Comm) :: server_active_comm   = MPI_COMM_NULL  ! Server PEs that consume relay data (subset of server_comm)
+
+  integer :: local_color
 
   !  ==========================================================================================
   !                        miscellaneous
@@ -277,7 +276,8 @@ module ioserver_internal_mod
   type(distributed_circular_buffer) :: local_dcb ! Distributed circular buffer for communication b/w relay and server processes
   type(heap)             :: node_heap            ! On server node only. Heap that everyone there can use
 
-  integer(C_SIZE_T), parameter :: DCB_SIZE = 4 * MBYTE ! Size of each CB within the DCB
+  integer(C_SIZE_T), parameter :: DCB_SIZE = 4 * MBYTE                  ! Size of each CB within the DCB
+  integer(C_SIZE_T), parameter :: SERVER_SHMEM_HEAP_SIZE = 10 * GBYTE   ! We want a lot of shared mem on the server
 
   type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR ! procedure to call on relay processes (if not NULL)
   type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR ! procedure to call on server processes (if not NULL)
@@ -454,82 +454,11 @@ end function IOserver_is_time_to_quit
 !!
 !! F_EnD
 
-function server_set_winsize(wkind, sz) result(status)  !  set shared memory area sizes
+function IOserver_get_relay_shmem() result(p_relay)!  get communication window / shared memory area addresses
   implicit none
-  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-  integer(C_SIZE_T), intent(IN) :: sz        ! shared memory area size
-  logical :: status                          ! true if there was an error
-
-  status = .true.
-  if(sz <=0) return
-
-  select case (wkind)
-    case(IO_CONTROL)
-      if(sz > KBYTE * 32) then         ! minimum size is the size of shared_memory
-        ctrl_shmem_size = sz                   ! control memory (normally not very large)
-        status = .false.
-      endif
-    case(IO_BASE)
-      if(sz > MBYTE) then
-        alliosiz = sz                   ! 1 sided window on relay PEs
-        status = .false.
-      endif
-    case(IO_RELAY)
-      if(sz > MBYTE * 128) then
-        relay_shmem_size = sz                  ! memory shared between relay and compute PEs
-        status = .false.
-      endif
-    case(IO_SERVER)
-      if(sz > MBYTE * 128) then
-        server_shmem_size = sz                 ! shared memory and window on server PEs
-        status = .false.
-      endif
-    case DEFAULT
-      status = .true.
-  end select
-  return
-end function server_set_winsize
-
-function server_get_winsize(wkind) result(sz)  !  get shared memory area sizes
-  implicit none
-  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-  integer(C_SIZE_T)             :: sz
-
-  select case (wkind)
-    case(IO_CONTROL)
-      sz = ctrl_shmem_size
-    case(IO_BASE)
-      sz = alliosiz
-    case(IO_RELAY)
-      sz = relay_shmem_size
-    case(IO_SERVER)
-      sz = server_shmem_size
-    case DEFAULT
-      sz = 0
-  end select
-  return
-end function server_get_winsize
-
-function server_get_winptr(wkind) result(ptr)  !  get shared memory area addresses
-  implicit none
-  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-  type(C_PTR)                   :: ptr
-
-  select case (wkind)
-    case(IO_CONTROL)
-      ptr = ctrl_shmem
-    case(IO_BASE)
-      ptr = alliomem
-    case(IO_RELAY)
-      ptr = relay_shmem
-    case(IO_SERVER)
-      ptr = server_shmem
-    case DEFAULT
-      ptr = C_NULL_PTR
-  end select
-  return
-end function server_get_winptr
-
+  type(C_PTR) :: p_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
+  p_relay  = relay_shmem
+end function IOserver_get_relay_shmem
 
 subroutine print_created(temp, name, sz32)
   implicit none
@@ -544,7 +473,6 @@ subroutine print_created(temp, name, sz32)
 end subroutine print_created
 
 end module ioserver_internal_mod
-
 !  ==========================================================================================
 !                                           END OF MODULE
 !  ==========================================================================================
@@ -650,7 +578,7 @@ end subroutine print_io_colors
         crs % comm = iorelay_comm
 
       case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of smp_comm, model_comm, iorelay_comm)
-        crs % comm = relaycom
+        crs % comm = model_relay_smp_comm
 
       case(MODEL_COLOR + NODE_COLOR)                ! compute PEs on SMP node         (subset of  smp_comm, model_comm)
         crs % comm = model_smp_comm
@@ -659,11 +587,11 @@ end subroutine print_io_colors
         crs % comm = relay_smp_comm
 
       case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of all_comm)
-        crs % comm = alliocom
+        crs % comm = allio_comm
 
       case(SERVER_COLOR + NODE_COLOR)               ! server PEs on SMP node          (subset of smp_comm, server_comm)
         ! crs % comm = servercom
-        crs % comm = server_consumer_comm
+        crs % comm = server_active_comm
 
       case default
         crs % comm = MPI_COMM_NULL
@@ -789,143 +717,6 @@ end function IOserver_Commisnull
 !! F_EnD
 
 !! F_StArT
-function IOserver_set_winsize(wkind, sz) result(status)  !  set shared memory area sizes
-!! F_EnD
-  use ioserver_internal_mod
-!! F_StArT
-!! import :: C_SIZE_T
-  implicit none
-  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-  integer(C_SIZE_T), intent(IN) :: sz        ! shared memory area size
-  logical :: status                          ! true if there was an error
-!! F_EnD
-
-  status = server_set_winsize(wkind, sz)
-
-  return
-!! F_StArT
-end function IOserver_set_winsize
-!!
-!! F_EnD
-
-!! F_StArT
-function IOserver_get_winsize(wkind) result(sz)  !  get shared memory area sizes
-!! F_EnD
-  use ioserver_internal_mod
-!! F_StArT
-!! import :: C_SIZE_T
-  implicit none
-  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-  integer(C_SIZE_T)             :: sz
-!! F_EnD
-  sz = server_get_winsize(wkind)
-
-  return
-!! F_StArT
-end function IOserver_get_winsize
-!!
-!! F_EnD
-
-!! F_StArT
-function IOserver_get_win_ptr(wkind) result(pt)  !  get shared memory area address
-!! F_EnD
-  use ioserver_internal_mod
-!! F_StArT
-!! import :: C_PTR
-  implicit none
-  integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-  type(C_PTR)                   :: pt
-!! F_EnD
-  pt = server_get_winptr(wkind)
-
-  return
-!! F_StArT
-end function IOserver_get_win_ptr
-!!
-!! F_EnD
-
-!! F_StArT
-function IOserver_set_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
-!! F_EnD
-  use ioserver_internal_mod
-!! F_StArT
-!! import :: C_SIZE_T
-  implicit none
-  integer(C_SIZE_T), intent(IN) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-  integer(C_SIZE_T), intent(IN) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-  integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-  logical :: status
-!! F_EnD
-  status = server_set_winsize(IO_BASE, sz_base)
-  if(status) return
-
-  status = server_set_winsize(IO_RELAY, sz_relay)
-  if(status) return
-
-  status = server_set_winsize(IO_SERVER, sz_server)
-  if(status) return
-  
-  return
-!! F_StArT
-end function IOserver_set_winsizes
-!!
-!! F_EnD
-
-!! F_StArT
-subroutine IOserver_get_winsizes(sz_base, sz_relay, sz_server) !  get communication window / shared memory area sizes
-!! F_EnD
-  use ioserver_internal_mod
-!! F_StArT
-!! import :: C_SIZE_T
-  implicit none
-  integer(C_SIZE_T), intent(OUT) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-  integer(C_SIZE_T), intent(OUT) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-  integer(C_SIZE_T), intent(OUT) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-!! F_EnD
-
-  sz_base   = server_get_winsize(IO_BASE)
-  sz_relay  = server_get_winsize(IO_RELAY)
-  sz_server = server_get_winsize(IO_SERVER)
-  
-  return
-!! F_StArT
-end subroutine IOserver_get_winsizes
-!!
-!! F_EnD
-
-!! F_StArT
-subroutine IOserver_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area addresses
-!! F_EnD
-  use ioserver_internal_mod
-!! F_StArT
-!! import :: C_PTR
-  implicit none
-  type(C_PTR), intent(OUT) :: p_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-  type(C_PTR), intent(OUT) :: p_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-  type(C_PTR), intent(OUT) :: p_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-!! F_EnD
-  integer(C_INTPTR_T) :: tmp
-
-  p_base   = server_get_winptr(IO_BASE)
-  p_relay  = server_get_winptr(IO_RELAY)
-  p_server = server_get_winptr(IO_SERVER)
-  if(debug_mode) then
-    if(C_ASSOCIATED(p_base))         print 1,'DEBUG: alliomem   is DEFINED',transfer(p_base,tmp),' size =',alliosiz/1024/1024,' MB'
-    if(.not. C_ASSOCIATED(p_base))   print *,'DEBUG: alliomem   is NULL'
-    if(C_ASSOCIATED(p_relay))        print 1,'DEBUG: relay_shmem  is DEFINED',transfer(p_relay,tmp),' size =',relay_shmem_size/1024/1024,' MB'
-    if(.not. C_ASSOCIATED(p_relay))  print *,'DEBUG: relay_shmem  is NULL'
-    if(C_ASSOCIATED(p_server))       print 1,'DEBUG: server_shmem is DEFINED',transfer(p_server,tmp),' size =',server_shmem_size/1024/1024,' MB'
-    if(.not. C_ASSOCIATED(p_server)) print *,'DEBUG: server_shmem is NULL'
-  endif
-
-1 format(1X,A,2X,Z16.16,A,I10,A)
-  return
-!! F_StArT
-end subroutine IOserver_get_winmem
-!!
-!! F_EnD
-
-!! F_StArT
 subroutine set_IOserver_global_comm(comm)   !  set global communicator to other than MPI_COMM_WORLD
 !! F_EnD
   use ioserver_internal_mod
@@ -1010,71 +801,24 @@ end function IOserver_int_finalize
 !!
 !! F_EnD
 
-! function IOserver_int_init(model, modelio, allio, nodeio, serverio, nodecom, nio_node, app_class) result(status)
-!   integer, intent(OUT) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-!   integer, intent(OUT) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-!   integer, intent(OUT) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-!   integer, intent(OUT) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-!   integer, intent(OUT) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-!   integer, intent(OUT) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
-!! F_StArT
-function IOserver_int_init(nio_node, app_class) result(status)
-!! F_EnD
+function IOserver_init_communicators(nio_node, app_class) result(color)
   use ioserver_internal_mod
-  use c_binding_extras_module
-  use shared_mem_alloc_module
-!! F_StArT
-!!import :: C_FUNPTR, MPI_Comm
   implicit none
-  type(MPI_Comm) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-  type(MPI_Comm) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-  type(MPI_Comm) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-  type(MPI_Comm) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-  type(MPI_Comm) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-  type(MPI_Comm) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
-  integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
+  integer,          intent(IN) :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
   character(len=*), intent(IN) :: app_class
-  integer :: status
-!! F_EnD
-  character(len=8) :: heap_name, cioin_name, cioout_name
+  integer :: color
+
   type(MPI_Comm) :: temp_comm
-  integer :: color, temp, iocolor, errors, total_errors, server_size !, ierr
-  integer(KIND=MPI_ADDRESS_KIND) :: winsize
-  type(C_PTR) :: win_base
-  logical :: initialized
-  procedure(), pointer :: p
-  integer, dimension(:), pointer :: f_win_base
-  type(C_PTR) :: c_win_base, temp_ptr
-  integer(C_INT64_T) :: shmsz64
-  integer(C_SIZE_T) :: cb_size
-  integer :: sz32
-  logical :: ok
+  logical :: is_initialized
+  integer :: io_color
 
-  interface
-    function sleep(nsec) result(left) BIND(C,name='sleep')
-      import :: C_INT
-      implicit none
-      integer(C_INT), intent(IN), value :: nsec
-      integer(C_INT) :: left
-    end function sleep
-  end interface
+  color = NO_COLOR                ! invalid
 
-  ! 2 (model or server PE) or 3 (relay PE) of these 5 communicators will be true upon return from subroutine
-  model    = MPI_COMM_NULL  ! preset all communicators to the NULL communicator
-  modelio  = MPI_COMM_NULL
-  allio    = MPI_COMM_NULL
-  nodeio   = MPI_COMM_NULL
-  serverio = MPI_COMM_NULL
-  nodecom  = MPI_COMM_NULL
-  status   = NO_COLOR       ! precondition for failure
-  errors   = 0              ! none so far
-
-  call MPI_Initialized(initialized)      ! is MPI library already initialized ?
-  if(.not. initialized) call MPI_Init()  ! initialize MPI if not already done
+  call MPI_Initialized(is_initialized)      ! is MPI library already initialized ?
+  if(.not. is_initialized) call MPI_Init()  ! initialize MPI if not already done
   call MPI_Comm_rank(global_comm, global_rank)
   call MPI_Comm_size(global_comm, global_size)
 
-  color = NO_COLOR                             ! invalid
   if(app_class(1:1) == 'M') color = MODEL_COLOR  + RELAY_COLOR    ! model or relay app
   if(app_class(1:1) == 'S') color = SERVER_COLOR + INOUT_COLOR    ! IO server app (both input and output)
   if(app_class(1:1) == 'C') color = SERVER_COLOR + CHANNEL_COLOR  ! Channel process (on server, to communicate with relays)
@@ -1088,140 +832,208 @@ function IOserver_int_init(nio_node, app_class) result(status)
   call MPI_Comm_rank(smp_comm, smp_rank)                  ! rank on SMP node
   call MPI_Comm_size(smp_comm, smp_size)                  ! population of SMP node
 
-  ! allocate shared memory segment used for control, communicator = smp_comm
-  call RPN_allocate_shared(ctrl_shmem_size, smp_comm, win_base)
-
-!   if(debug_mode) print *,'DEBUG: ctrl_shmem_size, smp_rank, ierr =',ctrl_shmem_size, smp_rank, ierr
-  ! ctrlwin is no longer used after this point
-  ctrl_shmem = transfer(win_base, C_NULL_PTR)   ! ctrl_shmem points to control shared memory segment
-  call ioserver_memory_mod_init(ctrl_shmem, smp_size)     ! main control structure will point to shared memory at ctrl_shmem
-  mem % pe(smp_rank) % ctrl_ra = ctrl_shmem               ! local address of control memory segment
-
-  if(smp_rank == 0) mem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
-  call MPI_barrier(global_comm)              ! wait until control area initialization is done everywhere
-
   ! split global communicator into : server+model+relay / no-op
   ! there MUST be AT LEAST ONE non NO-OP process on each node (a deadlock will happen if this condition is not respected)
   ! color/NO_OP_COLOR has value 1 if NO-OP, 0 otherwise (NO_OP_COLOR MUST BE THE LARGEST CODE VALUE)
   call mpi_comm_split(global_comm, color/NO_OP_COLOR, global_rank, all_comm)
 
+  ! no-op processes don't need to go any further
+  if (color == NO_OP_COLOR) return
+
+  ! split the all useful communicator (all_comm) into : server / model+relay
+  io_color = color
+  if (iand(color, SERVER_COLOR) == SERVER_COLOR) io_color = SERVER_COLOR  ! treat INPUT and OUTPUT server PEs the same way
+  call mpi_comm_split(all_comm, io_color, global_rank, temp_comm)         ! temp_comm is either server_comm or modelio_comm
+
+  if (iand(color,SERVER_COLOR) == SERVER_COLOR) then
+    !-------------------
+    ! Server processes
+    !-------------------
+    server_comm = temp_comm             ! communicator for the "io server(s)"
+
+    block
+      type(MPI_Comm) :: server_comm_tmp
+      integer :: server_comm_size_tmp, server_comm_size
+
+      ! Verify that all server processes are indeed on the same node
+      call MPI_Comm_split_type(server_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, server_comm_tmp)
+      call MPI_Comm_rank(server_comm_tmp, serverrank)     ! rank on SMP node
+      call MPI_Comm_size(server_comm_tmp, server_comm_size_tmp) ! population of SMP node
+      call MPI_Comm_size(server_comm, server_comm_size)  ! population of SMP node
+
+      if(server_comm_size_tmp .ne. server_comm_size) then
+        ! for now, error if servercom_size is not equal to server_size
+        color = NO_COLOR
+        return
+      endif
+    end block
+
+    ! Split between active and 'ghost' processes (channel)
+    if (iand(color, CHANNEL_COLOR) == CHANNEL_COLOR) then
+      call MPI_Comm_split(server_comm, CHANNEL_COLOR, 0, temp_comm)
+    else
+      call MPI_Comm_split(server_comm, SERVER_COLOR, serverrank, server_active_comm)
+    end if
+
+  else
+    !----------------------------
+    ! Model and relay processes
+    !----------------------------
+    modelio_comm = temp_comm              ! communicator for "model compute and io relay" PEs
+
+    ! Split modelio_comm by node, PEs on same SMP node (compute and IO processes)
+    call MPI_Comm_split_type(modelio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, model_relay_smp_comm)
+    call MPI_Comm_rank(model_relay_smp_comm, relay_node_rank)     ! rank on SMP node
+    call MPI_Comm_size(model_relay_smp_comm, relay_node_size) ! population of SMP node
+
+    ! Split between model and relay processes
+    ! Spread the nio_node relay PEs across the node (lowest and highest node ranks)
+    if(relay_node_rank >= ((nio_node+1)/2) .and. relay_node_rank < (relay_node_size - ((nio_node)/2))) then   ! model compute process
+    ! Model process
+      color = MODEL_COLOR
+      if(debug_mode) print *,'DEBUG: model compute process, node rank =', &
+          relay_node_rank,relay_node_size,nio_node/2,(relay_node_size - ((nio_node+1)/2))
+
+      call MPI_Comm_split(model_relay_smp_comm, MODEL_COLOR, relay_node_rank, model_smp_comm) ! Model processes on this node
+      call MPI_Comm_split(modelio_comm, MODEL_COLOR, global_rank, model_comm)                 ! Model processes on all nodes
+    else
+    ! Relay process
+      color = RELAY_COLOR
+      if(debug_mode) print *,'DEBUG: IO relay process, node rank =', &
+          relay_node_rank,relay_node_size,nio_node/2,(relay_node_size - ((nio_node+1)/2))
+
+      call MPI_Comm_split(model_relay_smp_comm, RELAY_COLOR, relay_node_rank, relay_smp_comm) ! Relay processes on this node
+      call MPI_Comm_split(modelio_comm, RELAY_COLOR, global_rank, iorelay_comm)               ! Relay processes on all nodes
+    endif
+  end if
+
+  ! Split all_comm into model and IO (relay+server) processes
+  if (iand(color, SERVER_COLOR) == SERVER_COLOR) color = SERVER_COLOR
+  if (color == RELAY_COLOR .or. color == SERVER_COLOR) then  
+    call MPI_Comm_split(all_comm, RELAY_COLOR + SERVER_COLOR, global_rank, allio_comm) 
+    call MPI_Comm_size(allio_comm, alliosize)
+  else
+    call MPI_Comm_split(all_comm, MODEL_COLOR, global_rank, temp_comm)
+  endif
+
+end function IOserver_init_communicators
+
+function IOserver_init_shared_mem(color) result(num_errors)
+  use ioserver_internal_mod
+  use shared_mem_alloc_module
+  implicit none
+
+  integer, intent(IN) :: color
+  integer num_errors
+
+  interface
+    function sleep(nsec) result(left) BIND(C,name='sleep')
+      import :: C_INT
+      implicit none
+      integer(C_INT), intent(IN), value :: nsec
+      integer(C_INT) :: left
+    end function sleep
+  end interface
+
+  integer(C_SIZE_T)  :: cb_size
+  integer(C_INT64_T) :: shmsz64
+  integer            :: sz32
+  character(len=8)  :: heap_name, cioin_name, cioout_name
+
+  logical     :: success
+  integer     :: status, temp, total_errors
+  type(C_PTR) :: temp_ptr
+
+  num_errors = 0              ! none so far
+
+  ! allocate shared memory segment used for control, communicator = smp_comm
+  ctrl_shmem = RPN_allocate_shared(ctrl_shmem_size, smp_comm)
+
+!   if(debug_mode) print *,'DEBUG: ctrl_shmem_size, smp_rank, ierr =',ctrl_shmem_size, smp_rank, ierr
+  call ioserver_memory_mod_init(ctrl_shmem, smp_size) ! main control structure will point to shared memory at ctrl_shmem
+  mem % pe(smp_rank) % ctrl_ra = ctrl_shmem           ! local address of control memory segment
+
+  if(smp_rank == 0) mem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
+  call MPI_barrier(global_comm)              ! wait until control area initialization is done everywhere
 
   if(color == NO_OP_COLOR) then       ! this is a NO-OP process, enter wait loop for finalize
     mem % pe(smp_rank) % color = NO_OP_COLOR
     call IOserver_noop()              ! this subroutine will never return and call finalize
-    call MPI_Finalize()           ! IOserver_noop should never return, but ... in case it does
+    call MPI_Finalize()               ! IOserver_noop should never return, but ... in case it does
     stop
   endif
 
-  ! split the all useful communicator (all_comm) into : server / model+relay
-  iocolor = color
-  if (iand(color,SERVER_COLOR) == SERVER_COLOR) iocolor = SERVER_COLOR  ! treat INPUT and OUTPUT server PEs the same way
-  call mpi_comm_split(all_comm, iocolor, global_rank, temp_comm)        ! temp_comm is either server_comm or modelio_comm
+  ! ===================================================================================
+  ! at this point we only have "active" PEs (model, relay, server)
+  ! allocate node local shared memory used for intra node communications
+  ! ===================================================================================
+  if (debug_mode) temp = sleep(2)  ! to test the NO-OP wait loop, this is only executed on model/relay/server nodes in debug mode
 
-! ===================================================================================
-! at this point we only have "active" PEs (model, relay, server)
-! allocate node local shared memory used for intra node communications
-! ===================================================================================
-  if(debug_mode) temp = sleep(2)  ! to test the NO-OP wait loop, this is only executed on model/relay/server nodes in debug mode
-
-  if( iand(color,SERVER_COLOR) == SERVER_COLOR) then
+  if (iand(color,SERVER_COLOR) == SERVER_COLOR) then
   ! =========================================================================
   ! ============================ IO server process ==========================
   ! =========================================================================
+    ! Allocate shared memory used for intra node communication between PEs on a server node
+    server_shmem = RPN_allocate_shared(server_shmem_size, server_comm)
 
-    server_comm = temp_comm             ! communicator for the "io server(s)"
-    serverio = server_comm              ! output argument
-    ! split server_comm by node, PEs on same SMP node
-    call MPI_Comm_split_type(server_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, servercom)
-    nodecom  = servercom                              ! server processes on same SMP node
-    relaycom = MPI_COMM_NULL
-
-    call MPI_Comm_rank(servercom, serverrank)   ! rank on SMP node
-    call MPI_Comm_size(servercom, servercom_size)   ! population of SMP node
-    call MPI_Comm_size(server_comm, server_size)   ! population of SMP node
-    ! for now, error if servercom_size is not equal to server_size
-    if(servercom_size .ne. server_size) then
-      errors = errors + 1
-      goto 2
-    endif
-
-    ! allocate shared memory used for intra node communication between PEs on a server node
-    call RPN_allocate_shared(server_shmem_size, servercom, win_base)
-    server_shmem = transfer(win_base, C_NULL_PTR)        ! base address 
-    winsize = server_shmem_size
-
-    if (iand(color, CHANNEL_COLOR) == CHANNEL_COLOR) then
-      call MPI_Comm_split(server_comm, 1, 0, temp_comm)
-    else
-      call MPI_Comm_split(server_comm, 0, serverrank, server_consumer_comm)
+    if  (.not. c_associated(server_shmem)) then
+      print *, 'We have a problem! Server_shmem is not valid!'
+      error stop 1
     end if
+
+    ! Create server shared memory heap
+    if (serverrank == 0) then
+      temp_ptr = node_heap % create(server_shmem, server_shmem_size)
+    else
+      temp_ptr = node_heap % clone(server_shmem)
+      status = node_heap % register(server_shmem)
+
+      if (status < 0) then
+        print *, 'ERROR Could not register cloned heap on server node!'
+        num_errors = num_errors + 1
+        goto 2
+      end if
+    end if
+
+    temp = node_heap % set_default()
+    call node_heap % set_base(server_shmem)
 
   else
   ! =========================================================================
   ! ======================= model compute or IO relay process ===============
   ! =========================================================================
-
-    modelio_comm = temp_comm              ! communicator for "model compute and io relay" PEs
-    modelio      = modelio_comm
-    ! split modelio_comm by node, PEs on same SMP node (compute and IO processes)
-    call MPI_Comm_split_type(modelio_comm, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, relaycom)
-    nodecom   = relaycom                            ! compute and relay processes on same SMP node
-    servercom = MPI_COMM_NULL
-
-    call MPI_Comm_rank(relaycom, relayrank)   ! rank on SMP node
-    call MPI_Comm_size(relaycom, relaycom_size)   ! population of SMP node
-
-    ! allocate shared memory window used for intra node communication between model and relay PEs
-    call RPN_allocate_shared(relay_shmem_size, relaycom, win_base)
-    if(debug_mode) write(6,*)'DEBUG: after MPI_Win_allocate_shared relaywin, size, rank =',relay_shmem_size,relayrank
+    ! Allocate shared memory used for intra node communication between model and relay PEs
+    relay_shmem = RPN_allocate_shared(relay_shmem_size, model_relay_smp_comm)
+    if (debug_mode) write(6,*) 'DEBUG: after MPI_Win_allocate_shared relaywin, size, rank =', relay_shmem_size, relay_node_rank
     call flush(6)
-    relay_shmem = transfer(win_base, C_NULL_PTR)        ! base address , integer -> C pointer
 
-    if(relayrank == 0) then        ! PE with rank on node == 0 creates the memory arena
+    if(relay_node_rank == 0) then                   ! PE with rank on node == 0 creates the memory arena
       shmsz64 = relay_shmem_size
       temp_ptr = local_arena % create(relay_shmem, 128, shmsz64)
     else
       temp_ptr = local_arena % clone(relay_shmem)   !  cloning is O.K. even if arena is not initialized
     endif
     local_arena_ptr = local_arena % addr()
-    mem % pe(smp_rank) % io_ra = local_arena_ptr               ! local address of arena segment
+    mem % pe(smp_rank) % io_ra = local_arena_ptr    ! local address of arena segment
 
-    ! spread the nio_node relay PEs across the node (lowest and highest node ranks)
-    if(relayrank >= ((nio_node+1)/2) .and. relayrank < (relaycom_size - ((nio_node)/2))) then   ! model compute process
-      color  = MODEL_COLOR
-      if(debug_mode) &
-          print *,'DEBUG: model compute process, node rank =', &
-                  relayrank,relaycom_size,nio_node/2,(relaycom_size - ((nio_node+1)/2))
-    else                                                                                     ! relay IO process
-      color = RELAY_COLOR  ! relay IO process
-      if(debug_mode) print *,'DEBUG: IO relay process, node rank =',relayrank,relaycom_size,nio_node/2,(relaycom_size - ((nio_node+1)/2))
-      ! not much memory is needed on the relay PEs for the remote IO window, allocate it
-      winsize = alliosiz           ! 1 sided window size for relay <-> server PEs on relay PEs
-      call MPI_Alloc_mem(winsize, MPI_INFO_NULL, win_base)     ! allocate memory through MPI library for 1 sided get/put with server PEs
-    endif
+    mem % pe(smp_rank) % color = color              ! store color of this PE in shared memory table
 
-    mem % pe(smp_rank) % color = color                                   ! store color of this PE in shared memory table
-    call MPI_Comm_split(relaycom, color, relayrank, temp_comm)      ! split into compute and IO relay
-    if(color == RELAY_COLOR) then
-      relay_smp_comm = temp_comm    ! relay PEs on same SMP node
+    if (color == RELAY_COLOR) then
+      call MPI_Comm_rank(relay_smp_comm, mem % pe(smp_rank) % rank)  ! rank on node in my color
     else
-      model_smp_comm = temp_comm    ! compute PEs on same SMP node
-    endif
-    call MPI_Comm_rank(temp_comm, mem % pe(smp_rank)%rank)  ! rank on node in my color
-    if(debug_mode) print *,'DEBUG: rank',mem % pe(smp_rank)%rank,' in color',color
+      call MPI_Comm_rank(model_smp_comm, mem % pe(smp_rank) % rank)
+    end if
 
-    call MPI_Comm_split(modelio_comm, color, global_rank, temp_comm)    ! split into model compute and IO relay processes
+    if (debug_mode) print *, 'DEBUG: rank', mem % pe(smp_rank) % rank, ' in color', color
 
     ! wait for memory arena to be initialized by rank 0 before allocating heap and circular buffer(s)
-    call MPI_Barrier(relaycom)
+    call MPI_Barrier(model_relay_smp_comm)
 
     if(color == RELAY_COLOR) then                            ! io relay processes
     ! =========================================================================
     ! ================================ IO relay process =======================
     ! =========================================================================
-      iorelay_comm  = temp_comm                                ! for internal module
-      nodeio        = iorelay_comm                             ! output argument
-      shmsz64 = relay_shmem_size / relaycom_size        ! available size (in bytes) per PE on SMP node
+      shmsz64 = relay_shmem_size / relay_node_size        ! available size (in bytes) per PE on SMP node
 
       !  allocate nominal heap and circular buffers (8K elements)
       ! 85%  of per PE size for the heap
@@ -1239,9 +1051,9 @@ function IOserver_int_init(nio_node, app_class) result(status)
       cb_size = INT(shmsz64 * 0.04_8, 4)                     ! 4% for model-bound CB (in bytes)
       sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32, cioin_name)
-      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
-      ok = local_cio_in % create_bytes(temp_ptr, cb_size)
-      if( .not. ok ) goto 2                                  ! cio creation failed
+      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
+      success = local_cio_in % create_bytes(temp_ptr, cb_size)
+      if (.not. success) goto 2                              ! cio creation failed
       mem % pe(smp_rank) % cio_in = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
 
       !  10%  of per PE size for outbound circular buffer
@@ -1249,18 +1061,16 @@ function IOserver_int_init(nio_node, app_class) result(status)
       cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound CB (in bytes)
       sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32 / 4, cioout_name)
-      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
-      ok = local_cio_out % create_bytes(temp_ptr, cb_size)
-      if( .not. ok ) goto 2                                  ! cio creation failed
+      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
+      success = local_cio_out % create_bytes(temp_ptr, cb_size)
+      if (.not. success) goto 2                              ! cio creation failed
       mem % pe(smp_rank) % cio_out = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
 
     else                                                     ! compute processes
     ! =========================================================================
     ! ============================ model compute process ======================
     ! =========================================================================
-      model_comm = temp_comm                                 ! for internal module
-      model      = model_comm                                ! output argument
-      shmsz64 = relay_shmem_size / relaycom_size      ! available size in bytes per PE on SMP node
+      shmsz64 = relay_shmem_size / relay_node_size      ! available size in bytes per PE on SMP node
 
       ! will also need rank on node for compute in rat table
       !  pe() % relay_ra = local_arena % addr()
@@ -1269,8 +1079,8 @@ function IOserver_int_init(nio_node, app_class) result(status)
       write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(smp_rank)%rank
       sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in number of 32-bit elements
       temp_ptr = local_arena % newblock(sz32, heap_name)
-      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
-      if(debug_mode) call print_created(temp_ptr, heap_name, sz32)
+      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
+      if (debug_mode) call print_created(temp_ptr, heap_name, sz32)
       temp_ptr = local_heap % create(temp_ptr, sz32)
       temp     = local_heap % set_default()                  ! make local_heap the default heap
       call local_heap % set_base( local_arena % addr() )     ! set arena address as offset base for heap
@@ -1281,10 +1091,10 @@ function IOserver_int_init(nio_node, app_class) result(status)
       cb_size = INT(shmsz64 * 0.04_8, 4)                     ! Size in bytes, model-bound CB
       sz32    = INT(cb_size / 4,      4)                     ! Size in number of 32-bit elements
       temp_ptr = local_arena % newblock(sz32, cioin_name)
-      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
-      if(debug_mode) call print_created(temp_ptr, cioin_name, sz32)
-      ok = local_cio_in % create_bytes(temp_ptr, cb_size)
-      if( .not. ok ) goto 2                                  ! cio creation failed
+      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
+      if (debug_mode) call print_created(temp_ptr, cioin_name, sz32)
+      success = local_cio_in % create_bytes(temp_ptr, cb_size)
+      if (.not. success) goto 2                              ! cio creation failed
       mem % pe(smp_rank) % cio_in = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
 
       ! 10%  of per PE size for compute -> relay circular buffer
@@ -1292,10 +1102,10 @@ function IOserver_int_init(nio_node, app_class) result(status)
       cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound circular buffer (in bytes)
       sz32    = INT(cb_size / 4,     4)                      ! Size in 32-bit elements
       temp_ptr = local_arena % newblock(sz32 / 4, cioout_name)
-      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
-      if(debug_mode) call print_created(temp_ptr, cioout_name, sz32)
-      ok = local_cio_out % create_bytes(temp_ptr, cb_size)
-      if( .not. ok ) goto 2                                  ! cio creation failed
+      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
+      if (debug_mode) call print_created(temp_ptr, cioout_name, sz32)
+      success = local_cio_out % create_bytes(temp_ptr, cb_size)
+      if (.not. success) goto 2                              ! cio creation failed
       ! inject signature data into outbound buffer to prime the pump
 !       nfree = local_cio_out % atomic_put( [mem % pe(smp_rank) % rank + 10000], 1, .true.)
       mem % pe(smp_rank) % cio_out = Pointer_offset(local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
@@ -1306,73 +1116,99 @@ function IOserver_int_init(nio_node, app_class) result(status)
                      mem % pe(smp_rank) % heap, mem % pe(smp_rank) % cio_in, mem % pe(smp_rank) % cio_out
     call flush(6)
   endif   ! (color == SERVER_COLOR)
+
   goto 3       ! no error, bypass
 2 continue     ! go here upon error in memory allocation
-  errors = errors + 1
+  num_errors = num_errors + 1
 3 continue     ! no error
-! ===================================================================================
-!                              GLOBAL ERROR CHECK 
-! ===================================================================================
-  call MPI_Allreduce(errors, total_errors, 1, MPI_INTEGER, MPI_SUM, all_comm)
-  if(debug_mode) print *,'INFO: allocation error(s) detected =',total_errors
+
+  !  GLOBAL ERROR CHECK  (and synchronization point)
+  call MPI_Allreduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, all_comm)
+  if(debug_mode) print *,'INFO: allocation error(s) detected =', total_errors
   call flush(6)
-!   total_errors = 1
   if(total_errors > 0) then
     print *,'FATAL:',total_errors,' error(s) detected while allocating memory'
     call IOserver_set_time_to_quit()      ! tell NO-OP PEs to quit
     call MPI_Finalize()
     stop
   endif
+
   if(color == RELAY_COLOR .or. color == MODEL_COLOR) then
     call build_relay_model_index()
     call fetch_node_shmem_structs()
   endif
-  if(debug_mode .and. (color == RELAY_COLOR .or. color == MODEL_COLOR)) call build_print_model_index()
-! split IO PEs into server and relay PEs, create 1 sided communication window
-! set return code to appropriate value or call supplied relay subroutine
-! ===================================================================================
-  if(model_comm == MPI_COMM_NULL) then    ! not compute PE, IO server or IO relay PE
-    color = RELAY_COLOR + SERVER_COLOR
-  else
-    color = MODEL_COLOR                   ! model compute PE
-  endif
 
-  call MPI_Comm_split(all_comm, color, global_rank, temp_comm)  ! split all_comm into model and IO (relay+server) processes
-
-  if(color == MODEL_COLOR) then                 ! model compute PE
-    status = MODEL_COLOR
-  else                                          ! IO relay or IO server
-
-    alliocom  = temp_comm                       ! all IO processes
-    call mpi_comm_size(alliocom, alliosize)
-    allio     = alliocom
-    if(server_comm .ne. MPI_COMM_NULL) then     ! IO server process on separate node(s)
-      status = SERVER_COLOR                     ! IO server PE
-    else
-      status = RELAY_COLOR                      ! IO relay PE
-    endif
-
-    allocate(iocolors(0:alliosize))             ! collect colors for IO PEs, index in array is rank in alliocom
-    color = status
-    call MPI_Allgather(color, 1, MPI_INTEGER, iocolors, 1, MPI_INTEGER, alliocom)
+  ! IO Relay or Server
+  if (color .ne. MODEL_COLOR) then              ! IO relay or IO server
+    allocate(iocolors(0:alliosize))             ! collect colors for IO PEs, index in array is rank in allio_comm
+    call MPI_Allgather(color, 1, MPI_INTEGER, iocolors, 1, MPI_INTEGER, allio_comm)
     if(debug_mode) write(6,'(A,10I8,(/19X,10I8))') ' DEBUG: IO colors =',iocolors(0:alliosize-1)
 
-    ! winsize and win_base have been obtained previously, allocate 1 sided window for relay and server PEs
-    c_win_base = transfer(win_base, c_win_base)
-    call C_F_POINTER(c_win_base, f_win_base, [winsize/4])   !  make honest Fortran pointer (f_win_base) for call to MPI_Win_create
-    call MPI_Win_create(f_win_base, winsize, disp_unit, MPI_INFO_NULL, alliocom, alliowin)
-    alliomem = transfer(win_base, C_NULL_PTR)    ! base address of local window (address in integer -> C pointer)
-    alliosiz = winsize                           ! alliomem same as server_shmem for server PEs
-
+    ! Create DCB
+    if (color == RELAY_COLOR) then
+      success = local_dcb % create_bytes(allio_comm, MPI_COMM_NULL, 0, 0_8)
+    else
+      success = local_dcb % create_bytes(allio_comm, server_comm, 2, DCB_SIZE)
+    end if
+    if (.not. success) num_errors = num_errors + 1
   endif
+
+  if(debug_mode .and. (color == RELAY_COLOR .or. color == MODEL_COLOR)) call build_print_model_index()
+end function IOserver_init_shared_mem
+
+!! F_StArT
+function IOserver_int_init(nio_node, app_class) result(status)
+!! F_EnD
+  use ioserver_internal_mod
+!! F_StArT
+!!import :: C_FUNPTR, MPI_Comm
+  implicit none
+
+  integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
+  character(len=*), intent(IN) :: app_class
+  integer :: status
+!! F_EnD
+
+  interface
+    function IOserver_init_communicators(nio_node, app_class) result(color)
+      implicit none
+      integer,          intent(IN) :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
+      character(len=*), intent(IN) :: app_class
+      integer :: color
+    end function IOserver_init_communicators
+
+    function IOserver_init_shared_mem(color) result(num_errors)
+      implicit none
+      integer, intent(IN) :: color
+      integer num_errors
+    end function IOserver_init_shared_mem
+  end interface
+
+  integer :: color, num_errors
+  procedure(), pointer :: p
+
+  status = NO_COLOR
+
+  color = IOserver_init_communicators(nio_node, app_class)
+
+  if (color == NO_COLOR) then
+    print *, 'ERROR were not able to properly initialize all communicators!'
+    return
+  end if
+
+  num_errors = IOserver_init_shared_mem(color)
+
+  if (num_errors > 0) then
+    print *, 'There were errors during shared memory initialization'
+    return
+  end if
+
+  status = color
 
   ! ===================================================================================
   !                     SERVER processes (no return to caller)
   ! ===================================================================================
-  if(server_comm .ne. MPI_COMM_NULL) then
-
-    ok = local_dcb % create_bytes(alliocom, server_comm, 2, DCB_SIZE)
-
+  if (iand(color, SERVER_COLOR) == SERVER_COLOR) then
     if (local_dcb % get_channel_id() >= 0) then
       status = local_dcb % start_listening()
       call local_dcb % delete()
@@ -1396,9 +1232,7 @@ function IOserver_int_init(nio_node, app_class) result(status)
   ! ===================================================================================
   !                     RELAY processes (no return to caller if io_relay_fn is defined)
   ! ===================================================================================
-  if(iorelay_comm .ne. MPI_COMM_NULL) then       ! IO relay process, check if caller supplied relay routine
-
-    ok = local_dcb % create_bytes(alliocom, MPI_COMM_NULL, 0, 0_8)
+  if (color == RELAY_COLOR) then                   ! IO relay process, check if caller supplied relay routine
 
     if(C_ASSOCIATED(io_relay_fn)) then             ! caller supplied subroutine to be called on relay PEs
       if(debug_mode) print *,'INFO: io_relay_fn is associated'
@@ -1409,14 +1243,13 @@ function IOserver_int_init(nio_node, app_class) result(status)
       call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
       call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
-      write(6,*)'FINAL: model+io node PE',relayrank+1,' of',relaycom_size
+      write(6,*)'FINAL: model+io node PE',relay_node_rank+1,' of',relay_node_size
       call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop
       stop
 
     else                                        ! IO relay process on model node
-
       if(debug_mode) print *,'INFO: io_relay_fn is not associated'
-      status = RELAY_COLOR                      ! IO relay, back to caller, with relay status code, caller will call relay subroutine
+      ! IO relay, back to caller, with relay status code, caller will call relay subroutine
     endif
   endif
 
@@ -1432,21 +1265,9 @@ subroutine ioserver_finalize
   use mpi_f08
   use ioserver_internal_mod
   implicit none
-  call ioserver_free_windows
   call MPI_Finalize()
 !! F_StArT
 end subroutine ioserver_finalize
-!!
-!! F_EnD
-
-!! F_StArT
-subroutine ioserver_free_windows
-!! F_EnD
-  use ioserver_internal_mod
-  implicit none
-  if(alliowin .ne. MPI_WIN_NULL) call MPI_Win_free(alliowin)
-!! F_StArT
-end subroutine ioserver_free_windows
 !!
 !! F_EnD
 

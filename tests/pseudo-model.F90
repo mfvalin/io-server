@@ -70,7 +70,6 @@ program pseudomodelandserver
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv, noops, me, nio_node
   integer :: noderank, nodesize
-  logical :: error
   character(len=128) :: arg
   type(shmem_arena) :: ma
   type(comm_rank_size) :: server_crs, fullnode_crs, model_crs
@@ -91,11 +90,6 @@ program pseudomodelandserver
 
   call get_local_world(comm, rank, size)
   me = ma % setid(rank)
-  error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
-  if(error) then
-    write(6,*)'ERROR: bad window sizes'
-    goto 777
-  endif
 
   if(rank >= nserv) then
     ! =============================================================================================
@@ -141,7 +135,6 @@ program pseudomodelandserver
     endif
 
   endif
-777 continue
   fullnode_crs = IOserver_get_crs(NODE_COLOR)
   call ioserver_set_time_to_quit()
   write(6,*)'Final:      node PE',noderank+1,' of',nodesize
@@ -211,6 +204,7 @@ subroutine compute_fn()
   use helpers
   use ioserver_functions
   use shmem_arena_mod
+  use ioserver_internal_mod, only: IOserver_get_relay_shmem
   implicit none
   type(MPI_Comm) :: model, allio, relay, server, modelio, nodecom !, nio_node, me
   integer :: rank, size, noderank, nodesize !, comm, navail, ierr
@@ -245,7 +239,7 @@ subroutine compute_fn()
   write(6,*)'START: compute PE',rank+1,' of',size
   write(6,*)' model+io node PE',noderank+1,' of', nodesize
 
-  p_relay = IOserver_get_win_ptr(IO_RELAY)
+  p_relay = IOserver_get_relay_shmem()
   temp = ma%clone(p_relay)         ! get memory arena address
 
 !   call MPI_Barrier(modelio, ierr)                      ! barrier 1 compute/relay

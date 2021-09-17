@@ -97,7 +97,6 @@ program pseudomodelandserver
 
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv !, noops
-  logical :: error
   character(len=128) :: arg
   type(comm_rank_size) :: fullnode_crs, local_crs
 
@@ -141,11 +140,6 @@ program pseudomodelandserver
   read(arg,*) nio_node                    ! number of relay processes per node
 
   call get_local_world(comm, rank, size)
-  error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
-  if(error) then
-    write(6,*)'ERROR: bad window sizes'
-    goto 777
-  endif
 
   server_node = am_server_node(node_rank, single_node)
 
@@ -197,7 +191,7 @@ program pseudomodelandserver
     end if
 
   endif
-777 continue
+
   call ioserver_set_time_to_quit()
 !  write(6,*)'FINAL: serv node PE',noderank+1,' of',nodesize
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size

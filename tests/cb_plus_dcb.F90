@@ -85,7 +85,6 @@ program pseudomodelandserver
   integer :: me, nio_node
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv
-  logical :: error
   character(len=128) :: arg
   type(shmem_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
@@ -135,11 +134,6 @@ program pseudomodelandserver
 
   call get_local_world(comm, rank, size)
   me = ma % setid(rank)
-  error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
-  if(error) then
-    write(6,*)'ERROR: bad window sizes'
-    goto 777
-  endif
 
   server_node = am_server_node(node_rank)
 
@@ -187,7 +181,7 @@ program pseudomodelandserver
     endif
 
   endif
-777 continue
+
   call ioserver_set_time_to_quit()
 !  write(6,*)'FINAL: serv node PE',noderank+1,' of',nodesize
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
@@ -406,6 +400,7 @@ subroutine model_process()
   use circular_buffer_module
   use rpn_extra_module, only: sleep_us
   use io_common_mod
+  use ioserver_internal_mod, only: IOserver_get_relay_shmem
   implicit none
 
   type(MPI_Comm)        :: global_comm
@@ -418,6 +413,7 @@ subroutine model_process()
   character(len=8)      :: compute_name
   integer               :: bsize, bflags
   type(C_PTR)           :: tmp_ptr
+  type(C_PTR) :: node_shmem
 
   integer, dimension(CB_MESSAGE_SIZE_INT) :: message
 
@@ -428,8 +424,8 @@ subroutine model_process()
   local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
-  call IOSERVER_get_winmem(p_base, p_relay, p_server)
-  tmp_ptr = ma % clone(p_relay)
+  node_shmem = IOserver_get_relay_shmem()
+  tmp_ptr = ma % clone(node_shmem)
 
   ! write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
 

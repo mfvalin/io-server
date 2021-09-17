@@ -114,53 +114,6 @@ type(MPI_Comm), intent(IN) :: comm
 logical :: status
 end function IOserver_Commisnull
 
-function IOserver_set_winsize(wkind, sz) result(status)  !  set shared memory area sizes
-import :: C_SIZE_T
-implicit none
-integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-integer(C_SIZE_T), intent(IN) :: sz        ! shared memory area size
-logical :: status                          ! true if there was an error
-end function IOserver_set_winsize
-
-function IOserver_get_winsize(wkind) result(sz)  !  get shared memory area sizes
-import :: C_SIZE_T
-implicit none
-integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-integer(C_SIZE_T)             :: sz
-end function IOserver_get_winsize
-
-function IOserver_get_win_ptr(wkind) result(pt)  !  get shared memory area address
-import :: C_PTR
-implicit none
-integer, intent(IN)           :: wkind     ! target window window (base, relay, server, ....
-type(C_PTR)                   :: pt
-end function IOserver_get_win_ptr
-
-function IOserver_set_winsizes(sz_base, sz_relay, sz_server) result(status)  !  set communication window / shared memory area sizes
-import :: C_SIZE_T
-implicit none
-integer(C_SIZE_T), intent(IN) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-integer(C_SIZE_T), intent(IN) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-integer(C_SIZE_T), intent(IN) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-logical :: status
-end function IOserver_set_winsizes
-
-subroutine IOserver_get_winsizes(sz_base, sz_relay, sz_server) !  get communication window / shared memory area sizes
-import :: C_SIZE_T
-implicit none
-integer(C_SIZE_T), intent(OUT) :: sz_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-integer(C_SIZE_T), intent(OUT) :: sz_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-integer(C_SIZE_T), intent(OUT) :: sz_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-end subroutine IOserver_get_winsizes
-
-subroutine IOserver_get_winmem(p_base, p_relay, p_server) !  get communication window / shared memory area addresses
-import :: C_PTR
-implicit none
-type(C_PTR), intent(OUT) :: p_base        ! 1 sided window size for relay <-> server PEs on relay PEs  (normally quite small)
-type(C_PTR), intent(OUT) :: p_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-type(C_PTR), intent(OUT) :: p_server      ! shared memory size for server PEs (internal exchanges + get/put with relay PEs)
-end subroutine IOserver_get_winmem
-
 subroutine set_IOserver_global_comm(comm)   !  set global communicator to other than MPI_COMM_WORLD
 import :: MPI_Comm
 implicit none
@@ -184,12 +137,7 @@ end function IOserver_int_finalize
 function IOserver_int_init(nio_node, app_class) result(status)
 import :: C_FUNPTR, MPI_Comm
 implicit none
-type(MPI_Comm) :: model        ! communicator for model compute PEs         (may be MPI_COMM_NULL)
-type(MPI_Comm) :: modelio      ! communicator for compute and relay PEs     (may be MPI_COMM_NULL)
-type(MPI_Comm) :: allio        ! communicator for relay and server IO PEs   (may be MPI_COMM_NULL)
-type(MPI_Comm) :: nodeio       ! communicator for relay PEs on model nodes  (may be MPI_COMM_NULL)
-type(MPI_Comm) :: serverio     ! communicator for io server PEs             (may be MPI_COMM_NULL)
-type(MPI_Comm) :: nodecom      ! communicator for io server PEs on a node   (may be MPI_COMM_NULL)
+
 integer, intent(IN)  :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
 character(len=*), intent(IN) :: app_class
 integer :: status
@@ -197,8 +145,5 @@ end function IOserver_int_init
 
 subroutine ioserver_finalize
 end subroutine ioserver_finalize
-
-subroutine ioserver_free_windows
-end subroutine ioserver_free_windows
 
 end interface

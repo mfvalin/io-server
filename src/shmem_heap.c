@@ -477,7 +477,6 @@ void *ShmemHeapInit(
   stats->max  = 0 ;             // high water mark
   stats->nblk = 0 ;             // allocated blocks
   stats->nbyt = 0 ;             // bytes allocated
-  
 
   ShmemHeapRegister(h) ;        // register Heap for block validation purpose
   return h ;                    // O.K. return address of Heap
