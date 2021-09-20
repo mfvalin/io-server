@@ -37,19 +37,36 @@
 !******************************************************************************
 
 interface
-subroutine lock_set(location) BIND(C, name = 'lock_set_F')
+subroutine acquire_idlock(lock, id) BIND(C, name = 'acquire_idlock_F')
+import :: C_INT, C_PTR
+implicit none
+type(C_PTR),    intent(in), value :: lock
+integer(C_INT), intent(in), value :: id
+end subroutine acquire_idlock
+subroutine release_idlock(lock, id) BIND(C, name = 'release_idlock_F')
+import :: C_INT, C_PTR
+implicit none
+type(C_PTR),    intent(in), value :: lock
+integer(C_INT), intent(in), value :: id
+end subroutine release_idlock
+function test_idlock(lock, id) result(is_locked) BIND(C, name = 'test_idlock_F')
+import :: C_INT, C_PTR
+implicit none
+type(C_PTR),    intent(in), value :: lock
+integer(C_INT), intent(in), value :: id
+integer(C_INT) :: is_locked
+end function test_idlock
+function test_lock(lock) result(is_locked) BIND(C, name = 'test_lock_F')
+import :: C_INT, C_PTR
+implicit none
+type(C_PTR),    intent(in), value :: lock
+integer(C_INT) :: is_locked
+end function test_lock
+subroutine reset_lock(lock) BIND(C, name = 'reset_lock_F')
 import :: C_PTR
-type(C_PTR), intent(IN), value :: location
-end subroutine lock_set
-subroutine lock_reset(location) BIND(C, name = 'lock_reset_F')
-import :: C_PTR
-type(C_PTR), intent(IN), value :: location
-end subroutine lock_reset
-function lock_is_set(location) BIND(C, name = 'lock_is_set_F')
-import :: C_PTR, C_INT
-type(C_PTR), intent(IN), value :: location
-integer(C_INT) :: lock_is_set
-end function lock_is_set
+implicit none
+type(C_PTR), intent(in), value :: lock
+end subroutine reset_lock
 subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 import :: C_INT
 implicit none

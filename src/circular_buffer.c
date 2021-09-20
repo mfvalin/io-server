@@ -690,7 +690,7 @@ int CB_get(
   }
 
   if (operation == CB_COMMIT) {
-    memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
+    full_memory_fence(); // memory fence, make sure everything fetched and stored before adjusting the "out" pointer
     uint64_t volatile* outp = &(buffer->m.out[CB_FULL]);
     *outp                   = out;
   }

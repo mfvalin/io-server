@@ -29,14 +29,17 @@ module simple_mutex_module
 
   type, public :: simple_mutex
     private
-    type(C_PTR) :: c_location = C_NULL_PTR
-    logical :: is_mine = .false.
+    type(C_PTR)    :: c_location = C_NULL_PTR
+    integer(C_INT) :: id = -1
   contains
     procedure, pass :: is_valid
-    procedure, pass :: init
+    procedure, pass :: init_from_ptr
+    procedure, pass :: init_from_int
     procedure, pass :: lock
     procedure, pass :: unlock
     procedure, pass :: is_locked
+    procedure, pass :: is_locked_by_me
+    procedure, pass :: reset
   end type simple_mutex
 
 contains
@@ -45,52 +48,82 @@ contains
     implicit none
     class(simple_mutex), intent(in) :: this
     logical :: is_valid
-    is_valid = c_associated(this % c_location)
+    is_valid = c_associated(this % c_location) .and. (this % id >= 0)
   end function is_valid
 
-  subroutine init(this, c_location)
+  subroutine init_from_ptr(this, c_location, id)
     implicit none
-    class(simple_mutex), intent(inout) :: this
-    type(C_PTR), intent(in), value :: c_location
+    class(simple_mutex), intent(inout)     :: this
+    type(C_PTR),         intent(in), value :: c_location
+    integer(C_INT),      intent(in)        :: id
 
     if (.not. this % is_valid()) then
       this % c_location = c_location
-      this % is_mine = .false.
+      this % id = id
+      call this % reset()
     end if
-  end subroutine init
+  end subroutine init_from_ptr
+
+  subroutine init_from_int(this, lock_var, id)
+    implicit none
+    class(simple_mutex), intent(inout)      :: this
+    integer(C_INT),      intent(in), target :: lock_var
+    integer(C_INT),      intent(in)         :: id
+
+    if (.not. this % is_valid()) then
+      this % c_location = C_LOC(lock_var)
+      this % id = id
+      call this % reset()
+    end if
+  end subroutine init_from_int
 
   subroutine lock(this)
     implicit none
     class(simple_mutex), intent(inout) :: this
-    if (this % is_valid()) call lock_set(this % c_location)
-    this % is_mine = .true.
+    if (this % is_valid()) call acquire_idlock(this % c_location, this % id)
   end subroutine lock
 
   subroutine unlock(this)
     implicit none
     class(simple_mutex), intent(inout) :: this
-    if (this % is_valid() .and. this % is_mine) then
-      call lock_unset(this % c_location)
-      this % is_mine = .false.
-    end if
+    if (this % is_valid()) call release_idlock(this % c_location, this % id)
   end subroutine unlock
 
-  function is_locked(this, by_me)
+  function is_locked(this)
     implicit none
     class(simple_mutex), intent(in) :: this
-    logical, intent(in) :: by_me
     logical :: is_locked
+
+    integer(C_INT) :: is_locked_c
+
     is_locked = .false.
     if (this % is_valid()) then
-      if (this % is_mine) then
+      is_locked_c = test_lock(this % c_location)
+      if (is_locked_c .ne. 0) then
         is_locked = .true.
-      else
-        if (by_me) then
-          is_locked = .false.
-        else
-          is_locked = (lock_is_set(this % c_location) .ne. 0)
-        end if
       end if
     end if
   end function is_locked
+
+  function is_locked_by_me(this)
+    implicit none
+    class(simple_mutex), intent(in) :: this
+    logical :: is_locked_by_me
+
+    integer(C_INT) :: is_locked_c
+
+    is_locked_by_me = .false.
+    if (this % is_valid()) then
+      is_locked_c = test_idlock(this % c_location, this % id)
+      if (is_locked_c .ne. 0) then
+        is_locked_by_me = .true.
+      end if
+    end if
+  end function is_locked_by_me
+
+  subroutine reset(this)
+    implicit none
+    class(simple_mutex), intent(inout) :: this
+    if (this % is_valid()) call reset_lock(this % c_location)
+  end subroutine reset
 end module simple_mutex_module

@@ -1437,7 +1437,7 @@ int DCB_get_bytes(
 
   // Update full extraction pointer if needed
   if (operation == CB_COMMIT) {
-    memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
+    full_memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
     volatile uint64_t* d_out = &instance->circ_buffer.m.out[CB_FULL];
     *d_out                   = out_index; // Update actual extraction pointer

@@ -15,6 +15,7 @@ set(TEST_SOURCES
 #   pseudo-server.F90
    put_error.F90
 #   small_dcb_test.c
+   simple_mutex.F90
    test_memory_arena.F90
    test_serializer.F90
    test_shmem_heap.F90
@@ -119,6 +120,9 @@ get_test_name(circular_buffer_fill.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(distributed_circular_buffer.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(simple_mutex.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(test_memory_arena.F90 TEST_TARGET)

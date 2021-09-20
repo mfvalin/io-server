@@ -700,7 +700,7 @@ int32_t ShmemHeapFreeBlock(
   nw = h[0];                       // if block is in use, nw will be negative
   if(nw >= 0) return -2 ;          // certainly not a block in use
   nw = -nw ;                       // make count positive
-  memory_fence();                  // make sure every read operation within this block has been completed before freeing it
+  full_memory_fence();             // make sure every read operation within this block has been completed before freeing it
   h[0] = nw ;                      // mark memory block as free
   return 0;
 }

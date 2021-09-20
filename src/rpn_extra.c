@@ -37,59 +37,126 @@
 //! Memory store fence
 static inline void write_fence() {
   __asm__ volatile("sfence" : : : "memory");
-  //   _mm_sfence();
 }
 
 //! Memory load fence
 static inline void read_fence() {
   __asm__ volatile("lfence" : : : "memory");
-  //   _mm_lfence();
 }
 
-//! memory load+store fence
-static inline void memory_fence() {
+//! Memory load+store fence
+static inline void full_memory_fence() {
   __asm__ volatile("mfence" : : : "memory");
-  //   _mm_mfence();
 }
 
-static inline void lock_set(int* location) {
-  while (__sync_val_compare_and_swap(location, 0, 1) != 0)
+//! Acquire the given lock, with the given ID, *without* a memory fence
+static inline void acquire_idlock_no_fence(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0)
     ;
-}
-static inline void lock_reset(int* location) {
-  *(volatile int*)location = 0;
+  __asm__ volatile("": : :"memory");
 }
 
-static inline int lock_is_set(int* location) {
-  const int value = *(volatile int*)location;
-  return value;
+//! Acquire the given lock, with the given ID.
+static inline void acquire_idlock(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0)
+    ;
+  full_memory_fence();
+}
+
+//! Acquire the given lock, no specific ID, *without* a memory fence
+static inline void acquire_lock_no_fence(volatile int32_t *lock) {
+  acquire_idlock_no_fence(lock, 1); // Use 1 as ID
+}
+
+//! Acquire the given lock, no specific ID.
+static inline void acquire_lock(volatile int32_t *lock) {
+  acquire_idlock(lock, 1); // Use 1 as ID
+}
+
+//! Release given lock if it has this specific ID (will deadlock if ID is wrong), *without* a memory fence
+static inline void release_idlock_no_fence(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1))
+    ;
+  __asm__ volatile("": : :"memory");
+}
+
+//! Release lock if it has specific ID (deadlocks if ID is wrong)
+static inline void release_idlock(volatile int32_t *lock, int32_t id) {
+  full_memory_fence();
+  while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1))
+    ;
+  __asm__ volatile("": : :"memory");
+}
+
+//! Release given lock with ID 1 (deadlocks if ID is wrong), *without* a fence
+static inline void release_lock_no_fence(volatile int32_t *lock) {
+  release_idlock_no_fence(lock, 1);
+}
+
+//! Release given lock with ID 1 (deadlocks if ID is wrong)
+static inline void release_lock(volatile int32_t *lock) {
+  release_idlock(lock, 1) ;
+}
+
+//! Test if lock is held by given ID
+//! @return true if lock is held by [ID], false otherwise
+static inline int32_t test_idlock(volatile int32_t *lock, int32_t id) {
+  return (*lock != (id+1));
+}
+
+//! Test if lock is held by anyone
+//! @return true if lock is held by someone, false otherwise
+static inline int32_t test_lock(volatile int32_t *lock) {
+  return (*lock != 0);
+}
+
+//! Forcefully reset given lock
+static inline void reset_lock(volatile int32_t *lock) { 
+  *lock = 0;
 }
 //C_EnD
 
 //F_StArT
-//  subroutine lock_set(location) BIND(C, name = 'lock_set_F')
+//  subroutine acquire_idlock(lock, id) BIND(C, name = 'acquire_idlock_F')
+//    import :: C_INT, C_PTR
+//    implicit none
+//    type(C_PTR),    intent(in), value :: lock
+//    integer(C_INT), intent(in), value :: id
+//  end subroutine acquire_idlock
+//  subroutine release_idlock(lock, id) BIND(C, name = 'release_idlock_F')
+//    import :: C_INT, C_PTR
+//    implicit none
+//    type(C_PTR),    intent(in), value :: lock
+//    integer(C_INT), intent(in), value :: id
+//  end subroutine release_idlock
+//  function test_idlock(lock, id) result(is_locked) BIND(C, name = 'test_idlock_F')
+//    import :: C_INT, C_PTR
+//    implicit none
+//    type(C_PTR),    intent(in), value :: lock
+//    integer(C_INT), intent(in), value :: id
+//    integer(C_INT) :: is_locked
+//  end function test_idlock
+//  function test_lock(lock) result(is_locked) BIND(C, name = 'test_lock_F')
+//    import :: C_INT, C_PTR
+//    implicit none
+//    type(C_PTR),    intent(in), value :: lock
+//    integer(C_INT) :: is_locked
+//  end function test_lock
+//  subroutine reset_lock(lock) BIND(C, name = 'reset_lock_F')
 //    import :: C_PTR
-//    type(C_PTR), intent(IN), value :: location
-//  end subroutine lock_set
+//    implicit none
+//    type(C_PTR), intent(in), value :: lock
+//  end subroutine reset_lock
 //F_EnD
-void lock_set_F(int* location) { lock_set(location); }
+void    acquire_idlock_F(volatile int32_t *lock, int32_t id) { acquire_idlock(lock, id); }
+void    release_idlock_F(volatile int32_t *lock, int32_t id) { release_idlock(lock, id); }
+int32_t test_idlock_F(volatile int32_t *lock, int32_t id) { return test_idlock(lock, id); }
+int32_t test_lock_F(volatile int32_t *lock) { return test_lock(lock); }
+void    reset_lock_F(volatile int32_t *lock) { reset_lock(lock); }
 
-//F_StArT
-//  subroutine lock_reset(location) BIND(C, name = 'lock_reset_F')
-//    import :: C_PTR
-//    type(C_PTR), intent(IN), value :: location
-//  end subroutine lock_reset
-//F_EnD
-void lock_reset_F(int* location) { lock_reset(location); }
-
-//F_StArT
-//  function lock_is_set(location) BIND(C, name = 'lock_is_set_F')
-//    import :: C_PTR, C_INT
-//    type(C_PTR), intent(IN), value :: location
-//    integer(C_INT) :: lock_is_set
-//  end function lock_is_set
-//F_EnD
-int lock_is_set_F(int* location) { return lock_is_set(location); }
 
 //F_StArT
 //  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
