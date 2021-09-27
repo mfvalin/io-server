@@ -125,6 +125,15 @@ static inline void acquire_lock(volatile int32_t *lock) {
   acquire_idlock(lock, 1); // Use 1 as ID
 }
 
+//! Try to acquire the given lock, with a specific ID
+//! @return true if the lock was successfully acquired by the given ID, false if it was already held by someone
+static inline int32_t try_acquire_idlock(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  if (__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) return 0;
+  full_memory_fence();
+  return 1;
+}
+
 //! Release given lock if it has this specific ID (will deadlock if ID is wrong), *without* a memory fence
 static inline void release_idlock_no_fence(volatile int32_t *lock, int32_t id) {
   __asm__ volatile("": : :"memory");
@@ -153,13 +162,13 @@ static inline void release_lock(volatile int32_t *lock) {
 
 //! Test if lock is held by given ID
 //! @return true if lock is held by [ID], false otherwise
-static inline int32_t test_idlock(volatile int32_t *lock, int32_t id) {
-  return (*lock != (id+1));
+static inline int32_t is_idlock_taken(volatile int32_t *lock, int32_t id) {
+  return (*lock == (id+1));
 }
 
 //! Test if lock is held by anyone
 //! @return true if lock is held by someone, false otherwise
-static inline int32_t test_lock(volatile int32_t *lock) {
+static inline int32_t is_lock_taken(volatile int32_t *lock) {
   return (*lock != 0);
 }
 

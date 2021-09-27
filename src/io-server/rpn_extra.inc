@@ -49,19 +49,26 @@ implicit none
 type(C_PTR),    intent(in), value :: lock
 integer(C_INT), intent(in), value :: id
 end subroutine release_idlock
-function test_idlock(lock, id) result(is_locked) BIND(C, name = 'test_idlock_F')
+function try_acquire_idlock(lock, id) result(is_successfully_acquired) BIND(C, name = 'try_acquire_idlock_F')
+import :: C_INT, C_PTR
+implicit none
+type(C_PTR),    intent(in), value :: lock
+integer(C_INT), intent(in), value :: id
+integer(C_INT) :: is_successfully_acquired
+end function try_acquire_idlock
+function is_idlock_taken(lock, id) result(is_locked) BIND(C, name = 'is_idlock_taken_F')
 import :: C_INT, C_PTR
 implicit none
 type(C_PTR),    intent(in), value :: lock
 integer(C_INT), intent(in), value :: id
 integer(C_INT) :: is_locked
-end function test_idlock
-function test_lock(lock) result(is_locked) BIND(C, name = 'test_lock_F')
+end function is_idlock_taken
+function is_lock_taken(lock) result(is_locked) BIND(C, name = 'is_lock_taken_F')
 import :: C_INT, C_PTR
 implicit none
 type(C_PTR),    intent(in), value :: lock
 integer(C_INT) :: is_locked
-end function test_lock
+end function is_lock_taken
 subroutine reset_lock(lock) BIND(C, name = 'reset_lock_F')
 import :: C_PTR
 implicit none

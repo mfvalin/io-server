@@ -37,6 +37,7 @@ module simple_mutex_module
     procedure, pass :: init_from_int
     procedure, pass :: lock
     procedure, pass :: unlock
+    procedure, pass :: try_lock
     procedure, pass :: is_locked
     procedure, pass :: is_locked_by_me
     procedure, pass :: reset
@@ -89,6 +90,20 @@ contains
     if (this % is_valid()) call release_idlock(this % c_location, this % id)
   end subroutine unlock
 
+  function try_lock(this) result(is_successfully_acquired)
+    implicit none
+    class(simple_mutex), intent(inout) :: this
+    logical :: is_successfully_acquired
+
+    is_successfully_acquired = .false.
+
+    if (this % is_valid()) then
+      if (try_acquire_idlock(this % c_location, this % id) .ne. 0) then
+        is_successfully_acquired = .true.
+      end if
+    end if
+  end function try_lock
+
   function is_locked(this)
     implicit none
     class(simple_mutex), intent(in) :: this
@@ -98,7 +113,7 @@ contains
 
     is_locked = .false.
     if (this % is_valid()) then
-      is_locked_c = test_lock(this % c_location)
+      is_locked_c = is_lock_taken(this % c_location)
       if (is_locked_c .ne. 0) then
         is_locked = .true.
       end if
@@ -114,7 +129,7 @@ contains
 
     is_locked_by_me = .false.
     if (this % is_valid()) then
-      is_locked_c = test_idlock(this % c_location, this % id)
+      is_locked_c = is_idlock_taken(this % c_location, this % id)
       if (is_locked_c .ne. 0) then
         is_locked_by_me = .true.
       end if
