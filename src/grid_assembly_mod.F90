@@ -1,5 +1,5 @@
 module grid_assembly_module
-  use ioserver_functions
+  use ioserver_message_module
   implicit none
 
   private
@@ -21,18 +21,6 @@ module grid_assembly_module
     contains
     procedure :: put_data => grid_assembly_put_data
   end type
-
-  type, public :: stream_file
-    private
-    integer :: stream_id = -1       ! File ID, for internal use
-    character(len=:), allocatable :: name
-    integer :: unit = -1
-
-    contains
-    procedure :: open    => stream_file_open
-    procedure :: is_open => stream_file_is_open
-    final     :: stream_file_finalize
-  end type stream_file
 
 contains
 
@@ -95,41 +83,5 @@ contains
       status = 0
     end if
   end function grid_assembly_put_data
-
-  function stream_file_open(this, stream_id, file_name) result(success)
-    implicit none
-    class(stream_file), intent(inout) :: this
-    integer,            intent(in)    :: stream_id
-    character(len=*),   intent(in)    :: file_name
-    logical :: success
-
-    success = .false.
-    if (.not. this % is_open()) then
-      this % name = trim(file_name) // '.out'
-      print *, 'Opening file, name = ', this % name
-
-      open(newunit = this % unit, file = this % name, status = 'replace', form = 'unformatted')
-      this % stream_id = stream_id
-      success = .true.
-    end if
-
-  end function stream_file_open
-
-  function stream_file_is_open(this)
-    implicit none
-    class(stream_file), intent(in) :: this
-    logical :: stream_file_is_open
-    stream_file_is_open = (this % stream_id >= 0)
-  end function stream_file_is_open
-
-  subroutine stream_file_finalize(this)
-    implicit none
-    type(stream_file), intent(inout) :: this
-
-    if (this % is_open()) then
-      close(this % unit)
-      this % stream_id = -1
-    end if
-  end subroutine stream_file_finalize
 
 end module grid_assembly_module

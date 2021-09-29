@@ -11,7 +11,7 @@ set(TEST_SOURCES
    distributed_circular_buffer.F90
 #   memory_arena.F90
    model_write.F90
-   pseudo-model.F90
+   # pseudo-model.F90
 #   pseudo-server.F90
    put_error.F90
 #   small_dcb_test.c

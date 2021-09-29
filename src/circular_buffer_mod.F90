@@ -73,7 +73,7 @@ contains
     if (is_valid) then
       is_valid = (CB_check_integrity(this % p) == 0)
     else
-      print *, 'ERROR, CB pointer is not even associated'
+      print *, 'ERROR: CB pointer is not even associated'
     end if
   end function is_valid
 

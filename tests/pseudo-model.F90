@@ -1,6 +1,11 @@
 module helpers
   use ISO_C_BINDING
-  use ioserver_functions
+  use mpi_f08
+  use ioserver_internal_mod
+
+  save
+
+  type(ioserver_context) :: context
 
  contains
 
@@ -33,16 +38,17 @@ subroutine print_comms(model, modelio, allio, relay, server, nodecom)
   implicit none
   type(MPI_Comm), intent(IN) :: model, allio, relay, server, modelio, nodecom
 
-  call print_comm(IOSERVER_Commisnull(model),    'model')
-  call print_comm(IOSERVER_Commisnull(modelio),  'modelio')
-  call print_comm(IOSERVER_Commisnull(allio),    'allio')
-  call print_comm(IOSERVER_Commisnull(relay),    'relay')
-  call print_comm(IOSERVER_Commisnull(server),   'server')
-  call print_comm(IOSERVER_Commisnull(nodecom),  'nodecom')
+  call print_comm(model == MPI_COMM_NULL,    'model')
+  call print_comm(modelio == MPI_COMM_NULL,  'modelio')
+  call print_comm(allio == MPI_COMM_NULL,    'allio')
+  call print_comm(relay == MPI_COMM_NULL,    'relay')
+  call print_comm(server == MPI_COMM_NULL,   'server')
+  call print_comm(nodecom == MPI_COMM_NULL,  'nodecom')
 end subroutine print_comms
 
 subroutine check_comm(comm, crs, name)
   use mpi_f08
+  use ioserver_constants
   implicit none
   type(MPI_Comm),       intent(IN) :: comm
   type(comm_rank_size), intent(IN) :: crs
@@ -61,8 +67,8 @@ end module helpers
 
 program pseudomodelandserver
   use ISO_C_BINDING
+  use mpi_f08
   use helpers
-  use ioserver_functions
   use shmem_arena_mod
   implicit none
   external io_relay_fn, io_server_out, compute_fn
@@ -202,9 +208,7 @@ end program
 subroutine compute_fn()
   use ISO_C_BINDING
   use helpers
-  use ioserver_functions
   use shmem_arena_mod
-  use ioserver_internal_mod, only: IOserver_get_relay_shmem
   implicit none
   type(MPI_Comm) :: model, allio, relay, server, modelio, nodecom !, nio_node, me
   integer :: rank, size, noderank, nodesize !, comm, navail, ierr
@@ -263,9 +267,8 @@ end subroutine compute_fn
 subroutine io_relay_fn()
   use ISO_C_BINDING
   use helpers
-  use io_relay_mod
-  use ioserver_memory_mod
   implicit none
+  type(comm_rank_size) :: model_crs, allio_crs, relay_crs, server_crs, node_crs, modelio_crs
   type(MPI_Comm) :: model, allio, relay, server, nodecom, modelio
   integer :: old, new
   integer :: rank, size, ncompute, i, bsize, bflags !, ierr, noderank, nodesize
@@ -276,18 +279,24 @@ subroutine io_relay_fn()
   character(len=8) :: cio_name
   logical :: ok
 
-  call io_relay_mod_init()
-relay_debug = .true.
+  relay_debug = .true.
   if(relay_debug) then   ! mem % pe() % io_ra
     call verify_translations()
   endif
+
+  model_crs   = context % get_crs(MODEL_COLOR)
+  modelio_crs = context % get_crs(MODEL_COLOR + RELAY_COLOR) 
+  allio_crs   = context % get_crs(SERVER_COLOR + RELAY_COLOR) 
+  relay_crs   = context % get_crs(RELAY_COLOR)
+  server_crs  = context % get_crs(SERVER_COLOR)
+  node_crs    = context % get_crs(NODE_COLOR)
 
   model    = model_crs % comm
   modelio  = modelio_crs % comm
   allio    = allio_crs % comm
   relay    = relay_crs % comm
   server   = server_crs % comm
-  nodecom  = nodecom_crs % comm
+  nodecom  = node_crs % comm
   
   rank = relay_crs % rank
   new = 0
@@ -295,14 +304,14 @@ relay_debug = .true.
   old = io_relay_debug(new)
   size = relay_crs % size
   write(6,*)'in pseudo io-relay, PE',rank+1,' of',size,' debug mode (old,new) =',old, new
-  if(relay_debug) write(6,*)'      model+io node PE',nodecom_crs % rank + 1, ' of', nodecom_crs % size
-  if(relay_debug) write(6,*)'          full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
-  if(relay_debug) call print_comms(model, modelio, allio, relay, server, nodecom)
+  if (relay_debug) write(6,*)'      model+io node PE', node_crs % rank + 1, ' of', node_crs % size
+  ! if (relay_debug) write(6,*)'          full node PE', fullnode_crs % rank + 1,' of', fullnode_crs % size
+  if (relay_debug) call print_comms(model, modelio, allio, relay, server, nodecom)
 
 !   call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
 
   ncompute = modelio_crs % size - relay_crs % size
-  arena = ma % addr()
+  arena = context % get_local_arena_ptr()
   write(6,*) 'INFO: number of compute processes found on node =',ncompute
 
   if(rank == 0) then              ! outbound relay PR

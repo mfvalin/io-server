@@ -21,8 +21,11 @@
 
 module model_write_parameters
   use ISO_C_BINDING
-  use ioserver_functions
+  use ioserver_constants
+  use ioserver_internal_mod
   implicit none
+
+  save
 
   integer, parameter :: MAX_NUM_WORKER_PER_NODE = 128
 
@@ -36,6 +39,8 @@ module model_write_parameters
   logical :: CHECK_DCB_MESSAGES
 
   integer :: num_channels
+
+  type(ioserver_context) :: context
 
 contains
 
@@ -87,13 +92,14 @@ program pseudomodelandserver
   use ISO_C_BINDING
   use mpi_f08
 
-  use ioserver_functions
+  use ioserver_constants
   use model_write_parameters
   implicit none
   external io_relay_process
   external io_server_process
   integer :: status, input
   integer :: nio_node
+  logical :: success
 
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv !, noops
@@ -104,10 +110,13 @@ program pseudomodelandserver
   logical :: server_node, single_node
   integer :: node_rank
 
+  logical :: debug_mode
+
   call mpi_init(status)
   local_crs = COMM_RANK_SIZE_NULL
 
-  ! call IOSERVER_debug(1)            ! activate debug mode
+  debug_mode = .false.
+  debug_mode = .true. ! activate debug mode
 
   ! Arguments
   ! 1. Check messages or not
@@ -149,10 +158,16 @@ program pseudomodelandserver
     ! =============================================================================================
     !                                 compute or IO relay Processes
     ! =============================================================================================
-    call set_IOSERVER_relay(io_relay_process)
+    ! call set_IOSERVER_relay(io_relay_process)
+    call context % set_relay_fn(io_relay_process)
     !  no return from ioserver_int_init in the case of IO relay processes when io_relay_fn is defined
     !  compute processes will return from call
-    status = ioserver_init(nio_node, 'M')
+    ! status = ioserver_init(nio_node, 'M')
+    success = context % init(nio_node, 'M', debug_mode)
+    if (.not. success) then
+      print *, 'Could not initialize io-server MODEL process'
+      error stop 1
+    end if
     ! =============================================================================================
     !                                 compute Processes
     ! =============================================================================================
@@ -168,31 +183,49 @@ program pseudomodelandserver
     ! nio_node = -1
     if (node_rank < nserv) then
       if (node_rank < nserv - num_channels) then
-        call set_IOserver_server(io_server_process)
-        status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
+        ! call set_IOserver_server(io_server_process)
+        call context % set_server_fn(io_server_process)
+        ! status = ioserver_init(nio_node, 'O')   ! this function should not return as set_IOserver_server is set
+        success = context % init(nio_node, 'O', debug_mode)
       else
-        status = ioserver_init(nio_node, 'C') ! This should never return
+        ! status = ioserver_init(nio_node, 'C') ! This should never return
+        success = context % init(nio_node, 'C', debug_mode)
+      end if
+      if (.not. success) then
+        print *, 'Could not initialize io-server SERVER process'
+        error stop 1
       end if
     else 
       if (single_node) then
         !--------------------------------------------------------------
         ! Relay + model processes, when eeeveryone in on the same node
-        call set_IOSERVER_relay(io_relay_process)
+        ! call set_IOSERVER_relay(io_relay_process)
+        call context % set_relay_fn(io_relay_process)
         !  no return from ioserver_int_init in the case of IO relay processes when io_relay_fn is defined
         !  compute processes will return from call
-        status = ioserver_init(nio_node, 'M')
+        ! status = ioserver_init(nio_node, 'M')
+        success = context % init(nio_node, 'M', debug_mode)
+        if (.not. success) then
+          print *, 'Could not initialize io-server MODEL process (single node)'
+          error stop 1
+        end if
         call model_process()
         write(6,*)'END: compute, PE',rank+1,' of',size
       else
         !-----------------
         ! no-op processes
-        status = ioserver_init(nio_node, 'Z')
+        ! status = ioserver_init(nio_node, 'Z')
+        success = context % init(nio_node, 'Z', debug_mode)
+        if (.not. success) then
+          print *, 'Could not initialize io-server NO-OP process'
+          error stop 1
+        end if
       end if
     end if
 
   endif
 
-  call ioserver_set_time_to_quit()
+  ! call ioserver_set_time_to_quit()
 !  write(6,*)'FINAL: serv node PE',noderank+1,' of',nodesize
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
   call mpi_finalize(status)
@@ -202,7 +235,7 @@ subroutine io_server_process()
   use mpi_f08
   use model_write_parameters
   use distributed_circular_buffer_module, only : distributed_circular_buffer
-  use io_server_mod
+  ! use io_server_mod
   implicit none
 
   type(comm_rank_size) :: consumer_crs
@@ -213,15 +246,15 @@ subroutine io_server_process()
   ! integer :: num_producers
 
   call get_local_world(global_comm, global_rank, global_size)
-  call io_server_mod_init()
+  ! call io_server_mod_init()
 
 
   ! write(6, *) 'SERVER process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
-  data_buffer = IOserver_get_dcb()
+  data_buffer = context % get_dcb()
 
-  consumer_crs = IOserver_get_crs(SERVER_COLOR + NODE_COLOR)
+  consumer_crs = context % get_crs(SERVER_COLOR + NODE_COLOR)
 
   ! Choose what to do based on whether we are a consumer or a channel process
   if (data_buffer % get_consumer_id() >= 0) then
@@ -260,6 +293,7 @@ end subroutine process_message
 function receive_message(dcb, producer_id) result(finished)
   use distributed_circular_buffer_module
   use ioserver_functions
+  use ioserver_message_module
   use model_write_parameters
   implicit none
   type(distributed_circular_buffer), intent(inout) :: dcb
@@ -529,13 +563,15 @@ subroutine model_process()
   use ISO_C_BINDING
   use mpi_f08
 
-  use model_write_parameters
   use circular_buffer_module
+  use ioserver_file_module
+  use ioserver_message_module
+  use model_write_parameters
   use rpn_extra_module, only: sleep_us
-  use io_common_mod
+  use shmem_heap
   implicit none
 
-  type(comm_rank_size)  :: node_crs, local_compute_crs, all_crs
+  type(comm_rank_size)  :: node_crs, local_compute_crs, all_crs, model_crs
   integer               :: local_compute_id, global_rank
   integer               :: num_errors
   type(circular_buffer) :: data_buffer
@@ -554,27 +590,31 @@ subroutine model_process()
   integer(C_INT) :: tkr
   integer(C_SIZE_T) :: o
 
-  node_heap = ioserver_heap(0)
+  node_heap = context % get_local_heap()
 
-  f_status = results_file % open('model_write_results_')
-  if (f_status .ne. 0) then
+  results_file = context % open_file('model_write_results_')
+  if (.not. results_file % is_open()) then
     print *, 'Unable to open model file!!!!'
     error stop 1
   end if
 
-  model_crs = IOserver_get_crs(MODEL_COLOR)
+  model_crs = context % get_crs(MODEL_COLOR)
 
   num_errors        = 0
-  node_crs          = IOserver_get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
-  local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
+  node_crs          = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
+  local_compute_crs = context % get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
-  all_crs = IOserver_get_crs(NO_COLOR)
+  all_crs = context % get_crs(NO_COLOR)
   global_rank = all_crs % rank
 
   ! print *, 'MODEL, local compute id: ', local_compute_id
 
-  data_buffer = IOserver_get_cio_out()
+  data_buffer = context % get_server_bound_cb()
+  if (.not. data_buffer % is_valid()) then
+    print *, 'ERROR: CB received from context is not valid!'
+    error stop 1
+  end if
   ! if (data_buffer % get_capacity(CB_KIND_INTEGER_4) .ne. data_buffer % get_num_spaces(CB_KIND_INTEGER_4)) then
   !   print *, 'AAAAaaaahhhhh local CB is NOT EMPTY. Aaaaahhh', data_buffer % get_capacity(CB_KIND_INTEGER_4), data_buffer % get_num_spaces(CB_KIND_INTEGER_4)
   !   error stop 1
@@ -660,46 +700,53 @@ subroutine io_relay_process()
   use model_write_parameters
   use circular_buffer_module
   use distributed_circular_buffer_module
-  use io_relay_mod
+  ! use io_relay_mod
   use ioserver_memory_mod
   use data_serialize
   implicit none
 
   type(MPI_Comm)       :: global_comm
   integer              :: global_rank, global_size
-  type(comm_rank_size) :: local_relay_crs, local_model_crs
+  type(comm_rank_size) :: local_relay_crs, local_model_crs, node_crs
   integer              :: num_local_compute, local_relay_id, num_local_relays, producer_id
   integer              :: i_compute, index, num_errors
   integer :: h_status
 
   logical :: success
   type(distributed_circular_buffer) :: data_buffer
+  type(circular_buffer), dimension(:), pointer :: cb_list
+  type(heap), dimension(:), pointer :: heap_list
 
-  call io_relay_mod_init()
+  ! call io_relay_mod_init()
   call get_local_world(global_comm, global_rank, global_size)
 
-  local_relay_crs = IOserver_get_crs(RELAY_COLOR + NODE_COLOR)
-  local_model_crs = IOserver_get_crs(MODEL_COLOR + NODE_COLOR)
+  cb_list => context % get_server_bound_cb_list()
+  heap_list => context % get_heap_list()
+
+  node_crs        = context % get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
+  local_relay_crs = context % get_crs(RELAY_COLOR + NODE_COLOR)
+  local_model_crs = context % get_crs(MODEL_COLOR + NODE_COLOR)
 
   local_relay_id    = local_relay_crs % rank
   num_local_relays  = local_relay_crs % size
-  num_local_compute = nodecom_crs % size - local_relay_crs % size
+  num_local_compute = local_model_crs % size
   num_errors        = 0
 
   ! print *, 'RELAY, local relay id: ', local_relay_id
 
   ! Create the DCB used to communicate with the server
-  data_buffer = IOserver_get_dcb()
+  data_buffer = context % get_dcb()
 
   producer_id = data_buffer % get_producer_id()
 
   ! NODE barrier to allow MODEL processes to initialize their CBs
-  call MPI_Barrier(nodecom_crs % comm)
+  call MPI_Barrier(node_crs % comm)
 
   ! Recover all CBs that are stored on this node and check that they are valid (even if we don't necessarily access all of them)
   index = 1
 
   block
+    use ioserver_message_module
     
     integer :: i_data_check
     integer :: total_message_size, model_message_size, end_cap, content_size
@@ -747,7 +794,7 @@ subroutine io_relay_process()
       ! Get the initial test signal from each CB this relay is responsible for
       ! do i_compute = 0, num_local_compute - 1 !, num_local_relays
       !   cb_message(:) = -1
-      !   success = c_cio_out(i_compute) % get(cb_message, 1_8, CB_KIND_INTEGER_4, .true.)
+      !   success = cb_list(i_compute) % get(cb_message, 1_8, CB_KIND_INTEGER_4, .true.)
       !   if (.not. success) then
       !     print *, 'ERROR in relay. atomic_get returned a negative value'
       !     error stop 1
@@ -763,19 +810,19 @@ subroutine io_relay_process()
         do i_compute = 0, num_local_compute - 1
 
           ! The buffer is empty, so it has not finished sending stuff. Move on to the next CB
-          if (c_cio_out(i_compute) % get_num_elements(CB_KIND_INTEGER_4) == 0) then
+          if (cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_4) == 0) then
             finished = .false.
             cycle
           end if
 
-          success = c_cio_out(i_compute) % peek(model_message_size, 1_8, CB_KIND_INTEGER_4)
+          success = cb_list(i_compute) % peek(model_message_size, 1_8, CB_KIND_INTEGER_4)
           if (model_message_size > 0) then
             ! There is something in the buffer!
             finished = .false.
 
             ! Read the content of the CB
 
-            success = c_cio_out(i_compute) % get(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) ! Header
+            success = cb_list(i_compute) % get(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) ! Header
             if (.not. success) then
               print *, 'ERROR when getting message header from CIO_OUT', i_compute
               error stop 1
@@ -785,8 +832,8 @@ subroutine io_relay_process()
             !   'Got header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream, ', tag ', header % tag, ', rank ', header % sender_global_rank
 
             if (header % command == MSG_COMMAND_DATA) then
-              success = c_cio_out(i_compute) % get(record, model_record_size_int(), CB_KIND_INTEGER_4, .false.) ! Record 
-              success = c_cio_out(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
+              success = cb_list(i_compute) % get(record, model_record_size_int(), CB_KIND_INTEGER_4, .false.) ! Record 
+              success = cb_list(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
 
               if (.not. success) then
                 print *, 'ERROR Could not get record from data message'
@@ -800,7 +847,7 @@ subroutine io_relay_process()
 
               ! TODO take compression meta and other meta stuff into account
 
-              c_data = ptr_translate_from(record % data, MODEL_COLOR, i_compute)
+              c_data = context % ptr_translate_from(record % data, MODEL_COLOR, i_compute)
               num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
               call c_f_pointer(c_data, f_data, [num_data])
               
@@ -870,15 +917,15 @@ subroutine io_relay_process()
               ! print *, '(r len)  Jar high = ', dcb_message_jar % high()
 
               f_data(2) = -1
-              h_status = c_heaps(i_compute) % free(c_data)
+              h_status = heap_list(i_compute) % free(c_data)
               if (h_status .ne. 0) then
                 print*, 'Unable to free heap data (from RELAY)'
                 error stop 1
               end if
 
             else
-              success = c_cio_out(i_compute) % get(cb_message, int(content_size, kind=8), CB_KIND_INTEGER_4, .true.)
-              success = c_cio_out(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
+              success = cb_list(i_compute) % get(cb_message, int(content_size, kind=8), CB_KIND_INTEGER_4, .true.)
+              success = cb_list(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
               num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:content_size))
               ! print *, '(cmd d)  Jar high = ', dcb_message_jar % high()
               num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header % length)
@@ -914,9 +961,9 @@ subroutine io_relay_process()
 
 
   if (local_relay_id == 0) then
-    call c_heaps(0) % dumpinfo()
+    call heap_list(0) % dumpinfo()
     do i_compute = 0, num_local_compute - 1
-      call c_cio_out(i_compute) % print_stats(producer_id * 100 + i_compute, i_compute == 0)
+      call cb_list(i_compute) % print_stats(producer_id * 100 + i_compute, i_compute == 0)
     end do
   end if
 
@@ -925,7 +972,7 @@ subroutine io_relay_process()
     error stop 1
   end if
 
-  call MPI_Barrier(nodecom_crs % comm) ! Sync with models and avoid scrambling output
+  call MPI_Barrier(node_crs % comm) ! Sync with models and avoid scrambling output
 
 end subroutine io_relay_process
 
