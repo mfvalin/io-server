@@ -292,7 +292,6 @@ end subroutine process_message
 
 function receive_message(dcb, producer_id) result(finished)
   use distributed_circular_buffer_module
-  use ioserver_functions
   use ioserver_message_module
   use model_write_parameters
   implicit none
@@ -407,7 +406,6 @@ subroutine consumer_process(data_buffer, consumer_comm)
   use mpi_f08
   use model_write_parameters
   use distributed_circular_buffer_module
-  use ioserver_functions
   use data_serialize
   implicit none
 

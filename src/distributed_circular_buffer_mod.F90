@@ -59,7 +59,7 @@ module distributed_circular_buffer_module
     procedure :: start_listening
     procedure :: server_barrier
     procedure :: full_barrier
-    final     :: dcb_finalize
+    ! final     :: dcb_finalize
   end type distributed_circular_buffer
 
 contains
@@ -319,10 +319,10 @@ contains
     call DCB_server_barrier(this % c_buffer)
   end subroutine server_barrier
 
-  subroutine dcb_finalize(this)
-    implicit none
-    type(distributed_circular_buffer), intent(inout) :: this
-    call this % delete()
-  end subroutine dcb_finalize
+  ! subroutine dcb_finalize(this)
+  !   implicit none
+  !   type(distributed_circular_buffer), intent(inout) :: this
+  !   call this % delete()
+  ! end subroutine dcb_finalize
 
 end module distributed_circular_buffer_module

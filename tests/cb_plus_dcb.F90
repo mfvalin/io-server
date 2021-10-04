@@ -75,7 +75,6 @@ end module cb_plus_dcb_parameters
 
 program pseudomodelandserver
   use ISO_C_BINDING
-  use ioserver_functions
   use shmem_arena_mod
   use cb_plus_dcb_parameters
   implicit none

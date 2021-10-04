@@ -700,6 +700,7 @@ subroutine IOserver_int_finalize(context)
   call IOserver_set_time_to_quit()
   if (associated(context % iocolors)) deallocate(context % iocolors)
   if (associated(context % messenger)) deallocate(context % messenger)
+  call context % local_dcb % delete()
 end subroutine IOserver_int_finalize
 
 function IOserver_init_communicators(context, nio_node, app_class) result(success)
@@ -1125,7 +1126,6 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
   if (iand(context % color, SERVER_COLOR) == SERVER_COLOR) then
     if (context % local_dcb % get_channel_id() >= 0) then
       status = context % local_dcb % start_listening()
-      call context % local_dcb % delete()
     else if (C_ASSOCIATED(context % io_server_fn)) then
       if (context % debug_mode) print *,'INFO: io_server_fn is associated'
       call C_F_PROCPOINTER(context % io_server_fn, p)    ! associate procedure pointer with caller supplied address
@@ -1137,6 +1137,7 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
       call io_server_out()                      ! not expected to return, but ...
     endif
 
+    call context % local_dcb % delete()
     call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
     write(6,*) 'FINAL: SMP node PE', context % smp_rank + 1,' of', context % smp_size
     call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop
@@ -1156,6 +1157,7 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
       write(6,*) 'INFO: no return from io_relay_fn'
       call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
+      call context % local_dcb % delete()
       call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
       write(6,*) 'FINAL: model+io node PE', context % model_relay_smp_rank + 1,'  of', context % model_relay_smp_size
       call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop

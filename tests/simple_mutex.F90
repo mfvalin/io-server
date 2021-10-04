@@ -1,5 +1,6 @@
 
 program test_simple_mutex
+  use ISO_C_BINDING
   use mpi_f08
   use shared_mem_alloc_module
   use simple_mutex_module
