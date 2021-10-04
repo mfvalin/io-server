@@ -44,7 +44,7 @@ subroutine shared_mem_test()
 
   integer(C_SIZE_T), parameter :: BUFFER_SIZE_BYTE = 128 * 4
   ! integer, parameter :: NUM_BUFFER_ELEMENTS = 128
-  integer, parameter :: NUM_DATA_ELEMENTS = 10
+  ! integer, parameter :: NUM_DATA_ELEMENTS = 10
   integer, parameter :: NPTEST = 200
   integer(C_SIZE_T), parameter :: STEP_SIZE = 5
 

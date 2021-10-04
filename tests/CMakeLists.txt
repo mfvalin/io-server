@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
 set(TEST_SOURCES
-   cb_plus_dcb.F90
+   # cb_plus_dcb.F90
    cb_unaligned_input.c
    circular_buffer.F90
    circular_buffer_fill.c
@@ -11,9 +11,11 @@ set(TEST_SOURCES
    distributed_circular_buffer.F90
 #   memory_arena.F90
    model_write.F90
-   pseudo-model.F90
+   # pseudo-model.F90
 #   pseudo-server.F90
+   put_error.F90
 #   small_dcb_test.c
+   simple_mutex.F90
    test_memory_arena.F90
    test_serializer.F90
    test_shmem_heap.F90
@@ -120,17 +122,26 @@ add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLA
 get_test_name(distributed_circular_buffer.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
+get_test_name(simple_mutex.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
 get_test_name(test_memory_arena.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
-get_test_name(cb_plus_dcb.F90 TEST_TARGET)
-add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} -oversubscribe ${MPIEXEC_NUMPROC_FLAG} 16 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 4 0)
+# get_test_name(cb_plus_dcb.F90 TEST_TARGET)
+# add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} -oversubscribe ${MPIEXEC_NUMPROC_FLAG} 16 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 4 0)
+
+get_test_name(model_write.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} -oversubscribe ${MPIEXEC_NUMPROC_FLAG} 8 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 1)
 
 get_test_name(dcb_edge_case_1.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(dcb_unaligned_input.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(put_error.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} -oversubscribe ${MPIEXEC_NUMPROC_FLAG} 40 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 #get_test_name(test_shmem_heap.F90 TEST_TARGET)
 #add_test(NAME ${TEST_TARGET}_base COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 0)

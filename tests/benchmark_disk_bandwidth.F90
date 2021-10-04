@@ -89,7 +89,7 @@ program disk_bandwidth
       call MPI_Barrier(MPI_COMM_WORLD)
       !---------------------------------------
       time1 = get_current_time_us()
-      total_time =  (time1 - time0) / 1000000.0
+      total_time =  real(time1 - time0, 4) / 1000000.0
       rates(i_buf_elem_count) = TOTAL_DATA_GB / total_time
       ! if (rank == 0) then
       !   print *, 'total time, rate', total_time, rates(i_buf_elem_count)

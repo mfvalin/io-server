@@ -58,6 +58,12 @@ contains
     integer :: i
 
     capacity = dcb % get_capacity(CB_KIND_INTEGER_4)
+
+    if (capacity < 0) then
+      print *, 'AAAhhh capacity is bad!'
+      error stop 1
+    end if
+
     ! print *, '(Producer) capacity: ', capacity
     allocate(msg(capacity))
 
@@ -73,7 +79,7 @@ contains
     end if
 
     ! Fill the buffer so that the internal pointers (indices) reach exactly their upper limit
-    do i = 1, capacity
+    do i = 1, int(capacity, 4)
       success = dcb % put_elems(msg(i), 1_8, CB_KIND_INTEGER_4, .true.)
       num_spaces = dcb % get_num_spaces(CB_KIND_INTEGER_4, .false.)
       if (num_spaces .ne. capacity - i) then
@@ -118,10 +124,10 @@ program dcb_edge_case_1
   ! Create the communicators (needed for the server only)
   if (global_rank == 0 .or. global_rank == 1) then
     call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, 1, 1, NUM_CB_BYTES)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, 1, NUM_CB_BYTES)
   else if (global_rank == 2) then
     call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0, 0_8)
+    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0_8)
   else
     print *, 'Error'
     error stop 1

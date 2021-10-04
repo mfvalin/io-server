@@ -60,14 +60,14 @@ void consumer_process(distributed_circular_buffer_p dcb)
 void producer_process(distributed_circular_buffer_p dcb)
 {
     char message[NUM_CHARS];
-    for (int i = 0; i < NUM_CHARS - 1; ++i)
+    for (size_t i = 0; i < NUM_CHARS - 1; ++i)
         message[i] = 'a' + i % 26;
     message[NUM_CHARS - 1] = '\0';
 
     size_t total_sent = 0;
     const int64_t capacity = DCB_get_capacity_local_bytes(dcb);
 
-    if (capacity < NUM_BUFFER_BYTES || capacity > NUM_BUFFER_BYTES + 8)
+    if (capacity < (int64_t)NUM_BUFFER_BYTES || capacity > (int64_t)NUM_BUFFER_BYTES + 8)
     {
         printf("AAAHHHHH wrong capacity! Asked for %ld, got %ld\n", NUM_BUFFER_BYTES, capacity);
         exit(-1);
@@ -102,12 +102,12 @@ int main(int argc, char** argv)
     if (global_rank == 0 || global_rank == 1) {
         MPI_Comm server_comm;
         MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, &server_comm);
-        dcb = DCB_create_bytes(MPI_COMM_WORLD, server_comm, 1, 1, NUM_BUFFER_BYTES);
+        dcb = DCB_create_bytes(MPI_COMM_WORLD, server_comm, 1, NUM_BUFFER_BYTES);
     }
     else {
         MPI_Comm producer_comm;
         MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, &producer_comm);
-        dcb = DCB_create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0, 0);
+        dcb = DCB_create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0);
     }
 
     if (dcb == NULL) {

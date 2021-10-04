@@ -76,7 +76,7 @@ end module cb_plus_dcb_parameters
 program pseudomodelandserver
   use ISO_C_BINDING
   use ioserver_functions
-  use memory_arena_mod
+  use shmem_arena_mod
   use cb_plus_dcb_parameters
   implicit none
   external io_relay_process
@@ -85,12 +85,11 @@ program pseudomodelandserver
   integer :: me, nio_node
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv
-  logical :: error
   character(len=128) :: arg
-  type(memory_arena) :: ma
+  type(shmem_arena) :: ma
   type(comm_rank_size) :: fullnode_crs, local_crs
 
-  integer, parameter :: NUM_NODES = 3
+  ! integer, parameter :: NUM_NODES = 3
   logical :: server_node
   integer :: node_rank
 
@@ -135,11 +134,6 @@ program pseudomodelandserver
 
   call get_local_world(comm, rank, size)
   me = ma % setid(rank)
-  error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
-  if(error) then
-    write(6,*)'ERROR: bad window sizes'
-    goto 777
-  endif
 
   server_node = am_server_node(node_rank)
 
@@ -187,7 +181,7 @@ program pseudomodelandserver
     endif
 
   endif
-777 continue
+
   call ioserver_set_time_to_quit()
 !  write(6,*)'FINAL: serv node PE',noderank+1,' of',nodesize
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
@@ -204,8 +198,6 @@ subroutine io_server_process()
   type(MPI_Comm) :: global_comm
   integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
-  logical :: success
-  integer :: num_producers
 
   call get_local_world(global_comm, global_rank, global_size)
   call io_server_mod_init()
@@ -213,28 +205,15 @@ subroutine io_server_process()
   ! write(6, *) 'Server process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used for this test
-  num_producers = allio_crs % size - server_crs % size
-  success = data_buffer % create_bytes(allio_crs % comm, server_crs % comm, num_producers, num_channels, DCB_SIZE_BYTES)
-
-  if (.not. success) then
-    write(6, *) 'Unable to create DCB (from SERVER process)'
-    error stop 1
-  end if
+  data_buffer = IOserver_get_dcb()
 
   ! Choose what to do based on whether we are a consumer or a channel process
   if (data_buffer % get_consumer_id() >= 0) then
     call consumer_process(data_buffer)
-  else if (data_buffer % get_channel_id() >= 0) then
-    call channel_process(data_buffer)
   else
     write(6, *) 'We have a problem'
     error stop 1
   end if
-
-  call data_buffer % delete()
-
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
-  call MPI_Barrier(allio_crs % comm) ! To avoid scrambling printed stats
 
 end subroutine io_server_process
 
@@ -421,6 +400,7 @@ subroutine model_process()
   use circular_buffer_module
   use rpn_extra_module, only: sleep_us
   use io_common_mod
+  use ioserver_internal_mod, only: IOserver_get_relay_shmem
   implicit none
 
   type(MPI_Comm)        :: global_comm
@@ -433,6 +413,7 @@ subroutine model_process()
   character(len=8)      :: compute_name
   integer               :: bsize, bflags
   type(C_PTR)           :: tmp_ptr
+  type(C_PTR) :: node_shmem
 
   integer, dimension(CB_MESSAGE_SIZE_INT) :: message
 
@@ -443,8 +424,8 @@ subroutine model_process()
   local_compute_crs = IOserver_get_crs(NODE_COLOR + MODEL_COLOR)
   local_compute_id  = local_compute_crs % rank
 
-  call IOSERVER_get_winmem(p_base, p_relay, p_server)
-  tmp_ptr = ma % clone(p_relay)
+  node_shmem = IOserver_get_relay_shmem()
+  tmp_ptr = ma % clone(node_shmem)
 
   ! write(6, *) 'Model process! PE', node_crs % rank + 1, ' of', node_crs % size, ' global:', global_rank + 1
 
@@ -535,11 +516,7 @@ subroutine io_relay_process()
   ! write(6, *) 'Relay process! PE', nodecom_crs % rank + 1, ' of', nodecom_crs % size, ' global:', global_rank + 1
 
   ! Create the DCB used to communicate with the server
-  success = data_buffer % create_bytes(allio_crs % comm, MPI_COMM_NULL, -1, -1, -1_8)
-  if (.not. success) then
-    write(6, *) 'Unable to create DCB from RELAY process'
-    error stop 1
-  end if
+  data_buffer = IOserver_get_dcb()
 
   producer_id = data_buffer % get_producer_id()
 
@@ -638,17 +615,11 @@ subroutine io_relay_process()
     deallocate(dcb_message)
   end block
 
-  call data_buffer % delete()
-
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
-
   if (local_relay_id == 0) then
     do i_compute = 1, num_local_compute
       call local_data_buffers(i_compute) % print_stats(producer_id * 100 + i_compute - 1, i_compute == 1)
     end do
   end if
-
-  call MPI_Barrier(allio_crs % comm, ierr) ! To avoid scrambling printed stats
 
   if (num_errors > 0) then
     write (6, *) 'Terminating with error from RELAY process'

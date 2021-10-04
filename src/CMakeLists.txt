@@ -8,16 +8,16 @@ file(GLOB PROJECT_F_FILES *.F90 *.F *.f *.f90)
 set(C_TO_INC_FILES
   circular_buffer.c
   distributed_circular_buffer.c
-  memory_arena.c
   rpn_extra.c
+  shmem_arena.c
   timer.c
 )
 
 set(C_TO_H_FILES
   circular_buffer.c
   distributed_circular_buffer.c
-  memory_arena.c
   rpn_extra.c
+  shmem_arena.c
   shmem_heap.c
   timer.c
 )
@@ -50,12 +50,6 @@ foreach(C_FILE ${C_TO_H_FILES})
    list(APPEND PROJECT_INCLUDE_FILES ${OUT_FILE})
 endforeach(C_FILE)
 
-add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/io-server/ioserver.inc
-   COMMAND ${EXTRACT_FORTRAN_SCRIPT} ${CMAKE_CURRENT_SOURCE_DIR}/ioserver_init.F90 > ${CMAKE_CURRENT_SOURCE_DIR}/io-server/ioserver.inc
-   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/ioserver_init.F90 ${EXTRACT_FORTRAN_SCRIPT}
-   )
-list(APPEND PROJECT_INCLUDE_FILES io-server/ioserver.inc)
-
 # A bunch of fortran function signatures
 set(F_ALLOC_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/shape_f_pointer.sh)
 add_custom_command(OUTPUT ${F_ALLOC_FILE} COMMAND ${F_ALLOC_SCRIPT} > ${F_ALLOC_FILE} DEPENDS ${F_ALLOC_SCRIPT})
@@ -77,10 +71,8 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE _POSIX_C_SOURCE=199309L)
 target_compile_options(
    ${PROJECT_NAME}
    PUBLIC
-   # $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra -Werror>
-   $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra>
-   # $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror>
-   $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra>
+   $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra -Werror -Wno-error=pedantic -Wno-error=unused-function>
+   $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror -Wno-error=unused-function -fmax-errors=8>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>
    #-g -O0

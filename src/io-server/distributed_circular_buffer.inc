@@ -42,12 +42,11 @@ import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_sync_window
-function DCB_create_bytes(f_communicator, f_server_communicator, num_producers, num_channels, num_bytes) result(p) BIND(C, name = 'DCB_create_bytes_f')
+function DCB_create_bytes(f_communicator, f_server_communicator, num_channels, num_bytes) result(p) BIND(C, name = 'DCB_create_bytes_f')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
 integer(C_INT),    intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
 integer(C_INT),    intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
-integer(C_INT),    intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
 integer(C_INT),    intent(IN), value :: num_channels   !< Number of channels (PEs used for communication only)
 integer(C_SIZE_T), intent(IN), value :: num_bytes      !< Number of desired bytes in the circular buffer
 type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer

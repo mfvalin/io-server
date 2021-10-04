@@ -87,27 +87,94 @@ or
 //! Memory store fence
 static inline void write_fence() {
   __asm__ volatile("sfence" : : : "memory");
-  //   _mm_sfence();
 }
 
 //! Memory load fence
 static inline void read_fence() {
   __asm__ volatile("lfence" : : : "memory");
-  //   _mm_lfence();
 }
 
-//! memory load+store fence
-static inline void memory_fence() {
+//! Memory load+store fence
+static inline void full_memory_fence() {
   __asm__ volatile("mfence" : : : "memory");
-  //   _mm_mfence();
 }
 
-static inline void lock_set(int* location) {
-  while (__sync_val_compare_and_swap(location, 0, 1) != 0)
+//! Acquire the given lock, with the given ID, *without* a memory fence
+static inline void acquire_idlock_no_fence(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0)
     ;
+  __asm__ volatile("": : :"memory");
 }
-static inline void lock_reset(int* location) {
-  *(volatile int*)location = 0;
+
+//! Acquire the given lock, with the given ID.
+static inline void acquire_idlock(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  while(__sync_val_compare_and_swap(lock, 0, (id+1)) != 0)
+    ;
+  full_memory_fence();
+}
+
+//! Acquire the given lock, no specific ID, *without* a memory fence
+static inline void acquire_lock_no_fence(volatile int32_t *lock) {
+  acquire_idlock_no_fence(lock, 1); // Use 1 as ID
+}
+
+//! Acquire the given lock, no specific ID.
+static inline void acquire_lock(volatile int32_t *lock) {
+  acquire_idlock(lock, 1); // Use 1 as ID
+}
+
+//! Try to acquire the given lock, with a specific ID
+//! @return true if the lock was successfully acquired by the given ID, false if it was already held by someone
+static inline int32_t try_acquire_idlock(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  if (__sync_val_compare_and_swap(lock, 0, (id+1)) != 0) return 0;
+  full_memory_fence();
+  return 1;
+}
+
+//! Release given lock if it has this specific ID (will deadlock if ID is wrong), *without* a memory fence
+static inline void release_idlock_no_fence(volatile int32_t *lock, int32_t id) {
+  __asm__ volatile("": : :"memory");
+  while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1))
+    ;
+  __asm__ volatile("": : :"memory");
+}
+
+//! Release lock if it has specific ID (deadlocks if ID is wrong)
+static inline void release_idlock(volatile int32_t *lock, int32_t id) {
+  full_memory_fence();
+  while(__sync_val_compare_and_swap(lock, (id+1), 0) != (id+1))
+    ;
+  __asm__ volatile("": : :"memory");
+}
+
+//! Release given lock with ID 1 (deadlocks if ID is wrong), *without* a fence
+static inline void release_lock_no_fence(volatile int32_t *lock) {
+  release_idlock_no_fence(lock, 1);
+}
+
+//! Release given lock with ID 1 (deadlocks if ID is wrong)
+static inline void release_lock(volatile int32_t *lock) {
+  release_idlock(lock, 1) ;
+}
+
+//! Test if lock is held by given ID
+//! @return true if lock is held by [ID], false otherwise
+static inline int32_t is_idlock_taken(volatile int32_t *lock, int32_t id) {
+  return (*lock == (id+1));
+}
+
+//! Test if lock is held by anyone
+//! @return true if lock is held by someone, false otherwise
+static inline int32_t is_lock_taken(volatile int32_t *lock) {
+  return (*lock != 0);
+}
+
+//! Forcefully reset given lock
+static inline void reset_lock(volatile int32_t *lock) { 
+  *lock = 0;
 }
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait

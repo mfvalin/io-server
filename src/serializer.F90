@@ -68,6 +68,7 @@ module data_serialize
     procedure, PASS :: reset   => reset_jar      ! make jar empty, keep allocated space
     procedure, PASS :: data    => jar_pointer    ! get C pointer to actual jar data
     procedure, PASS :: array   => jar_contents   ! get Fortran pointer to actual jar data
+    procedure, PASS :: raw_array => jar_contents_full ! get Fortran pointer to entire jar data array
     procedure, PASS :: usable  => jar_size       ! maximum capacity of data jar
     procedure, PASS :: high    => jar_top        ! current number of elements inserted (written)
     procedure, PASS :: low     => jar_bot        ! current number of elements extracted (read)
@@ -239,6 +240,17 @@ module data_serialize
     call C_F_POINTER(j % p, fp, [j % top])  ! Fortran pointer to array of j%size JAR_ELEMENTs
 
   end function jar_contents
+
+  function jar_contents_full(j) result(fp)
+    implicit none
+    class(jar), intent(IN) :: j
+    integer(JAR_ELEMENT), dimension(:), pointer :: fp
+
+    nullify(fp)
+    if (.not. C_ASSOCIATED(j % p)) return
+
+    call C_F_POINTER(j % p, fp, [j % size])
+  end function jar_contents_full
 
   subroutine final_jar(j)                    ! deallocate a jar's data if not already done at finalize (if jar owns it)
     implicit none

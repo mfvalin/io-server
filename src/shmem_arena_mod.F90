@@ -80,7 +80,7 @@ module shmem_arena_mod
     type(C_PTR) :: p                                         !< address of memory block, NULL if error
     integer(C_INT64_T) :: size64
     p = shmem_block_find_wait(this%p, size64, flags, trim(name)//achar(0), timeout)
-    size = size64 / 4       ! convert into 32 bit units
+    size = INT(size64 / 4, 4)       ! convert into 32 bit units
   end function getblockw
 
   function adrblockw(this, name, timeout) result(p)         !< get address of a block (with timeout)
@@ -103,7 +103,7 @@ module shmem_arena_mod
     type(C_PTR) :: p                                         !< address of memory block, NULL if error
     integer(C_INT64_T)       :: size64
     p = shmem_block_find(this%p, size64, flags, trim(name)//achar(0))
-    size = size64 / 4       ! convert into 32 bit units
+    size = INT(size64 / 4, 4)       ! convert into 32 bit units
   end function getblock
 
   function adrblock(this, name) result(p)              !< get address of a block

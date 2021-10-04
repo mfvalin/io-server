@@ -32,7 +32,7 @@
 #include "io-server/circular_buffer.h"
 //C_EnD
 
-#include "io-server/memory_arena.h"
+#include "io-server/shmem_arena.h"
 #include "io-server/timer.h"
 
 static const MPI_Datatype CB_MPI_ELEMENT_TYPE = sizeof(data_element) == sizeof(int32_t)   ? MPI_INT
@@ -579,7 +579,7 @@ static inline size_t get_available_space_from_remote_bytes(
 //! initially, that copy is updated. If there is an error, returns -1.
 static int64_t DCB_wait_space_available_bytes(
     distributed_circular_buffer_p buffer,             //!< [in] Pointer to the distributed buffer we're waiting for
-    const int                     num_requested_bytes //!< [in] Needed number of available bytes
+    const size_t                  num_requested_bytes //!< [in] Needed number of available bytes
 ) {
   // Function inputs and buffer consistency checks
   if (buffer == NULL || !is_producer(buffer))
@@ -735,7 +735,6 @@ void DCB_sync_window(distributed_circular_buffer_p buffer) {
 distributed_circular_buffer_p DCB_create_bytes(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
-    const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
     const size_t  num_bytes      //!< [in] Number of bytes in a single circular buffer (only needed on the root process)
     )
@@ -746,7 +745,7 @@ distributed_circular_buffer_p DCB_create_bytes(
   // Put default values everywhere
   buffer->communicator             = communicator;
   buffer->server_communicator      = server_communicator;
-  buffer->num_producers            = num_producers;
+  buffer->num_producers            = -1;
   buffer->num_channels             = num_channels;
   buffer->local_header.target_rank = -1;
 
@@ -770,8 +769,22 @@ distributed_circular_buffer_p DCB_create_bytes(
         return NULL;
       }
 
-      int total_num_procs;
+      int total_num_procs, server_num_procs;
       MPI_Comm_size(buffer->communicator, &total_num_procs);
+      MPI_Comm_size(buffer->server_communicator, &server_num_procs);
+
+      if (server_num_procs < 2) {
+        printf("ERROR during DCB_create. We need at least 2 processes on the server, but there is only %d. Aborting.\n",
+               server_num_procs);
+        return NULL;
+      }
+
+      if (buffer->num_channels > server_num_procs - 1) {
+        printf("Requesting too many channels (%d), reducing to (%d)\n", buffer->num_channels, server_num_procs - 1);
+        buffer->num_channels = server_num_procs - 1;
+      }
+
+      buffer->num_producers = total_num_procs - server_num_procs;
       buffer->num_consumers = total_num_procs - buffer->num_producers - buffer->num_channels;
     }
 
@@ -825,7 +838,7 @@ distributed_circular_buffer_p DCB_create_bytes(
   // Root only: allocate shared DCB memory on the server, initialize the common header and send memory info to other server processes
   if (is_root(buffer)) {
     int id           = -1;
-    buffer->raw_data = memory_allocate_shared(&id, win_total_size);
+    buffer->raw_data = shmem_allocate_shared(&id, win_total_size);
     if (buffer->raw_data == NULL) {
       printf("Error when allocating shared memory for DCB\n");
       return NULL;
@@ -840,7 +853,7 @@ distributed_circular_buffer_p DCB_create_bytes(
   if (is_on_server(buffer) && !is_root(buffer)) {
     int id;
     MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Receive shared mem info from root process
-    buffer->raw_data = memory_address_from_id(id);
+    buffer->raw_data = shmem_address_from_id(id);
 
     // Set channel ranks in common header
     if (is_channel(buffer)) {
@@ -863,7 +876,7 @@ distributed_circular_buffer_p DCB_create_bytes(
         total_circular_buffer_instance_size(num_desired_elements) - instance_header_size() + circular_buffer_header_size();
 
     // Initialize the individual buffers
-    for (int i = 0; i < num_producers; i++) {
+    for (int i = 0; i < buffer->num_producers; i++) {
       circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
       init_circular_buffer_instance(buffer_instance, i, num_elem_in_circ_buffer);
       assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
@@ -902,12 +915,11 @@ distributed_circular_buffer_p DCB_create_bytes(
 }
 
 //F_StArT
-//  function DCB_create_bytes(f_communicator, f_server_communicator, num_producers, num_channels, num_bytes) result(p) BIND(C, name = 'DCB_create_bytes_f')
+//  function DCB_create_bytes(f_communicator, f_server_communicator, num_channels, num_bytes) result(p) BIND(C, name = 'DCB_create_bytes_f')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
 //    integer(C_INT),    intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
 //    integer(C_INT),    intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
-//    integer(C_INT),    intent(IN), value :: num_producers  !< Number of producers (circular buffer instances)
 //    integer(C_INT),    intent(IN), value :: num_channels   !< Number of channels (PEs used for communication only)
 //    integer(C_SIZE_T), intent(IN), value :: num_bytes      !< Number of desired bytes in the circular buffer
 //    type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer
@@ -917,12 +929,11 @@ distributed_circular_buffer_p DCB_create_bytes(
 distributed_circular_buffer_p DCB_create_bytes_f(
     int32_t f_communicator,        //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
     int32_t f_server_communicator, //!< [in] Communicator that groups server processes (in Fortran)
-    int32_t num_producers,         //!< [in] Number or producers (circular buffer instances)
     int32_t num_channels,          //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
     size_t  num_bytes              //!< [in] Desired size of the buffer in bytes
 ) {
   return DCB_create_bytes(
-      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), num_producers, num_channels, num_bytes);
+      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), num_channels, num_bytes);
 }
 
 //F_StArT
@@ -1050,7 +1061,7 @@ int64_t DCB_get_available_data_bytes(
     )
 //C_EnD
 {
-  if (buffer != NULL && is_consumer(buffer) && buffer_id < buffer->num_producers)
+  if (buffer != NULL && is_consumer(buffer) && buffer_id < buffer->num_producers && buffer_id >= 0)
     return (int64_t)get_available_data_bytes(get_circular_buffer_instance(buffer, buffer_id));
   return -1;
 }
@@ -1426,7 +1437,7 @@ int DCB_get_bytes(
 
   // Update full extraction pointer if needed
   if (operation == CB_COMMIT) {
-    memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
+    full_memory_fence(); // Make sure everything has been read, and the temp pointer actually updated
 
     volatile uint64_t* d_out = &instance->circ_buffer.m.out[CB_FULL];
     *d_out                   = out_index; // Update actual extraction pointer

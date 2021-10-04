@@ -47,7 +47,7 @@ int main()
         char* message = base_message;
         char received_message[NUM_CHARS];
 
-        for (int i = 0; i < NUM_CHARS - 1; ++i)
+        for (size_t i = 0; i < NUM_CHARS - 1; ++i)
             base_message[i] = 'a' + i % 26;
         base_message[NUM_CHARS - 1] = '\0';
 

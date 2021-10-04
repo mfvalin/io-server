@@ -1,6 +1,11 @@
 module helpers
   use ISO_C_BINDING
-  use ioserver_functions
+  use mpi_f08
+  use ioserver_internal_mod
+
+  save
+
+  type(ioserver_context) :: context
 
  contains
 
@@ -33,16 +38,17 @@ subroutine print_comms(model, modelio, allio, relay, server, nodecom)
   implicit none
   type(MPI_Comm), intent(IN) :: model, allio, relay, server, modelio, nodecom
 
-  call print_comm(IOSERVER_Commisnull(model),    'model')
-  call print_comm(IOSERVER_Commisnull(modelio),  'modelio')
-  call print_comm(IOSERVER_Commisnull(allio),    'allio')
-  call print_comm(IOSERVER_Commisnull(relay),    'relay')
-  call print_comm(IOSERVER_Commisnull(server),   'server')
-  call print_comm(IOSERVER_Commisnull(nodecom),  'nodecom')
+  call print_comm(model == MPI_COMM_NULL,    'model')
+  call print_comm(modelio == MPI_COMM_NULL,  'modelio')
+  call print_comm(allio == MPI_COMM_NULL,    'allio')
+  call print_comm(relay == MPI_COMM_NULL,    'relay')
+  call print_comm(server == MPI_COMM_NULL,   'server')
+  call print_comm(nodecom == MPI_COMM_NULL,  'nodecom')
 end subroutine print_comms
 
 subroutine check_comm(comm, crs, name)
   use mpi_f08
+  use ioserver_constants
   implicit none
   type(MPI_Comm),       intent(IN) :: comm
   type(comm_rank_size), intent(IN) :: crs
@@ -61,18 +67,17 @@ end module helpers
 
 program pseudomodelandserver
   use ISO_C_BINDING
+  use mpi_f08
   use helpers
-  use ioserver_functions
-  use memory_arena_mod
+  use shmem_arena_mod
   implicit none
   external io_relay_fn, io_server_out, compute_fn
   integer :: status
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv, noops, me, nio_node
   integer :: noderank, nodesize
-  logical :: error
   character(len=128) :: arg
-  type(memory_arena) :: ma
+  type(shmem_arena) :: ma
   type(comm_rank_size) :: server_crs, fullnode_crs, model_crs
 
   call mpi_init(status)
@@ -91,11 +96,6 @@ program pseudomodelandserver
 
   call get_local_world(comm, rank, size)
   me = ma % setid(rank)
-  error = ioserver_set_winsizes(2*MBYTE, GBYTE/4, GBYTE/2)   !  base, relay, server
-  if(error) then
-    write(6,*)'ERROR: bad window sizes'
-    goto 777
-  endif
 
   if(rank >= nserv) then
     ! =============================================================================================
@@ -141,12 +141,11 @@ program pseudomodelandserver
     endif
 
   endif
-777 continue
   fullnode_crs = IOserver_get_crs(NODE_COLOR)
   call ioserver_set_time_to_quit()
   write(6,*)'Final:      node PE',noderank+1,' of',nodesize
   write(6,*)'Final: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
-  call ioserver_finalize
+  ! status = ioserver_terminate()
 !   call mpi_finalize(status)
 end program
 
@@ -209,12 +208,11 @@ end program
 subroutine compute_fn()
   use ISO_C_BINDING
   use helpers
-  use ioserver_functions
-  use memory_arena_mod
+  use shmem_arena_mod
   implicit none
   type(MPI_Comm) :: model, allio, relay, server, modelio, nodecom !, nio_node, me
   integer :: rank, size, noderank, nodesize !, comm, navail, ierr
-  type(memory_arena) :: ma
+  type(shmem_arena) :: ma
   type(comm_rank_size) :: model_crs, relay_crs !, local_crs 
   type(comm_rank_size) :: modelio_crs, allio_crs, server_crs, nodecom_crs
   type(C_PTR) :: p_relay, temp
@@ -245,7 +243,7 @@ subroutine compute_fn()
   write(6,*)'START: compute PE',rank+1,' of',size
   write(6,*)' model+io node PE',noderank+1,' of', nodesize
 
-  p_relay = IOserver_get_win_ptr(IO_RELAY)
+  p_relay = IOserver_get_relay_shmem()
   temp = ma%clone(p_relay)         ! get memory arena address
 
 !   call MPI_Barrier(modelio, ierr)                      ! barrier 1 compute/relay
@@ -269,9 +267,8 @@ end subroutine compute_fn
 subroutine io_relay_fn()
   use ISO_C_BINDING
   use helpers
-  use io_relay_mod
-  use ioserver_memory_mod
   implicit none
+  type(comm_rank_size) :: model_crs, allio_crs, relay_crs, server_crs, node_crs, modelio_crs
   type(MPI_Comm) :: model, allio, relay, server, nodecom, modelio
   integer :: old, new
   integer :: rank, size, ncompute, i, bsize, bflags !, ierr, noderank, nodesize
@@ -282,18 +279,24 @@ subroutine io_relay_fn()
   character(len=8) :: cio_name
   logical :: ok
 
-  call io_relay_mod_init()
-relay_debug = .true.
+  relay_debug = .true.
   if(relay_debug) then   ! mem % pe() % io_ra
     call verify_translations()
   endif
+
+  model_crs   = context % get_crs(MODEL_COLOR)
+  modelio_crs = context % get_crs(MODEL_COLOR + RELAY_COLOR) 
+  allio_crs   = context % get_crs(SERVER_COLOR + RELAY_COLOR) 
+  relay_crs   = context % get_crs(RELAY_COLOR)
+  server_crs  = context % get_crs(SERVER_COLOR)
+  node_crs    = context % get_crs(NODE_COLOR)
 
   model    = model_crs % comm
   modelio  = modelio_crs % comm
   allio    = allio_crs % comm
   relay    = relay_crs % comm
   server   = server_crs % comm
-  nodecom  = nodecom_crs % comm
+  nodecom  = node_crs % comm
   
   rank = relay_crs % rank
   new = 0
@@ -301,14 +304,14 @@ relay_debug = .true.
   old = io_relay_debug(new)
   size = relay_crs % size
   write(6,*)'in pseudo io-relay, PE',rank+1,' of',size,' debug mode (old,new) =',old, new
-  if(relay_debug) write(6,*)'      model+io node PE',nodecom_crs % rank + 1, ' of', nodecom_crs % size
-  if(relay_debug) write(6,*)'          full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
-  if(relay_debug) call print_comms(model, modelio, allio, relay, server, nodecom)
+  if (relay_debug) write(6,*)'      model+io node PE', node_crs % rank + 1, ' of', node_crs % size
+  ! if (relay_debug) write(6,*)'          full node PE', fullnode_crs % rank + 1,' of', fullnode_crs % size
+  if (relay_debug) call print_comms(model, modelio, allio, relay, server, nodecom)
 
 !   call MPI_Barrier(modelio, ierr)        ! barrier 1 compute/relay
 
   ncompute = modelio_crs % size - relay_crs % size
-  arena = ma % addr()
+  arena = context % get_local_arena_ptr()
   write(6,*) 'INFO: number of compute processes found on node =',ncompute
 
   if(rank == 0) then              ! outbound relay PR
@@ -390,7 +393,7 @@ relay_debug = .true.
   call IOserver_set_time_to_quit()              ! activate quit signal for NO-OP PEs
   write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'Final: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
-  call ioserver_finalize
+  ! call ioserver_finalize
 !   call MPI_Finalize(ierr)                   ! DO NOT return to caller, call finalize, then stop
   stop
 1 format(A,I10,A,Z10.8,A,Z18.16,A,I10)
@@ -430,7 +433,7 @@ subroutine io_server_out()
   write(6,'(A,(15I5))')' DEBUG: colors =',mem % pe(0:max_smp_pe) % color
   write(6,*)'Final:       full node PE',fullnode_crs % rank + 1,' of', fullnode_crs % size
 
-  call ioserver_finalize
+  ! call ioserver_finalize
 !   call mpi_finalize(ierr)
   stop
 end subroutine io_server_out

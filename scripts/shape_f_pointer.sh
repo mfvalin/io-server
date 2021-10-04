@@ -29,6 +29,8 @@ EOT
 for RI in I R ; do
   [[ $RI == I ]] && RANGE="1 2 4 8"
   [[ $RI == R ]] && RANGE="4 8"
+  [[ $RI == I ]] && PARAM_DECLARE="integer, parameter :: I = TKR_INTEGER"
+  [[ $RI == R ]] && PARAM_DECLARE="integer, parameter :: R = TKR_REAL"
   for L in $RANGE ; do
     for D in 5 4 3 2 1 ; do
     if [[ $RI == I ]] ; then
@@ -61,8 +63,7 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
   type(C_PTR) :: cptr, ref
   integer(C_SIZE_T) :: asz
   integer :: tkr, status, bsz
-  integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
+  ${PARAM_DECLARE}
 
   nullify(p)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
@@ -100,8 +101,7 @@ function ${RI}${L}${D}D_bm(p, bm) result(status)  ! fortran pointer to metadata 
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
+  ${PARAM_DECLARE}
   integer :: tkr, ix
 
   status = -1
@@ -113,7 +113,7 @@ function ${RI}${L}${D}D_bm(p, bm) result(status)  ! fortran pointer to metadata 
   bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
   bm % a % d   = 1
   do ix = 1, ${D}                   ! copy array dimensions
-    bm % a % d(i) = size(p, ix)
+    bm % a % d(ix) = size(p, ix)
   enddo
   bm % p = transfer(LOC(p), bm % p) ! array address
   
@@ -127,8 +127,7 @@ function bm_${RI}${L}${D}D(p, bm, strict) result(status)  ! metadata to pointer 
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
-  integer, parameter :: R = TKR_REAL
+  ${PARAM_DECLARE}
   integer :: tkr, tp, kd, rk
 
   status = -1

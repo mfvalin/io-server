@@ -87,38 +87,22 @@
  \endverbatim
 */
 
-#include <io-server/shmem_heap.h>
-
-// the block that follows was extracted to io-server/shmem_heap.h
-#ifndef MAX_HEAPS
-
 // \cond DOXYGEN_SHOULD_SKIP_THIS
 //   C_StArT
 #include <io-server/cb_data.h>
 
 // remain consistent with io-server package
 
-// heap element (see data_element in common.h)<br>
-// if data_element is int32_t, "small" heap, with no more than 2*1024*1024*1024 - 1 elements (8 GBytes)
-// heap element is identical to data_element
-// typedef data_element heap_element
-
-//!> heap element (same as data_element)
-#if defined(DATA_ELEMENT_64)
-typedef int64_t heap_element ;
-#else
-typedef data_element heap_element ;
-#endif
-// #define heap_element data_element
+typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able to contain its own size)
 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 64
 
 //!> HEAD marker below block
-#define HEAD 0xCAFEFADE
+const heap_element HEAD = 0xCAFEFADE;
 
 //!> TAIL marker above block
-#define TAIL 0xBEBEFADA
+const heap_element TAIL = 0xBEBEFADA;
 
 //!> heap statistics
 typedef struct{
@@ -141,8 +125,6 @@ typedef  struct {
   } meta_c;
 //    C_EnD
 // \endcond
-
-#endif
 
 //!> number of registered heaps
 static int32_t nheaps = 0 ;
@@ -193,8 +175,8 @@ void ShmemHeapDumpInfo(
   for(i = 0 ; i < MAX_HEAPS ; i++) {
     if( heap_table[i].bot != NULL) {
       printf("heap %2d, (%p : %p), high point: %ld bytes, allocated %ld blocks (%ld bytes)\n",
-             i, heap_table[i].bot, heap_table[i].top , 
-             (heap_table[i].inf)->max * sizeof(heap_element) , 
+             i, (void*)heap_table[i].bot, (void*)heap_table[i].top, 
+             (heap_table[i].inf)->max * sizeof(heap_element), 
              (heap_table[i].inf)->nblk, (heap_table[i].inf)->nbyt) ;
     }
   }
@@ -476,7 +458,7 @@ void *ShmemHeapInit(
   ){
 //  C_EnD
   heap_element *h = (heap_element *) addr ;
-  heap_element heap_sz ;
+  size_t heap_sz ;
   heap_stats *stats ;
 
   if(h == NULL) h = (heap_element *) malloc(sz) ;
@@ -495,7 +477,6 @@ void *ShmemHeapInit(
   stats->max  = 0 ;             // high water mark
   stats->nblk = 0 ;             // allocated blocks
   stats->nbyt = 0 ;             // bytes allocated
-  
 
   ShmemHeapRegister(h) ;        // register Heap for block validation purpose
   return h ;                    // O.K. return address of Heap
@@ -545,12 +526,12 @@ int32_t ShmemHeapCheck(
 
     if(sz < 5 && sz > 0) return 3 ;             // valid size must be > 4
     if(h[cur+1] != HEAD || h[cur+sz-2] != TAIL){
-      printf("trampled block bounds marker(s), expected %8.8x %8.8x, found %8.8x %8.8x\n",
+      printf("trampled block bounds marker(s), expected %8.8lx %8.8lx, found %8.8lx %8.8lx\n",
              HEAD, TAIL, h[cur+1], h[cur+sz-2]);
       return 4 ; 
     }
     if(h[cur+sz-1] != sz) {                     // check tail size marker
-      printf("bad tail size marker, got %d, expected %d\n",h[cur+sz-1], sz);
+      printf("bad tail size marker, got %ld, expected %ld\n",h[cur+sz-1], sz);
       return 4 ;                                // tail size marker not consistent
     }
     if(h[cur] > 0){                             // free block
@@ -596,7 +577,7 @@ void *ShmemHeapAllocBlock(
 //     while(! __sync_bool_compare_and_swap(h + limit, 0, -1) ) ;  // wait for 0, then set to -1 to indicate lock
     while(! __sync_bool_compare_and_swap(h + limit, 0, 1) ) ;  // wait for 0, then set to 1 to indicate lock
   }
-  bsz += 4 ;                                         // add head + tail elements
+  bsz += 2 * sizeof(heap_element);                   // add head + tail elements
   for(cur = 1 ; cur < limit ; cur += sz){            // scan block list to find/make a large enough free block
     sz = (h[cur] < 0) ? -h[cur] : h[cur] ;           // abs(h[cur])
     if(h[cur] < 0) continue ;                        // block is not free
@@ -610,11 +591,11 @@ void *ShmemHeapAllocBlock(
       h[next - 2] = TAIL ;
       h[next - 1] = sz ;                             // tail size marker
     }
-    if(bsz <= sz){                                   // block large enough to satisfy request
+    if(bsz <= (size_t)sz){                           // block large enough to satisfy request
       t = h + cur + 2 ;                              // point to element following size marker
       (heap_table[index].inf)->nblk += 1 ;
       (heap_table[index].inf)->nbyt += nbyt ;
-      if(sz - bsz > 64) {             //  split block if worth it (more than 64 extra elements)
+      if (sz - bsz > 64) {             //  split block if worth it (more than 64 extra elements)
         h[cur]       =  -bsz ;        // head count (lower block)
         h[cur+1]     =  HEAD ;        // low  marker
         h[cur+bsz-2] =  TAIL ;        // tail marker
@@ -627,7 +608,9 @@ void *ShmemHeapAllocBlock(
       }
       else {
         h[cur] = -sz;
-        if( (cur + sz) > (heap_table[index].inf)->max ) (heap_table[index].inf)->max = (cur + sz) ;
+        if ((uint64_t)(cur + sz) > (heap_table[index].inf)->max) {
+          (heap_table[index].inf)->max = (cur + sz);
+        }
       }
     }else{
 //       printf("block is too small to allocate, need %d, have %d\n", bsz, sz-2);
@@ -717,7 +700,7 @@ int32_t ShmemHeapFreeBlock(
   nw = h[0];                       // if block is in use, nw will be negative
   if(nw >= 0) return -2 ;          // certainly not a block in use
   nw = -nw ;                       // make count positive
-  memory_fence();                  // make sure every read operation within this block has been completed before freeing it
+  full_memory_fence();             // make sure every read operation within this block has been completed before freeing it
   h[0] = nw ;                      // mark memory block as free
   return 0;
 }

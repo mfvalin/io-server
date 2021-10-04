@@ -159,7 +159,6 @@ int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose
 distributed_circular_buffer_p DCB_create_bytes(
     MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
     MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
-    const int32_t num_producers, //!< [in] Number of producer processes in the communicator (number of buffer instances)
     const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
     const size_t  num_bytes      //!< [in] Number of bytes in a single circular buffer (only needed on the root process)
 );

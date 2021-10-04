@@ -31,7 +31,7 @@ module circular_buffer_module
 
   private
 
-  public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8
+  public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8, num_char_to_num_int
 
   !> \brief circular_buffer user defined type
   type, public :: circular_buffer
@@ -73,7 +73,7 @@ contains
     if (is_valid) then
       is_valid = (CB_check_integrity(this % p) == 0)
     else
-      print *, 'ERROR, CB pointer is not even associated'
+      print *, 'ERROR: CB pointer is not even associated'
     end if
   end function is_valid
 

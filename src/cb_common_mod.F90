@@ -44,4 +44,12 @@ contains
     endif
   end function get_type_size
 
+  function num_char_to_num_int(num_char) result(num_int)
+    implicit none
+    integer, intent(in) :: num_char
+    integer             :: num_int
+
+    num_int = (num_char + 3) / 4
+  end function num_char_to_num_int
+
 end module cb_common_module
