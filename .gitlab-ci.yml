@@ -56,7 +56,7 @@ test_job_regular_gnu_single_node:
     - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
     - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
 
-test_job_regular_gnu_single_node:
+test_job_regular_gnu_multi_node:
   stage: test_batch
   variables:
     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
