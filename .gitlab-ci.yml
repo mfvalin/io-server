@@ -66,7 +66,7 @@ test_job_regular_gnu_multi_node:
     ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
     ORD_SOUMET_C: "${NUM_CPUS}x1"
     ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-regular-single-node
+    ORD_SOUMET_JN: io-server-regular-multi-node
     ORD_SOUMET_M: "4G"
     ORD_SOUMET_TMPFS: "1024M"
     MPI_COMMAND: "mpirun"
