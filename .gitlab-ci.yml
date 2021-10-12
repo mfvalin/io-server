@@ -56,25 +56,25 @@ test_job_regular_gnu_single_node:
     - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
     - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
 
-test_job_regular_gnu_multi_node:
-  stage: test_batch
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-    NUM_CPUS: "160"
-    OMPI_MCA_opal_cuda_support: "0"
+# test_job_regular_gnu_multi_node:
+#   stage: test_batch
+#   variables:
+#     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+#     NUM_CPUS: "160"
+#     OMPI_MCA_opal_cuda_support: "0"
 
-    ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}x1"
-    ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-regular-multi-node
-    ORD_SOUMET_M: "4G"
-    ORD_SOUMET_TMPFS: "1024M"
-    MPI_COMMAND: "mpirun"
+#     ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
+#     ORD_SOUMET_C: "${NUM_CPUS}x1"
+#     ORD_SOUMET_W: "30"
+#     ORD_SOUMET_JN: io-server-regular-multi-node
+#     ORD_SOUMET_M: "4G"
+#     ORD_SOUMET_TMPFS: "1024M"
+#     MPI_COMMAND: "mpirun"
 
-  script:
-    - cd ${build_dir}
-    - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
-    - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
+#   script:
+#     - cd ${build_dir}
+#     - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
+#     - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
 
 
 configure_job_big_intel:
@@ -117,16 +117,16 @@ test_job_big_intel_single_node:
     - pwd
     - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
 
-test_job_big_intel_multi_node:
-  stage: test_batch
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
-    NUM_CPUS: "160"
-    ORD_SOUMET_MACH: ${BIG_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}x1"
-    ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-big-multi-node
-    MPI_COMMAND: "aprun"
-  script:
-    - cd ${build_dir}
-    - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
+# test_job_big_intel_multi_node:
+#   stage: test_batch
+#   variables:
+#     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
+#     NUM_CPUS: "160"
+#     ORD_SOUMET_MACH: ${BIG_MACHINE_1}
+#     ORD_SOUMET_C: "${NUM_CPUS}x1"
+#     ORD_SOUMET_W: "30"
+#     ORD_SOUMET_JN: io-server-big-multi-node
+#     MPI_COMMAND: "aprun"
+#   script:
+#     - cd ${build_dir}
+#     - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
