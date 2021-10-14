@@ -4,7 +4,6 @@ module ioserver_message_module
   use ioserver_constants
   implicit none
   private
-  save
 
   type, public :: ioserver_messenger
     private
@@ -71,10 +70,10 @@ module ioserver_message_module
   end type model_record
 
   type, public :: message_header
-    integer(C_INT) :: length  = -1
-    integer(C_INT) :: command = -1
-    integer(C_INT) :: stream  = -1
-    integer(C_INT) :: tag     = -1
+    integer(C_INT) :: length      = -1
+    integer(C_INT) :: command     = -1
+    integer(C_INT) :: stream_id   = -1
+    integer(C_INT) :: tag         = -1
     integer(C_INT) :: sender_global_rank = -1
   end type message_header
 
@@ -85,7 +84,7 @@ module ioserver_message_module
   integer, parameter, public :: MSG_COMMAND_STOP        = 4
   integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 5
 
-  public :: message_header_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message
+  public :: message_header_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message, message_header_print
 contains
 
   function message_header_size_int()
@@ -183,5 +182,12 @@ contains
     type(comm_rank_size), intent(in) :: model_crs
     this % model_crs = model_crs
   end subroutine set_model_crs
+
+  subroutine message_header_print(header)
+    implicit none
+    type(message_header), intent(in) :: header
+    print '(A, I8, A, I3, A, I3, A, I8, A, I5)', &
+      'Header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream_id, ', tag ', header % tag, ', rank ', header % sender_global_rank
+  end subroutine message_header_print
 
 end module ioserver_message_module

@@ -16,6 +16,7 @@ set(TEST_SOURCES
    put_error.F90
 #   small_dcb_test.c
    simple_mutex.F90
+   stream_file_open.F90
    test_memory_arena.F90
    test_serializer.F90
    test_shmem_heap.F90

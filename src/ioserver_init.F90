@@ -145,6 +145,7 @@ module ioserver_internal_mod
   use circular_buffer_module
   use distributed_circular_buffer_module
   use ioserver_constants
+  use ioserver_file_module
   use ioserver_memory_mod
   use ioserver_message_module
   use shmem_arena_mod
@@ -229,7 +230,7 @@ module ioserver_internal_mod
     type(shmem_arena)      :: local_arena          ! local memory arena
     type(heap)             :: local_heap           ! local heap (located in memory arena)
     type(circular_buffer)  :: local_cio_in         ! inbound circular buffer  (located in memory arena)
-    type(circular_buffer)  :: local_cio_out        ! outbound circular buffer  (located in memory arena)
+    type(circular_buffer)  :: local_server_bound_cb        ! outbound circular buffer  (located in memory arena)
     type(distributed_circular_buffer) :: local_dcb ! Distributed circular buffer for communication b/w relay and server processes
     type(heap)             :: node_heap            ! On server node only. Heap that everyone there can use
 
@@ -238,35 +239,49 @@ module ioserver_internal_mod
 
     integer, dimension(:), pointer :: iocolors => NULL()     ! color table for io server and relay processes
 
-    type(ioserver_messenger), pointer :: messenger => NULL()
+    type(ioserver_messenger),        pointer :: messenger => NULL()
+    type(stream_file), dimension(:), pointer :: common_stream_files => NULL()  ! Located in shared memory
   contains
 
-    procedure, pass :: init => IOserver_int_init
-    procedure, pass, private :: init_communicators => IOserver_init_communicators
-    procedure, pass, private :: init_shared_mem => IOserver_init_shared_mem
+    private
+
+    procedure, pass, public :: init => IOserver_int_init
+    procedure, pass :: init_communicators => IOserver_init_communicators
+    procedure, pass :: init_shared_mem => IOserver_init_shared_mem
     procedure, pass :: is_initialized
+
+    procedure, pass         :: finalize_model
+    procedure, pass         :: finalize_relay
+    procedure, pass         :: finalize_server
+    procedure, pass, public :: finalize => ioserver_context_finalize_manually
     final :: IOserver_int_finalize
 
-    procedure, pass :: get_crs => IOserver_get_crs
-    procedure, pass :: get_local_heap => IOserver_get_heap
-    procedure, pass :: get_server_bound_cb => IOserver_get_cio_out
-    procedure, pass :: get_model_bound_cb => IOserver_get_cio_in
-    procedure, pass :: get_dcb => IOserver_get_dcb
-    procedure, pass :: get_relay_shmem => IOserver_get_relay_shmem
-    procedure, pass :: get_messenger => IOserver_get_messenger
-    procedure, pass :: get_local_arena_ptr
+    procedure, pass, public :: get_crs => IOserver_get_crs
+    procedure, pass, public :: get_local_heap => IOserver_get_heap
+    procedure, pass, public :: get_server_bound_cb => IOserver_get_server_bound_cb
+    procedure, pass, public :: get_model_bound_cb => IOserver_get_cio_in
+    procedure, pass, public :: get_dcb => IOserver_get_dcb
+    procedure, pass, public :: get_relay_shmem => IOserver_get_relay_shmem
+    procedure, pass, public :: get_messenger => IOserver_get_messenger
+    procedure, pass, public :: get_local_arena_ptr
 
-    procedure, pass :: get_server_bound_cb_list
-    procedure, pass :: get_heap_list
+    procedure, pass, public :: get_server_bound_cb_list
+    procedure, pass, public :: get_heap_list
 
-    procedure, pass :: no_op => IOserver_noop
-    procedure, pass :: set_relay_fn  => IOserver_set_relay
-    procedure, pass :: set_server_fn => IOserver_set_server
-    procedure, pass :: set_debug => IOserver_set_debug
+    procedure, pass         :: no_op => IOserver_noop
+    procedure, pass, public :: set_relay_fn  => IOserver_set_relay
+    procedure, pass, public :: set_server_fn => IOserver_set_server
+    procedure, pass, public :: set_debug => IOserver_set_debug
 
-    procedure, pass :: open_file => IOserver_open_file
-    procedure, pass :: ptr_translate_to
-    procedure, pass :: ptr_translate_from
+    ! procedure, pass, public :: open_file => IOserver_open_file
+    procedure, pass, public :: open_file_model
+    procedure, pass, public :: open_file_server
+    procedure, pass, public :: close_file_server
+
+    
+    procedure, pass, public :: ptr_translate_to
+    procedure, pass, public :: ptr_translate_from
+
     procedure, pass :: fetch_node_shmem_structs
     procedure, pass :: print_io_colors
     procedure, pass :: verify_translations
@@ -274,22 +289,13 @@ module ioserver_internal_mod
 
 contains
 
-! function get_server_bound_cb(context) result(cb)
-!   implicit none
-!   class(ioserver_context), intent(in) :: context
-!   type(circular_buffer), intent(out) :: cb
-
-!   cb = context % local_cio_out
-! end function get_server_bound_cb
-
-function IOserver_open_file(context, filename) result(new_file)
-  use ioserver_file_module
+function open_file_model(context, filename) result(new_file)
   implicit none
   class(ioserver_context), intent(inout) :: context
   character(len=*),        intent(in)    :: filename
   type(server_file) :: new_file
 
-  integer :: status
+  logical :: success
 
   if (.not. context % is_initialized()) then
     print *, 'ERROR: Cannot open file, context is *not* initialized.'
@@ -300,13 +306,71 @@ function IOserver_open_file(context, filename) result(new_file)
 
   new_file = server_file(context % global_rank, &
                          context % local_heap, &
-                         context % local_cio_out, &
+                         context % local_server_bound_cb, &
                          context % debug_mode, &
                          context % messenger)
-  status = new_file % open(filename)
+  success = new_file % open(filename)
 
-  if (status .ne. 0) print *, 'ERROR: Unable to open file, for some reason'
-end function IOserver_open_file
+  if (.not. success) print *, 'ERROR: Unable to open file, for some reason'
+end function open_file_model
+
+function open_file_server(context, filename, stream_id) result(new_file)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  character(len=*),        intent(in)    :: filename
+  integer,                 intent(in)    :: stream_id
+  type(stream_file), pointer :: new_file
+
+  type(stream_file), pointer :: tmp_file
+  logical :: success
+
+  nullify(new_file)
+  tmp_file => context % common_stream_files(stream_id)
+
+  if (mod(stream_id, context % local_dcb % get_num_consumers()) .ne. context % local_dcb % get_consumer_id() + 1) then
+    print *, 'ERROR, this file should be opened by consumer ', stream_id, context % local_dcb % get_consumer_id()
+    error stop 1
+  end if
+
+  if (tmp_file % is_open()) then
+    if (.not. tmp_file % is_same_name(filename)) then
+      print *, 'ERROR, trying to RE-open a file with a different name!', filename
+      error stop 1
+    end if
+    new_file => tmp_file
+    return
+  end if
+
+  success = tmp_file % open(stream_id, filename, context % local_dcb % get_consumer_id())
+  
+  if (.not. success) then
+    print *, 'ERROR, unable to properly open stream file ', filename, stream_id
+    error stop 1
+  end if
+
+  new_file => tmp_file
+end function open_file_server
+
+function close_file_server(context, stream_id) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer,                 intent(in)    :: stream_id
+  logical :: success
+
+  type(stream_file), pointer :: the_file
+
+  success = .false.
+  the_file => context % common_stream_files(stream_id)
+  if (the_file % is_open()) then
+    if (the_file % get_owner_id() .ne. context % local_dcb % get_consumer_id()) then
+      print *, 'ERROR, trying to close a file not owned by this consumer', stream_id, context % local_dcb % get_consumer_id()
+      return
+    end if
+    success = the_file % close()
+  else
+    success = .true.
+  end if
+end function close_file_server
 
 
 ! from OTHER PE space address ==> LOCAL space address (in shared memory arena)
@@ -595,12 +659,12 @@ function IOserver_get_cio_in(context) result(cio)
   cio = context % local_cio_in
 end function IOserver_get_cio_in
 
-function IOserver_get_cio_out(context) result(cio)
+function IOserver_get_server_bound_cb(context) result(cio)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(circular_buffer) :: cio
-  cio = context % local_cio_out
-end function IOserver_get_cio_out
+  cio = context % local_server_bound_cb
+end function IOserver_get_server_bound_cb
 
 function IOserver_get_dcb(context) result(dcb)
   implicit none
@@ -695,12 +759,92 @@ function is_initialized(context)
   is_initialized = context % color .ne. NO_COLOR
 end function is_initialized
 
+subroutine finalize_model(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  type(message_header) :: header
+  logical :: success
+
+  if (this % color == MODEL_COLOR) then
+      call this % messenger % bump_tag()
+      header % length  = message_header_size_int()
+      header % command = MSG_COMMAND_STOP
+      header % tag     = this % messenger % get_msg_tag()
+      success = this % local_server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+      success = this % local_server_bound_cb % put(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+  else
+    print *, 'Should NOT be calling "finish_model"'
+  end if
+end subroutine finalize_model
+
+subroutine finalize_relay(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  type(message_header) :: header
+  logical :: success
+
+  if (this % color == RELAY_COLOR) then
+    ! Send a stop signal
+    if (this % debug_mode) print *, 'Relay sending STOP signal'
+    header % length = 0
+    header % command = MSG_COMMAND_STOP
+    success = this % local_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+    success = this % local_dcb % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+
+    if (.not. success) then
+      if (this % debug_mode) print *, 'WARNING: Could not send a stop signal!!!'
+    end if
+  end if
+end subroutine finalize_relay
+
+subroutine finalize_server(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  type(stream_file), pointer :: file
+  logical :: success
+  integer :: i
+
+  do i = 1, MAX_NUM_STREAM_FILES
+    file => this % common_stream_files(i)
+    if (file % is_open()) then
+      if (file % get_owner_id() == this % local_dcb % get_consumer_id()) then
+        print *, 'Heeeeeyyyy forgot to close file #, owned by #', i, file % get_owner_id()
+        success = file % close()
+      end if
+    end if
+  end do
+end subroutine finalize_server
+
+subroutine ioserver_context_finalize_manually(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  if (this % is_initialized()) then
+    call IOserver_set_time_to_quit()
+
+    if (this % color == SERVER_COLOR) then
+      call this % finalize_server()
+    else if (this % color == MODEL_COLOR) then
+      call this % finalize_model()
+    else if (this % color == RELAY_COLOR) then
+      call this % finalize_relay()
+    end if
+
+    if (associated(this % iocolors)) deallocate(this % iocolors)
+    if (associated(this % messenger)) deallocate(this % messenger)
+    call this % local_dcb % delete() ! This will block if not everyone calls it
+
+    this % color = NO_COLOR
+  end if
+end subroutine ioserver_context_finalize_manually
+
 subroutine IOserver_int_finalize(context)
+  implicit none
   type(ioserver_context), intent(inout) :: context
-  call IOserver_set_time_to_quit()
-  if (associated(context % iocolors)) deallocate(context % iocolors)
-  if (associated(context % messenger)) deallocate(context % messenger)
-  call context % local_dcb % delete()
+  call context % finalize()
 end subroutine IOserver_int_finalize
 
 function IOserver_init_communicators(context, nio_node, app_class) result(success)
@@ -857,7 +1001,7 @@ function IOserver_init_shared_mem(context) result(success)
   integer     :: status, temp, total_errors
   type(C_PTR) :: temp_ptr
   type(stream_file)  :: dummy_stream_file
-  type(simple_mutex) :: dummy_simple_mutex
+  ! type(simple_mutex) :: dummy_simple_mutex
 
   success = .false.
   num_errors = 0              ! none so far
@@ -890,23 +1034,22 @@ function IOserver_init_shared_mem(context) result(success)
   ! ============================ IO server process ==========================
   ! =========================================================================
     ! Allocate shared memory used for intra node communication between PEs on a server node
-    context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm)
+    context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm) ! The heap
 
-    context % server_file_shmem_size = MAX_NUM_STREAM_FILES * (storage_size(dummy_stream_file) / 8 + 4)
-    context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm)
+    context % server_file_shmem_size = MAX_NUM_STREAM_FILES * (storage_size(dummy_stream_file) / 8)
+    context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm) ! The set of files that can be opened/written
 
     if  (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
       print *, 'ERROR: We have a problem! server_heap_shmem/server_file_shmem are not valid!'
       error stop 1
     end if
 
+    call c_f_pointer(context % server_file_shmem, context % common_stream_files, [MAX_NUM_STREAM_FILES])
+
     ! Create server shared memory heap
     if (context % server_comm_rank == 0) then
-      temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)
-
-
-      ! print *, 'Storage size stream_file/simple_mutex: ', storage_size(dummy_stream_file), storage_size(dummy_simple_mutex)
-
+      temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)  ! Initialize heap
+      context % common_stream_files(:) = stream_file()                                                        ! Initialize stream files
     else
       temp_ptr = context % node_heap % clone(context % server_heap_shmem)
       status   = context % node_heap % register(context % server_heap_shmem)
@@ -985,7 +1128,7 @@ function IOserver_init_shared_mem(context) result(success)
       sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
       temp_ptr = context % local_arena % newblock(sz32 / 4, cioout_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
-      success = context % local_cio_out % create_bytes(temp_ptr, cb_size)
+      success = context % local_server_bound_cb % create_bytes(temp_ptr, cb_size)
       if (.not. success) goto 2                              ! cio creation failed
       mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
 
@@ -1027,10 +1170,10 @@ function IOserver_init_shared_mem(context) result(success)
       temp_ptr = context % local_arena % newblock(sz32 / 4, cioout_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
       if (context % debug_mode) call print_created(temp_ptr, cioout_name, sz32)
-      success = context % local_cio_out % create_bytes(temp_ptr, cb_size)
+      success = context % local_server_bound_cb % create_bytes(temp_ptr, cb_size)
       if (.not. success) goto 2                              ! cio creation failed
       ! inject signature data into outbound buffer to prime the pump
-!       nfree = local_cio_out % atomic_put( [mem % pe(smp_rank) % rank + 10000], 1, .true.)
+!       nfree = local_server_bound_cb % atomic_put( [mem % pe(smp_rank) % rank + 10000], 1, .true.)
       mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
     endif
 

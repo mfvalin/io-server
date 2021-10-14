@@ -46,16 +46,23 @@ module ioserver_file_module
 
   type, public :: stream_file
     private
-    integer :: stream_id = -1       ! File ID, for internal use
+    integer :: stream_id = -1     ! File ID, for internal use
+    integer :: unit = -1          ! Fortran file unit, when open
+    integer :: owner_id = -1      ! Who owns (will read/write into) this file
+    integer :: mutex_value = 0    ! For later, if we need to lock this file with a mutex
     character(len=:), allocatable :: name
-    integer :: unit = -1
-
-    type(simple_mutex) :: mutex
 
     contains
-    procedure :: open    => stream_file_open
-    procedure :: is_open => stream_file_is_open
+    procedure :: open     => stream_file_open
+    procedure :: close    => stream_file_close
+    procedure :: is_open  => stream_file_is_open
+    procedure :: is_valid => stream_file_is_valid
+    procedure :: print    => stream_file_print
+    procedure :: is_same_name => stream_file_is_same_name
+    procedure :: get_owner_id => stream_file_get_owner_id
     final     :: stream_file_finalize
+
+    procedure, private :: make_full_filename => stream_file_make_full_filename
   end type stream_file
 
 contains
@@ -108,17 +115,15 @@ contains
 
   end function server_file_is_open
 
-  function server_file_open(this, name) result(status)
+  function server_file_open(this, name) result(success)
     implicit none
     class(server_file),    intent(INOUT) :: this
     character(len=*),      intent(IN)    :: name
-    integer :: status
+    logical :: success
 
     integer :: lname
     type(message_header) :: header
-    logical :: success
 
-    status = -1
     success = .false.
 
     if (.not. this % is_valid()) return ! wrong version
@@ -137,31 +142,45 @@ contains
     allocate(this % name(lname))
     this % name(1:lname) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
 
-    header % length  = lname
-    header % command = MSG_COMMAND_OPEN_FILE
-    header % stream  = this % stream_id
-    header % tag     = this % messenger % get_msg_tag()
+    header % length     = lname
+    header % command    = MSG_COMMAND_OPEN_FILE
+    header % stream_id  = this % stream_id
+    header % tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
 
     success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
     success = this % server_bound_cb % put(this % name, int(lname, kind=8), CB_KIND_CHAR, .false.) .and. success
     success = this % server_bound_cb % put(lname, 1_8, CB_KIND_INTEGER_4, .true.) .and. success       ! Append length and commit message
 
-    if (success) status = 0
   end function server_file_open
 
-  function server_file_close(this) result(status)
+  function server_file_close(this) result(success)
     implicit none
     class(server_file), intent(INOUT) :: this
-    integer :: status
+    logical :: success
 
-    status = -1
-    if(this % stream_id <= 0)                return    ! not open
-    if(.not. associated(this % name)) return    ! not open
+    type(message_header) :: header
+
+    success = .false.
+    if (.not. this % is_open()) return
 
     call this % messenger % bump_tag()
+
+    header % length = message_header_size_int()
+    header % stream_id = this % stream_id
+    header % tag = this  % messenger % get_msg_tag()
+    header % command = MSG_COMMAND_CLOSE_FILE
+    header % sender_global_rank = this % global_rank
+
     this % stream_id = -1
     deallocate(this % name)
-    status = 0
+    nullify(this % messenger)
+    
+    success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+    success = this % server_bound_cb % put(header % length, 1_8, CB_KIND_INTEGER_4, .true.)  .and. success ! Append length + commit
+
+    call message_header_print(header)
+
   end function server_file_close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
@@ -245,10 +264,10 @@ contains
     rec % type_kind_rank = tkr
     rec % data          = p
 
-    header % length  = rec % record_length
-    header % command = MSG_COMMAND_DATA
-    header % stream  = this % stream_id
-    header % tag     = this % messenger % get_msg_tag()
+    header % length     = rec % record_length
+    header % command    = MSG_COMMAND_DATA
+    header % stream_id  = this % stream_id
+    header % tag        = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
 !
     success = .true.
@@ -274,40 +293,100 @@ contains
     status = 0
   end function server_file_read
 
-  function stream_file_open(this, stream_id, file_name) result(success)
+  function stream_file_open(this, stream_id, file_name, owner_id) result(success)
     implicit none
     class(stream_file), intent(inout) :: this
     integer,            intent(in)    :: stream_id
     character(len=*),   intent(in)    :: file_name
+    integer,            intent(in)    :: owner_id
     logical :: success
 
     success = .false.
     if (.not. this % is_open()) then
-      this % name = trim(file_name) // '.out'
-      print *, 'Opening file, name = ', this % name
+      this % name = this % make_full_filename(file_name)
 
       open(newunit = this % unit, file = this % name, status = 'replace', form = 'unformatted')
       this % stream_id = stream_id
+      this % owner_id = owner_id
+      print '(A, A, A, I4, A, I6, A, I4)', 'Opened file, name = ', this % name, ', stream = ', this % stream_id, ', unit = ', this % unit, ', owner ID = ', this % owner_id
       success = .true.
     end if
-
   end function stream_file_open
+
+  function stream_file_close(this) result(success)
+    implicit none
+    class(stream_file), intent(inout) :: this
+    logical :: success
+
+    success = .false.
+
+    if (this % is_open()) then
+      close(this % unit)
+      this % stream_id = -1
+      this % owner_id = -1
+      success = .true.
+    end if
+  end function stream_file_close
+
+  function stream_file_is_valid(this)
+    implicit none
+    class(stream_file), intent(in) :: this
+    logical :: stream_file_is_valid
+    stream_file_is_valid = (this % stream_id > 0)
+  end function stream_file_is_valid
 
   function stream_file_is_open(this)
     implicit none
     class(stream_file), intent(in) :: this
     logical :: stream_file_is_open
-    stream_file_is_open = (this % stream_id >= 0)
+    stream_file_is_open = .false.
+    if (this % is_valid()) stream_file_is_open = (this % unit .ne. -1)
   end function stream_file_is_open
+
+  function stream_file_make_full_filename(this, filename) result(full_filename)
+    implicit none
+    class(stream_file), intent(in) :: this
+    character(len=*),   intent(in) :: filename
+    character(len=:), allocatable :: full_filename
+    full_filename = trim(filename) // '.out'
+  end function stream_file_make_full_filename
+
+  function stream_file_is_same_name(this, filename) result(is_same_name)
+    implicit none
+    class(stream_file), intent(in) :: this
+    character(len=*),   intent(in) :: filename
+    logical :: is_same_name
+
+    is_same_name = (this % name == this % make_full_filename(filename))
+  end function stream_file_is_same_name
+
+  function stream_file_get_owner_id(this) result(owner_id)
+    implicit none
+    class(stream_file), intent(in) :: this
+    integer :: owner_id
+    owner_id = this % owner_id
+  end function stream_file_get_owner_id
 
   subroutine stream_file_finalize(this)
     implicit none
     type(stream_file), intent(inout) :: this
 
+    logical :: success
     if (this % is_open()) then
-      close(this % unit)
-      this % stream_id = -1
+      success = this % close()
+    else
+      success = .true.
     end if
   end subroutine stream_file_finalize
+
+  subroutine stream_file_print(this)
+    implicit none
+    class(stream_file), intent(in) :: this
+    if (allocated(this % name)) then
+      print '(A, I4, I4, I4, I4)', this % name, this % stream_id, this % unit, this % owner_id, this % mutex_value
+    else
+      print '(I4, I4, I4, I4)', this % stream_id, this % unit, this % owner_id, this % mutex_value
+    end if
+  end subroutine stream_file_print
 
 end module ioserver_file_module
