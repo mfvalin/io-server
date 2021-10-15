@@ -246,15 +246,15 @@ module ioserver_internal_mod
     private
 
     procedure, pass, public :: init => IOserver_int_init
-    procedure, pass :: init_communicators => IOserver_init_communicators
-    procedure, pass :: init_shared_mem => IOserver_init_shared_mem
-    procedure, pass :: is_initialized
+    procedure, pass         :: init_communicators => IOserver_init_communicators
+    procedure, pass         :: init_shared_mem => IOserver_init_shared_mem
+    procedure, pass         :: is_initialized
 
     procedure, pass         :: finalize_model
     procedure, pass         :: finalize_relay
     procedure, pass         :: finalize_server
     procedure, pass, public :: finalize => ioserver_context_finalize_manually
-    final :: IOserver_int_finalize
+    final                   :: IOserver_int_finalize
 
     procedure, pass, public :: get_crs => IOserver_get_crs
     procedure, pass, public :: get_local_heap => IOserver_get_heap
@@ -264,6 +264,7 @@ module ioserver_internal_mod
     procedure, pass, public :: get_relay_shmem => IOserver_get_relay_shmem
     procedure, pass, public :: get_messenger => IOserver_get_messenger
     procedure, pass, public :: get_local_arena_ptr
+    procedure, pass, public :: get_stream => IOserver_get_stream
 
     procedure, pass, public :: get_server_bound_cb_list
     procedure, pass, public :: get_heap_list
@@ -277,7 +278,6 @@ module ioserver_internal_mod
     procedure, pass, public :: open_file_model
     procedure, pass, public :: open_file_server
     procedure, pass, public :: close_file_server
-
     
     procedure, pass, public :: ptr_translate_to
     procedure, pass, public :: ptr_translate_from
@@ -686,6 +686,14 @@ function get_local_arena_ptr(context) result(ptr)
   type(C_PTR) :: ptr
   ptr = context % local_arena_ptr
 end function get_local_arena_ptr
+
+function IOserver_get_stream(context, stream_id) result(stream)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer,                 intent(in)    :: stream_id
+  type(stream_file), pointer :: stream
+  stream => context % common_stream_files(stream_id)
+end function IOserver_get_stream
 
 function get_server_bound_cb_list(context) result(cbs)
   implicit none

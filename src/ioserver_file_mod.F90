@@ -1,6 +1,7 @@
 
 module ioserver_file_module
   use circular_buffer_module
+  use grid_assembly_module
   use ioserver_constants
   use ioserver_message_module
   use shmem_heap
@@ -52,9 +53,15 @@ module ioserver_file_module
     integer :: mutex_value = 0    ! For later, if we need to lock this file with a mutex
     character(len=:), allocatable :: name
 
+    type(heap) :: data_heap
+    type(grid_assembly) :: partial_grid_data
+
     contains
-    procedure :: open     => stream_file_open
-    procedure :: close    => stream_file_close
+    procedure :: open       => stream_file_open
+    procedure :: close      => stream_file_close
+    procedure :: put_data   => stream_file_put_data
+    procedure :: flush_data => stream_file_flush_data
+
     procedure :: is_open  => stream_file_is_open
     procedure :: is_valid => stream_file_is_valid
     procedure :: print    => stream_file_print
@@ -318,15 +325,43 @@ contains
     class(stream_file), intent(inout) :: this
     logical :: success
 
+    integer :: num_flushed, num_incomplete
+
     success = .false.
 
     if (this % is_open()) then
+      num_flushed = this % partial_grid_data % flush_completed_grids(this % unit)
+      if (num_flushed > 0) then
+        print *, 'Flushed ', num_flushed, ' completed grids upon closing ', this % name
+      end if
+      num_incomplete = this % partial_grid_data % get_num_partial_grids()
+      if (num_incomplete > 0) then
+        print *, 'ERROR: AAAhhhh  there are still ', num_incomplete, ' incomplete grids in file'
+      end if
       close(this % unit)
       this % stream_id = -1
       this % owner_id = -1
       success = .true.
     end if
   end function stream_file_close
+
+  function stream_file_put_data(this, record, subgrid_data) result(success)
+    implicit none
+    class(stream_file),   intent(inout) :: this
+    class(model_record),  intent(in)    :: record
+    integer, intent(in), dimension(record % ni, record % nj) :: subgrid_data
+    logical :: success
+
+    success = this % partial_grid_data % put_data(record, subgrid_data)
+  end function stream_file_put_data
+
+  function stream_file_flush_data(this) result(num_lines_flushed)
+    implicit none
+    class(stream_file), intent(inout) :: this
+    integer :: num_lines_flushed
+
+    num_lines_flushed = this % partial_grid_data % flush_completed_grids(this % unit)
+  end function stream_file_flush_data
 
   function stream_file_is_valid(this)
     implicit none

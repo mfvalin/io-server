@@ -226,7 +226,6 @@ program pseudomodelandserver
   endif
 
   ! call ioserver_set_time_to_quit()
-!  write(6,*)'FINAL: serv node PE',noderank+1,' of',nodesize
   write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
   call mpi_finalize(status)
 end program
@@ -269,30 +268,10 @@ end subroutine io_server_process
 subroutine io_server_out()
 end subroutine io_server_out
 
-subroutine channel_process(data_buffer)
-  use distributed_circular_buffer_module, only : distributed_circular_buffer
-  use ISO_C_BINDING
-  implicit none
-  type(distributed_circular_buffer), intent(inout) :: data_buffer
-  integer(C_INT) :: result
-
-  ! The channel doesn't do anything other than listening
-  result = data_buffer % start_listening()
-
-  if (result .ne. 0) then
-    write (6, *) 'The receiver loop did not terminate properly!!!'
-    write (6, *) 'Terminating with error from SERVER (channel) process'
-    error stop 1
-  end if
-
-end subroutine channel_process
-
-subroutine process_message()
-end subroutine process_message
-
 function receive_message(dcb, producer_id) result(finished)
   use distributed_circular_buffer_module
   use ioserver_file_module
+  use ioserver_memory_mod
   use ioserver_message_module
   use model_write_parameters
   implicit none
@@ -303,20 +282,32 @@ function receive_message(dcb, producer_id) result(finished)
   type(message_header) :: header
   type(model_record)   :: record
   logical :: success
-  integer :: i_data_check
+  integer :: i_data_check, i_file
   integer :: message_size, end_cap
   integer(C_INT64_T) :: num_elements, num_data
   
-  type(stream_file), pointer :: opened_file
+  type(stream_file), pointer :: file_ptr
   character(len=:), allocatable :: filename
-  integer, dimension(:), allocatable, save :: model_data
-  integer, dimension(:), allocatable, save :: expected_data
+  integer, dimension(:), pointer, contiguous, save :: model_data => NULL(), expected_data => NULL()
+  integer, dimension(:, :), pointer, contiguous :: data_ptr
+  integer :: num_flushed
 
-  if (.not. allocated(model_data)) allocate(model_data(MAX_DCB_MESSAGE_SIZE_INT))
-  if (.not. allocated(expected_data)) allocate(expected_data(CB_MESSAGE_SIZE_INT))
+  if (.not. associated(model_data)) allocate(model_data(MAX_DCB_MESSAGE_SIZE_INT))
+  if (.not. associated(expected_data)) allocate(expected_data(CB_MESSAGE_SIZE_INT))
 
   ! print *, 'Receiving a message'
   finished = .false.
+
+  ! Flush any completed grid for owned files
+  do i_file = 1, MAX_NUM_STREAM_FILES
+    file_ptr => context % get_stream(i_file)
+    if (file_ptr % get_owner_id() == dcb % get_consumer_id()) then
+      num_flushed = file_ptr % flush_data()
+      if (num_flushed > 0) then
+        print '(A, I4, A)', 'Flushed ', num_flushed, ' completed grids'
+      end if
+    end if
+  end do
 
   success = dcb % peek_elems(producer_id, message_size, 1_8, CB_KIND_INTEGER_4)
 
@@ -369,6 +360,14 @@ function receive_message(dcb, producer_id) result(finished)
       end if
     end if
 
+    data_ptr(1:record % ni, 1:record % nj) => model_data
+    file_ptr => context % get_stream(header % stream_id)
+    success = file_ptr % put_data(record, data_ptr)
+    if (.not. success) then
+      print *, 'ERROR: Could not put data into partial grid!'
+      error stop 1
+    end if
+
   !---------------
   ! Open a file
   else if (header % command == MSG_COMMAND_OPEN_FILE) then
@@ -376,10 +375,10 @@ function receive_message(dcb, producer_id) result(finished)
     print *, 'Got OPEN message'
     success = dcb % get_elems(producer_id, filename, INT(header % length, kind=8), CB_KIND_CHAR, .true.)
     print *, 'Opening a file named ', filename
-    opened_file => context % open_file_server(filename, header % stream_id)
-    if (.not. opened_file % is_open()) then
+    file_ptr => context % open_file_server(filename, header % stream_id)
+    if (.not. file_ptr % is_open()) then
       print *, 'Failed to open file ', filename
-      ! error stop 1
+      error stop 1
     end if
 
   !----------------
@@ -402,6 +401,15 @@ function receive_message(dcb, producer_id) result(finished)
   else if (header % command == MSG_COMMAND_STOP) then
     print *, 'Got a STOP message'
     finished = .true.
+
+    if (associated(model_data)) then
+      deallocate(model_data)
+      nullify(model_data)
+    end if
+    if (associated(expected_data)) then
+      deallocate(expected_data)
+      nullify(expected_data)
+    end if
 
   !------------
   ! Big no-no
@@ -622,7 +630,7 @@ subroutine model_process()
   ! call sleep_us(5000)
   block
     integer :: i, j
-    do i = 0, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
+    do i = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
       ! Get memory and put data in it
       msg_array_info = node_heap % allocate(msg_array, [CB_MESSAGE_SIZE_INT])
       call block_meta_internals(msg_array_info, p, d, tkr, o)
@@ -636,12 +644,9 @@ subroutine model_process()
 
       ! Using i + 2 b/c tag is incremented when opening a file
       do j = 1, CB_MESSAGE_SIZE_INT
-        msg_array(j) = compute_data_point(global_rank, i + 2, j)
+        msg_array(j) = compute_data_point(global_rank, i + 1, j)
       end do
 
-      ! if (local_compute_id == 0) then
-      !   print *, 'Sending', msg_array(1:3), transfer(p, tmp)
-      ! end if
       ! Write the data to a file (i.e. send it to the server to do that for us)
       f_status = results_file % write(msg_array_info, my_grid, input_grid, output_grid)
 
