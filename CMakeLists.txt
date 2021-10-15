@@ -8,6 +8,7 @@ include(ec_parse_manifest)
 ec_parse_manifest()
 project(${NAME} VERSION ${VERSION} DESCRIPTION "${DESCRIPTION}")
 
+include(ec_doxygen)
 enable_testing()
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -23,11 +24,6 @@ find_package(MPI)
 if (MPI_FOUND)
    set(CMAKE_Fortran_COMPILER ${MPI_Fortran_COMPILER})
    set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
-endif()
-
-option(BUILD_DOC "Build the Doxygen documentation" FALSE)
-if (BUILD_DOC)
-  include(ec_doxygen)
 endif()
 
 add_subdirectory(src)

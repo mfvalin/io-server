@@ -139,6 +139,7 @@ module ioserver_memory_mod
 end module ioserver_memory_mod
 
 module ioserver_internal_mod
+  !> Module description
   use ISO_C_BINDING
   use mpi_f08
 
@@ -161,86 +162,81 @@ module ioserver_internal_mod
 
   integer(C_SIZE_T), parameter :: DCB_SIZE = 4 * MBYTE                  ! Size of each CB within the DCB
 
+  !> Context that allows to interact with the IO-server library (initialization + the rest of the API)
   type, public :: ioserver_context
     private
 
     integer :: color = NO_COLOR
 
-    !  ==========================================================================================
-    !                                     shared memory areas
-    !  ==========================================================================================
+    ! ---------------------
+    ! Shared memory areas
+
     ! control memory, shared by all PEs on a given SMP node (whether active PEs or NO-OP PEs)
-    type(C_PTR)       :: ctrl_shmem      = C_NULL_PTR !  address of main (control) shared memory area on this node
-    integer(C_SIZE_T) :: ctrl_shmem_size = MBYTE      !  size of above, MUST BE AT LEAST the size of shared_memory
+    type(C_PTR)       :: ctrl_shmem      = C_NULL_PTR         !< Address of main (control) shared memory area on this node
+    integer(C_SIZE_T) :: ctrl_shmem_size = MBYTE              !< Size of control shared memory
 
     ! information for model compute and IO relay PEs on a given SMP node
     ! shared memory used for heaps and circular buffers on a given SMP node
     ! (one heap and 2 circular buffers per compute PE)
     ! this memory is used for communications between IO relay and model compute PEs
-    type(C_PTR)       :: relay_shmem          = C_NULL_PTR     !  base address of relay+model PEs shared memory area
-    integer(C_SIZE_T) :: relay_shmem_size     = GBYTE          !  size of above
+    type(C_PTR)       :: relay_shmem          = C_NULL_PTR    !< Address of relay+model PEs shared memory area
+    integer(C_SIZE_T) :: relay_shmem_size     = GBYTE         !< Size of relay/model shared memory area
 
-    ! shared memory on io server node(s), used by io server PEs to communicate
-    ! used for 1 sided communications window between relay and server PEs
-    ! not much memory (if any) is normally allocated on relay PEs for this purpose
-    type(C_PTR)       :: server_heap_shmem      = C_NULL_PTR   !  base address of io server PEs shared memory area
-    integer(C_SIZE_T) :: server_heap_shmem_size = 10 * GBYTE   !  size of above (we want a lot on the server for grid assembly)
+    type(C_PTR)       :: server_heap_shmem      = C_NULL_PTR  !< Address of io server PEs shared memory area
+    integer(C_SIZE_T) :: server_heap_shmem_size = 10 * GBYTE  !< Size of server shared memory area (we want a lot on the server for grid assembly)
 
-    type(C_PTR)       :: server_file_shmem      = C_NULL_PTR
-    ! integer(C_SIZE_T) :: server_file_shmem_size = MAX_NUM_STREAM_FILES * (storage_size(stream_file) / 8 + 4)
-    integer(C_SIZE_T) :: server_file_shmem_size = 0
+    type(C_PTR)       :: server_file_shmem      = C_NULL_PTR  !< Address of server shared memory area for holding open file data
+    integer(C_SIZE_T) :: server_file_shmem_size = 0           !< Size of server shared memory area for holding open file data (computed at initialization)
 
-    !  ==========================================================================================
-    !                                       communicators
-    !  ==========================================================================================
-    type(MPI_Comm) :: global_comm   = MPI_COMM_WORLD      !  MPI "WORLD" for this set of PEs
-    integer        :: global_rank   = -1                  !  rank in global_comm
-    integer        :: global_size   =  0                  !  population of global_comm
+    type(C_PTR) :: local_arena_ptr                            !< Pointer to start of shared memory arena
+    
+    ! -----------------
+    ! Communicators
+    type(MPI_Comm) :: global_comm   = MPI_COMM_WORLD        !< MPI "WORLD" for this set of PEs
+    integer        :: global_rank   = -1                    !< rank in global_comm
+    integer        :: global_size   =  0                    !< population of global_comm
 
-    type(MPI_Comm) :: smp_comm      = MPI_COMM_NULL       !  PEs on this SMP node        (any kind ) (subset of global_comm)
-    integer        :: smp_rank      = -1                  !  rank in smp_comm
-    integer        :: smp_size      =  0                  !  population of smp_comm
+    type(MPI_Comm) :: smp_comm      = MPI_COMM_NULL         !< PEs on this SMP node        (any kind ) (subset of global_comm)
+    integer        :: smp_rank      = -1                    !< rank in smp_comm
+    integer        :: smp_size      =  0                    !< population of smp_comm
 
-    type(MPI_Comm) :: model_relay_smp_comm = MPI_COMM_NULL  ! model+relays on current node
-    type(MPI_Comm) :: model_smp_comm       = MPI_COMM_NULL  ! model PEs on current SMP node
-    type(MPI_Comm) :: relay_smp_comm       = MPI_COMM_NULL  ! relay PEs on current SMP node
+    type(MPI_Comm) :: model_relay_smp_comm = MPI_COMM_NULL  !< model+relays on current node
+    type(MPI_Comm) :: model_smp_comm       = MPI_COMM_NULL  !< model PEs on current SMP node
+    type(MPI_Comm) :: relay_smp_comm       = MPI_COMM_NULL  !< relay PEs on current SMP node
 
-    ! global_comm  = all_comm + NO-OP PEs
-    ! all_comm     = modelio_comm + server_comm
-    ! modelio_comm = model_comm   + iorelay_comm
-    type(MPI_Comm) :: all_comm             = MPI_COMM_NULL  ! non NO-OP PEs               (all nodes) (subset of global_comm)
-    type(MPI_Comm) :: allio_comm           = MPI_COMM_NULL  ! all IO PEs (relay + server) (subset of all_comm)
-    type(MPI_Comm) :: modelio_comm         = MPI_COMM_NULL  ! model compute and relay PEs (all nodes) (subset of all_comm)
-    type(MPI_Comm) :: model_comm           = MPI_COMM_NULL  ! model compute PEs           (all nodes) (subset of all_comm and modelio_comm)
-    type(MPI_Comm) :: iorelay_comm         = MPI_COMM_NULL  ! relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
-    type(MPI_Comm) :: server_comm          = MPI_COMM_NULL  ! IO server PEs               (subset of all_comm)
-    type(MPI_Comm) :: server_active_comm   = MPI_COMM_NULL  ! Server PEs that consume relay data (subset of server_comm)
+    type(MPI_Comm) :: all_comm             = MPI_COMM_NULL  !< non NO-OP PEs               (all nodes) (subset of global_comm)
+    type(MPI_Comm) :: allio_comm           = MPI_COMM_NULL  !< all IO PEs (relay + server) (subset of all_comm)
+    type(MPI_Comm) :: modelio_comm         = MPI_COMM_NULL  !< model compute and relay PEs (all nodes) (subset of all_comm)
+    type(MPI_Comm) :: model_comm           = MPI_COMM_NULL  !< model compute PEs           (all nodes) (subset of all_comm and modelio_comm)
+    type(MPI_Comm) :: iorelay_comm         = MPI_COMM_NULL  !< relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
+    type(MPI_Comm) :: server_comm          = MPI_COMM_NULL  !< IO server PEs               (subset of all_comm)
+    type(MPI_Comm) :: server_active_comm   = MPI_COMM_NULL  !< Server PEs that consume relay data (subset of server_comm)
 
-    integer :: model_relay_smp_rank = -1    !  rank in model_relay_smp_comm
-    integer :: model_relay_smp_size = 0     !  population of model_relay_smp_comm
-    integer :: server_comm_rank     = -1    !  rank in server_comm
+    integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
+    integer :: model_relay_smp_size = 0     !< population of model_relay_smp_comm
+    integer :: server_comm_rank     = -1    !< rank in server_comm
 
-    !  ==========================================================================================
-    !                        miscellaneous
-    !  ==========================================================================================
+    !----------------------------------------------------
+    ! Local instances of objects located in shared memory
+    type(shmem_arena)      :: arena                 !< Node memory arena
+    type(heap)             :: local_heap            !< Local heap for this process (located in memory arena)
+    type(circular_buffer)  :: local_cio_in          !< Model-bound circular buffer for this process (located in memory arena)
+    type(circular_buffer)  :: local_server_bound_cb !< Server-bound circular buffer for this process (located in memory arena)
+    type(distributed_circular_buffer) :: output_dcb !< Distributed circular buffer for communication b/w relay and server processes
+    type(heap)             :: node_heap             !< On server node only. Heap that everyone on the node can use
+
+    type(stream_file), dimension(:), pointer :: common_stream_files => NULL()  !< Stream files used to assemble grids and write them (shared mem)
+
+    ! ------------------
+    ! Miscellaneous
     logical :: debug_mode = .false.
 
-    type(C_PTR) :: local_arena_ptr      ! will be used to compute offsets into local arena
+    type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR !< Procedure to call on relay processes (if not NULL)
+    type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR !< Procedure to call on server processes (if not NULL)
 
-    type(shmem_arena)      :: local_arena          ! local memory arena
-    type(heap)             :: local_heap           ! local heap (located in memory arena)
-    type(circular_buffer)  :: local_cio_in         ! inbound circular buffer  (located in memory arena)
-    type(circular_buffer)  :: local_server_bound_cb        ! outbound circular buffer  (located in memory arena)
-    type(distributed_circular_buffer) :: local_dcb ! Distributed circular buffer for communication b/w relay and server processes
-    type(heap)             :: node_heap            ! On server node only. Heap that everyone there can use
+    integer, dimension(:), pointer :: iocolors => NULL()     !< Color table for io server and relay processes
+    type(ioserver_messenger), pointer :: messenger => NULL() !< Will be shared among open model files
 
-    type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR ! procedure to call on relay processes (if not NULL)
-    type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR ! procedure to call on server processes (if not NULL)
-
-    integer, dimension(:), pointer :: iocolors => NULL()     ! color table for io server and relay processes
-
-    type(ioserver_messenger),        pointer :: messenger => NULL()
-    type(stream_file), dimension(:), pointer :: common_stream_files => NULL()  ! Located in shared memory
   contains
 
     private
@@ -289,6 +285,8 @@ module ioserver_internal_mod
 
 contains
 
+!> Open a file where the model can write data
+!> \return A file object that is already open and can be written to
 function open_file_model(context, filename) result(new_file)
   implicit none
   class(ioserver_context), intent(inout) :: context
@@ -327,8 +325,8 @@ function open_file_server(context, filename, stream_id) result(new_file)
   nullify(new_file)
   tmp_file => context % common_stream_files(stream_id)
 
-  if (mod(stream_id, context % local_dcb % get_num_consumers()) .ne. context % local_dcb % get_consumer_id() + 1) then
-    print *, 'ERROR, this file should be opened by consumer ', stream_id, context % local_dcb % get_consumer_id()
+  if (mod(stream_id, context % output_dcb % get_num_consumers()) .ne. context % output_dcb % get_consumer_id() + 1) then
+    print *, 'ERROR, this file should be opened by consumer ', stream_id, context % output_dcb % get_consumer_id()
     error stop 1
   end if
 
@@ -341,7 +339,7 @@ function open_file_server(context, filename, stream_id) result(new_file)
     return
   end if
 
-  success = tmp_file % open(stream_id, filename, context % local_dcb % get_consumer_id())
+  success = tmp_file % open(stream_id, filename, context % output_dcb % get_consumer_id())
   
   if (.not. success) then
     print *, 'ERROR, unable to properly open stream file ', filename, stream_id
@@ -362,8 +360,8 @@ function close_file_server(context, stream_id) result(success)
   success = .false.
   the_file => context % common_stream_files(stream_id)
   if (the_file % is_open()) then
-    if (the_file % get_owner_id() .ne. context % local_dcb % get_consumer_id()) then
-      print *, 'ERROR, trying to close a file not owned by this consumer', stream_id, context % local_dcb % get_consumer_id()
+    if (the_file % get_owner_id() .ne. context % output_dcb % get_consumer_id()) then
+      print *, 'ERROR, trying to close a file not owned by this consumer', stream_id, context % output_dcb % get_consumer_id()
       return
     end if
     success = the_file % close()
@@ -670,7 +668,7 @@ function IOserver_get_dcb(context) result(dcb)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(distributed_circular_buffer) :: dcb
-  dcb = context % local_dcb
+  dcb = context % output_dcb
 end function IOserver_get_dcb
 
 function IOserver_get_messenger(context) result(messenger)
@@ -798,8 +796,8 @@ subroutine finalize_relay(this)
     if (this % debug_mode) print *, 'Relay sending STOP signal'
     header % length = 0
     header % command = MSG_COMMAND_STOP
-    success = this % local_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % local_dcb % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+    success = this % output_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+    success = this % output_dcb % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
 
     if (.not. success) then
       if (this % debug_mode) print *, 'WARNING: Could not send a stop signal!!!'
@@ -818,7 +816,7 @@ subroutine finalize_server(this)
   do i = 1, MAX_NUM_STREAM_FILES
     file => this % common_stream_files(i)
     if (file % is_open()) then
-      if (file % get_owner_id() == this % local_dcb % get_consumer_id()) then
+      if (file % get_owner_id() == this % output_dcb % get_consumer_id()) then
         print *, 'Heeeeeyyyy forgot to close file #, owned by #', i, file % get_owner_id()
         success = file % close()
       end if
@@ -843,7 +841,7 @@ subroutine ioserver_context_finalize_manually(this)
 
     if (associated(this % iocolors)) deallocate(this % iocolors)
     if (associated(this % messenger)) deallocate(this % messenger)
-    call this % local_dcb % delete() ! This will block if not everyone calls it
+    call this % output_dcb % delete() ! This will block if not everyone calls it
 
     this % color = NO_COLOR
   end if
@@ -1083,11 +1081,11 @@ function IOserver_init_shared_mem(context) result(success)
 
     if (context % model_relay_smp_rank == 0) then                   ! PE with rank on node == 0 creates the memory arena
       shmsz64 = context % relay_shmem_size
-      temp_ptr = context % local_arena % create(context % relay_shmem, 128, shmsz64)
+      temp_ptr = context % arena % create(context % relay_shmem, 128, shmsz64)
     else
-      temp_ptr = context % local_arena % clone(context % relay_shmem)   !  cloning is O.K. even if arena is not initialized
+      temp_ptr = context % arena % clone(context % relay_shmem)   !  cloning is O.K. even if arena is not initialized
     endif
-    context % local_arena_ptr = context % local_arena % addr()
+    context % local_arena_ptr = context % arena % addr()
     mem % pe(context % smp_rank) % io_ra = context % local_arena_ptr    ! local address of arena segment
     mem % pe(context % smp_rank) % color = context % color              ! store color of this PE in shared memory table
 
@@ -1113,32 +1111,32 @@ function IOserver_init_shared_mem(context) result(success)
       ! 85%  of per PE size for the heap
       write(heap_name  ,'(A5,I3.3)') "RHEAP", mem % pe(context % smp_rank) % rank
       sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in 32-bit elements
-      temp_ptr = context % local_arena % newblock(sz32, heap_name)
+      temp_ptr = context % arena % newblock(sz32, heap_name)
       if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
       temp_ptr = context % local_heap % create(temp_ptr, sz32)         ! allocate local heap
       temp     = context % local_heap % set_default()                  ! make local_heap the default heap
-      call context % local_heap % set_base( context % local_arena % addr() )     ! set arena address as offset base for heap
-      mem % pe(context % smp_rank) % heap = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
+      call context % local_heap % set_base( context % arena % addr() )     ! set arena address as offset base for heap
+      mem % pe(context % smp_rank) % heap = Pointer_offset(context % arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
 
       !  4%  of per PE size for inbound circular buffer
       write(cioin_name ,'(A4,I4.4)') "RCIO", mem % pe(context % smp_rank)%rank
       cb_size = INT(shmsz64 * 0.04_8, 4)                     ! 4% for model-bound CB (in bytes)
       sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
-      temp_ptr = context % local_arena % newblock(sz32, cioin_name)
+      temp_ptr = context % arena % newblock(sz32, cioin_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
       success = context % local_cio_in % create_bytes(temp_ptr, cb_size)
       if (.not. success) goto 2                              ! cio creation failed
-      mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
+      mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
 
       !  10%  of per PE size for outbound circular buffer
       write(cioout_name,'(A4,I4.4)') "RCIO", mem % pe(context % smp_rank) % rank + 1000
       cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound CB (in bytes)
       sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
-      temp_ptr = context % local_arena % newblock(sz32 / 4, cioout_name)
+      temp_ptr = context % arena % newblock(sz32 / 4, cioout_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
       success = context % local_server_bound_cb % create_bytes(temp_ptr, cb_size)
       if (.not. success) goto 2                              ! cio creation failed
-      mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
+      mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
 
     else                                                     ! compute processes
     ! =========================================================================
@@ -1147,42 +1145,42 @@ function IOserver_init_shared_mem(context) result(success)
       shmsz64 = context % relay_shmem_size / context % model_relay_smp_size      ! available size in bytes per PE on SMP node
 
       ! will also need rank on node for compute in rat table
-      !  pe() % relay_ra = local_arena % addr()
+      !  pe() % relay_ra = arena % addr()
 
       ! 85%  of per PE size for the heap
       write(heap_name  ,'(A5,I3.3)') "MHEAP",mem % pe(context % smp_rank) % rank
       sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in number of 32-bit elements
-      temp_ptr = context % local_arena % newblock(sz32, heap_name)
+      temp_ptr = context % arena % newblock(sz32, heap_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
       if (context % debug_mode) call print_created(temp_ptr, heap_name, sz32)
       temp_ptr = context % local_heap % create(temp_ptr, sz32)
       temp     = context % local_heap % set_default()                  ! make local_heap the default heap
-      call context % local_heap % set_base( context % local_arena % addr() )     ! set arena address as offset base for heap
-      mem % pe(context % smp_rank) % heap = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
+      call context % local_heap % set_base( context % arena % addr() )     ! set arena address as offset base for heap
+      mem % pe(context % smp_rank) % heap = Pointer_offset(context % arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
 
       !  4%  of per PE size for relay -> compute circular buffer
       write(cioin_name ,'(A4,I4.4)') "MCIO", mem % pe(context % smp_rank) % rank
       cb_size = INT(shmsz64 * 0.04_8, 4)                     ! Size in bytes, model-bound CB
       sz32    = INT(cb_size / 4,      4)                     ! Size in number of 32-bit elements
-      temp_ptr = context % local_arena % newblock(sz32, cioin_name)
+      temp_ptr = context % arena % newblock(sz32, cioin_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
       if (context % debug_mode) call print_created(temp_ptr, cioin_name, sz32)
       success = context % local_cio_in % create_bytes(temp_ptr, cb_size)
       if (.not. success) goto 2                              ! cio creation failed
-      mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
+      mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
 
       ! 10%  of per PE size for compute -> relay circular buffer
       write(cioout_name,'(A4,I4.4)') "MCIO", mem % pe(context % smp_rank) % rank + 1000
       cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound circular buffer (in bytes)
       sz32    = INT(cb_size / 4,     4)                      ! Size in 32-bit elements
-      temp_ptr = context % local_arena % newblock(sz32 / 4, cioout_name)
+      temp_ptr = context % arena % newblock(sz32 / 4, cioout_name)
       if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
       if (context % debug_mode) call print_created(temp_ptr, cioout_name, sz32)
       success = context % local_server_bound_cb % create_bytes(temp_ptr, cb_size)
       if (.not. success) goto 2                              ! cio creation failed
       ! inject signature data into outbound buffer to prime the pump
 !       nfree = local_server_bound_cb % atomic_put( [mem % pe(smp_rank) % rank + 10000], 1, .true.)
-      mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % local_arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
+      mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
     endif
 
     if (context % debug_mode) write(6,*)'DEBUG: allocated '//heap_name//' '//cioin_name//' '//cioout_name
@@ -1224,9 +1222,9 @@ function IOserver_init_shared_mem(context) result(success)
 
     ! Create DCB
     if (context % color == RELAY_COLOR) then
-      success = context % local_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, 0, 0_8)
+      success = context % output_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, 0, 0_8)
     else
-      success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, 2, DCB_SIZE)
+      success = context % output_dcb % create_bytes(context % allio_comm, context % server_comm, 2, DCB_SIZE)
     end if
     if (.not. success) num_errors = num_errors + 1
   endif
@@ -1275,8 +1273,8 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
   !                     SERVER processes (no return to caller)
   ! ===================================================================================
   if (iand(context % color, SERVER_COLOR) == SERVER_COLOR) then
-    if (context % local_dcb % get_channel_id() >= 0) then
-      status = context % local_dcb % start_listening()
+    if (context % output_dcb % get_channel_id() >= 0) then
+      status = context % output_dcb % start_listening()
     else if (C_ASSOCIATED(context % io_server_fn)) then
       if (context % debug_mode) print *,'INFO: io_server_fn is associated'
       call C_F_PROCPOINTER(context % io_server_fn, p)    ! associate procedure pointer with caller supplied address
@@ -1288,7 +1286,7 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
       call io_server_out()                      ! not expected to return, but ...
     endif
 
-    call context % local_dcb % delete()
+    call context % output_dcb % delete()
     call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
     write(6,*) 'FINAL: SMP node PE', context % smp_rank + 1,' of', context % smp_size
     call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop
@@ -1308,7 +1306,7 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
       write(6,*) 'INFO: no return from io_relay_fn'
       call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
 
-      call context % local_dcb % delete()
+      call context % output_dcb % delete()
       call IOserver_set_time_to_quit()          ! activate quit signal for NO-OP PEs
       write(6,*) 'FINAL: model+io node PE', context % model_relay_smp_rank + 1,'  of', context % model_relay_smp_size
       call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop
