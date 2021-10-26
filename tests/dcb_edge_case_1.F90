@@ -20,7 +20,7 @@ contains
     if (return_value .ne. 0) error stop 1
   end subroutine channel_process
 
-  subroutine consumer_process(dcb)
+  subroutine server_bound_server_process(dcb)
     implicit none
     type(distributed_circular_buffer), intent(inout) :: dcb
 
@@ -46,9 +46,9 @@ contains
 
     call dcb % print(.true.)
     
-  end subroutine consumer_process
+  end subroutine server_bound_server_process
 
-  subroutine producer_process(dcb)
+  subroutine server_bound_client_process(dcb)
     implicit none
     type(distributed_circular_buffer), intent(inout) :: dcb
 
@@ -96,7 +96,7 @@ contains
     call dcb % full_barrier()
     !------------------------
 
-  end subroutine producer_process
+  end subroutine server_bound_client_process
 
 end module dcb_edge_case_1_mod
 
@@ -110,7 +110,7 @@ program dcb_edge_case_1
   integer :: global_rank, global_size
   type(MPI_Comm) :: server_comm, producer_comm
   logical :: success
-  integer :: channel_id, consumer_id, producer_id
+  integer :: channel_id, server_consumer_id, server_bound_client_id
 
   call MPI_Init()
   call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
@@ -122,33 +122,41 @@ program dcb_edge_case_1
   end if
 
   ! Create the communicators (needed for the server only)
-  if (global_rank == 0 .or. global_rank == 1) then
+  if (global_rank == 0) then
     call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, 1, NUM_CB_BYTES)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, DCB_SERVER_BOUND_TYPE, NUM_CB_BYTES, 0_8)
+  else if (global_rank == 1) then
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
   else if (global_rank == 2) then
     call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, 0, 0_8)
+    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
   else
     print *, 'Error'
     error stop 1
   end if
 
-  if (.not. success) error stop 1
+  if (.not. success) then
+    print *, 'ERROR, could not create DCB!'
+    error stop 1
+  end if
 
-  consumer_id = dcb % get_consumer_id()
-  producer_id = dcb % get_producer_id()
+  server_consumer_id = dcb % get_server_bound_server_id()
+  server_bound_client_id = dcb % get_server_bound_client_id()
   channel_id  = dcb % get_channel_id()
 
   ! Run appropriate code, according to role
-  if (consumer_id >= 0) then
-    call consumer_process(dcb)
-  else if (producer_id >= 0) then
-    call producer_process(dcb)
+  if (server_consumer_id >= 0) then
+    call server_bound_server_process(dcb)
+  else if (server_bound_client_id >= 0) then
+    call server_bound_client_process(dcb)
   else if (channel_id >= 0) then
     call channel_process(dcb)
   else
     error stop 1
   end if
+
+  print *, 'Got here! (before deleting the DCB)'
 
   call dcb % delete()
 

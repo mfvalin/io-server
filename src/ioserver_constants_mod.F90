@@ -8,16 +8,16 @@ module ioserver_constants
   integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
   integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
 
-  integer, parameter :: NO_COLOR      = 0
-  integer, parameter :: MODEL_COLOR   = 1
-  integer, parameter :: RELAY_COLOR   = 2
-  integer, parameter :: SERVER_COLOR  = 4
-  integer, parameter :: OUTPUT_COLOR  = 8
-  integer, parameter :: INPUT_COLOR   = 16
-  integer, parameter :: INOUT_COLOR   = INPUT_COLOR + OUTPUT_COLOR
-  integer, parameter :: CHANNEL_COLOR = 32
-  integer, parameter :: NODE_COLOR    = 4096
-  integer, parameter :: NO_OP_COLOR   = 8192   ! MUST BE THE HIGHEST VALUE
+  integer, parameter :: NO_COLOR            = 0
+  integer, parameter :: MODEL_COLOR         = 1
+  integer, parameter :: RELAY_COLOR         = 2
+  integer, parameter :: SERVER_COLOR        = 4
+  integer, parameter :: SERVER_BOUND_COLOR  = 8
+  integer, parameter :: MODEL_BOUND_COLOR   = 16
+  ! integer, parameter :: INOUT_COLOR   = INPUT_COLOR + OUTPUT_COLOR
+  integer, parameter :: CHANNEL_COLOR       = 32
+  integer, parameter :: NODE_COLOR          = 4096
+  integer, parameter :: NO_OP_COLOR         = 8192   ! MUST BE THE HIGHEST VALUE
 
   integer, parameter :: IO_CONTROL   = 1000
   integer, parameter :: IO_BASE      = 1001
@@ -48,5 +48,26 @@ function IOserver_is_CRS_null(crs) result(status)   !  is this a NULL communicat
   status = (crs % rank < 0 .or. crs % size <= 0)
   if (status) crs % comm = MPI_COMM_NULL
 end function IOserver_is_CRS_null
+
+function is_color_relay(color)
+  implicit none
+  integer, intent(in) :: color
+  logical :: is_color_relay
+  is_color_relay = iand(color, RELAY_COLOR) == RELAY_COLOR
+end function is_color_relay
+
+function is_color_server(color)
+  implicit none
+  integer, intent(in) :: color
+  logical :: is_color_server
+  is_color_server = iand(color, SERVER_COLOR) == SERVER_COLOR
+end function is_color_server
+
+function is_color_model(color)
+  implicit none
+  integer, intent(in) :: color
+  logical :: is_color_model
+  is_color_model = iand(color, MODEL_COLOR) == MODEL_COLOR
+end function is_color_model
 
 end module ioserver_constants

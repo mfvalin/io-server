@@ -929,7 +929,7 @@ void CB_print_stats(
            "rank "
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) |"
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) | "
-           "max fill (%%)  | frac. writes/reads (%%)\n");
+           "max fill %%    | frac. writes/reads %%\n");
   }
 
   printf(

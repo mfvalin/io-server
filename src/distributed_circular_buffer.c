@@ -66,65 +66,6 @@ typedef struct {
 
 typedef circular_buffer_instance* circular_buffer_instance_p;
 
-/**
- * @brief All information necessary to manage a set of circuler buffers accessed remotely, whose entire data is
- * located in a single process.
- *
- * This struct is a "collective" object, in the sense that every process that wants a remote circular buffer must have
- * an instance of the entire set description, including the "root" process. The set is composed of multiple circular
- * buffer "instances".
- * The processes that will read data from the buffer instance(s) are also called the "consumers" and share ownership
- * of the data of all the collectively created circular buffers in the distributed set.
- * _They must be located on the same physical node._ A set of "channel" processes also exist on the server as
- * communication targets only (they don't do any actual work).
- * One of the consumer processes is considered the "root" process and is responsible for allocating/deallocating shared
- * memory and for initializing the buffer instances.
- * The processes that insert data into the buffer instances are the "producers" and each only hold a copy of the header
- * of its circular buffer instance. Each producer is associated with exactly one buffer instance (and vice versa).
- * The data on the consumer processes also forms an MPI window into shared memory, which is
- * accessible remotely by every producer process that collectively own this distributed buffer set.
- * _However, each producer will only ever access the portion of that window that contains its associated buffer
- * instance._ This data is directly accessible (local load/store) by every consumer process. The only item that is ever
- * modified by a consumer process is the extraction index in a circular buffer instance, whenever that consumer has
- * finished extracting a bunch of data from that instance. In every (remote) communication, the consumer processes are
- * always passive; this removes any need for explicit synchronization related to data transfer. To enable a larger
- * bandwidth for remote data transfers, producers are able to access the shared memory window through multiple channels
- * (one process per channel). To ensure that the data will be received as quickly as possible from the passive/target
- * side, each channel process is constantly polling for updates by synchronizing the window.
- * _The channel processes must be located on the same physical node as the consumers._
- */
-typedef struct {
-  int32_t      num_producers; //!< How many producer processes share this distributed buffer set
-  int32_t      num_channels;  //!< How many channels can be used for MPI 1-sided communication (1 PE per channel)
-  int32_t      num_consumers; //!< How many server processes will read from the individual buffers
-  data_element window_offset; //!< Offset into the MPI window at which this producer's circular buffer is located
-
-  int32_t channel_id;  //!< This provides an ID on channel processes (and -1 on other processes)
-  int32_t consumer_id; //!< This provides an ID on consumer processes (and -1 on other ones)
-  int32_t producer_id; //!< This provides an ID on producer processes (and -1 on other ones)
-
-  int32_t server_rank; //!< Rank of this process on the _server_ communicator. (-1 if somewhere else)
-
-  MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
-  MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
-  MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
-
-  io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
-
-  //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
-  //! Will have some metadata in a _common header_ at the beginning
-  data_element* raw_data;
-
-  //! Header of the circular buffer instance (only valid for producers)
-  //! This is the local copy and will be synchronized with the remote one, located in the shared memory region of the
-  //! consumer processes
-  circular_buffer_instance local_header;
-
-} distributed_circular_buffer;
-
-typedef distributed_circular_buffer* distributed_circular_buffer_p;
-//C_EnD
-
 enum channel_signal
 {
   RSIG_NONE = 0,
@@ -135,25 +76,109 @@ enum channel_signal
 
 typedef enum channel_signal channel_signal_t;
 
+typedef struct {
+  int32_t num_server_consumers;     //!< How many server processes will _read_ from individual buffers (server-bound)
+  int32_t num_server_producers;     //!< How many server processes will _write_ to individual buffers (client-bound)
+  int32_t num_channels;             //!< How many channels (server processes) can be used for MPI 1-sided communication (1 process = 1 channel)
+
+  int32_t data_size;                  //!< Size of the data described by this struct, in number of #data_element (excluding the size of this struct)
+  int32_t num_server_bound_instances; //!< How many server-bound client processes there are ( = number of offsets in shared memory)
+  int32_t num_client_bound_instances; //!< How many client-bound client processes there are
+  int32_t num_elem_per_server_bound_instance; //!< How many #data_element can be stored in each server-bound instance
+  int32_t num_elem_per_client_bound_instance; //!< How many #data_element can be stored in each server-bound instance
+
+  int32_t server_bound_win_offsets_index; 
+  int32_t client_bound_win_offsets_index;
+  int32_t server_bound_client_ranks_index;
+  int32_t client_bound_client_ranks_index;
+  int32_t channel_ranks_index;
+  int32_t signals_index;
+} control_header;
+
+typedef control_header* control_header_p;
+
 /**
- * @brief Small header located at the beginning of the shared memory region on server processes. Stores the offset
- * of every instance within that shared memory region, the ranks of producer and channel processes on the DCB
- * communicator and locations that can be used to send signals to channel processes.
- * It will be stored in the remotely-accessible MPI window, so everything in it must have a size that is a multiple of
- * the size of an element to be addressable individually. So basically, just data_elements
+ * @brief All information necessary to manage a set of circuler buffers accessed remotely (from _clients_), whose entire data is
+ * located on a single node and accessible by any _server_ process.
+ *
+ * This struct is a _collective_ object, in the sense that every process that wants a remote circular buffer must have
+ * an instance of the entire set description, including the _root_ process. The set is composed of multiple circular
+ * buffer _instances_.
+ * Some instances will be for _server-bound_ data and will be written by client processes and read by server processes.
+ * The other instances will be for _client-bound_ data, and will be written by server processes and read by client processes.
+ * All data contained in the instances (either server-bound or client-bound) is stored on the server and is accessible by any
+ * server process.
+ * 
+ * Processes that read from a buffer are _consumers_ and processes that write to it are _producers_. There is exactly one
+ * consumer and one producer for each buffer instance. A server-bound server process can be a consumer for multiple buffer instances,
+ * a client-bound server process can be a producer for multiple buffer instances. However, a server process will never
+ * handle both server-bound and client-bound data. Client processes handle exactly one buffer instance each
+ * and each only holds a copy of the header of that instance (since the data content is located on the server).
+ * _Server processes must be located on the same physical node._
+ * 
+ * The data on the server processes also form an MPI window into shared memory, which is
+ * accessible remotely by every client process that collectively own the distributed buffer set.
+ * _However, each client will only ever access the portion of that window that contains its associated buffer
+ * instance._ This data is directly accessible (local load/store) by every server process. The only item that is ever
+ * modified by a consumer (server-bound) server process is the extraction index in a circular buffer instance, whenever that consumer has
+ * finished reading (extracting) a bunch of data from that instance. The opposite is true for producer (client-bound) server processes:
+ * they can modify everything except the extraction pointer, which is updated (remotely) by the client process responsible for an instance.
+ * In every remote communication, the server processes are always passive; this removes any need for explicit synchronization related
+ * to data transfer. 
+ * 
+ * A set of _channel_ processes also exist on the server as communication targets only (they don't do any actual work).
+ * Each channel can be used to transmit server-bound and client-bound data by any client process. This enables a
+ * larger bandwidth for remote data transfers.
+ * To ensure that the data will be received as quickly as possible from the passive/target
+ * side, each channel process is constantly polling for updates by synchronizing the window.
+ * _The channel processes must be located on the same physical node as the server processes._
+ * 
+ * One of the server processes is considered the _root_ process and is responsible for allocating/deallocating shared
+ * memory and for initializing the buffer instances.
  */
 typedef struct {
-  data_element num_producers; //!< How many producer processes there are ( = number of offsets in shared memory)
-  data_element size;          //!< Size of this struct, in number of #data_element
-  data_element num_channels;  //!< How many communication channels there are in the buffer set (1 signal per channel)
-  data_element data[];        //!< The data available to everyone. Organized as follows:
-  // First, the window offsets
-  // After the offsets, there are the producer ranks, but we can't name them explicitly. We really need a better solution
-  // After the producer ranks, there are the channel ranks.
-  // After the ranks, there are the signals. This is starting to get messy
-} common_server_header;
+  int32_t channel_id;             //!< This provides an ID on channel processes (and -1 on other processes)
+  int32_t server_bound_server_id; //!< ID on a server-bound server process (-1 on other processes)
+  int32_t client_bound_server_id; //!< ID on a client-bound server process (-1 on other processes)
+  int32_t server_bound_client_id; //!< ID on a server-bound client process (-1 on other processes)
+  int32_t client_bound_client_id; //!< ID on a client-bound client process (-1 on other processes)
 
-typedef common_server_header* common_server_header_p;
+  int32_t dcb_rank;           //!< Rank of this process on the global DCB communicator
+  int32_t server_rank;        //!< Rank of this process on the server communicator. (-1 if somewhere else)
+  int32_t communication_type; //!< Can be either server-bound, model-bound or channel
+
+  data_element window_offset; //!< Offset into the MPI window at which this client's circular buffer is located
+
+  MPI_Comm communicator; //!< Communicator through which the processes sharing the distributed buffer set communicate
+  MPI_Win  window;       //!< MPI window into the circular buffers themselves, on the process which holds all data
+  MPI_Comm server_communicator; //!< Communicator that groups processes located on the IO server
+
+  io_timer_t existence_timer; //!< To keep track of how long ago the buffer was created
+
+  //! Pointer to the data holding the entire set of circular buffers (only valid for the consumers)
+  //! Will have some _control data_ at the beginning.
+  data_element* raw_data;
+
+  data_element* control_data;
+  data_element* server_bound_win_offsets;
+  data_element* client_bound_win_offsets;
+  data_element* server_bound_client_ranks;
+  data_element* client_bound_client_ranks;
+  data_element* channel_ranks;
+  channel_signal_t* channel_signals;
+
+  //! Control metadata that is common to every DCB header. It will be computed once and transmitted to every DCB handle.
+  control_header control_metadata;
+
+  //! Header of the circular buffer instance. This is only valid for clients (server- and client-bound)
+  //! This is the local copy and will be synchronized with the remote one, located in the shared memory region of the
+  //! server processes
+  circular_buffer_instance local_header;
+
+} distributed_circular_buffer;
+
+typedef distributed_circular_buffer* distributed_circular_buffer_p;
+//C_EnD
 
 //F_StArT
 //  interface
@@ -161,6 +186,7 @@ typedef common_server_header* common_server_header_p;
 
 // Forward declarations
 static inline void print_instance(const circular_buffer_instance_p instance);
+static inline void print_control_metadata(const control_header_p header, const data_element* data);
 //C_StArT
 void DCB_delete(distributed_circular_buffer_p);
 void DCB_print(distributed_circular_buffer_p, int32_t);
@@ -193,13 +219,12 @@ static inline size_t instance_header_size() {
 }
 
 //! Size of the common server header, in number of #data_element tokens
-static inline size_t common_server_header_size(
+static inline size_t control_data_size(
     const int num_buffers, //!< Number of circular buffers in the set
     const int num_channels //!< Number of communication channels (PEs) used for MPI 1-sided calls
 ) {
-  const size_t num_bytes = sizeof(common_server_header) +                   // base struct size
-                           (size_t)num_buffers * sizeof(data_element) +     // window offsets size
-                           (size_t)num_buffers * sizeof(data_element) +     // producer ranks size
+  const size_t num_bytes = (size_t)num_buffers  * sizeof(data_element) +    // window offsets size (server- and client-bound)
+                           (size_t)num_buffers  * sizeof(data_element) +    // client ranks size (server- and client-bound)
                            (size_t)num_channels * sizeof(data_element) +    // channel (ghost process) ranks size
                            (size_t)num_channels * sizeof(channel_signal_t); // signals size
   return num_elem_from_bytes_aligned64(num_bytes);
@@ -212,14 +237,18 @@ static inline size_t total_circular_buffer_instance_size(const int num_desired_e
 }
 
 //! Compute the total size needed by the shared memory window to fit all circular buffers and metadata, in number of
-//! #data_element tokens
+//! #data_element tokens. The content includes the shared memory common header, the server-bound circular buffers and
+//! client-bound circular buffers.
 static inline size_t total_window_num_elem(
-    const int num_buffers,                   //!< How many circular buffers the set will hold
+    const int num_server_bound_buffers,      //!< How many server-bound circular buffer instances the set will hold
+    const int num_client_bound_buffers,      //!< How many client-bound circular buffer instances the set will hold
     const int num_channels,                  //!< How many communication channels with the IO server will be used
-    const size_t num_desired_elem_per_buffer //!< How many #data_element tokens we want to be able to store in each buffer
+    const size_t num_elem_per_server_buffer, //!< How many #data_element tokens we want to be able to store in each server-bound buffer
+    const size_t num_elem_per_client_buffer  //!< How many #data_element tokens we want to be able to store in each client-bound buffer
 ) {
-  return num_buffers * (total_circular_buffer_instance_size(num_desired_elem_per_buffer)) +
-         common_server_header_size(num_buffers, num_channels);
+  return num_server_bound_buffers * (total_circular_buffer_instance_size(num_elem_per_server_buffer)) +
+         num_client_bound_buffers * (total_circular_buffer_instance_size(num_elem_per_client_buffer)) +
+         control_data_size(num_server_bound_buffers + num_client_bound_buffers, num_channels);
 }
 
 //! @}
@@ -275,176 +304,215 @@ static inline int check_instance_consistency(const circular_buffer_instance_p in
 
 //! @{ \name Shared server data management
 
-//! Get a pointer to the list of window offsets, from a pointer to the header
-static inline data_element* get_offsets_pointer_from_common_header(common_server_header_p header) {
-  return header->data;
-}
-
-//! Get a pointer to the list of producer ranks, from a pointer to the header and the number of buffers in the DCB
-static inline data_element* get_prod_ranks_pointer_from_common_header(
-    common_server_header_p header,     //!< [in] The header from which we want the producer rank list
-    const int              num_buffers //!< [in] How many buffers there are in the DCB that owns the given header
-) {
-  return get_offsets_pointer_from_common_header(header) + num_buffers;
-}
-
-//! Get a pointer to the list of channel ranks, from a pointer to the header and the number of buffers in the DCB
-static inline data_element* get_channel_ranks_pointer_from_common_header(
-    common_server_header_p header,     //!< [in] The header from which we want the channel rank list
-    const int              num_buffers //!< [in] How many buffers there are in the DCB that owns the given header
-) {
-  return get_prod_ranks_pointer_from_common_header(header, num_buffers) + num_buffers;
-}
-
-//! Get a pointer to the list of channel signals, from a pointer to the header and the number of buffers and
-//! channels in the DCB
-static inline channel_signal_t* get_signals_pointer_from_common_header(
-    common_server_header_p header,      //!< [in] The header from which we want the channel signal list
-    const int              num_buffers, //!< [in] The number of buffers in the DCB that owns the given header
-    const int              num_channels //!< [in] The number of channels in the DCB that owns the given header
-) {
-  return (channel_signal_t*)(get_channel_ranks_pointer_from_common_header(header, num_buffers) + num_channels);
-}
-
-//! Get a pointer to the common_server_header of the given DCB
-static inline common_server_header_p get_common_server_header(
-    distributed_circular_buffer_p buffer_set //!< Buffer set from which we want the common_server_header
-) {
-  return (common_server_header_p)(buffer_set->raw_data);
-}
-
-//! Get a pointer to the list of channel signals of the given DCB
-static inline channel_signal_t* get_signals_pointer(distributed_circular_buffer_p buffer) {
-  return get_signals_pointer_from_common_header(
-      get_common_server_header(buffer), buffer->num_producers, buffer->num_channels);
-}
-
-//! Get a pointer to the list of producer ranks of the given DCB
-static inline data_element* get_producer_ranks(distributed_circular_buffer_p buffer) {
-  return get_prod_ranks_pointer_from_common_header(get_common_server_header(buffer), buffer->num_producers);
-}
-
-//! Get a pointer to the list of channel ranks of the given DCB
-static inline data_element* get_channel_ranks(distributed_circular_buffer_p buffer) {
-  return get_channel_ranks_pointer_from_common_header(get_common_server_header(buffer), buffer->num_producers);
-}
-
-//! Get a pointer to the signal location of the given channel process (ID, not rank)
-static inline channel_signal_t* get_channel_signal_ptr(
-    distributed_circular_buffer_p buffer,    //!< [in] Buffer whose channel signal we want
-    const int32_t                 channel_id //!< [in] ID of the channel we're looking for
-) {
-  return get_signals_pointer(buffer) + channel_id;
-}
-
 //! Initialize the common_server_header of the given distributed_circular_buffer. This computes the offset of every
 //! buffer instance within the set, sets the value of all ranks to -1 and all signals to RSIG_NONE.
-static inline void init_common_header(
-    common_server_header_p header,                   //!< [in] Pointer to the header that needs to be initialized
-    const int              num_buffers,              //!< [in] How many circular buffer instances there are in the set
+static inline void init_control_metadata(
+    control_header_p       metadata,                 //!< [in,out] Pointer to metadata struct we want to initialize
+    const int              num_server_bound_buffers, //!< [in] How many server-bound circular buffer instances there are in the set
+    const int              num_client_bound_buffers, //!< [in] How many client-bound circular buffer instances there are in the set
     const int              num_channels,             //!< [in] How many channels can be used to transmit data
-    const size_t           num_elements_per_instance //!< [in] How many elements each instance takes
+    const size_t           num_elem_per_server_bound_instance, //!< [in] How many elements each server-bound instance can store
+    const size_t           num_elem_per_client_bound_instance  //!< [in] How many elements each client-bound instance can store
 ) {
-  header->num_producers = num_buffers;
-  header->size          = common_server_header_size(num_buffers, num_channels);
-  header->num_channels  = num_channels;
+  metadata->data_size                          = control_data_size(num_server_bound_buffers + num_client_bound_buffers, num_channels);
+  metadata->num_server_bound_instances         = num_server_bound_buffers;
+  metadata->num_client_bound_instances         = num_client_bound_buffers;
+  metadata->num_elem_per_server_bound_instance = num_elem_per_server_bound_instance;
+  metadata->num_elem_per_client_bound_instance = num_elem_per_client_bound_instance;
+  metadata->num_channels                       = num_channels;
 
-  data_element* window_offsets = get_offsets_pointer_from_common_header(header);
-  for (int i = 0; i < header->num_producers; ++i) {
-    window_offsets[i] = header->size + i * (total_circular_buffer_instance_size(num_elements_per_instance));
+  // Set up indices
+  metadata->server_bound_win_offsets_index  = 0;
+  metadata->client_bound_win_offsets_index  = metadata->server_bound_win_offsets_index  + metadata->num_server_bound_instances;
+  metadata->server_bound_client_ranks_index = metadata->client_bound_win_offsets_index  + metadata->num_client_bound_instances;
+  metadata->client_bound_client_ranks_index = metadata->server_bound_client_ranks_index + metadata->num_server_bound_instances;
+  metadata->channel_ranks_index             = metadata->client_bound_client_ranks_index + metadata->num_client_bound_instances;
+  metadata->signals_index                   = metadata->channel_ranks_index             + metadata->num_channels;
+}
+
+//! Initialize the pointer in the DCB struct that point into shared memory.
+//! _The shared memory must be allocated before calling this function._
+static inline void init_control_pointers(
+    distributed_circular_buffer_p buffer
+) {
+  buffer->control_data = buffer->raw_data;
+  buffer->server_bound_win_offsets  = buffer->control_data + buffer->control_metadata.server_bound_win_offsets_index;
+  buffer->client_bound_win_offsets  = buffer->control_data + buffer->control_metadata.client_bound_win_offsets_index;
+  buffer->server_bound_client_ranks = buffer->control_data + buffer->control_metadata.server_bound_client_ranks_index;
+  buffer->client_bound_client_ranks = buffer->control_data + buffer->control_metadata.client_bound_client_ranks_index;
+  buffer->channel_ranks             = buffer->control_data + buffer->control_metadata.channel_ranks_index;
+  buffer->channel_signals           = (channel_signal_t*)(buffer->control_data + buffer->control_metadata.signals_index);
+}
+
+//! Initialize what is currently possible of the control block within the shared memory region. Process ranks will
+//! be initialized later by their own process.
+//! _The control pointers in the DCB struct must be initialized prior to calling this function._
+static inline void init_control_data(
+    distributed_circular_buffer_p buffer
+) {
+  // Compute window offsets
+  data_element current_offset = buffer->control_metadata.data_size;
+  for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
+    buffer->server_bound_win_offsets[i] = current_offset;
+    current_offset += total_circular_buffer_instance_size(buffer->control_metadata.num_elem_per_server_bound_instance);
+  }
+  for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
+    buffer->client_bound_win_offsets[i] = current_offset;
+    current_offset += total_circular_buffer_instance_size(buffer->control_metadata.num_elem_per_client_bound_instance);
   }
 
-  data_element* producer_ranks = get_prod_ranks_pointer_from_common_header(header, num_buffers);
-  for (int i = 0; i < num_buffers; ++i) {
-    producer_ranks[i] = -1;
+  // Clear process ranks and signals
+  for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
+    buffer->server_bound_client_ranks[i] = -1;
   }
-
-  data_element* channel_ranks = get_channel_ranks_pointer_from_common_header(header, num_buffers);
-  for (int i = 0; i < num_channels; ++i) {
-    channel_ranks[i] = -1;
+  for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
+    buffer->client_bound_client_ranks[i] = -1;
   }
-
-  channel_signal_t* signals = get_signals_pointer_from_common_header(header, num_buffers, num_channels);
-  for (int i = 0; i < num_channels; ++i) {
-    signals[i] = RSIG_NONE;
+  for (int i = 0; i < buffer->control_metadata.num_channels; ++i) {
+    buffer->channel_ranks[i]   = -1;
+    buffer->channel_signals[i] = RSIG_NONE;
   }
 }
 
-//! Print the contents of the given header
-static inline void print_common_server_header(common_server_header_p header) {
+//! Print the contents of the given control metadata header. Optionally print the corresponding control data.
+static inline void print_control_metadata(
+    const control_header_p header, //! [in] Control metadata header we want to print
+    const data_element* data       //! [in] (Optional) Pointer to the control data. Will be ignored if NULL.
+) {
   printf(
-      "Num producers: %d, common server header size: %d elements, num channels: %d\n"
-      "Address %ld",
-      header->num_producers, header->size, header->num_channels, (long)header);
-  printf("\nOffsets:        ");
-  const data_element* offsets = get_offsets_pointer_from_common_header(header);
-  for (int i = 0; i < header->num_producers; ++i) {
-    printf("%ld ", (long)offsets[i]);
+      "Common server header size:  %d elements\n"
+      "Num server consumers:       %d\n"
+      "Num server producers:       %d\n"
+      "Num server-bound buffers:   %d\n"
+      "Num client-bound buffers:   %d\n"
+      "Num channels (and signals): %d\n"
+      "Address %p\n",
+      header->data_size, header->num_server_consumers, header->num_server_producers,
+      header->num_server_bound_instances, header->num_client_bound_instances, header->num_channels, (void*)header);
+  printf(
+    "Indices:\n"
+    "  Server-bound window offsets: %d\n"
+    "  Client-bound window offsets: %d\n"
+    "  Server-bound client ranks:   %d\n"
+    "  Client-bound client ranks:   %d\n"
+    "  Channel ranks:               %d\n"
+    "  Signals:                     %d",
+    header->server_bound_win_offsets_index, header->client_bound_win_offsets_index,
+    header->server_bound_client_ranks_index, header->client_bound_client_ranks_index,
+    header->channel_ranks_index, header->signals_index);
+
+  if (data != NULL) {
+    printf("\nData: (%p)", (void*)data);
+    for (int i = 0; i < header->data_size; ++i) {
+      if (i % 4 == 0) printf("\n  ");
+      printf("%8ld ", (long)(data[i]));
+    }
+    printf("\n");
+    if (header->num_server_bound_instances > 0) {
+      printf("\nOffsets (server-bound):        ");
+      const data_element* server_bound_offsets = data + header->server_bound_win_offsets_index;
+      for (int i = 0; i < header->num_server_bound_instances; ++i) {
+        printf("%ld ", (long)server_bound_offsets[i]);
+      }
+    }
+    if (header->num_client_bound_instances > 0) {
+      printf("\nOffsets (client-bound):        ");
+      const data_element* client_bound_offsets = data + header->client_bound_win_offsets_index;
+      for (int i = 0; i < header->num_client_bound_instances; ++i) {
+        printf("%ld ", (long)client_bound_offsets[i]);
+      }
+    }
+    if (header->num_server_bound_instances > 0) {
+      printf("\nServer-bound client ranks:     ");
+      const data_element* sb_client_ranks = data + header->server_bound_client_ranks_index;
+      for (int i = 0; i < header->num_server_bound_instances; ++i) {
+        printf("%ld ", (long)sb_client_ranks[i]);
+      }
+    }
+    if (header->num_client_bound_instances > 0) {
+      printf("\nClient-bound client ranks:     ");
+      const data_element* cb_client_ranks = data + header->client_bound_client_ranks_index;
+      for (int i = 0; i < header->num_client_bound_instances; ++i) {
+        printf("%ld ", (long)cb_client_ranks[i]);
+      }
+    }
+    printf("\nChannel ranks:                   ");
+    const data_element* channel_ranks = data + header->channel_ranks_index;
+    for (int i = 0; i < header->num_channels; ++i) {
+      printf("%ld ", (long)channel_ranks[i]);
+    }
+    printf("\nSignals:                         ");
+    channel_signal_t* signals = (channel_signal_t*)(data + header->signals_index);
+    for (int i = 0; i < header->num_channels; ++i) {
+      printf("%ld ", (long)signals[i]);
+    }
+    printf("\n");
   }
-  printf("\nProducer ranks: ");
-  const data_element* ranks = get_prod_ranks_pointer_from_common_header(header, header->num_producers);
-  for (int i = 0; i < header->num_producers; ++i) {
-    printf("%ld ", (long)ranks[i]);
-  }
-  printf("\nChannel ranks:  ");
-  const data_element* channel_ranks = get_channel_ranks_pointer_from_common_header(header, header->num_producers);
-  for (int i = 0; i < header->num_channels; ++i) {
-    printf("%ld ", (long)channel_ranks[i]);
-  }
-  printf("\nSignals:        ");
-  channel_signal_t* signals =
-      get_signals_pointer_from_common_header(header, header->num_producers, header->num_channels);
-  for (int i = 0; i < header->num_channels; ++i) {
-    printf("%ld ", (long)signals[i]);
-  }
-  printf("\n");
 }
 
 //! @}
 
-//! @{ @name Offset calculators
+//! @{ @name Displacement calculators (within the MPI window)
 
-//! Compute the displacement in the shared memory window where the window offset for the specified rank (producer ID) is
+//! Compute the displacement in the shared memory window where the window offset for the specified server-bound instance is
 //! located. That displacement should land in the appropriate location in the common_server_header struct, which is
 //! itself at the start of the window
-//! @return The window displacement where a producer can find the offset (displacement) of its buffer within that window
-static inline MPI_Aint window_offset_displacement(
-    const int producer_id //!< [in] ID of the producer for which we want the window offset location (= its rank)
+//! @return The window displacement where a server-bound client can find the offset (displacement) of its buffer within that window
+static inline MPI_Aint server_bound_window_offset_displacement(
+    const distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
+    const int client_id //!< [in] ID of the (server-bound) client for which we want the window offset location
 ) {
-  data_element* ptr = get_offsets_pointer_from_common_header(NULL) + producer_id;
-  return (MPI_Aint)ptr / sizeof(data_element);
+  return (MPI_Aint)(buffer->control_metadata.server_bound_win_offsets_index + client_id);
 }
 
-//! Compute the displacement in the shared memory window where the MPI rank of the given producer ID is located.
-static inline MPI_Aint producer_rank_displacement(
-    const int producer_id,  //!< [in] ID of the producer whose rank we seek
-    const int num_producers //!< [in] How many producers there are in the DCB
+//! Compute the displacement in the shared memory window where the window offset for the specified client-bound instance is
+//! located. That displacement should land in the appropriate location in the common_server_header struct, which is
+//! itself at the start of the window
+//! @return The window displacement where a server-bound client can find the offset (displacement) of its buffer within that window
+static inline MPI_Aint client_bound_window_offset_displacement(
+    const distributed_circular_buffer_p buffer, //!< [in] The DCB we are querying
+    const int client_id //!< [in] ID of the (client-bound) client for which we want the window offset location
 ) {
-  // We find the displacement by taking a (fake) pointer to the rank, assuming the address of the header is NULL
-  // and by dividing that pointer by the size of a window element
-  data_element* ptr = get_prod_ranks_pointer_from_common_header(NULL, num_producers) + producer_id;
-  return (MPI_Aint)ptr / sizeof(data_element);
+  return (MPI_Aint)(buffer->control_metadata.client_bound_win_offsets_index + client_id);
 }
 
-//! @return The displacement in the shared memory window where the given element index for a circular buffer is located
+//! @return The displacement in the shared memory window where the MPI rank of the given server-bound client is located.
+static inline MPI_Aint server_bound_client_rank_displacement(
+    const distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
+    const int client_id                         //!< [in] ID of the server-bound client whose rank we seek
+) {
+  return (MPI_Aint)(buffer->control_metadata.server_bound_client_ranks_index + client_id);
+}
+
+//! @return The displacement in the shared memory window where the MPI rank of the given client-bound client is located.
+static inline MPI_Aint client_bound_client_rank_displacement(
+  const distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
+  const int client_id                         //!< [in] ID of the client-bound client whose rank we seek
+) {
+  return (MPI_Aint)(buffer->control_metadata.client_bound_client_ranks_index + client_id);
+}
+
+//! Compute the displacement in the shared memory window where the given element index for a circular buffer is located.
+//! _Can only be called from a client process._
+//! Displacement of the given element within the MPI window
 static inline MPI_Aint buffer_element_displacement(
     const distributed_circular_buffer_p buffer, //!< [in] Buffer in which the element is located
     const data_element                  index   //!< [in] Index of the element within the buffer
 ) {
-  // Start of the buffer element section within the window
-  const ptrdiff_t ptr_offset =
-      (data_element*)buffer->local_header.circ_buffer.data - (data_element*)&buffer->local_header;
-  const MPI_Aint base_displacement = buffer->window_offset + ptr_offset;
-  const MPI_Aint elem_displacement = base_displacement + index;
+  // Start of the buffer element section within the buffer instance
+  const ptrdiff_t ptr_offset = (data_element*)buffer->local_header.circ_buffer.data - (data_element*)&buffer->local_header;
+  const MPI_Aint base_displacement = buffer->window_offset + ptr_offset; // Add the start of this instance within the MPI window
+  const MPI_Aint elem_displacement = base_displacement + index;          // Add the position of the element within the CB data
   return elem_displacement;
 }
 
+//! _Must be called from a client process._
 //! @return The displacement in the shared memory window where the insertion index of the given buffer is located
 static inline MPI_Aint insertion_index_displacement(const distributed_circular_buffer_p buffer) {
-  const ptrdiff_t ptr_offset =
-      (data_element*)buffer->local_header.circ_buffer.m.in - (data_element*)&buffer->local_header;
-  const data_element displacement = buffer->window_offset + ptr_offset;
-  return displacement;
+  // Position of the insertion index within the CB instance
+  const ptrdiff_t ptr_offset = (data_element*)buffer->local_header.circ_buffer.m.in - (data_element*)&buffer->local_header;
+  const data_element displacement = buffer->window_offset + ptr_offset; // Add the start of the instance within the MPI window
+  return (MPI_Aint)displacement;
 }
 
 //! Get the displacement (in number of #data_element) in the shared memory window where the start of the buffer is
@@ -457,14 +525,19 @@ static inline MPI_Aint remote_header_displacement(const distributed_circular_buf
 
 //! @{ @name Helper functions
 
-//! Check whether the given distributed buffer is located on a consumer process
-static inline int is_consumer(const distributed_circular_buffer_p buffer) {
-  return (buffer->consumer_id >= 0);
+//! Check wether the given buffer is on a server-bound client process
+static inline int is_server_bound_client(const distributed_circular_buffer_p buffer) {
+  return (buffer->server_bound_client_id >= 0);
 }
 
-//! Check whether the given distributed buffer is located on a producer process
-static inline int is_producer(const distributed_circular_buffer_p buffer) {
-  return (buffer->producer_id >= 0);
+//! Check wether the given buffer is on a client-bound client process
+static inline int is_client_bound_client(const distributed_circular_buffer_p buffer) {
+  return (buffer->client_bound_client_id >= 0);
+}
+
+//! Check whether the given distributed buffer is located on a client process
+static inline int is_client(const distributed_circular_buffer_p buffer) {
+  return (is_server_bound_client(buffer) || is_client_bound_client(buffer));
 }
 
 //! Check whether the given distributed buffer is located on the DCB root process
@@ -477,42 +550,60 @@ static inline int is_channel(const distributed_circular_buffer_p buffer) {
   return (buffer->channel_id >= 0);
 }
 
+//! Check whether the given distributed buffer is located on a client process
 static inline int is_on_server(const distributed_circular_buffer_p buffer) {
   return (buffer->server_rank >= 0);
 }
 
+//! Check wether the given DCB is on a server-bound server process
+static inline int is_server_bound_server(const distributed_circular_buffer_p buffer) {
+  return (buffer->server_bound_server_id >= 0);
+}
+
+//! Check wether the given DCB is on a client-bound server process
+static inline int is_client_bound_server(const distributed_circular_buffer_p buffer) {
+  return (buffer->client_bound_server_id >= 0);
+}
+
 //! Set the process rank to be used for MPI communication for the given CB instance
 static inline void assign_target_channel(
-    const circular_buffer_instance_p    instance,   //!< [in, out] Buffer instance whose target we want to set
-    const int                           channel_id, //!< [in] Which channel this instance should use
-    const distributed_circular_buffer_p buffer      //!< [in] DCB to which this instance belongs
+    const distributed_circular_buffer_p buffer,    //!< [in] DCB to which this instance belongs
+    const circular_buffer_instance_p    instance,  //!< [in, out] Buffer instance whose target we want to set
+    const int                           channel_id //!< [in] Which channel this instance should use
 ) {
-  instance->target_rank = get_channel_ranks(buffer)[channel_id];
+  instance->target_rank = buffer->channel_ranks[channel_id];
 }
 
 //! Get a pointer to a certain circular_buffer_instance within the given distributed_circular_buffer
 static inline circular_buffer_instance_p get_circular_buffer_instance(
     distributed_circular_buffer_p buffer_set, //!< [in] The buffer set from which we want the circ buffer instance
-    const int                     buffer_id   //!< [in] ID of the circ buffer instance within the buffer set
+    const int                     buffer_id,  //!< [in] ID of the circ buffer instance within the buffer set
+    const int                     communication_type //!< [in] Server- or client-bound instance (#DCB_SERVER_BOUND_TYPE or #DCB_CLIENT_BOUND_TYPE)
 ) {
-  const data_element* offsets = get_offsets_pointer_from_common_header(get_common_server_header(buffer_set));
+  const data_element* offsets =
+              communication_type == DCB_SERVER_BOUND_TYPE ? buffer_set->server_bound_win_offsets :
+              communication_type == DCB_CLIENT_BOUND_TYPE ? buffer_set->client_bound_win_offsets :
+              NULL;
   return (circular_buffer_instance_p)(buffer_set->raw_data + offsets[buffer_id]);
 }
 
-//! Retrieve the window offset of the appropriate circular buffer instance within the given distributed buffer
-//! (according to its rank)
+//! Retrieve the window offset of the appropriate circular buffer instance within the given distributed buffer from the server
+//! (according to its ID). _Can only be called from a client process_
 static void retrieve_window_offset_from_remote(
     distributed_circular_buffer_p buffer //!< Buffer for which we want the window offset
 ) {
   // We communicate through the root process, because we don't yet know the rank of our target
   MPI_Win_lock(MPI_LOCK_SHARED, DCB_ROOT_ID, MPI_MODE_NOCHECK, buffer->window);
-  MPI_Get(
-      &buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, DCB_ROOT_ID, window_offset_displacement(buffer->producer_id), 1,
-      CB_MPI_ELEMENT_TYPE, buffer->window);
+  const MPI_Aint displacement =
+    is_server_bound_client(buffer) ? server_bound_window_offset_displacement(buffer, buffer->server_bound_client_id) :
+    is_client_bound_client(buffer) ? client_bound_window_offset_displacement(buffer, buffer->client_bound_client_id) :
+    -1;
+  MPI_Get(&buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, DCB_ROOT_ID, displacement, 1, CB_MPI_ELEMENT_TYPE, buffer->window);
   MPI_Win_unlock(DCB_ROOT_ID, buffer->window);
 }
 
-//! @brief Copy from the consumer process the header associated with this circular buffer instance
+//! @brief Copy from the consumer process the header associated with this circular buffer instance.
+//! _Can only be called from a client process._
 static inline void update_local_header_from_remote(
     distributed_circular_buffer_p buffer, //!< [in] Buffer set from which we want to update a single instance
     const int                     full    //!< [in] Whether to perform a full update (if =1) or only a partial one
@@ -542,17 +633,19 @@ static inline void update_local_header_from_remote(
   }
 }
 
-//! Set the value of this process' rank in the server shared data area, at the right location in the MPI window.
+//! Set the value of this client process' rank in the server shared data area, at the right location in the MPI window.
 //! (We use the rank on the global DCB communicator)
-static void set_producer_rank_on_remote(
-    distributed_circular_buffer_p buffer,      //!< [in,out] Buffer we want to update
-    const int                     producer_id, //!< [in] ID of the calling producer within the buffer
-    const int producer_rank //!< [in] MPI rank that corresponds to the calling producer on the buffer communicator
+static void set_client_rank_on_remote(
+    distributed_circular_buffer_p buffer //!< [in,out] Buffer we want to update
 ) {
   const int          target_rank         = 0; // Target the root of the DCB, which we know to be on the server
   const int          num_elem            = 1; // Rank takes exactly 1 element
-  const data_element value               = producer_rank;
-  const MPI_Aint     target_displacement = producer_rank_displacement(producer_id, buffer->num_producers);
+  const data_element value               = buffer->dcb_rank;
+
+  const MPI_Aint target_displacement = 
+    is_server_bound_client(buffer) ? server_bound_client_rank_displacement(buffer, buffer->server_bound_client_id) :
+    is_client_bound_client(buffer) ? client_bound_client_rank_displacement(buffer, buffer->client_bound_client_id) :
+    -1;
 
   MPI_Win_lock(MPI_LOCK_SHARED, target_rank, MPI_MODE_NOCHECK, buffer->window);
   MPI_Put(
@@ -575,14 +668,15 @@ static inline size_t get_available_space_from_remote_bytes(
 //!
 //! If the latest copy of the header shows enough space, compute + return the result immediately.
 //! Otherwise, copy metadata from the consumer process and check, until there is enough space.
+//! _Can only be called from a server-bound client._
 //! @return The number of available elements according to the latest copy of the header. If there was not enough
 //! initially, that copy is updated. If there is an error, returns -1.
-static int64_t DCB_wait_space_available_bytes(
+static int64_t DCB_wait_space_available_client(
     distributed_circular_buffer_p buffer,             //!< [in] Pointer to the distributed buffer we're waiting for
     const size_t                  num_requested_bytes //!< [in] Needed number of available bytes
 ) {
   // Function inputs and buffer consistency checks
-  if (buffer == NULL || !is_producer(buffer))
+  if (buffer == NULL || !is_server_bound_client(buffer))
     return -1;
 
   const circular_buffer_instance_p instance = &buffer->local_header;
@@ -609,18 +703,19 @@ static int64_t DCB_wait_space_available_bytes(
 }
 
 //! Stop and wait until there is enough data in this circular buffer instance
+//! _Can only be called from a server-bound server process._
 //!
 //! @return The number of data elements in the buffer, if everything goes smoothly, -1 otherwise.
-static int64_t DCB_wait_data_available_bytes(
+static int64_t DCB_wait_data_available_server(
     const distributed_circular_buffer_p buffer, //!< [in] Buffer we are querying
     const int buffer_id,             //!< [in] Which specific circular buffer we want to query (there are multiple ones)
     const size_t num_requested_bytes //!< [in] Number of bytes we want to read
 ) {
   // Function inputs and buffer consistency checks
-  if (buffer == NULL || !is_consumer(buffer))
+  if (buffer == NULL || !is_server_bound_server(buffer))
     return -1;
 
-  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
+  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE);
   if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer) || check_instance_consistency(instance) < 0)
     return -1;
 
@@ -698,8 +793,272 @@ static inline void set_channel_signal(channel_signal_t* signal_ptr, const channe
 //! Should only be called from a single process at a time, located on the IO server (so basically a consumer process,
 //! because the channels are normally busy)
 static inline void send_channel_signal(distributed_circular_buffer_p buffer, const channel_signal_t value) {
-  for (int i = 0; i < buffer->num_channels; ++i)
-    set_channel_signal(get_channel_signal_ptr(buffer, i), value);
+  for (int i = 0; i < buffer->control_metadata.num_channels; ++i)
+    set_channel_signal(&buffer->channel_signals[i], value);
+}
+
+//! Put default values into DCB struct members
+static inline void reset_dcb_struct(distributed_circular_buffer_p buffer) {
+  buffer->control_metadata.num_server_producers       = -1;
+  buffer->control_metadata.num_server_consumers       = -1;
+  buffer->control_metadata.num_server_bound_instances = -1;
+  buffer->control_metadata.num_client_bound_instances = -1;
+  buffer->control_metadata.num_channels               = -1;
+
+  buffer->channel_id             = -1;
+  buffer->server_bound_server_id = -1;
+  buffer->client_bound_server_id = -1;
+  buffer->server_bound_client_id = -1;
+  buffer->client_bound_client_id = -1;
+
+  buffer->communication_type       = -1;
+  buffer->server_rank              = -1;
+  buffer->dcb_rank                 = -1;
+  buffer->local_header.target_rank = -1;
+
+  buffer->window_offset       = -1;
+  buffer->communicator        = MPI_COMM_NULL;
+  buffer->server_communicator = MPI_COMM_NULL;
+  buffer->window              = MPI_WIN_NULL;
+
+  buffer->existence_timer.start      = 0;
+  buffer->existence_timer.total_time = 0.0;
+
+  buffer->raw_data                  = NULL;
+  buffer->control_data              = NULL;
+  buffer->server_bound_win_offsets  = NULL;
+  buffer->client_bound_win_offsets  = NULL;
+  buffer->server_bound_client_ranks = NULL;
+  buffer->client_bound_client_ranks = NULL;
+  buffer->channel_ranks             = NULL;
+  buffer->channel_signals           = NULL;
+}
+
+//! Count the number of each process type (server-bound server, client-bound server, channel, server-bound client, client-bound client)
+//! The number will be set in the metadata struct for the ROOT process only
+static inline distributed_circular_buffer_p count_process_types(distributed_circular_buffer_p buffer) {
+  const int32_t zero = 0;
+  const int32_t one  = 1;
+
+  // Determine which process will be the root of the DCB
+  if (buffer->server_communicator != MPI_COMM_NULL) // Server processes
+  {
+    MPI_Comm_rank(buffer->server_communicator, &buffer->server_rank);
+
+    if (buffer->server_rank == DCB_ROOT_ID && buffer->dcb_rank != DCB_ROOT_ID) {
+      printf("ERROR during DCB_create. DCB rank %d is not on the server communicator...\n", DCB_ROOT_ID);
+      return NULL;
+    }
+
+    if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
+      printf("I am a server-bound server (%d)\n", buffer->dcb_rank);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+    }
+    else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE) {
+      printf("I am a client-bound server (%d)\n", buffer->dcb_rank);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+    }
+    else if (buffer->communication_type == DCB_CHANNEL_TYPE) {
+      printf("I am a channel (%d)\n", buffer->dcb_rank);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+    }
+    else {
+      printf("ERROR during DCB_create. Server process given an invalid communication type\n");
+      return NULL;
+    }
+
+    MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+    MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+
+    // Do some sanity checks
+    if (buffer->server_rank == DCB_ROOT_ID) {
+
+      if (buffer->control_metadata.num_channels < 1 || (buffer->control_metadata.num_server_consumers + buffer->control_metadata.num_server_consumers < 1)) {
+        printf(
+          "ERROR during DCB_create. We are missing some processes on the server. "
+          "There are currently %d consumer(s), %d producer(s) and %d channel(s). "
+          "We need at least one channel et one of either a consumer or a producer.\n",
+          buffer->control_metadata.num_server_consumers, buffer->control_metadata.num_server_producers, buffer->control_metadata.num_channels
+        );
+        return NULL;
+      }
+
+      if (buffer->control_metadata.num_server_bound_instances > 0 && buffer->control_metadata.num_server_consumers <= 0) {
+        printf("ERROR during DCB_create. We have %d server-bound buffer instance(s), but no server consumer!\n",
+               buffer->control_metadata.num_server_bound_instances);
+        return NULL;
+      }
+
+      if (buffer->control_metadata.num_client_bound_instances > 0 && buffer->control_metadata.num_server_producers <= 0) {
+        printf("ERROR during DCB_create. We have %d client-bound buffer instance(s), but no server producer!\n",
+               buffer->control_metadata.num_client_bound_instances);
+        return NULL;
+      }
+    }
+
+    // Verify that server processes are all located on the same node
+    {
+      MPI_Comm local_comm;
+      MPI_Comm_split_type(buffer->server_communicator, MPI_COMM_TYPE_SHARED, buffer->server_rank, MPI_INFO_NULL, &local_comm);
+
+      int local_size, server_size;
+      MPI_Comm_size(local_comm, &local_size);
+      MPI_Comm_size(buffer->server_communicator, &server_size);
+      if (local_size != server_size) {
+        printf("ERROR during DCB create: Server processes appear to be on multiple nodes\n");
+        return NULL;
+      }
+    }
+  }
+  else // Client processes
+  {
+    if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
+      printf("I am a server-bound client (%d)\n", buffer->dcb_rank);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+    }
+    else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE) {
+      printf("I am a client-bound client (%d)\n", buffer->dcb_rank);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+    }
+    else {
+      printf("ERROR during DCB_create. Invalid communication type given by a client process (%d)\n.", buffer->communication_type);
+      return NULL;
+    }
+  }
+
+  return buffer;
+}
+
+//! Assign an ID to every process that participates in the given DCB. There is a set of IDs for server consumers (server-bound servers),
+//! one for server producers (client-bound servers), one for channels, one for server-bound clients, and one for client-bound clients
+//! Each set starts at zero.
+static inline distributed_circular_buffer_p assign_process_ids(distributed_circular_buffer_p buffer) {
+  if (buffer->server_communicator == MPI_COMM_NULL) { // Client processes
+    MPI_Comm new_comm;
+    if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
+      MPI_Comm_split(buffer->communicator, 1, 0, &new_comm);
+      MPI_Comm_rank(new_comm, &buffer->server_bound_client_id);
+    }
+    else {
+      MPI_Comm_split(buffer->communicator, 2, 0, &new_comm);
+      MPI_Comm_rank(new_comm, &buffer->client_bound_client_id);
+    }
+  }
+  else { // Server processes
+    MPI_Comm new_comm;
+    MPI_Comm_split(buffer->communicator, 0, 0, &new_comm);
+
+    if (buffer->server_rank < 0) {
+      printf("WE HAVE A PROBLEM!!!\n");
+      return NULL;
+    }
+
+    MPI_Comm_split(buffer->server_communicator, buffer->communication_type, buffer->server_rank, &new_comm);
+    if (buffer->communication_type == DCB_SERVER_BOUND_TYPE)
+      MPI_Comm_rank(new_comm, &buffer->server_bound_server_id);
+    else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE)
+      MPI_Comm_rank(new_comm, &buffer->client_bound_server_id);
+    else
+      MPI_Comm_rank(new_comm, &buffer->channel_id);
+  }
+
+  return buffer;
+}
+
+static inline void init_metadata(distributed_circular_buffer_p buffer, const size_t num_bytes_server_bound, const size_t num_bytes_client_bound) {
+  const size_t num_elements_server_bound = num_bytes_to_num_elem(num_bytes_server_bound);
+  const size_t num_elements_client_bound = num_bytes_to_num_elem(num_bytes_client_bound);
+
+  if (is_root(buffer)) {
+    init_control_metadata(
+        &buffer->control_metadata, buffer->control_metadata.num_server_bound_instances,
+        buffer->control_metadata.num_client_bound_instances, buffer->control_metadata.num_channels,
+        num_elements_server_bound, num_elements_client_bound);
+  }
+
+  // Every process that participate in the DCB has an identical copy of the control metadata
+  MPI_Bcast(&buffer->control_metadata, sizeof(control_header), MPI_BYTE, DCB_ROOT_ID, buffer->communicator);
+}
+
+//! Allocate shared memory for the given DCB, initialize (most of) it and create the MPI one-sided window into
+//! that shared memory. The initialization includes initiliazing the individual CB instances that reside on the
+//! server.
+static inline distributed_circular_buffer_p init_shmem_area_and_window(distributed_circular_buffer_p buffer) {
+  const MPI_Aint win_total_size = total_window_num_elem(
+      buffer->control_metadata.num_server_bound_instances, buffer->control_metadata.num_client_bound_instances,
+      buffer->control_metadata.num_channels, buffer->control_metadata.num_elem_per_server_bound_instance,
+      buffer->control_metadata.num_elem_per_client_bound_instance) * (MPI_Aint)sizeof(data_element);
+
+  // Allocated shared memory area and send shmem info to other server processes
+  if (is_root(buffer))
+  {
+    int id           = -1;
+    printf("Allocating %zu shmem bytes\n", win_total_size);
+    buffer->raw_data = shmem_allocate_shared(&id, win_total_size);
+    if (buffer->raw_data == NULL) {
+      printf("Error when allocating shared memory for DCB\n");
+      return NULL;
+    }
+
+    init_control_pointers(buffer); // Need the control pointers to initialize the data
+    init_control_data(buffer); // Initialize control data before syncing with other server processes (this removes 1 barrier)
+    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Send shared mem info to other server procs
+  }
+  else if (is_on_server(buffer))
+  {
+    int id;
+    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Receive shared mem info from root process
+    buffer->raw_data = shmem_address_from_id(id);
+  }
+
+  if (is_on_server(buffer)) {
+    init_control_pointers(buffer);
+
+    if (is_channel(buffer)) {
+      buffer->channel_ranks[buffer->channel_id] = buffer->dcb_rank;
+    }
+
+    // Make sure channel ranks are properly set in the shared memory region before proceeding with initialization by root process
+    MPI_Barrier(buffer->server_communicator);
+  }
+
+  // Root only: initialize the individual CB instances
+  if (is_root(buffer)) {
+    // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
+    const int num_elem_in_server_bound_cb =
+        total_circular_buffer_instance_size(buffer->control_metadata.num_elem_per_server_bound_instance) - instance_header_size() + circular_buffer_header_size();
+    const int num_elem_in_client_bound_cb =
+        total_circular_buffer_instance_size(buffer->control_metadata.num_elem_per_client_bound_instance) - instance_header_size() + circular_buffer_header_size();
+
+    // Initialize the individual buffers
+    for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
+      circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i, DCB_SERVER_BOUND_TYPE);
+      init_circular_buffer_instance(buffer_instance, i, num_elem_in_server_bound_cb);
+      assign_target_channel(buffer, buffer_instance, i % buffer->control_metadata.num_channels);
+    }
+
+    for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
+      circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i, DCB_CLIENT_BOUND_TYPE);
+      init_circular_buffer_instance(buffer_instance, i, num_elem_in_client_bound_cb);
+      assign_target_channel(buffer, buffer_instance, i % buffer->control_metadata.num_channels);
+    }
+  }
+
+  // Create the actual window that will be used for data transmission, using a pointer to the same shared memory on the server
+  const MPI_Aint final_win_size = is_client(buffer) ? 0 : win_total_size; // Size used for actual window creation
+  printf("Creating window of size %ld (rank %d)\n", final_win_size, buffer->dcb_rank);
+  MPI_Win_create(
+      buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
+
+  return buffer;
 }
 
 //! @}
@@ -719,190 +1078,63 @@ void DCB_sync_window(distributed_circular_buffer_p buffer) {
 
 //! @brief Create a set of distributed circular buffers on a set of processes.
 //!
-//! Some of the processes are consumers and hold the data for a circular buffer instance for each other process,
+//! Some of the processes are server-side and hold the data for a circular buffer instance for each other process,
 //! in a shared memory window.
 //! Some processes are channels and are only there to serve as MPI communication targets and do no actual work.
 //!  _It is the caller's responsibility to ensure that all consumer and channel processes are located on the same
 //! physical node, which we call the "server node"._
-//! The other processes are producers and only get a copy of the header of their circular buffer, as well as an offset
+//! The other processes are clients and only get a copy of the header of their circular buffer, as well as an offset
 //! that points to the location of their data within the shared window.
 //! _The buffer with rank #DCB_ROOT_ID on the given DCB communicator will be considered the root of the DCB and must be
 //! located on the server node._
+//! \sa distributed_circular_buffer
 //!
 //! @return If all went well, a pointer to a newly-allocated distributed circular buffer struct that contains all the
 //! relevant info. If there was an error, returns NULL
 //C_StArT
-distributed_circular_buffer_p DCB_create_bytes(
-    MPI_Comm      communicator,        //!< [in] Communicator on which the distributed buffer is shared
-    MPI_Comm      server_communicator, //!< [in] Communicator that groups server processes
-    const int32_t num_channels,  //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
-    const size_t  num_bytes      //!< [in] Number of bytes in a single circular buffer (only needed on the root process)
+distributed_circular_buffer_p DCB_create(
+    MPI_Comm      communicator,           //!< [in] Communicator on which the distributed buffer is shared
+    MPI_Comm      server_communicator,    //!< [in] Communicator that groups server processes (should be MPI_COMM_NULL on client processes)
+    const int32_t communication_type,     //!< [in] Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
+    const size_t  num_bytes_server_bound, //!< [in] Number of bytes in a single server-bound circular buffer (only needed on the root process)
+    const size_t  num_bytes_client_bound  //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
     )
 //C_EnD
 {
   distributed_circular_buffer_p buffer = (distributed_circular_buffer*)malloc(sizeof(distributed_circular_buffer));
 
+  reset_dcb_struct(buffer);
+
   // Put default values everywhere
-  buffer->communicator             = communicator;
-  buffer->server_communicator      = server_communicator;
-  buffer->num_producers            = -1;
-  buffer->num_channels             = num_channels;
-  buffer->local_header.target_rank = -1;
+  buffer->communicator        = communicator;
+  buffer->server_communicator = server_communicator;
+  buffer->communication_type  = communication_type;
 
-  buffer->channel_id  = -1;
-  buffer->consumer_id = -1;
-  buffer->producer_id = -1;
-  buffer->server_rank = -1;
+  MPI_Comm_rank(buffer->communicator, &buffer->dcb_rank);
 
-  buffer->existence_timer.start      = 0;
-  buffer->existence_timer.total_time = 0.0;
+  buffer = count_process_types(buffer);
+  if (buffer == NULL) return NULL;
 
-  int dcb_rank;
-  MPI_Comm_rank(buffer->communicator, &dcb_rank);
+  buffer = assign_process_ids(buffer);
+  if (buffer == NULL) return NULL;
 
-  // Determine which process will be the root of the DCB
-  if (buffer->server_communicator != MPI_COMM_NULL) {
-    MPI_Comm_rank(buffer->server_communicator, &buffer->server_rank);
-    if (buffer->server_rank == DCB_ROOT_ID) {
-      if (dcb_rank != DCB_ROOT_ID) {
-        printf("ERROR during DCB_create. DCB rank %d is not on the server communicator...\n", DCB_ROOT_ID);
-        return NULL;
-      }
+  init_metadata(buffer, num_bytes_server_bound, num_bytes_client_bound);
 
-      int total_num_procs, server_num_procs;
-      MPI_Comm_size(buffer->communicator, &total_num_procs);
-      MPI_Comm_size(buffer->server_communicator, &server_num_procs);
-
-      if (server_num_procs < 2) {
-        printf("ERROR during DCB_create. We need at least 2 processes on the server, but there is only %d. Aborting.\n",
-               server_num_procs);
-        return NULL;
-      }
-
-      if (buffer->num_channels > server_num_procs - 1) {
-        printf("Requesting too many channels (%d), reducing to (%d)\n", buffer->num_channels, server_num_procs - 1);
-        buffer->num_channels = server_num_procs - 1;
-      }
-
-      buffer->num_producers = total_num_procs - server_num_procs;
-      buffer->num_consumers = total_num_procs - buffer->num_producers - buffer->num_channels;
-    }
-
-    MPI_Comm local_comm;
-    MPI_Comm_split_type(buffer->server_communicator, MPI_COMM_TYPE_SHARED, buffer->server_rank, MPI_INFO_NULL, &local_comm);
-
-    int local_size, server_size;
-    MPI_Comm_size(local_comm, &local_size);
-    MPI_Comm_size(buffer->server_communicator, &server_size);
-    if (local_size != server_size) {
-      printf("ERROR during DCB create: Server processes appear to be on multiple nodes\n");
-      return NULL;
-    }
-  }
-
-  // We assume the rank DCB_ROOT_ID process is the root and contains the relevant info
-  // Now make sure the other processes have the same info
-  MPI_Bcast(&buffer->num_producers, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
-  MPI_Bcast(&buffer->num_channels, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
-  MPI_Bcast(&buffer->num_consumers, 1, MPI_INT, DCB_ROOT_ID, buffer->communicator);
-
-  if (server_communicator == MPI_COMM_NULL) {
-    // Assign a "buffer rank" to every producer process. It will be their producer ID
-    MPI_Comm new_comm;
-    MPI_Comm_split(buffer->communicator, 1, 0, &new_comm);
-    MPI_Comm_rank(new_comm, &buffer->producer_id);
-  }
-  else {
-    // Le the producers create their own (temporary) communicator
-    int global_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &global_rank);
-    MPI_Comm dummy;
-    MPI_Comm_split(buffer->communicator, 0, global_rank, &dummy);
-
-    if (buffer->server_rank < 0) {
-      printf("WE HAVE A PROBLEM!!!\n");
-      return NULL;
-    }
-
-    // Determine whether we are a consumer or a channel process
-    if (buffer->server_rank < buffer->num_consumers)
-      buffer->consumer_id = buffer->server_rank;
-    else
-      buffer->channel_id = buffer->server_rank - buffer->num_consumers;
-  }
-
-  const size_t num_desired_elements = num_bytes_to_num_elem(num_bytes);
-  const MPI_Aint win_total_size =
-      total_window_num_elem(buffer->num_producers, buffer->num_channels, num_desired_elements) * (MPI_Aint)sizeof(data_element);
-
-  // Root only: allocate shared DCB memory on the server, initialize the common header and send memory info to other server processes
-  if (is_root(buffer)) {
-    int id           = -1;
-    buffer->raw_data = shmem_allocate_shared(&id, win_total_size);
-    if (buffer->raw_data == NULL) {
-      printf("Error when allocating shared memory for DCB\n");
-      return NULL;
-    }
-
-    init_common_header(get_common_server_header(buffer), buffer->num_producers, buffer->num_channels, num_desired_elements);
-
-    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Send shared mem info to other server procs
-  }
-
-  // Non-root server processes: retrieve shared memory info and set own rank (channels only) into common header
-  if (is_on_server(buffer) && !is_root(buffer)) {
-    int id;
-    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Receive shared mem info from root process
-    buffer->raw_data = shmem_address_from_id(id);
-
-    // Set channel ranks in common header
-    if (is_channel(buffer)) {
-      int full_rank;
-      MPI_Comm_rank(buffer->communicator, &full_rank);
-      get_channel_ranks(buffer)[buffer->channel_id] = full_rank;
-    }
-
-    // Let the root know it can initialize the buffers
-    MPI_Barrier(buffer->server_communicator);
-  }
-
-  // Root only: initialize the individual CB instances
-  if (is_root(buffer)) {
-    // Wait until everyone on the server has retrieved the shared mem info and the channels have set their rank
-    MPI_Barrier(buffer->server_communicator);
-
-    // Compute number of elements that fit in individual buffers (excludes the space taken by some headers)
-    const int num_elem_in_circ_buffer =
-        total_circular_buffer_instance_size(num_desired_elements) - instance_header_size() + circular_buffer_header_size();
-
-    // Initialize the individual buffers
-    for (int i = 0; i < buffer->num_producers; i++) {
-      circular_buffer_instance_p buffer_instance = get_circular_buffer_instance(buffer, i);
-      init_circular_buffer_instance(buffer_instance, i, num_elem_in_circ_buffer);
-      assign_target_channel(buffer_instance, i % buffer->num_channels, buffer);
-    }
-  }
-
-  // Create the actual window that will be used for data transmission, using a pointer to the same shared memory on the server
-  const MPI_Aint final_win_size = is_producer(buffer) ? 0 : win_total_size; // Size used for actual window creation
-  MPI_Win_create(
-      buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
-
-  // Producers: retrieve their assigned initialized CB instance and send their rank to the server
-  if (is_producer(buffer)) {
+  buffer = init_shmem_area_and_window(buffer);
+  if (buffer == NULL) return NULL;
+  
+  // Clients: retrieve their assigned initialized CB instance and send their rank to the server
+  if (is_client(buffer)) {
     retrieve_window_offset_from_remote(buffer); // Find out where in the window this instance is located
     update_local_header_from_remote(buffer, 1); // Get the header to sync the instance locally
-
-    int producer_rank;
-    MPI_Comm_rank(buffer->communicator, &producer_rank);
-    set_producer_rank_on_remote(buffer, buffer->producer_id, producer_rank);
+    set_client_rank_on_remote(buffer);
   }
 
-  // Wait until everyone (especially the producers) is properly initialized before allowing the use of the buffer
+  // Wait until everyone (especially the clients, at this point) is properly initialized before allowing the use of the buffer
   MPI_Barrier(buffer->communicator);
 
   if (is_root(buffer))
-    print_common_server_header(get_common_server_header(buffer));
+    print_control_metadata(&buffer->control_metadata, buffer->control_data);
 
   if (DCB_check_integrity(buffer, 1) < 0) {
     printf("AAAHHHh just-created DCB is not consistent!!!!\n");
@@ -915,25 +1147,27 @@ distributed_circular_buffer_p DCB_create_bytes(
 }
 
 //F_StArT
-//  function DCB_create_bytes(f_communicator, f_server_communicator, num_channels, num_bytes) result(p) BIND(C, name = 'DCB_create_bytes_f')
+//  function DCB_create(f_communicator, f_server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound) result(p) BIND(C, name = 'DCB_create_f')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
-//    integer(C_INT),    intent(IN), value :: f_communicator !< Communicator on which the distributed buffer is shared
-//    integer(C_INT),    intent(IN), value :: f_server_communicator !< Communicator that groups the server processes
-//    integer(C_INT),    intent(IN), value :: num_channels   !< Number of channels (PEs used for communication only)
-//    integer(C_SIZE_T), intent(IN), value :: num_bytes      !< Number of desired bytes in the circular buffer
+//    integer(C_INT),    intent(IN), value :: f_communicator         !< Communicator on which the distributed buffer is shared
+//    integer(C_INT),    intent(IN), value :: f_server_communicator  !< Communicator that groups the server processes
+//    integer(C_INT),    intent(IN), value :: communication_type     !< Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
+//    integer(C_SIZE_T), intent(IN), value :: num_bytes_server_bound !< Number of bytes in a single server-bound circular buffer (only needed on the root process)
+//    integer(C_SIZE_T), intent(IN), value :: num_bytes_client_bound !< Number of bytes in a single client-bound circular buffer (only needed on the root process)
 //    type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer
-//   end function DCB_create_bytes
+//   end function DCB_create
 //F_EnD
 //! Wrapper function to call from Fortran code, with Fortran MPI communicators
-distributed_circular_buffer_p DCB_create_bytes_f(
-    int32_t f_communicator,        //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
-    int32_t f_server_communicator, //!< [in] Communicator that groups server processes (in Fortran)
-    int32_t num_channels,          //!< [in] Number of processes that can be the target of MPI 1-sided comm (channels)
-    size_t  num_bytes              //!< [in] Desired size of the buffer in bytes
+distributed_circular_buffer_p DCB_create_f(
+    int32_t f_communicator,         //!< [in] Communicator on which the distributed buffer is shared (in Fortran)
+    int32_t f_server_communicator,  //!< [in] Communicator that groups server processes (in Fortran)
+    int32_t communication_type,     //!< [in] Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
+    size_t  num_bytes_server_bound, //!< [in] Number of bytes in a single server-bound circular buffer (only needed on the root process)
+    size_t  num_bytes_client_bound  //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
 ) {
-  return DCB_create_bytes(
-      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), num_channels, num_bytes);
+  return DCB_create(
+      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), communication_type, num_bytes_server_bound, num_bytes_client_bound);
 }
 
 //F_StArT
@@ -950,23 +1184,35 @@ void DCB_print(
   int32_t dump_data                     //!< [in] Whether to print content too
 ) {
   printf(
-      "Printing distributed circ buf: num producers %d, num channels %d, window offset = %d\n"
-      "Consumer ID: %d\n"
-      "Producer ID: %d\n"
-      "Channel ID:  %d\n"
-      "Server rank: %d\n"
-      "Current time: %.2f ms\n",
-      buffer->num_producers, buffer->num_channels, buffer->window_offset, buffer->consumer_id, buffer->producer_id,
-      buffer->channel_id, buffer->server_rank, IO_time_since_start(&buffer->existence_timer));
-  if (is_producer(buffer)) {
+      "Server-bound server ID: %d\n"
+      "Client-bound server ID: %d\n"
+      "Server-bound client ID: %d\n"
+      "Client-bound client ID: %d\n"
+      "Channel ID:             %d\n"
+      "Server rank:            %d\n"
+      "Current time:           %.2f ms\n"
+      "Window offset:          %ld\n",
+      buffer->server_bound_server_id, buffer->client_bound_server_id,
+      buffer->server_bound_client_id, buffer->client_bound_client_id, buffer->channel_id,
+      buffer->server_rank, IO_time_since_start(&buffer->existence_timer), (long int)buffer->window_offset);
+  if (is_client(buffer)) {
     print_instance(&buffer->local_header);
     if (dump_data == 1) {
       CB_dump_data(&buffer->local_header.circ_buffer);
     }
   }
   else if (is_root(buffer)) {
-    for (int i = 0; i < buffer->num_producers; ++i) {
-      const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i);
+    print_control_metadata(&buffer->control_metadata, NULL);
+    for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
+      const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i, DCB_SERVER_BOUND_TYPE);
+      printf("From root: buffer %d has %ld data in it\n", i, get_available_data_bytes(instance));
+      if (dump_data == 1) {
+        print_instance(instance);
+        CB_dump_data(&instance->circ_buffer);
+      }
+    }
+    for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
+      const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i, DCB_CLIENT_BOUND_TYPE);
       printf("From root: buffer %d has %ld data in it\n", i, get_available_data_bytes(instance));
       if (dump_data == 1) {
         print_instance(instance);
@@ -991,34 +1237,35 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
   IO_timer_stop(&buffer->existence_timer);
 
   // Producers must send their collected stats to the root
-  if (is_producer(buffer)) {
-    MPI_Send(
-        &buffer->local_header.circ_buffer.stats, sizeof(cb_stats), MPI_BYTE, DCB_ROOT_ID, buffer->producer_id,
-        buffer->communicator);
+  if (is_client(buffer)) {
+    const int id = is_server_bound_client(buffer) ? buffer->server_bound_client_id : buffer->client_bound_client_id;
+    MPI_Send(&buffer->local_header.circ_buffer.stats, sizeof(cb_stats), MPI_BYTE, DCB_ROOT_ID, id, buffer->communicator);
   }
 
   // The root will print all stats, and compute some global stat values
   if (is_root(buffer)) {
     send_channel_signal(buffer, RSIG_STOP); // Tell channels to stop any activity
-    const data_element* producer_ranks     = get_producer_ranks(buffer);
-    uint64_t            total_data_written = 0;
+    uint64_t total_data_received = 0;
+    uint64_t total_data_sent     = 0;
     printf(
         "------------------------------------------------------------------------------------\n"
         "DCB STATS\n"
-        "Num server processes: %d\n"
-        "Num consumers: %d\n"
+        "Num server-bound server procs: %d\n"
+        "Num client-bound server procs: %d\n"
         "Num channels: %d\n"
-        "Num producers (=buffers): %d\n",
-        buffer->num_channels + buffer->num_consumers, buffer->num_consumers, buffer->num_channels,
-        buffer->num_producers);
-    for (int i = 0; i < buffer->num_producers; ++i) {
-      const circular_buffer_instance_p instance   = get_circular_buffer_instance(buffer, i);
+        "Num server-bound buffers: %d\n"
+        "Num client-bound buffers: %d\n",
+        buffer->control_metadata.num_server_consumers, buffer->control_metadata.num_server_producers,
+        buffer->control_metadata.num_channels,
+        buffer->control_metadata.num_server_bound_instances, buffer->control_metadata.num_client_bound_instances);
+    for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
+      const circular_buffer_instance_p instance   = get_circular_buffer_instance(buffer, i, DCB_SERVER_BOUND_TYPE);
       cb_stats_p                       full_stats = &instance->circ_buffer.stats;
 
       // Combine the stats from remote and server
       MPI_Status status;
       cb_stats   remote_stats;
-      MPI_Recv(&remote_stats, sizeof(cb_stats), MPI_BYTE, producer_ranks[i], i, buffer->communicator, &status);
+      MPI_Recv(&remote_stats, sizeof(cb_stats), MPI_BYTE, buffer->server_bound_client_ranks[i], i, buffer->communicator, &status);
       full_stats->num_writes               = remote_stats.num_writes;
       full_stats->num_write_elems          = remote_stats.num_write_elems;
       full_stats->total_write_time_ms      = remote_stats.total_write_time_ms;
@@ -1026,14 +1273,35 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 
       print_instance_stats(instance, i == 0);
 
-      total_data_written += remote_stats.num_write_elems;
+      total_data_received += remote_stats.num_write_elems;
+    }
+
+    for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
+      const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i, DCB_CLIENT_BOUND_TYPE);
+      cb_stats_p full_stats = &instance->circ_buffer.stats;
+
+      MPI_Status status;
+      cb_stats   remote_stats;
+      MPI_Recv(&remote_stats, sizeof(cb_stats), MPI_BYTE, buffer->client_bound_client_ranks[i], i, buffer->communicator, &status);
+      full_stats->num_writes               = remote_stats.num_writes;
+      full_stats->num_write_elems          = remote_stats.num_write_elems;
+      full_stats->total_write_time_ms      = remote_stats.total_write_time_ms;
+      full_stats->total_write_wait_time_ms = remote_stats.total_write_wait_time_ms;
+
+      print_instance_stats(instance, i == 0);
+
+      total_data_sent += remote_stats.num_write_elems;
     }
 
     const double existence_time = IO_time_ms(&buffer->existence_timer);
-    char         total_data_s[8], dps_s[8];
-    readable_element_count((double)total_data_written * sizeof(data_element), total_data_s);
-    readable_element_count(total_data_written / existence_time * 1000.0 * sizeof(data_element), dps_s);
-    printf("Total data received: %sB (%sB/s)\n", total_data_s, dps_s);
+    char total_data_recv_s[8], dps_recv_s[8];
+    char total_data_send_s[8], dps_send_s[8];
+    readable_element_count((double)total_data_received * sizeof(data_element), total_data_recv_s);
+    readable_element_count(total_data_received / existence_time * 1000.0 * sizeof(data_element), dps_recv_s);
+    readable_element_count((double)total_data_sent * sizeof(data_element), total_data_send_s);
+    readable_element_count(total_data_sent / existence_time * 1000.0 * sizeof(data_element), dps_send_s);
+    printf("Total data received: %sB (%sB/s)\n", total_data_recv_s, dps_recv_s);
+    printf("Total data sent:     %sB (%sB/s)\n", total_data_send_s, dps_send_s);
     printf("------------------------------------------------------------------------------------\n");
   }
 
@@ -1043,46 +1311,47 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
 }
 
 //F_StArT
-//  function DCB_get_available_data_bytes(buffer, buffer_id) result(num_bytes) BIND(C, name = 'DCB_get_available_data_bytes')
+//  function DCB_get_available_data(buffer, buffer_id) result(num_bytes) BIND(C, name = 'DCB_get_available_data')
 //    import :: C_PTR, C_INT, C_INT64_T
 //    implicit none
 //    type(C_PTR), intent(in), value    :: buffer
 //    integer(C_INT), intent(in), value :: buffer_id
 //    integer(C_INT64_T) :: num_bytes
-//  end function DCB_get_available_data_bytes
+//  end function DCB_get_available_data
 //F_EnD
 //! Check how many elements are stored in the specified buffer.
-//! _Can only be called from a consumer process._
-//! @return The number of elements in the specified buffer, or -1 if called from a producer process
+//! _Can only be called from a server consumer process._
+//! @return The number of elements in the specified buffer, or -1 if called from a wrong process
 //C_StArT
-int64_t DCB_get_available_data_bytes(
+int64_t DCB_get_available_data(
     distributed_circular_buffer_p buffer,   //!< [in] DCB we are querying
     const int                     buffer_id //!< [in] Which specific buffer in the DCB
     )
 //C_EnD
 {
-  if (buffer != NULL && is_consumer(buffer) && buffer_id < buffer->num_producers && buffer_id >= 0)
-    return (int64_t)get_available_data_bytes(get_circular_buffer_instance(buffer, buffer_id));
+  if (buffer != NULL && is_server_bound_server(buffer) && buffer_id < buffer->control_metadata.num_server_bound_instances && buffer_id >= 0)
+    return (int64_t)get_available_data_bytes(get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE));
   return -1;
 }
 
 //F_StArT
-//  function DCB_get_available_space_bytes(buffer, update_from_remote) result(num_spaces) BIND(C, name = 'DCB_get_available_space_bytes')
+//  function DCB_get_available_space(buffer, update_from_remote) result(num_spaces) BIND(C, name = 'DCB_get_available_space')
 //    import :: C_PTR, C_INT, C_INT64_T
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
 //    integer(C_INT), intent(in), value :: update_from_remote
 //    integer(C_INT64_T) :: num_spaces
-//  end function DCB_get_available_space_bytes
+//  end function DCB_get_available_space
 //F_EnD
 //C_StArT
-int64_t DCB_get_available_space_bytes(
+//! Check how many bytes can still fit in the remaining space in the buffer. _Can only be called from a server-bound client process._
+int64_t DCB_get_available_space(
     distributed_circular_buffer_p buffer, //!< [in] DCB we are querying
     int update_from_remote                //!< [in] Whether to look at the server to get the absolute latest num spaces
     )
 //C_EnD
 {
-  if (is_producer(buffer)) {
+  if (is_server_bound_client(buffer)) {
     if (update_from_remote == 1)
       return get_available_space_from_remote_bytes(buffer);
     else
@@ -1092,15 +1361,15 @@ int64_t DCB_get_available_space_bytes(
 }
 
 //F_StArT
-// function DCB_get_producer_id(buffer) result(producer_id) BIND(C, name = 'DCB_get_producer_id')
+// function DCB_get_server_bound_client_id(buffer) result(server_bound_client_id) BIND(C, name = 'DCB_get_server_bound_client_id')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
-//    integer(C_INT) :: producer_id
-// end function DCB_get_producer_id
+//    integer(C_INT) :: server_bound_client_id
+// end function DCB_get_server_bound_client_id
 //F_EnD
-int32_t DCB_get_producer_id(const distributed_circular_buffer_p buffer) {
-  return buffer->producer_id;
+int32_t DCB_get_server_bound_client_id(const distributed_circular_buffer_p buffer) {
+  return buffer->server_bound_client_id;
 }
 
 //F_StArT
@@ -1116,71 +1385,75 @@ int32_t DCB_get_channel_id(const distributed_circular_buffer_p buffer) {
 }
 
 //F_StArT
-// function DCB_get_consumer_id(buffer) result(consumer_id) BIND(C, name = 'DCB_get_consumer_id')
+// function DCB_get_server_bound_server_id(buffer) result(server_bound_server_id) BIND(C, name = 'DCB_get_server_bound_server_id')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
-//    integer(C_INT) :: consumer_id
-// end function DCB_get_consumer_id
+//    integer(C_INT) :: server_bound_server_id
+// end function DCB_get_server_bound_server_id
 //F_EnD
-int32_t DCB_get_consumer_id(const distributed_circular_buffer_p buffer) {
-  return buffer->consumer_id;
+int32_t DCB_get_server_bound_server_id(const distributed_circular_buffer_p buffer) {
+  return buffer->server_bound_server_id;
 }
 
 //F_StArT
-//  function DCB_get_num_producers(buffer) result(num_producers) BIND(C, name = 'DCB_get_num_producers')
+//  function DCB_get_num_server_bound_instances(buffer) result(num_instances) BIND(C, name = 'DCB_get_num_server_bound_instances')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
-//    integer(C_INT) :: num_producers
-//  end function DCB_get_num_producers
+//    integer(C_INT) :: num_instances
+//  end function DCB_get_num_server_bound_instances
 //F_EnD
-int32_t DCB_get_num_producers(const distributed_circular_buffer_p buffer) {
-  return buffer->num_producers;
+int32_t DCB_get_num_server_bound_instances(const distributed_circular_buffer_p buffer) {
+  return buffer->control_metadata.num_server_bound_instances;
 }
 
 //F_StArT
-//  function DCB_get_num_consumers(buffer) result(num_consumers) BIND(C, name = 'DCB_get_num_consumers')
+//  function DCB_get_num_server_consumers(buffer) result(num_consumers) BIND(C, name = 'DCB_get_num_server_consumers')
 //    import :: C_PTR, C_INT
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
 //    integer(C_INT) :: num_consumers
-//  end function DCB_get_num_consumers
+//  end function DCB_get_num_server_consumers
 //F_EnD
-int32_t DCB_get_num_consumers(const distributed_circular_buffer_p buffer) {
-  return buffer->num_consumers;
+int32_t DCB_get_num_server_consumers(const distributed_circular_buffer_p buffer) {
+  return buffer->control_metadata.num_server_consumers;
 }
 
 //F_StArT
-//  function DCB_get_capacity_local_bytes(buffer) result(capacity) BIND(C, name = 'DCB_get_capacity_local_bytes')
+//  function DCB_get_capacity_local(buffer) result(capacity_bytes) BIND(C, name = 'DCB_get_capacity_local')
 //    import :: C_PTR, C_INT64_T
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer
-//    integer(C_INT64_T) :: capacity
-//  end function DCB_get_capacity_local_bytes
+//    integer(C_INT64_T) :: capacity_bytes
+//  end function DCB_get_capacity_local
 //F_EnD
 //C_StArT
-int64_t DCB_get_capacity_local_bytes(const distributed_circular_buffer_p buffer
+int64_t DCB_get_capacity_local(const distributed_circular_buffer_p buffer
 )
 //C_EnD
 {
-  if (is_producer(buffer))
+  if (is_client(buffer))
     return buffer->local_header.capacity;
   return -1;
 }
 
 //F_StArT
-//  function DCB_get_capacity_server_bytes(buffer, buffer_id) result(capacity) BIND(C, name = 'DCB_get_capacity_server_bytes')
+//  function DCB_get_capacity_server(buffer, buffer_id) result(capacity_bytes) BIND(C, name = 'DCB_get_capacity_server')
 //    import :: C_PTR, C_INT, C_INT64_T
 //    implicit none
 //    type(C_PTR),    intent(in), value :: buffer
 //    integer(C_INT), intent(in), value :: buffer_id
-//    integer(C_INT64_T) :: capacity
-//  end function DCB_get_capacity_server_bytes
+//    integer(C_INT64_T) :: capacity_bytes
+//  end function DCB_get_capacity_server
 //F_EnD
-int64_t DCB_get_capacity_server_bytes(const distributed_circular_buffer_p buffer, int buffer_id) {
-  if (is_consumer(buffer))
-    return get_circular_buffer_instance(buffer, buffer_id)->capacity;
+//! Must be called from a server process.
+//! @return Capacity of the specified buffer, or -1 if we are not a server process
+int64_t DCB_get_capacity_server(const distributed_circular_buffer_p buffer, int buffer_id) {
+  if (is_server_bound_server(buffer))
+    return get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE)->capacity;
+  else if (is_client_bound_server(buffer))
+    return get_circular_buffer_instance(buffer, buffer_id, DCB_CLIENT_BOUND_TYPE)->capacity;
   return -1;
 }
 
@@ -1206,7 +1479,7 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [i
   if (!is_channel(buffer))
     return -1;
 
-  volatile channel_signal_t* signal = get_channel_signal_ptr(buffer, buffer->channel_id);
+  volatile channel_signal_t* signal = buffer->channel_signals + buffer->channel_id;
 
   while (1) {
     sleep_us(DCB_WINDOW_SYNC_DELAY_US);
@@ -1259,12 +1532,12 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
   if (is_root(buffer))
     send_channel_signal(buffer, RSIG_SERVER_BARRIER);
 
-  if (is_consumer(buffer))
+  if (is_on_server(buffer))
     MPI_Barrier(buffer->server_communicator);
 }
 
 //F_StArT
-//  function DCB_put_bytes(buffer, src_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_put_bytes')
+//  function DCB_put_client(buffer, src_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_put_client')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
 //    type(C_PTR),       intent(in), value :: buffer    !< Buffer where we want to insert data
@@ -1272,21 +1545,23 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 //    integer(C_SIZE_T), intent(in), value :: num_bytes !< How many data elements we want to insert
 //    integer(C_INT),    intent(in), value :: operation !< Whether to commit the transaction or wait
 //    integer(C_INT) :: status !< 0 if success, -1 if failure
-//  end function DCB_put_bytes
+//  end function DCB_put_client
 //F_EnD
 //! @brief Insert data into the given buffer, once there is enough space (will wait if there isn't enough initially)
 //!
 //! The data will be inserted into the buffer instance associated with the calling process.
 //! We use the MPI_Accumulate function along with the MPI_REPLACE operation, rather than MPI_Put, to ensure the order
 //! in which the memory transfers are done. We need to have finished the transfer of the data itself before updating
-//! the insertion pointer on the root node (otherwise it might try to read data that has not yet arrived).
+//! the insertion pointer on the root node (otherwise it might try to read data that have not yet arrived).
 //! An operation must be specified. The options for now are either COMMIT or NO_COMMIT. COMMIT will make the data
 //! available for the consumer to read, whereas NO_COMMIT will _send_ the data but _not_ make it available.
 //! _With NO_COMMIT, the data is still sent through MPI_.
 //!
+//! _Can only be called from a server-bound client process._
+//!
 //! @return 0 if everything went smoothly, -1 otherwise
 //C_StArT
-int DCB_put_bytes(
+int DCB_put_client(
     distributed_circular_buffer_p buffer,    //!< [in,out] Distributed buffer in which we want to put data
     void* const                   src_data,  //!< [in] Pointer to the data we want to insert
     const size_t                  num_bytes, //!< [in] How many bytes we want to insert
@@ -1298,7 +1573,7 @@ int DCB_put_bytes(
   IO_timer_start(&timer);
 
   const size_t  num_elements = num_bytes_to_num_elem(num_bytes);
-  const int64_t num_spaces   = DCB_wait_space_available_bytes(buffer, num_elements * sizeof(data_element));
+  const int64_t num_spaces   = DCB_wait_space_available_client(buffer, num_elements * sizeof(data_element));
   if (num_spaces < 0)
     return -1;
 
@@ -1371,7 +1646,7 @@ int DCB_put_bytes(
 }
 
 //F_StArT
-//  function DCB_get_bytes(buffer, buffer_id, dest_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_get_bytes')
+//  function DCB_get_server(buffer, buffer_id, dest_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_get_server')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
 //    type(C_PTR),       intent(in), value :: buffer    !< DCB from which we want to read
@@ -1380,10 +1655,19 @@ int DCB_put_bytes(
 //    integer(C_SIZE_T), intent(in), value :: num_bytes !< How many bytes to read
 //    integer(C_INT),    intent(in), value :: operation !< Whether to actually extract, read or just peek at the data
 //    integer(C_INT) :: status
-//  end function DCB_get_bytes
+//  end function DCB_get_server
 //F_EnD
 //C_StArT
-int DCB_get_bytes(
+//! Read data from the specified buffer. This operation does not perform any MPI communication.
+//! 
+//! 3 operations are possible: extract (CB_COMMIT) will read the data and make the space available for the client
+//! to insert more into the buffer, read (CB_NO_COMMIT) will read the data but will _not_ remove it from the buffer,
+//! and peek (CB_PEEK) will have a look at the data, but that data will still be available to read afterwards. 
+//!
+//! _Can only be called from a server-bound server process._
+//!
+//! @return 0 on success, -1 on error
+int DCB_get_server(
     distributed_circular_buffer_p buffer,    //!< [in,out] DCB from which we want to read
     const int                     buffer_id, //!< [in] Specific buffer in the DCB
     void*                         dest_data, //!< [in] Where to put the data from the buffer
@@ -1396,11 +1680,11 @@ int DCB_get_bytes(
   IO_timer_start(&timer);
 
   const size_t  num_elements       = num_bytes_to_num_elem(num_bytes);
-  const int64_t num_available_elem = DCB_wait_data_available_bytes(buffer, buffer_id, num_elements * sizeof(data_element));
+  const int64_t num_available_elem = DCB_wait_data_available_server(buffer, buffer_id, num_elements * sizeof(data_element));
   if (num_available_elem < 0)
     return -1;
 
-  circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
+  circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE);
 
   // Update "max fill" metric
   if (instance->circ_buffer.stats.max_fill < (uint64_t)num_available_elem)
@@ -1456,15 +1740,16 @@ int DCB_get_bytes(
 }
 
 /**
- * @brief Check the integrity of a single CB instance within the given DCB _(only valid for consumers/channels)_
+ * @brief Check the integrity of a single CB instance within the given DCB _(only valid for server processes)_
  * @return 0 if the check is successful, a negative value otherwise
  */
 int DCB_check_instance_integrity(
-    const distributed_circular_buffer_p buffer,   //!< [in] The DCB we want to check
-    const int                           buffer_id //!< [in] The ID of the CB we want to check within the DCB
+    const distributed_circular_buffer_p buffer,     //!< [in] The DCB we want to check
+    const int                           buffer_id,  //!< [in] The ID of the CB we want to check within the DCB
+    const int communication_type //!< [in] Whether we are looking for a server- or client-bound CB
 ) {
-  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id);
-  if (check_instance_consistency(instance) != 0)
+  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, communication_type);
+  if (instance == NULL || check_instance_consistency(instance) != 0)
     return -1;
 
   return 0;
@@ -1493,24 +1778,25 @@ int DCB_check_integrity(
     return -1;
   }
 
-  if ((buffer->producer_id >= 0) + (buffer->channel_id >= 0) + (buffer->consumer_id >= 0) != 1) {
+  if ((buffer->server_bound_server_id >= 0) + (buffer->client_bound_server_id >= 0) + (buffer->channel_id >= 0) +
+      (buffer->server_bound_client_id >= 0) + (buffer->client_bound_client_id >= 0) != 1) {
     if (verbose) printf("Inconsistency in DCB IDs\n");
     return -1;
   }
 
-  if (is_producer(buffer)) {
+  if (is_client(buffer)) {
     if (check_instance_consistency(&buffer->local_header) != 0) {
-      if (verbose) printf("Local instance %d failed integrity check!\n", buffer->producer_id);
+      if (verbose) printf("Local instance %d/%d failed integrity check!\n", buffer->server_bound_client_id, buffer->client_bound_client_id);
       return -1;
     }
   }
-  else if (is_consumer(buffer)) {
-    for (int i = 0; i < buffer->num_producers; ++i) {
+  else if (is_server_bound_server(buffer)) {
+    for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
 
       // Check whether the limit of this CB points to the beginning of the next CB
-      if (i < buffer->num_producers - 1) {
-        const circular_buffer_instance_p current_instance = get_circular_buffer_instance(buffer, i);
-        const circular_buffer_instance_p next_instance    = get_circular_buffer_instance(buffer, i+1);
+      if (i < buffer->control_metadata.num_server_bound_instances - 1) {
+        const circular_buffer_instance_p current_instance = get_circular_buffer_instance(buffer, i, DCB_SERVER_BOUND_TYPE);
+        const circular_buffer_instance_p next_instance    = get_circular_buffer_instance(buffer, i+1, DCB_SERVER_BOUND_TYPE);
         const data_element* end_of_buffer = current_instance->circ_buffer.data + current_instance->circ_buffer.m.limit;
 
         if ((void*)end_of_buffer != (void*)next_instance) {
@@ -1520,7 +1806,27 @@ int DCB_check_integrity(
       }
 
       // Check consistency of that particular buffer
-      if (DCB_check_instance_integrity(buffer, i) != 0)
+      if (DCB_check_instance_integrity(buffer, i, DCB_SERVER_BOUND_TYPE) != 0)
+        return -1;
+    }
+  }
+  else if (is_client_bound_server(buffer)) {
+    for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
+
+      // Check whether the limit of this CB points to the beginning of the next CB
+      if (i < buffer->control_metadata.num_client_bound_instances - 1) {
+        const circular_buffer_instance_p current_instance = get_circular_buffer_instance(buffer, i, DCB_CLIENT_BOUND_TYPE);
+        const circular_buffer_instance_p next_instance    = get_circular_buffer_instance(buffer, i+1, DCB_CLIENT_BOUND_TYPE);
+        const data_element* end_of_buffer = current_instance->circ_buffer.data + current_instance->circ_buffer.m.limit;
+
+        if ((void*)end_of_buffer != (void*)next_instance) {
+          printf("AAAHHHHhhh end of CB %d (%ld) does not match with start of CB %d (%ld)\n", i, (uint64_t)end_of_buffer, i + 1, (uint64_t)next_instance);
+          return -1;
+        }
+      }
+
+      // Check consistency of that particular buffer
+      if (DCB_check_instance_integrity(buffer, i, DCB_SERVER_BOUND_TYPE) != 0)
         return -1;
     }
   }

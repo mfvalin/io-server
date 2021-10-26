@@ -104,7 +104,7 @@ program pseudomodelandserver
   type(MPI_Comm) :: comm
   integer :: rank, size, nserv !, noops
   character(len=128) :: arg
-  type(comm_rank_size) :: fullnode_crs, local_crs
+  type(comm_rank_size) :: local_crs
 
   ! integer, parameter :: NUM_NODES = 3
   logical :: server_node, single_node
@@ -174,7 +174,7 @@ program pseudomodelandserver
     !  from this point on, this is a model compute process
 
     call model_process()
-    write(6,*)'END: compute, PE',rank+1,' of',size
+    ! write(6,*)'END: compute, PE',rank+1,' of',size
 
   else            ! ranks 0, 1,..., nserv-1 :
     ! =============================================================================================
@@ -210,7 +210,7 @@ program pseudomodelandserver
           error stop 1
         end if
         call model_process()
-        write(6,*)'END: compute, PE',rank+1,' of',size
+        ! write(6,*)'END: compute, PE',rank+1,' of',size
       else
         !-----------------
         ! no-op processes
@@ -226,7 +226,7 @@ program pseudomodelandserver
   endif
 
   ! call ioserver_set_time_to_quit()
-  write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
+  ! write(6,*)'FINAL: full node PE',fullnode_crs % rank+1,' of',fullnode_crs % size
   call mpi_finalize(status)
 end program
 
@@ -237,16 +237,18 @@ subroutine io_server_process()
   ! use io_server_mod
   implicit none
 
-  type(comm_rank_size) :: consumer_crs
-  type(MPI_Comm) :: global_comm !, consumer_comm
-  integer :: global_rank, global_size
+  type(comm_rank_size) :: consumer_crs, all_crs
+  ! type(MPI_Comm) :: global_comm !, consumer_comm
+  ! integer :: global_rank, global_size
   type(distributed_circular_buffer) :: data_buffer
   ! logical :: success
   ! integer :: num_producers
 
-  call get_local_world(global_comm, global_rank, global_size)
+  ! call get_local_world(global_comm, global_rank, global_size)
   ! call io_server_mod_init()
 
+  all_crs = context % get_crs(NO_COLOR)
+  print '(A, I5)', 'SERVER, global ', all_crs % rank
 
   ! write(6, *) 'SERVER process! PE', server_crs % rank + 1, ' of', server_crs % size, ' global:', global_rank + 1
 
@@ -256,7 +258,7 @@ subroutine io_server_process()
   consumer_crs = context % get_crs(SERVER_COLOR + NODE_COLOR)
 
   ! Choose what to do based on whether we are a consumer or a channel process
-  if (data_buffer % get_consumer_id() >= 0) then
+  if (data_buffer % get_server_bound_server_id() >= 0) then
     call consumer_process(data_buffer, consumer_crs % comm)
   else
     write(6, *) 'We have a problem'
@@ -301,7 +303,7 @@ function receive_message(dcb, producer_id) result(finished)
   ! Flush any completed grid for owned files
   do i_file = 1, MAX_NUM_STREAM_FILES
     file_ptr => context % get_stream(i_file)
-    if (file_ptr % get_owner_id() == dcb % get_consumer_id()) then
+    if (file_ptr % get_owner_id() == dcb % get_server_bound_server_id()) then
       num_flushed = file_ptr % flush_data()
       if (num_flushed > 0) then
         print '(A, I4, A)', 'Flushed ', num_flushed, ' completed grids'
@@ -452,7 +454,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
 
   integer, parameter :: WRITE_BUFFER_SIZE = 50000
 
-  integer :: consumer_id, num_producers, num_consumers, producer_id
+  integer :: server_bound_server_id, num_producers, num_consumers, producer_id
   integer :: i_producer
   integer, dimension(:), allocatable :: message, expected_message
   integer, dimension(:), allocatable :: file_write_buffer
@@ -474,20 +476,20 @@ subroutine consumer_process(data_buffer, consumer_comm)
 
   num_errors = 0
 
-  consumer_id   = data_buffer % get_consumer_id()
-  num_consumers = data_buffer % get_num_consumers()
-  num_producers = data_buffer % get_num_producers()
+  server_bound_server_id = data_buffer % get_server_bound_server_id()
+  num_consumers = data_buffer % get_num_server_consumers()
+  num_producers = data_buffer % get_num_server_bound_clients()
 
   allocate(active_producers(num_producers))
   active_producers(:) = -1
 
   file_write_position = 1
 
-  write(file_name,'(A6, I4.4, A4)') 'SERVER', consumer_id, '.out'
+  write(file_name,'(A6, I4.4, A4)') 'SERVER', server_bound_server_id, '.out'
   open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
 
   num_active_producers = 0
-  if (consumer_id == 0) then
+  if (server_bound_server_id == 0) then
     ! Should receive one test signal
     do i_producer = 0, num_producers - 1
       finished = receive_message(data_buffer, i_producer)
@@ -510,7 +512,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
   finished = .false.
   do while (.not. finished)
     finished = .true.
-    do i_producer = consumer_id + 1, num_active_producers, num_consumers
+    do i_producer = server_bound_server_id + 1, num_active_producers, num_consumers
       producer_id = active_producers(i_producer)
       if (producer_id < 0) cycle
 
@@ -523,10 +525,10 @@ subroutine consumer_process(data_buffer, consumer_comm)
       end if
     end do
   end do
-  print *, 'Server done receiving', consumer_id
+  print *, 'Server done receiving', server_bound_server_id
 
   ! Final check on the buffers' content
-  do i_producer = consumer_id + 1, num_active_producers - 1, num_consumers
+  do i_producer = server_bound_server_id + 1, num_active_producers - 1, num_consumers
     if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 0) then
       num_errors = num_errors + 1 
       write (6, *) 'ERROR: buffer should be empty at the end of test', data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4), i_producer
@@ -596,6 +598,7 @@ subroutine model_process()
   global_rank = all_crs % rank
 
   ! print *, 'MODEL, local compute id: ', local_compute_id
+  print '(A, I5)', 'MODEL, global ', global_rank
 
   data_buffer = context % get_server_bound_cb()
   if (.not. data_buffer % is_valid()) then
@@ -685,10 +688,10 @@ subroutine io_relay_process()
   use data_serialize
   implicit none
 
-  type(MPI_Comm)       :: global_comm
-  integer              :: global_rank, global_size
-  type(comm_rank_size) :: local_relay_crs, node_crs
-  integer              :: num_local_compute, local_relay_id, num_local_relays, producer_id
+  ! type(MPI_Comm)       :: all_comm
+  ! integer              :: all_comm_rank, all_comm_size
+  type(comm_rank_size) :: all_crs, local_relay_crs, node_crs
+  integer              :: num_local_compute, local_relay_id, num_local_relays, server_bound_client_id
   integer              :: i_compute, num_errors
   integer :: h_status
 
@@ -698,7 +701,7 @@ subroutine io_relay_process()
   type(heap), dimension(:), pointer :: heap_list
 
   ! call io_relay_mod_init()
-  call get_local_world(global_comm, global_rank, global_size)
+  ! call get_local_world(global_comm, global_rank, global_size)
 
   cb_list => context % get_server_bound_cb_list()
   heap_list => context % get_heap_list()
@@ -712,11 +715,13 @@ subroutine io_relay_process()
   num_errors        = 0
 
   ! print *, 'RELAY, local relay id: ', local_relay_id
+  all_crs = context % get_crs(NO_COLOR)
+  print '(A, I5)', 'RELAY, global ', all_crs % rank
 
   ! Create the DCB used to communicate with the server
   data_buffer = context % get_dcb()
 
-  producer_id = data_buffer % get_producer_id()
+  server_bound_client_id = data_buffer % get_server_bound_client_id()
 
   ! NODE barrier to allow MODEL processes to initialize their CBs
   call MPI_Barrier(node_crs % comm)
@@ -752,7 +757,7 @@ subroutine io_relay_process()
     dcb_message => dcb_message_jar % raw_array()
 
     ! Say hi to the consumer processes
-    header % length  = message_header_size_int()
+    header % length  = int(message_header_size_int(), kind=4)
     if (local_relay_id == 0) then
       header % command = MSG_COMMAND_DUMMY
     else
@@ -935,7 +940,7 @@ subroutine io_relay_process()
   if (local_relay_id == 0) then
     call heap_list(0) % dumpinfo()
     do i_compute = 0, num_local_compute - 1
-      call cb_list(i_compute) % print_stats(producer_id * 100 + i_compute, i_compute == 0)
+      call cb_list(i_compute) % print_stats(server_bound_client_id * 100 + i_compute, i_compute == 0)
     end do
   end if
 

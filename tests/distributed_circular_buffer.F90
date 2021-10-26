@@ -76,22 +76,22 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   integer :: num_errors
 
   integer            :: i_prod, i_data
-  integer(C_INT)     :: num_producers, consumer_id, producer_id
+  integer(C_INT)     :: num_server_bound_instances, server_bound_server_id, server_bound_client_id
   integer(C_INT64_T) :: num_elements, num_spaces, capacity
   integer :: first_prod, num_prod_local, last_prod
   integer, dimension(NUM_DATA_ELEMENTS_SMALL) :: data_small, expected_data_small
   integer, dimension(NUM_DATA_ELEMENTS_LARGE) :: data_large, expected_data_large
   logical :: success
-  logical :: is_producer, is_consumer
+  logical :: is_server_bound_server, is_server_bound_client
 
   num_errors = 0
 
-  consumer_id   = buffer % get_consumer_id()
-  producer_id   = buffer % get_producer_id()
-  num_producers = buffer % get_num_producers()
+  server_bound_server_id     = buffer % get_server_bound_server_id()
+  server_bound_client_id     = buffer % get_server_bound_client_id()
+  num_server_bound_instances = buffer % get_num_server_bound_clients()
 
-  is_consumer = (consumer_id >= 0)
-  is_producer = (producer_id >= 0)
+  is_server_bound_server = (server_bound_server_id >= 0)
+  is_server_bound_client = (server_bound_client_id >= 0)
 
   ! Put dummy data to make it easier to detect errors later
   do i_data=1, NUM_DATA_ELEMENTS_SMALL
@@ -104,15 +104,15 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   end do
 
   ! Initialization
-  if (is_consumer) then
-    num_prod_local = ceiling(real(num_producers) / NUM_CONSUMERS)
-    first_prod     = consumer_id * num_prod_local
-    last_prod      = min(first_prod + num_prod_local, num_producers) - 1
+  if (is_server_bound_server) then
+    num_prod_local = ceiling(real(num_server_bound_instances) / NUM_CONSUMERS)
+    first_prod     = server_bound_server_id * num_prod_local
+    last_prod      = min(first_prod + num_prod_local, num_server_bound_instances) - 1
 
-    print *, 'Consumer: first/last prod = ', first_prod, last_prod
+    print *, 'Server: first/last prod = ', first_prod, last_prod
 
     ! Check that the buffers are empty
-    do i_prod = 0, num_producers - 1
+    do i_prod = 0, num_server_bound_instances - 1
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
       if (num_elements .ne. 0) then 
         num_errors = num_errors + 1
@@ -128,7 +128,7 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
     end if
 
     ! Check that the buffers have the requested capacity (+/- one 8-byte element)
-    do i_prod = 0, num_producers - 1
+    do i_prod = 0, num_server_bound_instances - 1
       capacity = buffer % get_capacity(i_prod, CB_KIND_CHAR)
       if (capacity < BUFFER_SIZE_BYTE .or. capacity > BUFFER_SIZE_BYTE + 8) then
         print '(A,I10,A,I10)', 'Buffer has the wrong capacity! Requested/got', BUFFER_SIZE_BYTE, ' / ', capacity
@@ -138,10 +138,10 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
     end do
 
 
-  else if (is_producer) then
+  else if (is_server_bound_client) then
     capacity = buffer % get_capacity(CB_KIND_INTEGER_4)
 
-    print *, 'Producer, rank = ', rank
+    print *, 'Client, rank = ', rank
     print *, 'Capacity: ', capacity, buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
     print *, '          ', buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
 
@@ -150,8 +150,8 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Producers partially insert a value
-  if (is_producer) then
+  ! Clients partially insert a value
+  if (is_server_bound_client) then
     print *, 'Partially putting a value'
     data_small(1) = SECRET_TEST_VALUE
     success = buffer % put_elems(data_small, 1_8, CB_KIND_INTEGER_4, .false.)
@@ -167,10 +167,10 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Consumers check that the buffers still have no available data
-  if (is_consumer) then
-    print *, 'Consumer DOING CHECKS'
-    do i_prod = 0, num_producers - 1
+  ! Servers check that the buffers still have no available data
+  if (is_server_bound_server) then
+    print *, 'Server consumer DOING CHECKS'
+    do i_prod = 0, num_server_bound_instances - 1
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
       if (num_elements .ne. 0) then 
         num_errors = num_errors + 1
@@ -183,9 +183,9 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Producers commit content and check that the space is now taken
+  ! Clients commit content and check that the space is now taken
   ! (not updating buffer status from server)
-  if (is_producer) then
+  if (is_server_bound_client) then
     print *, 'Fully committing buffer content'
     success = buffer % put_elems(data_small, 0_8, CB_KIND_INTEGER_4, .true.)
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
@@ -215,9 +215,9 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! "root" consumer checks that the test value was properly written in every CB (just peeking at it, no extraction)
-  if (consumer_id == 0) then
-    do i_prod = 0, num_producers - 1
+  ! "root" server checks that the test value was properly written in every CB (just peeking at it, no extraction)
+  if (server_bound_server_id == 0) then
+    do i_prod = 0, num_server_bound_instances - 1
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
       if (num_elements .ne. 1) then
         print *, 'There should be exactly 1 4-byte element!', num_elements
@@ -274,11 +274,11 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Producers check that the value is still there
-  if (is_producer) then
+  ! Clients check that the value is still there
+  if (is_server_bound_client) then
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
     if (num_spaces .ne. capacity - 1) then
-      print *, 'Consumer only peeked, available space is wrong', num_spaces, capacity - 1
+      print *, 'Server only peeked, available space is wrong', num_spaces, capacity - 1
       num_errors = num_errors + 1
       error stop 1
     end if
@@ -287,9 +287,9 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! root producer extract the test value
-  if (consumer_id == 0) then
-    do i_prod = 0, num_producers - 1
+  ! root server extract the test value
+  if (server_bound_server_id == 0) then
+    do i_prod = 0, num_server_bound_instances - 1
       success = buffer % get_elems(i_prod, data_small, 0_8, CB_KIND_INTEGER_4, .true.)
       if (.not. success) then
         print *, 'ERROR, buffer%get_elems failed (0)'
@@ -301,19 +301,19 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Producers check that their CB is now empty
-  if (is_producer) then
+  ! Clients check that their CB is now empty
+  if (is_server_bound_client) then
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
     if (num_spaces .ne. capacity) then
-      print *, 'Consumer removed everything, available space is wrong', num_spaces, capacity
+      print *, 'Server removed everything, available space is wrong', num_spaces, capacity
       num_errors = num_errors + 1
       error stop 1
     end if
   end if
 
-  ! Producers init and insert a small message into their CB
-  if (is_producer) then
-    call init_array(data_small, producer_id)
+  ! Clients init and insert a small message into their CB
+  if (is_server_bound_client) then
+    call init_array(data_small, server_bound_client_id)
     success = buffer % put_elems(data_small, NUM_DATA_ELEMENTS_SMALL, CB_KIND_INTEGER_4, .true.)
 
     if (.not. success) then
@@ -326,9 +326,9 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Consumers all check that every CB contains data with the expected size
-  if (is_consumer) then
-    do i_prod = 0, num_producers - 1
+  ! Servers all check that every CB contains data with the expected size
+  if (is_server_bound_server) then
+    do i_prod = 0, num_server_bound_instances - 1
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
       if (num_elements .ne. NUM_DATA_ELEMENTS_SMALL) then
         num_errors = num_errors + 1
@@ -340,8 +340,8 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Consumers extract the small message from their *assigned CBs* and check that it is correct
-  if (is_consumer) then
+  ! Servers extract the small message from their *assigned CBs* and check that it is correct
+  if (is_server_bound_server) then
     do i_prod = first_prod, last_prod
       call init_array(expected_data_small, i_prod)
 
@@ -366,8 +366,8 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Producers check that their CB is now empty
-  if (is_producer) then
+  ! Clients check that their CB is now empty
+  if (is_server_bound_client) then
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
     if (num_spaces .ne. capacity) then
       num_errors = num_errors + 1
@@ -380,11 +380,11 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   call buffer % full_barrier()
   !---------------------------
 
-  ! Producers send the large message (larger than CB size), starting with elements of different sizes
-  ! Since each consumer will read an entire CB message before going to the next, most CBs will become
+  ! Clients send the large message (larger than CB size), starting with elements of different sizes
+  ! Since each server will read an entire CB message before going to the next, most CBs will become
   ! full before the message can be completely inserted
-  if (is_producer) then
-    call init_array(data_large, producer_id)
+  if (is_server_bound_client) then
+    call init_array(data_large, server_bound_client_id)
 
     ! Try putting char-sized elements
     success = buffer % put_elems(data_large(1:STEP_SIZE), STEP_SIZE * 4, CB_KIND_CHAR, .true.)
@@ -412,15 +412,15 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
       end if
     end do
 
-  ! In the meantime, consumers just read the large message. (Not doing different element sizes since we tested that earlier)
-  else if (is_consumer) then
+  ! In the meantime, servers just read the large message. (Not doing different element sizes since we tested that earlier)
+  else if (is_server_bound_server) then
     do i_prod = first_prod, last_prod
       call init_array(expected_data_large, i_prod)
       do i_data = 1, NUM_DATA_ELEMENTS_LARGE, STEP_SIZE
         success = buffer % get_elems(i_prod, data_large(i_data), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
         if (.not. success) then
           print '(A, I4, A, I10)', 'ERROR, buffer%get_elems failed! (1). i_prod/i_data ', i_prod, ' / ', i_data
-          if (consumer_id == 0) call buffer % print(.true.)
+          if (server_bound_server_id == 0) call buffer % print(.true.)
           call sleep_us(500000)
           error stop 1
         end if
@@ -446,10 +446,10 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Producers check that their CB is empty
+  ! Clients check that their CB is empty
   ! They then try to add more than capacity in one call
   ! They then fill their CB exactly, in one call
-  if (is_producer) then
+  if (is_server_bound_client) then
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
     if (num_spaces .ne. capacity) then
       num_errors = num_errors + 1
@@ -479,8 +479,8 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   !---------------------------
   call buffer % full_barrier()
   !---------------------------
-  ! Consumers check that their assigned CBs are exactly full, then extract the data
-  if (is_consumer) then
+  ! Servers check that their assigned CBs are exactly full, then extract the data
+  if (is_server_bound_server) then
     do i_prod = first_prod, last_prod
       capacity = buffer % get_capacity(i_prod, CB_KIND_INTEGER_4)
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
@@ -549,9 +549,10 @@ program test_distributed_circular_buffer
   type(MPI_Comm)  :: server_comm, dcb_comm
   type(MPI_Group) :: server_group, dcb_group
   integer, dimension(3, 1) :: incl_range
+  integer(C_INT) :: communication_type
 
   type(distributed_circular_buffer) :: circ_buffer
-  integer :: consumer_id, channel_id, producer_id
+  integer :: server_bound_server_id, channel_id, server_bound_client_id
 
   ! Initialization
 
@@ -586,10 +587,20 @@ program test_distributed_circular_buffer
     incl_range(3, 1) = 1
     call MPI_Group_range_incl(dcb_group, 1, incl_range, server_group)
     call MPI_Comm_create_group(dcb_comm, server_group, 0, server_comm)
+
+    if (rank < NUM_CONSUMERS) then
+      communication_type = DCB_SERVER_BOUND_TYPE
+    else
+      communication_type = DCB_CHANNEL_TYPE
+    end if
+  else
+    communication_type = DCB_SERVER_BOUND_TYPE
   end if
 
+  ! print *, 'Everyone here is on dcb_comm', rank
+
   ! Beginning of test
-  success = circ_buffer % create_bytes(dcb_comm, server_comm, NUM_CONSUMERS, BUFFER_SIZE_BYTE)
+  success = circ_buffer % create_bytes(dcb_comm, server_comm, communication_type, BUFFER_SIZE_BYTE, 0_8)
 
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
@@ -597,11 +608,11 @@ program test_distributed_circular_buffer
     goto 777
   end if
 
-  consumer_id = circ_buffer % get_consumer_id()
-  channel_id  = circ_buffer % get_channel_id()
-  producer_id = circ_buffer % get_producer_id()
+  server_bound_server_id = circ_buffer % get_server_bound_server_id()
+  channel_id             = circ_buffer % get_channel_id()
+  server_bound_client_id = circ_buffer % get_server_bound_client_id()
 
-!  print *, 'rank, prod, channel, consume ', rank, producer_id, channel_id, consumer_id
+!  print *, 'rank, prod, channel, consume ', rank, producer_id, channel_id, server_bound_server_id
 
   if (.not. circ_buffer % is_valid()) then
     print *, 'Something wrong with the newly-created buffer!!!'
@@ -613,9 +624,9 @@ program test_distributed_circular_buffer
   call MPI_Barrier(dcb_comm)
   !---------------------------------------
 
-  if (consumer_id >= 0) then
+  if (server_bound_server_id >= 0) then
     num_errors = test_dcb_consumer_producer(circ_buffer, rank)
-  else if (producer_id >= 0) then
+  else if (server_bound_client_id >= 0) then
     num_errors = test_dcb_consumer_producer(circ_buffer, rank)
   else if (channel_id >= 0) then
     num_errors = test_dcb_channel(circ_buffer)
@@ -625,7 +636,7 @@ program test_distributed_circular_buffer
 
 !  call circ_buffer % print()
   call circ_buffer % delete()
-  if (consumer_id == 0) then
+  if (server_bound_server_id == 0) then
     call MPI_Group_free(server_group)
     call MPI_Comm_free(server_comm)
   end if
@@ -635,7 +646,7 @@ program test_distributed_circular_buffer
   tmp_errors = num_errors
   call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
 
-  if(consumer_id == 0) then  ! check that we got back what we sent
+  if(server_bound_server_id == 0) then  ! check that we got back what we sent
     if(num_errors > 0) then
       print *, 'ERRORS IN DISTRIBUTED BUFFER TEST ', num_errors
     else

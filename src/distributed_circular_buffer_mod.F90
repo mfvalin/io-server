@@ -32,6 +32,7 @@ module distributed_circular_buffer_module
   private
 
   public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8
+  public :: DCB_SERVER_BOUND_TYPE, DCB_CLIENT_BOUND_TYPE, DCB_CHANNEL_TYPE
 
   !> A set of FIFO queues used by multiple pairs of processes, with their data stored on a single one of these processes. Called a DCB
   !> See #distributed_circular_buffer
@@ -48,11 +49,11 @@ module distributed_circular_buffer_module
     procedure :: peek_elems         !< distributed_circular_buffer_module::peek_elems
     procedure :: get_num_elements   !< distributed_circular_buffer_module::get_num_elements
     procedure :: get_num_spaces     !< distributed_circular_buffer_module::get_num_spaces
-    procedure :: get_producer_id    !< distributed_circular_buffer_module::get_producer_id
     procedure :: get_channel_id     !< distributed_circular_buffer_module::get_channel_id
-    procedure :: get_consumer_id    !< distributed_circular_buffer_module::get_consumer_id
-    procedure :: get_num_producers  !< distributed_circular_buffer_module::get_num_producers
-    procedure :: get_num_consumers  !< distributed_circular_buffer_module::get_num_consumers
+    procedure :: get_server_bound_server_id    !< distributed_circular_buffer_module::get_server_bound_server_id
+    procedure :: get_server_bound_client_id    !< distributed_circular_buffer_module::get_server_bound_client_id
+    procedure :: get_num_server_bound_clients  !< distributed_circular_buffer_module::get_num_server_bound_clients
+    procedure :: get_num_server_consumers      !< distributed_circular_buffer_module::get_num_server_consumers
     GENERIC :: get_capacity => get_capacity_local, get_capacity_server !< Get the capacity of this buffer
     procedure :: get_capacity_local !< distributed_circular_buffer_module::get_capacity_local
     procedure :: get_capacity_server !< distributed_circular_buffer_module::get_capacity_server
@@ -80,22 +81,23 @@ contains
     end if
   end function is_valid
 
-  !> Create and initialize a distributed circular buffer. See DCB_create_bytes. This is a collective call
+  !> Create and initialize a distributed circular buffer. See DCB_create. This is a collective call
   !> If there already was an underlying DCB, it will be deleted
-  function create_bytes(this, communicator, server_communicator, num_channels, num_bytes) result(is_valid)
+  function create_bytes(this, communicator, server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    type(MPI_Comm),    intent(in)                        :: communicator          !< MPI communicator common to all processes that share this buffer
-    type(MPI_Comm),    intent(in)                        :: server_communicator   !< MPI communicator between the server processes only
-    integer(C_INT),    intent(in)                        :: num_channels          !< How many MPI communication channels will be used
-    integer(C_SIZE_T), intent(in)                        :: num_bytes             !< How many bytes of data can be stored in the buffer
+    type(MPI_Comm),    intent(in)                        :: communicator            !< MPI communicator common to all processes that share this buffer
+    type(MPI_Comm),    intent(in)                        :: server_communicator     !< MPI communicator between the server processes only
+    integer(C_INT),    intent(in)                        :: communication_type      !< Whether this process is for server- or client-bound CBs, or just a communication channel
+    integer(C_SIZE_T), intent(in)                        :: num_bytes_server_bound  !< How many bytes of data can be stored in server-bound buffers
+    integer(C_SIZE_T), intent(in)                        :: num_bytes_client_bound  !< How many bytes of data can be stored in client-bound buffers
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
 
     if (this % is_valid()) then
       call this % delete()
     end if
 
-    this % c_buffer = DCB_create_bytes(communicator % mpi_val, server_communicator % mpi_val, num_channels, num_bytes)
+    this % c_buffer = DCB_create(communicator % mpi_val, server_communicator % mpi_val, communication_type, num_bytes_server_bound, num_bytes_client_bound)
     is_valid = this % is_valid()
   end function create_bytes
 
@@ -125,7 +127,7 @@ contains
     call DCB_print(this % c_buffer, c_dump_data)
   end subroutine print
 
-  !> Insert elements into a distributed circular buffer. See DCB_put_bytes
+  !> Insert elements into a distributed circular buffer. See DCB_put_client
 #define IgnoreTypeKindRank src_data
 #define ExtraAttributes , target
   function put_elems(this, src_data, num_elements, type_id, commit_transaction) result(success)
@@ -148,12 +150,12 @@ contains
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
-    status = DCB_put_bytes(this % c_buffer, src_ptr, num_elements * type_size, operation)
+    status = DCB_put_client(this % c_buffer, src_ptr, num_elements * type_size, operation)
 
     if (status == 0) success = .true.
   end function put_elems
 
-  !> Extract elements from a distributed circular buffer. See DCB_get_bytes
+  !> Extract elements from a distributed circular buffer. See DCB_get_server
 #define IgnoreTypeKindRank dest_data
 #define ExtraAttributes , target
   function get_elems(this, buffer_id, dest_data, num_elements, type_id, commit_transaction) result(success)
@@ -177,11 +179,11 @@ contains
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
-    status = DCB_get_bytes(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, operation)
+    status = DCB_get_server(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, operation)
     if (status == 0) success = .true.
   end function get_elems
 
-  !> Read the next elements in a buffer instance, without removing them. See DCB_get_bytes
+  !> Read the next elements in a buffer instance, without removing them. See DCB_get_server
 #define IgnoreTypeKindRank dest_data
 #define ExtraAttributes , target
   function peek_elems(this, buffer_id, dest_data, num_elements, type_id) result(success)
@@ -201,13 +203,13 @@ contains
     dest_ptr  = C_LOC(dest_data)
     type_size = get_type_size(type_id)
 
-    status = DCB_get_bytes(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, CB_PEEK)
+    status = DCB_get_server(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, CB_PEEK)
     if (status == 0) success = .true.
   end function peek_elems
 
   !> \brief Get current number of elements of type [type_id] stored in one of the buffer instances.
   !> \return The number of elements if all went well, -1 if there was an error
-  !> \sa DCB_get_available_data_bytes
+  !> \sa DCB_get_available_data
   function get_num_elements(this, buffer_id, type_id) result(num_elements)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
@@ -219,14 +221,14 @@ contains
     integer(C_INT64_T) :: num_bytes
 
     type_size = get_type_size(type_id)
-    num_bytes = DCB_get_available_data_bytes(this % c_buffer, buffer_id)
+    num_bytes = DCB_get_available_data(this % c_buffer, buffer_id)
     num_elements = num_bytes / type_size
     if (num_bytes < 0) num_elements = -1
   end function get_num_elements
 
   !> \brief Get current number of available spaces that can fit element of type [type_id] in one of the buffer instances.
   !> \return The number of spaces if all went well, -1 if there was an error.
-  !> \sa DCB_get_available_space_bytes
+  !> \sa DCB_get_available_space
   function get_num_spaces(this, type_id, update_from_remote) result(num_spaces)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
@@ -241,20 +243,20 @@ contains
     c_update = 0
     if (update_from_remote) c_update = 1
 
-    num_bytes  = DCB_get_available_space_bytes(this % c_buffer, c_update)
+    num_bytes  = DCB_get_available_space(this % c_buffer, c_update)
     type_size  = get_type_size(type_id)
     num_spaces = num_bytes / type_size
     if (num_bytes < 0) num_spaces = -1
   end function get_num_spaces
 
-  !> Get the producer ID of this buffer. See DCB_get_producer_id
-  !> \return The producer ID if we are indeed a producer, -1 otherwise
-  function get_producer_id(this) result(producer_id)
+  !> Get the server-bound client ID of this buffer. See DCB_get_server_bound_client_id
+  !> \return The client ID if we are indeed a server-bound client, -1 otherwise
+  function get_server_bound_client_id(this) result(client_id)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT) :: producer_id
-    producer_id = DCB_get_producer_id(this % c_buffer)
-  end function get_producer_id
+    integer(C_INT) :: client_id
+    client_id = DCB_get_server_bound_client_id(this % c_buffer)
+  end function get_server_bound_client_id
 
   !> Get the channel ID of this buffer. See DCB_get_channel_id
   !> \return The channel ID if we are indeed a channel process, -1 otherwise
@@ -265,33 +267,32 @@ contains
     channel_id = DCB_get_channel_id(this % c_buffer)
   end function get_channel_id
 
-  !> Get the consumer ID of this buffer. See DCB_get_consumer_id
+  !> Get the consumer ID of this buffer. See DCB_get_server_bound_server_id
   !> \return The consumer ID if we are indeed a consumer, -1 otherwise
-  function get_consumer_id(this) result(consumer_id)
+  function get_server_bound_server_id(this) result(server_id)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT) :: consumer_id
-    consumer_id = DCB_get_consumer_id(this % c_buffer)
-  end function get_consumer_id
+    integer(C_INT) :: server_id
+    server_id = DCB_get_server_bound_server_id(this % c_buffer)
+  end function get_server_bound_server_id
 
-  !> Get the number of producers that participate in this buffer set (number of circular buffer instances)
-  !> \return Number of #circular_buffer instances in this buffer set
-  !> \sa DCB_get_num_producers
-  function get_num_producers(this) result(num_producers)
+  !> Get the number of server-bound clients that participate in this buffer set
+  !> \sa DCB_get_num_server_bound_instances
+  function get_num_server_bound_clients(this) result(num_clients)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT) :: num_producers
-    num_producers = DCB_get_num_producers(this % c_buffer)
-  end function get_num_producers
+    integer(C_INT) :: num_clients
+    num_clients = DCB_get_num_server_bound_instances(this % c_buffer)
+  end function get_num_server_bound_clients
 
-  !> Get the number of consumer processes that participate in this buffer set
-  !> \sa DCB_get_num_consumers
-  function get_num_consumers(this) result(num_consumers)
+  !> Get the number of server consumer processes that participate in this buffer set
+  !> \sa DCB_get_num_server_consumers
+  function get_num_server_consumers(this) result(num_consumers)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
     integer(C_INT) :: num_consumers
-    num_consumers = DCB_get_num_consumers(this % c_buffer)
-  end function get_num_consumers
+    num_consumers = DCB_get_num_server_consumers(this % c_buffer)
+  end function get_num_server_consumers
 
   !> Get the capacity of this circular buffer instance, in the given element type. Can only be called by a producer
   !> \return The number of elements of the given type that the CB instance can hold, -1 if we are not a producer process
@@ -301,7 +302,7 @@ contains
     class(distributed_circular_buffer), intent(inout) :: this
     integer,                            intent(in)    :: type_id !< Type of elements we want to count
     integer(C_INT64_T) :: num_elements
-    num_elements = DCB_get_capacity_local_bytes(this % c_buffer) / get_type_size(type_id)
+    num_elements = DCB_get_capacity_local(this % c_buffer) / get_type_size(type_id)
   end function get_capacity_local
 
   !> Get the capacity of a circular buffer in this DCB. Can only be called by a server process
@@ -313,7 +314,7 @@ contains
     integer(C_INT),                     intent(in)    :: buffer_id !< ID of the instance we want to query 
     integer       ,                     intent(in)    :: type_id !< Type of elements we want to count
     integer(C_INT64_T) :: num_elements
-    num_elements = DCB_get_capacity_server_bytes(this % c_buffer, buffer_id) / get_type_size(type_id)
+    num_elements = DCB_get_capacity_server(this % c_buffer, buffer_id) / get_type_size(type_id)
   end function get_capacity_server
 
   !> Start a channel process working. Will loop until the DCB is deleted.

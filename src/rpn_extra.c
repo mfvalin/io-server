@@ -95,7 +95,7 @@ static inline void release_idlock_no_fence(volatile int32_t *lock, int32_t id) {
 //! Release lock if it has specific ID (deadlocks if ID is wrong)
 static inline void release_idlock(volatile int32_t *lock, int32_t id) {
   full_memory_fence();
-  const int32_t val = __sync_val_compare_and_swap(lock, (id+1), 0);
+  __sync_val_compare_and_swap(lock, (id+1), 0);
   __asm__ volatile("": : :"memory");
 }
 
