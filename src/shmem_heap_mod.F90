@@ -21,7 +21,7 @@
 
 !> \file
 !> \brief shared memory heap Fortran module (object oriented)
-module shmem_heap
+module heap_module
   use ISO_C_BINDING
   implicit none
 
@@ -841,4 +841,4 @@ module shmem_heap
 
   end subroutine block_meta_internals
   
-end module shmem_heap
+end module heap_module

@@ -67,7 +67,7 @@ module machins
 end module
 
 subroutine test_pickling
-  use data_serialize
+  use jar_module
   use machins
   implicit none
   logical :: old_debug
@@ -189,7 +189,7 @@ subroutine test_pickling
 end subroutine test_pickling
 
 subroutine pass_through(blind_array, n)    !  integer array inbound, jar outbound
-  use data_serialize
+  use jar_module
   implicit none
   interface
     subroutine level2(my_jar)
@@ -207,7 +207,7 @@ subroutine pass_through(blind_array, n)    !  integer array inbound, jar outboun
 end subroutine pass_through
 
 subroutine level2(my_jar)    ! receives jar, recreated from integer array by pass_through
-  use data_serialize
+  use jar_module
   use machins
   implicit none
   type(jar), intent(INOUT) :: my_jar
@@ -227,7 +227,7 @@ subroutine level2(my_jar)    ! receives jar, recreated from integer array by pas
 end subroutine level2
 
 subroutine test_free
-  use data_serialize
+  use jar_module
   implicit none
   type(jar) :: myjar
   logical :: old_debug, scrap
@@ -260,7 +260,7 @@ subroutine test_free
 end subroutine test_free
 
 subroutine test_jar_1
-  use data_serialize
+  use jar_module
   implicit none
   integer :: ok
   type(jar) :: myjar
@@ -286,7 +286,7 @@ subroutine test_jar_1
 end subroutine test_jar_1
 
 subroutine test_jar_finalize
-  use data_serialize
+  use jar_module
   implicit none
   type(jar) :: myjar
   integer :: ok

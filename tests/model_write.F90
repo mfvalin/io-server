@@ -22,7 +22,7 @@
 module model_write_parameters
   use ISO_C_BINDING
   use ioserver_constants
-  use ioserver_internal_mod
+  use ioserver_context_module
   implicit none
 
   save
@@ -272,10 +272,10 @@ end subroutine io_server_out
 
 function receive_message(dcb, producer_id) result(finished)
   use distributed_circular_buffer_module
-  use ioserver_file_module
   use ioserver_memory_mod
   use ioserver_message_module
   use model_write_parameters
+  use server_stream_module
   implicit none
   type(distributed_circular_buffer), intent(inout) :: dcb
   integer, intent(in) :: producer_id
@@ -288,7 +288,7 @@ function receive_message(dcb, producer_id) result(finished)
   integer :: message_size, end_cap
   integer(C_INT64_T) :: num_elements, num_data
   
-  type(stream_file), pointer :: file_ptr
+  type(server_stream), pointer :: file_ptr
   character(len=:), allocatable :: filename
   integer, dimension(:), pointer, contiguous, save :: model_data => NULL(), expected_data => NULL()
   integer, dimension(:, :), pointer, contiguous :: data_ptr
@@ -301,7 +301,7 @@ function receive_message(dcb, producer_id) result(finished)
   finished = .false.
 
   ! Flush any completed grid for owned files
-  do i_file = 1, MAX_NUM_STREAM_FILES
+  do i_file = 1, MAX_NUM_SERVER_STREAMS
     file_ptr => context % get_stream(i_file)
     if (file_ptr % get_owner_id() == dcb % get_server_bound_server_id()) then
       num_flushed = file_ptr % flush_data()
@@ -432,7 +432,7 @@ subroutine consumer_process(data_buffer, consumer_comm)
   use mpi_f08
   use model_write_parameters
   use distributed_circular_buffer_module
-  use data_serialize
+  use jar_module
   implicit none
 
   interface
@@ -553,11 +553,11 @@ subroutine model_process()
   use mpi_f08
 
   use circular_buffer_module
-  use ioserver_file_module
   use ioserver_message_module
+  use model_stream_module
   use model_write_parameters
   use rpn_extra_module, only: sleep_us
-  use shmem_heap
+  use heap_module
   implicit none
 
   type(comm_rank_size)  :: node_crs, local_compute_crs, all_crs, model_crs
@@ -567,12 +567,12 @@ subroutine model_process()
   logical               :: success
 
   integer :: f_status
-  type(server_file) :: results_file
-  type(heap)        :: node_heap
+  type(model_stream) :: results_file
+  type(heap)         :: node_heap
   integer(kind=4), dimension(:), pointer :: msg_array
-  type(block_meta) :: msg_array_info
-  type(subgrid) :: my_grid
-  type(grid) :: input_grid, output_grid
+  type(block_meta)   :: msg_array_info
+  type(subgrid)      :: my_grid
+  type(grid)         :: input_grid, output_grid
 
   type(C_PTR) :: p
   integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
@@ -685,7 +685,7 @@ subroutine io_relay_process()
   use circular_buffer_module
   use distributed_circular_buffer_module
   use ioserver_memory_mod
-  use data_serialize
+  use jar_module
   implicit none
 
   ! type(MPI_Comm)       :: all_comm

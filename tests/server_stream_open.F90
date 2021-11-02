@@ -1,9 +1,9 @@
 
-program test_stream_file_open
+program test_server_stream_open
   use ISO_C_BINDING
   use mpi_f08
 
-  use ioserver_file_module
+  use server_stream_module
   use shared_mem_alloc_module
   use simple_mutex_module
   implicit none
@@ -16,9 +16,9 @@ program test_stream_file_open
   type(simple_mutex), dimension(:), allocatable :: mutexes
 
   integer(C_INT), dimension(:), pointer :: int_array
-  type(stream_file), dimension(:), pointer :: file_array
+  type(server_stream), dimension(:), pointer :: file_array
 
-  type(stream_file) :: dummy_stream_file
+  type(server_stream) :: dummy_server_stream
   character(len=11) :: file_name
 
   logical :: success
@@ -32,7 +32,7 @@ program test_stream_file_open
   call MPI_Comm_rank(MPI_COMM_WORLD, rank)
   call MPI_Comm_size(MPI_COMM_WORLD, num_pes)
 
-  shared_mem_size = (NUM_FILES * 4) + (NUM_FILES * storage_size(dummy_stream_file) / 8)
+  shared_mem_size = (NUM_FILES * 4) + (NUM_FILES * storage_size(dummy_server_stream) / 8)
   shared_mem = RPN_allocate_shared(shared_mem_size, MPI_COMM_WORLD)
 
   call c_f_pointer(shared_mem, int_array, [NUM_FILES + 4])
@@ -46,7 +46,7 @@ program test_stream_file_open
 
   if (rank == 0) then
     do i = 1, NUM_FILES
-      file_array(i) = stream_file()
+      file_array(i) = server_stream()
     end do
   end if
 
@@ -96,4 +96,4 @@ program test_stream_file_open
   deallocate(mutexes)
   call MPI_Finalize()
 
-end program test_stream_file_open
+end program test_server_stream_open

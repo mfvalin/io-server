@@ -19,10 +19,10 @@ module ioserver_memory_mod
   use ISO_C_BINDING
   use ioserver_constants
   use circular_buffer_module
-  use shmem_heap
+  use heap_module
   implicit none
 
-  integer, parameter :: MAX_NUM_STREAM_FILES = 128
+  integer, parameter :: MAX_NUM_SERVER_STREAMS = 128
   integer, parameter :: MAX_PES_PER_NODE = 128
 
   type, bind(C) :: pe_info 
@@ -138,19 +138,19 @@ module ioserver_memory_mod
 
 end module ioserver_memory_mod
 
-module ioserver_internal_mod
+module ioserver_context_module
   !> Module description
   use ISO_C_BINDING
   use mpi_f08
 
   use circular_buffer_module
   use distributed_circular_buffer_module
+  use heap_module
   use ioserver_constants
-  use ioserver_file_module
   use ioserver_memory_mod
   use ioserver_message_module
+  use server_stream_module
   use shmem_arena_mod
-  use shmem_heap
   implicit none
 
   private
@@ -226,7 +226,7 @@ module ioserver_internal_mod
     type(distributed_circular_buffer) :: local_dcb  !< Distributed circular buffer for communication b/w relay and server processes
     type(heap)             :: node_heap             !< On server node only. Heap that everyone on the node can use
 
-    type(stream_file), dimension(:), pointer :: common_stream_files => NULL()  !< Stream files used to assemble grids and write them (shared mem)
+    type(server_stream), dimension(:), pointer :: common_server_streams => NULL()  !< Stream files used to assemble grids and write them (shared mem)
 
     ! ------------------
     ! Miscellaneous
@@ -339,10 +339,11 @@ end function IOserver_is_channel
 !> Open a file where the model can write data
 !> \return A file object that is already open and can be written to
 function open_file_model(context, filename) result(new_file)
+  use model_stream_module
   implicit none
   class(ioserver_context), intent(inout) :: context
   character(len=*),        intent(in)    :: filename
-  type(server_file) :: new_file
+  type(model_stream) :: new_file
 
   logical :: success
 
@@ -353,11 +354,11 @@ function open_file_model(context, filename) result(new_file)
 
   if (context % debug_mode) print *, 'DEBUG: Opening file with name ', filename
 
-  new_file = server_file(context % global_rank, &
-                         context % local_heap, &
-                         context % local_server_bound_cb, &
-                         context % debug_mode, &
-                         context % messenger)
+  new_file = model_stream(context % global_rank, &
+                          context % local_heap, &
+                          context % local_server_bound_cb, &
+                          context % debug_mode, &
+                          context % messenger)
   success = new_file % open(filename)
 
   if (.not. success) print *, 'ERROR: Unable to open file, for some reason'
@@ -368,13 +369,13 @@ function open_file_server(context, filename, stream_id) result(new_file)
   class(ioserver_context), intent(inout) :: context
   character(len=*),        intent(in)    :: filename
   integer,                 intent(in)    :: stream_id
-  type(stream_file), pointer :: new_file
+  type(server_stream), pointer :: new_file
 
-  type(stream_file), pointer :: tmp_file
+  type(server_stream), pointer :: tmp_file
   logical :: success
 
   nullify(new_file)
-  tmp_file => context % common_stream_files(stream_id)
+  tmp_file => context % common_server_streams(stream_id)
 
   if (mod(stream_id, context % local_dcb % get_num_server_consumers()) .ne. context % local_dcb % get_server_bound_server_id() + 1) then
     print *, 'ERROR, this file should be opened by consumer ', stream_id, context % local_dcb % get_server_bound_server_id()
@@ -406,10 +407,10 @@ function close_file_server(context, stream_id) result(success)
   integer,                 intent(in)    :: stream_id
   logical :: success
 
-  type(stream_file), pointer :: the_file
+  type(server_stream), pointer :: the_file
 
   success = .false.
-  the_file => context % common_stream_files(stream_id)
+  the_file => context % common_server_streams(stream_id)
   if (the_file % is_open()) then
     if (the_file % get_owner_id() .ne. context % local_dcb % get_server_bound_server_id()) then
       print *, 'ERROR, trying to close a file not owned by this consumer', stream_id, context % local_dcb % get_server_bound_server_id()
@@ -742,8 +743,8 @@ function IOserver_get_stream(context, stream_id) result(stream)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_id
-  type(stream_file), pointer :: stream
-  stream => context % common_stream_files(stream_id)
+  type(server_stream), pointer :: stream
+  stream => context % common_server_streams(stream_id)
 end function IOserver_get_stream
 
 function get_server_bound_cb_list(context) result(cbs)
@@ -864,12 +865,12 @@ subroutine finalize_server(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
-  type(stream_file), pointer :: file
+  type(server_stream), pointer :: file
   logical :: success
   integer :: i
 
-  do i = 1, MAX_NUM_STREAM_FILES
-    file => this % common_stream_files(i)
+  do i = 1, MAX_NUM_SERVER_STREAMS
+    file => this % common_server_streams(i)
     if (file % is_open()) then
       if (file % get_owner_id() == this % local_dcb % get_server_bound_server_id()) then
         print *, 'Heeeeeyyyy forgot to close file #, owned by #', i, file % get_owner_id()
@@ -1043,7 +1044,6 @@ function IOserver_init_communicators(context, nio_node, app_class) result(succes
 end function IOserver_init_communicators
 
 function IOserver_init_shared_mem(context) result(success)
-  use ioserver_file_module
   use shared_mem_alloc_module
   use simple_mutex_module
   implicit none
@@ -1068,7 +1068,7 @@ function IOserver_init_shared_mem(context) result(success)
 
   integer     :: status, temp, total_errors
   type(C_PTR) :: temp_ptr
-  type(stream_file)  :: dummy_stream_file
+  type(server_stream)  :: dummy_server_stream
   ! type(simple_mutex) :: dummy_simple_mutex
 
   success = .false.
@@ -1104,7 +1104,7 @@ function IOserver_init_shared_mem(context) result(success)
     ! Allocate shared memory used for intra node communication between PEs on a server node
     context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm) ! The heap
 
-    context % server_file_shmem_size = MAX_NUM_STREAM_FILES * (storage_size(dummy_stream_file) / 8)
+    context % server_file_shmem_size = MAX_NUM_SERVER_STREAMS * (storage_size(dummy_server_stream) / 8)
     context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm) ! The set of files that can be opened/written
 
     if  (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
@@ -1112,12 +1112,12 @@ function IOserver_init_shared_mem(context) result(success)
       error stop 1
     end if
 
-    call c_f_pointer(context % server_file_shmem, context % common_stream_files, [MAX_NUM_STREAM_FILES])
+    call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_SERVER_STREAMS])
 
     ! Create server shared memory heap
     if (context % server_comm_rank == 0) then
       temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)  ! Initialize heap
-      context % common_stream_files(:) = stream_file()                                                        ! Initialize stream files
+      context % common_server_streams(:) = server_stream()                                                    ! Initialize stream files
     else
       temp_ptr = context % node_heap % clone(context % server_heap_shmem)
       status   = context % node_heap % register(context % server_heap_shmem)
@@ -1385,7 +1385,7 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
   return
 end function IOserver_int_init
 
-end module ioserver_internal_mod
+end module ioserver_context_module
 !  ==========================================================================================
 !                                           END OF MODULE
 !  ==========================================================================================

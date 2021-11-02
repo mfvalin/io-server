@@ -20,7 +20,7 @@
 #define WHAT_TYPE integer(C_INTPTR_T)
 #endif
 
-module data_serialize
+module jar_module
   use ISO_C_BINDING
   implicit none
 
@@ -435,4 +435,4 @@ module data_serialize
 ! 
 !   end function get_from_jar
 
-end module
+end module jar_module

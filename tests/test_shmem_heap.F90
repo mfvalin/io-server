@@ -54,7 +54,7 @@ end program
 subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE traffic
   use ISO_C_BINDING
   ! heap and block management functions
-  use shmem_heap, only : heap, HEAP_ELEMENT, MAX_ARRAY_RANK, block_meta_f08, block_meta
+  use heap_module, only : heap, HEAP_ELEMENT, MAX_ARRAY_RANK, block_meta_f08, block_meta
   use mpi_f08
   implicit none
   integer, intent(IN) :: myrank, nprocs
@@ -265,7 +265,7 @@ end subroutine relay_test
 #define NBLKS 128
 
 subroutine base_test(nprocs, myrank)
-  use shmem_heap
+  use heap_module
   use mpi_f08
   implicit none
   integer, intent(IN) :: myrank, nprocs
