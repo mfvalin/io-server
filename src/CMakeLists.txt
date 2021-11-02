@@ -6,28 +6,28 @@ file(GLOB PROJECT_F_FILES *.F90 *.F *.f *.f90)
 
 # Headers to generate
 set(C_TO_INC_FILES
-  circular_buffer.c
-  distributed_circular_buffer.c
-  rpn_extra.c
-  shmem_arena.c
-  timer.c
+   circular_buffer.c
+   distributed_circular_buffer.c
+   rpn_extra.c
+   shmem_arena.c
+   timer.c
 )
 
 set(C_TO_H_FILES
-  circular_buffer.c
-  distributed_circular_buffer.c
-  rpn_extra.c
-  shmem_arena.c
-  shmem_heap.c
-  timer.c
+   circular_buffer.c
+   distributed_circular_buffer.c
+   rpn_extra.c
+   shmem_arena.c
+   shmem_heap.c
+   timer.c
 )
 
 set(F_ALLOC_FILE ${CMAKE_CURRENT_SOURCE_DIR}/io-server/f_alloc.inc)
 
 file(GLOB PROJECT_INCLUDE_FILES
-  io-server/*.h
-  io-server/*.inc
-  io-server/*.hf
+   io-server/*.h
+   io-server/*.inc
+   io-server/*.hf
 )
 
 # Fortran headers
@@ -61,8 +61,17 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Where to put modules
 get_target_property(LIBRARY_DIR ${PROJECT_NAME} BINARY_DIR)
-set_target_properties(${PROJECT_NAME} PROPERTIES Fortran_MODULE_DIRECTORY ${LIBRARY_DIR}/mod)
-target_include_directories(${PROJECT_NAME} INTERFACE ${LIBRARY_DIR}/mod)
+set(MODULE_DIR ${LIBRARY_DIR}/mod)
+set_target_properties(${PROJECT_NAME} PROPERTIES Fortran_MODULE_DIRECTORY ${MODULE_DIR})
+target_include_directories(${PROJECT_NAME} INTERFACE ${MODULE_DIR})
+
+# Specify which modules to include in the public package
+set(PUBLIC_MODULES
+   ${MODULE_DIR}/heap_module.mod
+   ${MODULE_DIR}/ioserver_context_module.mod
+   ${MODULE_DIR}/jar_module.mod
+   ${MODULE_DIR}/model_stream_module.mod
+)
 
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})
 
@@ -77,7 +86,8 @@ target_compile_options(
   #  $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror -Wno-error=unused-function -fmax-errors=8>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>
-   #-g -O0
+   -g -O0
 )
 
 install(TARGETS ${PROJECT_NAME})
+install(FILES ${PUBLIC_MODULES} DESTINATION mod)
