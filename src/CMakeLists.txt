@@ -86,7 +86,7 @@ target_compile_options(
   #  $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror -Wno-error=unused-function -fmax-errors=8>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>
-   -g -O0
+   # -g -O0
 )
 
 install(TARGETS ${PROJECT_NAME})

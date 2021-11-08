@@ -11,7 +11,6 @@ module server_stream_module
 #define VERSION 10000
 #endif
 
-  save
   private
 
   public :: block_meta, subgrid, grid, cmeta
@@ -24,8 +23,8 @@ module server_stream_module
     integer :: mutex_value = 0    ! For later, if we need to lock this file with a mutex
     character(len=:), allocatable :: name
 
-    type(heap) :: data_heap
-    type(grid_assembly) :: partial_grid_data
+    type(heap) :: data_heap = heap()
+    type(grid_assembly) :: partial_grid_data = grid_assembly(grid_assembly_line())
 
     contains
     procedure :: open

@@ -118,6 +118,7 @@ program put_error
        end if
     end block
  
+    call mpi_win_free(mpi_window, ierr)
     call mpi_finalize(ierr)
  end program
  
