@@ -1,60 +1,54 @@
 variables:
-  GIT_SUBMODULE_STRATEGY: recursive
-  ORD_SOUMET_SHELL: /bin/bash
+   GIT_SUBMODULE_STRATEGY: recursive
+   ORD_SOUMET_SHELL: /bin/bash
 
 before_script:
-  - export ORDENV_SITE_PROFILE=20210129
-  - export ORDENV_COMM_PROFILE=eccc/20210309
-  - export ORDENV_GROUP_PROFILE=eccc/cmc/1.9.5
-  - . /fs/ssm/main/env/ordenv-boot-20201118.sh
-
-  - export EC_ATOMIC_PROFILE_VERSION=1.13.0
-
-  # - export CLICOLOR_FORCE=1
+   - export CLICOLOR_FORCE=1
 
 stages:
-  - configure
-  - build
-  - test_batch
+   - build
+   - test
+   - package
+#  - deploy
 
-configure_job_regular_gnu:
-  stage: configure
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-  script:
-    - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
-    - mkdir -pv ${build_dir}
-    - cd ${build_dir}
-    - cmake ${CI_PROJECT_DIR}
+build:gnu-7.4.0:
+   stage: build
+   only:
+      - master
+      - dev
+      - tags
+   script:
+      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
+      - mkdir build_gnu-7.4.0
+      - cd build_gnu-7.4.0
+      - cmake ../ 
+      - make
+   artifacts:
+      expire_in: 2 hrs
+      paths:
+         - build_gnu-7.4.0
 
-build_job_regular_gnu:
-  stage: build
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-  script:
-    - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
-    - cd ${build_dir}
-    - make
+test:gnu-7.4.0_job_regular_gnu_single_node:
+   stage: test
+   dependencies:
+      - build:gnu-7.4.0
+   variables:
+      build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
+      NUM_CPUS: "40"
+      OMPI_MCA_opal_cuda_support: "0"
 
-test_job_regular_gnu_single_node:
-  stage: test_batch
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
-    NUM_CPUS: "40"
-    OMPI_MCA_opal_cuda_support: "0"
+      ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
+      ORD_SOUMET_C: "${NUM_CPUS}"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: io-server-regular-single-node
+      ORD_SOUMET_M: "4G"
+      ORD_SOUMET_TMPFS: "1024M"
+      MPI_COMMAND: "mpirun"
 
-    ORD_SOUMET_MACH: ${REGULAR_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}"
-    ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-regular-single-node
-    ORD_SOUMET_M: "4G"
-    ORD_SOUMET_TMPFS: "1024M"
-    MPI_COMMAND: "mpirun"
-
-  script:
-    - cd ${build_dir}
-    - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
-    - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
+   script:
+      - cd ${build_dir}
+      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
+      - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
 
 # test_job_regular_gnu_multi_node:
 #   stage: test_batch
@@ -76,46 +70,42 @@ test_job_regular_gnu_single_node:
 #     - source ${RPN_CI_SCRIPTS}/io-server-setup-gnu-7.4.sh
 #     - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
 
-
-configure_job_big_intel:
-  stage: configure
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
-  tags:
-    - login_node
-  script:
-    - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
-    - mkdir -pv ${build_dir}
-    - cd ${build_dir}
-    - pwd
-    - cmake ${CI_PROJECT_DIR}
-
-build_job_big_intel:
-  stage: build
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
-  tags:
-    - login_node
-  script:
-    - . ssmuse-sh -d main/opt/cmake/cmake-3.16.4
-    - cd ${build_dir}
-    - pwd
-    - make
+build:XC50_intel-19.0.5:
+   stage: build
+   tags:
+      - XC50-login
+   only:
+      - master
+      - dev
+      - tags
+   script:
+      - set +e
+      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
+      - mkdir build_XC50_intel-19.0.5
+      - cd build_XC50_intel-19.0.5
+      - cmake ../ 
+      - make
+   artifacts:
+      expire_in: 2 hrs
+      paths:
+         - build_XC50_intel-19.0.5
 
 test_job_big_intel_single_node:
-  stage: test_batch
-  variables:
-    build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
-    NUM_CPUS: "40"
-    ORD_SOUMET_MACH: ${BIG_MACHINE_1}
-    ORD_SOUMET_C: "${NUM_CPUS}"
-    ORD_SOUMET_W: "30"
-    ORD_SOUMET_JN: io-server-big-single-node
-    MPI_COMMAND: "aprun"
-  script:
-    - cd ${build_dir}
-    - pwd
-    - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
+   stage: test
+   dependencies:
+      - build:XC50_intel-19.0.5
+   variables:
+      build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
+      NUM_CPUS: "40"
+      ORD_SOUMET_MACH: ${BIG_MACHINE_1}
+      ORD_SOUMET_C: "${NUM_CPUS}"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: io-server-big-single-node
+      MPI_COMMAND: "aprun"
+   script:
+      - cd ${build_dir}
+      - pwd
+      - source ${RPN_CI_SCRIPTS}/single_node_tests.sh
 
 # test_job_big_intel_multi_node:
 #   stage: test_batch
@@ -130,3 +120,46 @@ test_job_big_intel_single_node:
 #   script:
 #     - cd ${build_dir}
 #     - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
+
+
+package:XC50_intel-19.0.5:
+   stage: package
+   only:
+      - tags
+   dependencies:
+      - build:XC50_intel-19.0.5
+   environment:
+      name: testing
+   script:
+      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
+      - cd build_XC50_intel-19.0.5
+      - make package
+      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
+
+package:intel-19.0.3:
+   stage: package
+   only:
+      - tags
+   dependencies:
+      - build:intel-19.0.3
+   environment:
+      name: testing
+   script:
+      - source ci-env/latest/ubuntu-18.04-skylake-64/intel-19.0.3.199.sh
+      - cd build_intel-19.0.3
+      - make package
+      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
+
+package:gnu-7.4.0:
+   stage: package
+   only:
+      - tags
+   dependencies:
+      - build:gnu-7.4.0
+   environment:
+      name: testing
+   script:
+      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
+      - cd build_gnu-7.4.0
+      - make package
+      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
