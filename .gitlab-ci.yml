@@ -19,7 +19,7 @@ build:gnu-7.4.0:
 #      - tags
    script:
       - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
-      - r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
+      - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
       - mkdir build_gnu-7.4.0
       - cd build_gnu-7.4.0
       - cmake ../ 
