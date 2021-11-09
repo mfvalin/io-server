@@ -1,5 +1,5 @@
 ${BUILD_PATH}/tests/io_server_circular_buffer_single_thread
-tests/io_server_cb_unaligned_input
+${BUILD_PATH}/tests/io_server_cb_unaligned_input
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_circular_buffer
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_circular_buffer_fill
 ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_distributed_circular_buffer
