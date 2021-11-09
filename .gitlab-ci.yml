@@ -1,6 +1,7 @@
 variables:
    GIT_SUBMODULE_STRATEGY: recursive
    ORD_SOUMET_SHELL: /bin/bash
+   # Used to force HOST, remove once sici00 runners are restarted
    ECCI_BACKEND: banting
    ECCI_FRONTEND: ppp3
 
