@@ -108,14 +108,15 @@ test:XC50_intel-19.0.5_job_big_single_node:
       - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
       - cd build_XC50_intel-19.0.5
       - pwd
-      - source ../tests/scripts/single_node_tests.sh
+      - source ../tests/script/single_node_tests.sh
 
 # test:XC50_intel-19.0.5_job_big_multi_node:
-#   stage: test_batch
+#   stage: test
+#  dependencies:
+#      - build:XC50_intel-19.0.5
 #   variables:
-#     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/big/intel
 #     NUM_CPUS: "160"
-#     ORD_SOUMET_MACH: ${BIG_MACHINE_1}
+#     ORD_SOUMET_MACH: ${CI_BACKEND[0]}
 #     ORD_SOUMET_C: "${NUM_CPUS}x1"
 #     ORD_SOUMET_W: "30"
 #     ORD_SOUMET_JN: io-server-big-multi-node
@@ -124,7 +125,7 @@ test:XC50_intel-19.0.5_job_big_single_node:
 #      - set +e
 #      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
 #      - cd build_XC50_intel-19.0.5
-#     - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
+#      - source ../tests/script/multi_node_tests.sh
 
 
 package:XC50_intel-19.0.5:
