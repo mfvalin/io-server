@@ -116,11 +116,10 @@ else()
       COMMAND grep -E -o "Open MPI"
       OUTPUT_VARIABLE MPI_IMPLEMENTATION
       OUTPUT_STRIP_TRAILING_WHITESPACE)
-   # message(WARNING "MPI implementation: ${MPI_IMPLEMENTATION}")
    if ("x${MPI_IMPLEMENTATION}" STREQUAL "xOpen MPI")
       set(OVERSUBSCRIBE_FLAG "-oversubscribe")
    endif()
-   message(WARNING "Oversubscribe flag: ${OVERSUBSCRIBE_FLAG}")
+   # message(WARNING "Oversubscribe flag: ${OVERSUBSCRIBE_FLAG}")
 endif()
 
 

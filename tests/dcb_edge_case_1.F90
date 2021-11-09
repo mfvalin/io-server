@@ -14,10 +14,10 @@ contains
     implicit none
     type(distributed_circular_buffer), intent(inout) :: dcb
 
-    integer :: return_value
+    logical :: success
 
-    return_value = dcb % start_listening()
-    if (return_value .ne. 0) error stop 1
+    success = dcb % start_listening()
+    if (.not. success) error stop 1
   end subroutine channel_process
 
   subroutine server_bound_server_process(dcb)

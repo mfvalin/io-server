@@ -446,8 +446,8 @@ static inline void print_control_metadata(
     for (int i = 0; i < header->num_channels; ++i) {
       printf("%ld ", (long)signals[i]);
     }
-    printf("\n");
   }
+  printf("\n");
 }
 
 //! @}
@@ -851,19 +851,19 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
     }
 
     if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
-      printf("I am a server-bound server (%d)\n", buffer->dcb_rank);
+      // printf("I am a server-bound server (%d)\n", buffer->dcb_rank);
       MPI_Reduce(&one,  &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
       MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
       MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
     }
     else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE) {
-      printf("I am a client-bound server (%d)\n", buffer->dcb_rank);
+      // printf("I am a client-bound server (%d)\n", buffer->dcb_rank);
       MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
       MPI_Reduce(&one,  &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
       MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
     }
     else if (buffer->communication_type == DCB_CHANNEL_TYPE) {
-      printf("I am a channel (%d)\n", buffer->dcb_rank);
+      // printf("I am a channel (%d)\n", buffer->dcb_rank);
       MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
       MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
       MPI_Reduce(&one,  &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
@@ -890,15 +890,15 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
       }
 
       if (buffer->control_metadata.num_server_bound_instances > 0 && buffer->control_metadata.num_server_consumers <= 0) {
-        printf("ERROR during DCB_create. We have %d server-bound buffer instance(s), but no server consumer!\n",
+        printf("BIG WARNING during DCB_create. We have %d server-bound buffer instance(s), but no server consumer!\n",
                buffer->control_metadata.num_server_bound_instances);
-        return NULL;
+        // return NULL;
       }
 
       if (buffer->control_metadata.num_client_bound_instances > 0 && buffer->control_metadata.num_server_producers <= 0) {
-        printf("ERROR during DCB_create. We have %d client-bound buffer instance(s), but no server producer!\n",
+        printf("BIG WARNING during DCB_create. We have %d client-bound buffer instance(s), but no server producer!\n",
                buffer->control_metadata.num_client_bound_instances);
-        return NULL;
+        // return NULL;
       }
     }
 
@@ -919,12 +919,12 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
   else // Client processes
   {
     if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
-      printf("I am a server-bound client (%d)\n", buffer->dcb_rank);
+      // printf("I am a server-bound client (%d)\n", buffer->dcb_rank);
       MPI_Reduce(&one,  &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
       MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
     }
     else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE) {
-      printf("I am a client-bound client (%d)\n", buffer->dcb_rank);
+      // printf("I am a client-bound client (%d)\n", buffer->dcb_rank);
       MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
       MPI_Reduce(&one,  &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
     }
@@ -1001,7 +1001,7 @@ static inline distributed_circular_buffer_p init_shmem_area_and_window(distribut
   if (is_root(buffer))
   {
     int id           = -1;
-    printf("Allocating %zu shmem bytes\n", win_total_size);
+    // printf("Allocating %zu shmem bytes\n", win_total_size);
     buffer->raw_data = shmem_allocate_shared(&id, win_total_size);
     if (buffer->raw_data == NULL) {
       printf("Error when allocating shared memory for DCB\n");
@@ -1054,7 +1054,7 @@ static inline distributed_circular_buffer_p init_shmem_area_and_window(distribut
 
   // Create the actual window that will be used for data transmission, using a pointer to the same shared memory on the server
   const MPI_Aint final_win_size = is_client(buffer) ? 0 : win_total_size; // Size used for actual window creation
-  printf("Creating window of size %ld (rank %d)\n", final_win_size, buffer->dcb_rank);
+  // printf("Creating window of size %ld (rank %d)\n", final_win_size, buffer->dcb_rank);
   MPI_Win_create(
       buffer->raw_data, final_win_size, sizeof(data_element), MPI_INFO_NULL, buffer->communicator, &buffer->window);
 

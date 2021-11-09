@@ -163,7 +163,7 @@ contains
     integer,              intent(in)    :: line_id
     integer,              intent(in)    :: file_unit
 
-    print *, 'Flushing line ', line_id, size(this % lines(line_id) % data) * 4
+    print '(A, I4, I8, A)', 'Flushing line ', line_id, size(this % lines(line_id) % data) * 4, ' bytes'
     ! print *, this % lines(line_id) % data
 
     write(unit=file_unit) this % lines(line_id) % data(:, :)
