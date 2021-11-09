@@ -5,7 +5,7 @@ module grid_assembly_module
 
   integer, parameter :: MAX_ASSEMBLY_LINES = 20
 
-  type, private :: grid_assembly_line
+  type, public :: grid_assembly_line
     integer :: tag = -1
     integer, dimension(:, :), pointer :: data => NULL()
     integer(kind=8) :: missing_data = -1
@@ -15,7 +15,7 @@ module grid_assembly_module
   end type
 
   type, public :: grid_assembly
-    type(grid_assembly_line), dimension(MAX_ASSEMBLY_LINES) :: lines
+    type(grid_assembly_line), dimension(MAX_ASSEMBLY_LINES) :: lines = grid_assembly_line()
 
   contains
     private
