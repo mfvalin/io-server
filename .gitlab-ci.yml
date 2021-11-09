@@ -1,6 +1,7 @@
 variables:
    GIT_SUBMODULE_STRATEGY: recursive
    ORD_SOUMET_SHELL: /bin/bash
+   ECCI_BACKEND: banting
 
 before_script:
    - export CLICOLOR_FORCE=1
