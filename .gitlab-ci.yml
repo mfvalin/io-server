@@ -49,12 +49,13 @@ test:gnu-7.4.0_job_regular_single_node:
       - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
       - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
       - cd build_gnu-7.4.0
-      - source ../tests/scripts/single_node_tests.sh
+      - source ../tests/script/single_node_tests.sh
 
 # test:gnu-7.4.0_job_regular_multi_node:
 #   stage: test_batch
+#   dependencies:
+#      - build:gnu-7.4.0
 #   variables:
-#     build_dir: ${RPN_CI_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/${REGULAR_MACHINE_1}
 #     NUM_CPUS: "160"
 #     OMPI_MCA_opal_cuda_support: "0"
 
@@ -70,7 +71,7 @@ test:gnu-7.4.0_job_regular_single_node:
 #     - cd build_gnu-7.4.0
 #      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
 #      - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
-#     - source ${RPN_CI_SCRIPTS}/multi_node_tests.sh
+#     - source ../tests/script/multi_node_tests.sh
 
 build:XC50_intel-19.0.5:
    stage: build
@@ -126,7 +127,6 @@ test:XC50_intel-19.0.5_job_big_single_node:
 #      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
 #      - cd build_XC50_intel-19.0.5
 #      - source ../tests/script/multi_node_tests.sh
-
 
 package:XC50_intel-19.0.5:
    stage: package
