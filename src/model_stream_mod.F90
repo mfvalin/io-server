@@ -156,7 +156,7 @@ contains
   end function close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
-  function write(this, mydata, area, grid_in, grid_out, cprs, meta) result(status)
+  function write(this, mydata, area, grid_in, grid_out, cprs, meta) result(success)
     use jar_module
     implicit none
     class(model_stream), intent(INOUT) :: this
@@ -168,7 +168,8 @@ contains
     type(cmeta), intent(IN), optional :: cprs             ! compression related metadata (carried serialized)
     type(jar),   intent(IN), optional :: meta             ! metadata associated with data (carried serialized and blindly)
 
-    integer :: status
+    logical :: success
+
     type(model_record)   :: rec
     type(message_header) :: header
     integer(C_INT), dimension(:), pointer :: metadata
@@ -177,9 +178,9 @@ contains
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
     integer(C_INT) :: tkr
     integer(C_SIZE_T) :: o
-    logical :: dim_ok, success
+    logical :: dim_ok
 
-    status = -1
+    success = .false.
     if(this % stream_id <= 0) return
 
     ! transmission layout for circular buffer (compute PE -> relay PE) :
@@ -241,16 +242,17 @@ contains
     header % stream_id  = this % stream_id
     header % tag        = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
-!
-    success = .true.
-    success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) .and. success
-    success = this % server_bound_cb % put(rec, model_record_size_int(), CB_KIND_INTEGER_4, .false.)      .and. success
-    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % csize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
-    ! only send useful part of metadata jar (if supplied)
-    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % msize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
-    success = this % server_bound_cb % put(rec % record_length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
 
-    if (success) status = 0
+    ! Put header + data
+    success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
+    success = this % server_bound_cb % put(rec, model_record_size_int(), CB_KIND_INTEGER_4, .false.) .and. success
+
+    ! Optional parts of the message
+    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % csize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % msize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+
+    ! Add the end cap and commit the message
+    success = this % server_bound_cb % put(rec % record_length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
   end function write
 
   function read(this) result(status)

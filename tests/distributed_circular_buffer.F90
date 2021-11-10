@@ -42,12 +42,12 @@ function test_dcb_channel(buffer) result(num_errors)
   implicit none
   class(distributed_circular_buffer), intent(inout) :: buffer
   integer :: num_errors
-  integer :: return_value
+  logical :: success
 
-  return_value = buffer % start_listening()
+  success = buffer % start_listening()
 
   num_errors = 1
-  if (return_value == 0) num_errors = 0
+  if (success) num_errors = 0
 
   if (num_errors > 0) then
     print *, 'Error in CHANNEL process...'

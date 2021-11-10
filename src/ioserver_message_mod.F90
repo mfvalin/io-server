@@ -81,8 +81,9 @@ module ioserver_message_module
   integer, parameter, public :: MSG_COMMAND_DUMMY       = 1
   integer, parameter, public :: MSG_COMMAND_OPEN_FILE   = 2
   integer, parameter, public :: MSG_COMMAND_CLOSE_FILE  = 3
-  integer, parameter, public :: MSG_COMMAND_STOP        = 4
-  integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 5
+  integer, parameter, public :: MSG_COMMAND_MODEL_STOP  = 4
+  integer, parameter, public :: MSG_COMMAND_RELAY_STOP  = 5
+  integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 6
 
   public :: message_header_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message, message_header_print
 contains

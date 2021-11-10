@@ -61,7 +61,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Where to put modules
 get_target_property(LIBRARY_DIR ${PROJECT_NAME} BINARY_DIR)
-set(MODULE_DIR ${LIBRARY_DIR}/mod)
+set(MODULE_DIR ${LIBRARY_DIR}/include)
 set_target_properties(${PROJECT_NAME} PROPERTIES Fortran_MODULE_DIRECTORY ${MODULE_DIR})
 target_include_directories(${PROJECT_NAME} INTERFACE ${MODULE_DIR})
 
@@ -69,6 +69,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${MODULE_DIR})
 set(PUBLIC_MODULES
    ${MODULE_DIR}/heap_module.mod
    ${MODULE_DIR}/ioserver_context_module.mod
+   ${MODULE_DIR}/ioserver_message_module.mod
    ${MODULE_DIR}/jar_module.mod
    ${MODULE_DIR}/model_stream_module.mod
 )
@@ -85,8 +86,7 @@ target_compile_options(
    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -fmax-errors=8>
   #  $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -Werror -Wno-error=unused-function -fmax-errors=8>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
-   $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-warn all -diag-disable 5268,7025,7416>
-   # -g -O0
+   $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-error-limit 8 -warn all -diag-disable 5268,7025,7416>
 )
 
 install(TARGETS ${PROJECT_NAME}

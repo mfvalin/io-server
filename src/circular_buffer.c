@@ -297,6 +297,8 @@ void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to pr
 
     if (buffer->data[i] > 99999)
       printf("?%04ld ", (int64_t)buffer->data[i] % 10000);
+    else if (buffer->data[i] < -9999)
+      printf("-?%03ld ", (int64_t)buffer->data[i] % 1000);
     else
       printf("%5ld ", (int64_t)buffer->data[i]);
   }

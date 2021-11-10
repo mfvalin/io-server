@@ -318,13 +318,17 @@ contains
   end function get_capacity_server
 
   !> Start a channel process working. Will loop until the DCB is deleted.
-  !> \return -1 if we are not a channel process, 0 otherwise (once the DCB gets deleted)
+  !> \return .false. if we are not a channel process, .true. otherwise (once the DCB gets deleted)
   !> \sa DCB_channel_start_listening
-  function start_listening(this) result(return_value)
+  function start_listening(this) result(success)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
+    logical :: success
     integer(C_INT) :: return_value
+
     return_value = DCB_channel_start_listening(this % c_buffer)
+    success = .false.
+    if (return_value == 0) success = .true.
   end function start_listening
 
   !> MPI barrier among all processes that participate in this DCB (including channels)

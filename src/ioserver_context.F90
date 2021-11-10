@@ -22,7 +22,8 @@ module ioserver_memory_mod
   use heap_module
   implicit none
 
-  integer, parameter :: MAX_NUM_SERVER_STREAMS = 128
+  integer, public, parameter :: MAX_NUM_SERVER_STREAMS = 128
+
   integer, parameter :: MAX_PES_PER_NODE = 128
 
   type, bind(C) :: pe_info 
@@ -149,6 +150,7 @@ module ioserver_context_module
   use ioserver_constants
   use ioserver_memory_mod
   use ioserver_message_module
+  use model_stream_module
   use server_stream_module
   use shmem_arena_mod
   implicit none
@@ -156,7 +158,8 @@ module ioserver_context_module
   private
 
   ! Publish some types that are useful
-  public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size
+  public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream
+  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, NO_COLOR
 
   save
 
@@ -201,9 +204,10 @@ module ioserver_context_module
     integer        :: smp_rank      = -1                    !< rank in smp_comm
     integer        :: smp_size      =  0                    !< population of smp_comm
 
-    type(MPI_Comm) :: model_relay_smp_comm = MPI_COMM_NULL  !< model+relays on current node
-    type(MPI_Comm) :: model_smp_comm       = MPI_COMM_NULL  !< model PEs on current SMP node
-    type(MPI_Comm) :: relay_smp_comm       = MPI_COMM_NULL  !< relay PEs on current SMP node
+    type(MPI_Comm) :: model_relay_smp_comm        = MPI_COMM_NULL  !< model+relays on current node
+    type(MPI_Comm) :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
+    type(MPI_Comm) :: relay_smp_comm              = MPI_COMM_NULL  !< relay PEs on current SMP node
+    type(MPI_Comm) :: server_bound_relay_smp_comm = MPI_COMM_NULL  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
 
     type(MPI_Comm) :: all_comm             = MPI_COMM_NULL  !< non NO-OP PEs               (all nodes) (subset of global_comm)
     type(MPI_Comm) :: allio_comm           = MPI_COMM_NULL  !< all IO PEs (relay + server) (subset of all_comm)
@@ -216,6 +220,7 @@ module ioserver_context_module
     integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
     integer :: model_relay_smp_size = 0     !< population of model_relay_smp_comm
     integer :: server_comm_rank     = -1    !< rank in server_comm
+    integer :: num_local_model_proc = -1    !< Number of model processes on this SMP node
 
     !----------------------------------------------------
     ! Local instances of objects located in shared memory
@@ -260,6 +265,8 @@ module ioserver_context_module
     procedure, pass         :: finalize_server
     procedure, pass, public :: finalize => ioserver_context_finalize_manually
     final                   :: IOserver_int_finalize
+
+    procedure, pass, public :: get_num_local_model
 
     procedure, pass, public :: get_crs => IOserver_get_crs
     procedure, pass, public :: get_local_heap => IOserver_get_heap
@@ -339,7 +346,6 @@ end function IOserver_is_channel
 !> Open a file where the model can write data
 !> \return A file object that is already open and can be written to
 function open_file_model(context, filename) result(new_file)
-  use model_stream_module
   implicit none
   class(ioserver_context), intent(inout) :: context
   character(len=*),        intent(in)    :: filename
@@ -644,6 +650,13 @@ subroutine print_io_colors(context)
     if (context % debug_mode) write(6,'(A,(15I5))')' DEBUG: colors =', mem % pe(0:max_smp_pe) % color
 end subroutine print_io_colors
 
+function get_num_local_model(context) result(num_model)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  integer :: num_model
+  num_model = context % num_local_model_proc
+end function get_num_local_model
+
 function IOserver_get_crs(context, color) result(crs)
   implicit none
   class(ioserver_context), intent(in)        :: context
@@ -679,6 +692,9 @@ function IOserver_get_crs(context, color) result(crs)
 
     case(RELAY_COLOR + NODE_COLOR)                ! relay PEs on SMP node           (subset of  smp_comm, iorelay_comm)
       crs % comm = context % relay_smp_comm
+    
+    case(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR) ! server-bound relay PEs on SMP node (subset of relay_smp_comm)
+      crs % comm = context % server_bound_relay_smp_comm
 
     case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of all_comm)
       crs % comm = context % allio_comm
@@ -831,7 +847,7 @@ subroutine finalize_model(this)
   if (this % is_model()) then
       call this % messenger % bump_tag()
       header % length  = int(message_header_size_int(), kind=4)
-      header % command = MSG_COMMAND_STOP
+      header % command = MSG_COMMAND_MODEL_STOP
       header % tag     = this % messenger % get_msg_tag()
       success = this % local_server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
       success = this % local_server_bound_cb % put(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
@@ -851,7 +867,7 @@ subroutine finalize_relay(this)
     ! Send a stop signal
     if (this % debug_mode) print *, 'Relay sending STOP signal'
     header % length = 0
-    header % command = MSG_COMMAND_STOP
+    header % command = MSG_COMMAND_RELAY_STOP
     success = this % local_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
     success = this % local_dcb % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
 
@@ -909,17 +925,18 @@ subroutine IOserver_int_finalize(context)
   call context % finalize()
 end subroutine IOserver_int_finalize
 
-function IOserver_init_communicators(context, nio_node, app_class) result(success)
+function IOserver_init_communicators(context, is_on_server, num_relay_per_node, num_channels, num_server_noop) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
-  integer,                 intent(in)    :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
-  character(len=*),        intent(in)    :: app_class
+  logical,                 intent(in)    :: is_on_server
+  integer,                 intent(in)    :: num_relay_per_node
+  integer,                 intent(in)    :: num_channels
+  integer,                 intent(in)    :: num_server_noop
 
   logical :: success
-  ! integer :: color
 
   type(MPI_Comm) :: temp_comm
-  integer :: temp_rank
+  integer :: temp_rank, temp_size
   logical :: is_initialized
   integer :: split_color ! Temporary, used to define splits in MPI communicators
 
@@ -927,15 +944,27 @@ function IOserver_init_communicators(context, nio_node, app_class) result(succes
 
   call MPI_Initialized(is_initialized)      ! is MPI library already initialized ?
   if(.not. is_initialized) call MPI_Init()  ! initialize MPI if not already done
+
   call MPI_Comm_rank(context % global_comm, context % global_rank)
   call MPI_Comm_size(context % global_comm, context % global_size)
 
-  if(app_class(1:1) == 'M') context % color = MODEL_COLOR  + RELAY_COLOR          ! model or relay app
-  if(app_class(1:1) == 'C') context % color = SERVER_COLOR + CHANNEL_COLOR        ! Channel process (on server, to communicate with relays)
-  if(app_class(1:1) == 'O') context % color = SERVER_COLOR + SERVER_BOUND_COLOR   ! IO server app (output only)
-  if(app_class(1:1) == 'I') context % color = SERVER_COLOR + MODEL_BOUND_COLOR    ! IO server app (input only)
-  if(app_class(1:1) == 'Z') context % color = NO_OP_COLOR                         ! null app
-  if(context % color == NO_COLOR) return                                          ! miserable failure
+  ! Determine exact color for server processes, temporary color for processes on Model nodes
+  if (is_on_server) then
+    call MPI_Comm_split(context % global_comm, 0, context % global_rank, temp_comm)
+    call MPI_Comm_rank(temp_comm, temp_rank)
+    call MPI_Comm_size(temp_comm, temp_size)
+    ! Can only have SERVER_BOUND, CHANNEL and NO_OP for now
+    if (temp_rank >= temp_size - num_server_noop) then
+      context % color = NO_OP_COLOR
+    else if (temp_rank >= temp_size - num_server_noop - num_channels) then
+      context % color = SERVER_COLOR + CHANNEL_COLOR
+    else
+      context % color = SERVER_COLOR + SERVER_BOUND_COLOR
+    end if
+  else
+    call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm)
+    context % color = MODEL_COLOR + RELAY_COLOR
+  end if
 
   if (context % debug_mode) print *, 'DEBUG: Process global_rank, color: ', context % global_rank, context % color
 
@@ -1003,13 +1032,13 @@ function IOserver_init_communicators(context, nio_node, app_class) result(succes
     call MPI_Comm_size(context % model_relay_smp_comm, context % model_relay_smp_size) ! population of SMP node
 
     ! Split between model and relay processes
-    ! Spread the nio_node relay PEs across the node (lowest and highest node ranks)
-    if (context % model_relay_smp_rank >= ((nio_node+1)/2) .and. &
-        context % model_relay_smp_rank < (context % model_relay_smp_size - ((nio_node)/2))) then   ! model compute process
+    ! Spread relay PEs across the node (lowest and highest node ranks)
+    if (context % model_relay_smp_rank >= ((num_relay_per_node+1)/2) .and. &
+        context % model_relay_smp_rank < (context % model_relay_smp_size - ((num_relay_per_node)/2))) then   ! model compute process
     ! Model process
       context % color = MODEL_COLOR
       if (context % debug_mode) print *,'DEBUG: model compute process, node rank =', &
-          context % model_relay_smp_rank, context % model_relay_smp_size, nio_node/2, (context % model_relay_smp_size - ((nio_node+1)/2))
+          context % model_relay_smp_rank, context % model_relay_smp_size, num_relay_per_node/2, (context % model_relay_smp_size - ((num_relay_per_node+1)/2))
 
       call MPI_Comm_split(context % model_relay_smp_comm, MODEL_COLOR, context % model_relay_smp_rank, context % model_smp_comm) ! Model processes on this node
       call MPI_Comm_split(context % modelio_comm, MODEL_COLOR, context % global_rank, context % model_comm)                      ! Model processes on all nodes
@@ -1017,17 +1046,26 @@ function IOserver_init_communicators(context, nio_node, app_class) result(succes
     ! Relay process
       context % color = RELAY_COLOR
       if (context % debug_mode) print *,'DEBUG: IO relay process, node rank =', &
-          context % model_relay_smp_rank, context % model_relay_smp_size, nio_node/2, (context % model_relay_smp_size - ((nio_node+1)/2))
+          context % model_relay_smp_rank, context % model_relay_smp_size, num_relay_per_node/2, (context % model_relay_smp_size - ((num_relay_per_node+1)/2))
 
       call MPI_Comm_split(context % model_relay_smp_comm, RELAY_COLOR, context % model_relay_smp_rank, context % relay_smp_comm) ! Relay processes on this node
       call MPI_Comm_split(context % modelio_comm, RELAY_COLOR, context % global_rank, context % iorelay_comm)                    ! Relay processes on all nodes
 
-      ! Determine server-bound vs model-bound relays (no separate communicators for now)
+      block
+        integer :: node_size, relay_size
+        call MPI_Comm_size(context % model_relay_smp_comm, node_size)
+        call MPI_Comm_size(context % relay_smp_comm, relay_size)
+        context % num_local_model_proc = node_size - relay_size
+      end block
+
+      ! Determine server-bound vs model-bound relays (only server-bound communicator for now)
       call MPI_Comm_rank(context % relay_smp_comm, temp_rank)
       if (mod(temp_rank, 2) == 0) then
         context % color = RELAY_COLOR + SERVER_BOUND_COLOR
+        call MPI_Comm_split(context % relay_smp_comm, SERVER_BOUND_COLOR, temp_rank, context % server_bound_relay_smp_comm)
       else
         context % color = RELAY_COLOR + MODEL_BOUND_COLOR
+        call MPI_Comm_split(context % relay_smp_comm, MODEL_BOUND_COLOR, temp_rank, temp_comm)
       end if
     endif
   end if
@@ -1284,7 +1322,11 @@ function IOserver_init_shared_mem(context) result(success)
 
     ! Create DCB
     if (context % is_relay()) then
-      success = context % local_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
+      if (context % is_server_bound()) then
+        success = context % local_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
+      else if (context % is_model_bound()) then
+        success = context % local_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, DCB_CLIENT_BOUND_TYPE, 0_8, 0_8)
+      end if
     else if (context % is_channel()) then
       success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
     else
@@ -1302,22 +1344,24 @@ function IOserver_init_shared_mem(context) result(success)
   success = .true.
 end function IOserver_init_shared_mem
 
-function IOserver_int_init(context, nio_node, app_class, debug_mode) result(success)
+function IOserver_int_init(context, is_on_server, num_relay_per_node, num_channels, num_server_noop, in_debug_mode) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
-  integer,                 intent(in)    :: nio_node     ! number of relay processes per compute SMP node (1 or 2)
-  character(len=*),        intent(in)    :: app_class
-  logical,                 intent(in)    :: debug_mode
+  logical,                 intent(in)    :: is_on_server
+  integer,                 intent(in)    :: num_relay_per_node
+  integer,                 intent(in)    :: num_channels
+  integer,                 intent(in)    :: num_server_noop
+  logical, optional,       intent(in)    :: in_debug_mode
+
   logical :: success
-  integer :: status
 
   procedure(), pointer :: p
 
   success = .false.
-  status = NO_COLOR
-  context % debug_mode = debug_mode
+  context % debug_mode = .false.
+  if (present(in_debug_mode)) context % debug_mode = in_debug_mode
 
-  success = context % init_communicators(nio_node, app_class)
+  success = context % init_communicators(is_on_server, num_relay_per_node, num_channels, num_server_noop)
 
   if (.not. success) then
     print *, 'ERROR were not able to properly initialize all communicators!'
@@ -1333,33 +1377,9 @@ function IOserver_int_init(context, nio_node, app_class, debug_mode) result(succ
 
   success = .true.
 
-  ! ===================================================================================
-  !                     SERVER processes (no return to caller)
-  ! ===================================================================================
-  if (context % is_server()) then
-    if (context % local_dcb % get_channel_id() >= 0) then
-      status = context % local_dcb % start_listening()
-    else if (C_ASSOCIATED(context % io_server_fn)) then
-      if (context % debug_mode) print *,'INFO: io_server_fn is associated'
-      call C_F_PROCPOINTER(context % io_server_fn, p)    ! associate procedure pointer with caller supplied address
-      ! call user supplied server code that may or may not return
-      if (context % debug_mode) write(6,*) 'INFO: expecting no return from io_server_fn'
-      call p()                                ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
-    else
-      if (context % debug_mode) print *,'INFO: io_server_fn is not associated, calling default function'
-      call io_server_out()                    ! not expected to return, but ...
-    endif
-
-    call context % local_dcb % delete()
-    call context % set_time_to_quit()         ! activate quit signal for NO-OP PEs
-    if (context % debug_mode) write(6,*) 'FINAL: SMP node PE', context % smp_rank + 1,' of', context % smp_size
-    call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop
-    stop
-  endif
-
-  ! ===================================================================================
-  !                     RELAY processes (no return to caller if io_relay_fn is defined)
-  ! ===================================================================================
+  ! ====================================================================================
+  !            RELAY processes (no return to caller if io_relay_fn is defined)
+  ! ====================================================================================
   if (context % is_relay()) then                    ! IO relay process, check if caller supplied relay routine
 
     if (C_ASSOCIATED(context % io_relay_fn)) then             ! caller supplied subroutine to be called on relay PEs
