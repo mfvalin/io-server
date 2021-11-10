@@ -5,7 +5,7 @@ hybrid IO server for model usage
 
 ** Build dependencies
 
-- CMake 3.12+
+- CMake 3.16+
 
 Note: =cmake_rpn= and =ci-env= are included as a submodule.  Please clone with the
 =--recursive= flag or run =git submodule update --init --recursive= in the
@@ -48,7 +48,7 @@ make package
 
 ** Build dependencies
 
-- CMake 3.12+
+- CMake 3.16+
 
 Note: =cmake_rpn= and =ci-env= are included as a submodule but =ci-env= is not available externally. 
 Please run =git -c submodule."ci-env".update=none submodule update --init --recursive= in the git repo after having cloned.
