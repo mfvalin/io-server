@@ -168,8 +168,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   integer            :: i_data_check ! Only for verifying data
   integer, dimension(:),    pointer, contiguous, save :: model_data => NULL(), expected_data => NULL()
   integer, dimension(:, :), pointer, contiguous       :: data_ptr
+  type(heap)         :: data_heap
 
-
+  data_heap = context % get_node_heap()
   capacity = dcb % get_capacity(client_id, CB_KIND_INTEGER_4)
 
   if (.not. associated(model_data)) allocate(model_data(capacity))
@@ -241,7 +242,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
 
     data_ptr(1:record % ni, 1:record % nj) => model_data
     file_ptr => context % get_stream(header % stream_id)
-    success = file_ptr % put_data(record, data_ptr)
+    success = file_ptr % put_data(record, data_ptr, data_heap)
     if (.not. success) then
       print *, 'ERROR: Could not put data into partial grid!'
       error stop 1

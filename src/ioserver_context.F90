@@ -188,7 +188,8 @@ module ioserver_context_module
     procedure, pass, public :: get_num_local_model
 
     procedure, pass, public :: get_crs => IOserver_get_crs
-    procedure, pass, public :: get_local_heap => IOserver_get_heap
+    procedure, pass, public :: get_local_heap => IOserver_get_local_heap
+    procedure, pass, public :: get_node_heap => IOserver_get_node_heap
     procedure, pass, public :: get_server_bound_cb => IOserver_get_server_bound_cb
     procedure, pass, public :: get_model_bound_cb => IOserver_get_cio_in
     procedure, pass, public :: get_dcb => IOserver_get_dcb
@@ -635,12 +636,19 @@ function IOserver_get_crs(context, color) result(crs)
   endif
 end function IOserver_get_crs
 
-function IOserver_get_heap(context) result(h)
+function IOserver_get_local_heap(context) result(h)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(heap) :: h
   h = context % local_heap
-end function IOserver_get_heap
+end function IOserver_get_local_heap
+
+function IOserver_get_node_heap(context) result(h)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  type(heap) :: h
+  h = context % node_heap
+end function IOserver_get_node_heap
 
 function IOserver_get_cio_in(context) result(cio)
   implicit none

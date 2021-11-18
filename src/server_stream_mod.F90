@@ -5,7 +5,7 @@ module server_stream_module
   ! use ioserver_constants
   use ioserver_message_module
   use heap_module
-  ! use simple_mutex_module
+  use simple_mutex_module
   implicit none
 #if ! defined(VERSION)
 #define VERSION 10000
@@ -40,6 +40,12 @@ module server_stream_module
 
     procedure, nopass, private :: make_full_filename
   end type shared_server_stream
+
+  type, public :: local_server_stream
+    private
+    type(simple_mutex) :: mutex
+    contains
+  end type local_server_stream
 
 contains
 
@@ -88,14 +94,15 @@ contains
     end if
   end function shared_server_stream_close
 
-  function put_data(this, record, subgrid_data) result(success)
+  function put_data(this, record, subgrid_data, data_heap) result(success)
     implicit none
     class(shared_server_stream), intent(inout) :: this
-    class(model_record),  intent(in)    :: record
+    type(model_record),          intent(in)    :: record
     integer, intent(in), dimension(record % ni, record % nj) :: subgrid_data
+    type(heap),                  intent(inout) :: data_heap
     logical :: success
 
-    success = this % partial_grid_data % put_data(record, subgrid_data)
+    success = this % partial_grid_data % put_data(record, subgrid_data, data_heap)
   end function put_data
 
   function flush_data(this) result(num_lines_flushed)

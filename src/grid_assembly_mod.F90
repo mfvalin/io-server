@@ -1,5 +1,6 @@
 module grid_assembly_module
   use ioserver_message_module
+  use heap_module
   implicit none
   private
 
@@ -43,10 +44,11 @@ contains
     end if
   end subroutine grid_assembly_line_free_data
 
-  function grid_assembly_get_line_id(this, record) result(line_id)
+  function grid_assembly_get_line_id(this, record, data_heap) result(line_id)
     implicit none
     class(grid_assembly), intent(inout) :: this
     type(model_record),   intent(in)    :: record
+    type(heap),           intent(inout) :: data_heap
     integer :: line_id
 
     integer :: i_line, free_line_id
@@ -89,11 +91,12 @@ contains
     end if
   end function grid_assembly_is_line_full
 
-  function grid_assembly_put_data(this, record, subgrid_data) result(success)
+  function grid_assembly_put_data(this, record, subgrid_data, data_heap) result(success)
     implicit none
     class(grid_assembly), intent(inout) :: this
-    class(model_record),  intent(in)    :: record
-    integer, intent(in), dimension(record % ni, record % nj) :: subgrid_data
+    type(model_record),   intent(in)    :: record
+    integer,              intent(in), dimension(record % ni, record % nj) :: subgrid_data
+    type(heap),           intent(inout) :: data_heap
 
     logical :: success
 
@@ -101,7 +104,7 @@ contains
     integer :: i0, i1, j0, j1, size_x, size_y
 
     success = .false.
-    line_id = this % get_line_id(record)
+    line_id = this % get_line_id(record, data_heap)
 
     if (line_id < 0) return
 
