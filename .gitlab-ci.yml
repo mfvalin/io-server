@@ -55,27 +55,27 @@ test:gnu-7.4.0_job_regular_single_node:
       - BUILD_PATH=`pwd`
       - source ../tests/script/single_node_tests.sh
 
-# test:gnu-7.4.0_job_regular_multi_node:
-#   stage: test_batch
-#   dependencies:
-#      - build:gnu-7.4.0
-#   variables:
-#     NUM_CPUS: "160"
-#     OMPI_MCA_opal_cuda_support: "0"
+test:gnu-7.4.0_job_regular_multi_node:
+  stage: test
+  dependencies:
+     - build:gnu-7.4.0
+  variables:
+    NUM_CPUS: "160"
+    OMPI_MCA_opal_cuda_support: "0"
 
-#     ORD_SOUMET_MACH: ${ECCI_FRONTEND}
-#     ORD_SOUMET_C: "${NUM_CPUS}x1"
-#     ORD_SOUMET_W: "30"
-#     ORD_SOUMET_JN: io-server-regular-multi-node
-#     ORD_SOUMET_M: "4G"
-#     ORD_SOUMET_TMPFS: "1024M"
-#     MPI_COMMAND: "mpirun"
+    ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+    ORD_SOUMET_C: "${NUM_CPUS}x1"
+    ORD_SOUMET_W: "30"
+    ORD_SOUMET_JN: io-server-regular-multi-node
+    ORD_SOUMET_M: "4G"
+    ORD_SOUMET_TMPFS: "1024M"
+    MPI_COMMAND: "mpirun"
 
-#   script:
-#      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
-#      - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
-#      - cd build_gnu-7.4.0
-#      - source ../tests/script/multi_node_tests.sh
+  script:
+     - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
+     - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
+     - cd build_gnu-7.4.0
+     - source ../tests/script/multi_node_tests.sh
 
 build:XC50_intel-19.0.5:
    stage: build
@@ -97,7 +97,7 @@ build:XC50_intel-19.0.5:
       paths:
          - build_XC50_intel-19.0.5
 
-test:XC50_intel-19.0.5_job_big_single_node:
+test:XC50_intel-19.0.5_job_single_node:
    stage: test
    dependencies:
       - build:XC50_intel-19.0.5
@@ -106,7 +106,7 @@ test:XC50_intel-19.0.5_job_big_single_node:
       ORD_SOUMET_MACH: ${ECCI_BACKEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
       ORD_SOUMET_W: "30"
-      ORD_SOUMET_JN: io-server-big-single-node
+      ORD_SOUMET_JN: xc50-intel-single-node
       MPI_COMMAND: "aprun"
    script:
       - set +e
@@ -115,22 +115,22 @@ test:XC50_intel-19.0.5_job_big_single_node:
       - BUILD_PATH=`pwd`
       - source ../tests/script/single_node_tests.sh
 
-# test:XC50_intel-19.0.5_job_big_multi_node:
-#   stage: test
-#  dependencies:
-#      - build:XC50_intel-19.0.5
-#   variables:
-#     NUM_CPUS: "160"
-#     ORD_SOUMET_MACH: ${ECCI_BACKEND}
-#     ORD_SOUMET_C: "${NUM_CPUS}x1"
-#     ORD_SOUMET_W: "30"
-#     ORD_SOUMET_JN: io-server-big-multi-node
-#     MPI_COMMAND: "aprun"
-#   script:
-#      - set +e
-#      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-#      - cd build_XC50_intel-19.0.5
-#      - source ../tests/script/multi_node_tests.sh
+test:XC50_intel-19.0.5_job_multi_node:
+  stage: test
+ dependencies:
+     - build:XC50_intel-19.0.5
+  variables:
+    NUM_CPUS: "160"
+    ORD_SOUMET_MACH: ${ECCI_BACKEND}
+    ORD_SOUMET_C: "${NUM_CPUS}x1"
+    ORD_SOUMET_W: "30"
+    ORD_SOUMET_JN: xc50-intel-multi-node
+    MPI_COMMAND: "aprun"
+  script:
+     - set +e
+     - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
+     - cd build_XC50_intel-19.0.5
+     - source ../tests/script/multi_node_tests.sh
 
 package:XC50_intel-19.0.5:
    stage: package
