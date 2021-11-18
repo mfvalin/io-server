@@ -68,7 +68,6 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   use circular_buffer_module
   use ioserver_data_check_module
   use ioserver_message_module
-  use ioserver_memory_mod
   use jar_module
   implicit none
 
@@ -126,7 +125,6 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   dcb_capacity            = data_buffer % get_capacity(CB_KIND_INTEGER_4)
   dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT)
 
-
   jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
   if (jar_ok .ne. 0) then
     print *, 'Could not create jar to contain DCB message...'
@@ -134,6 +132,11 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   end if
 
   dcb_message => dcb_message_jar % raw_array()
+
+  c_data = C_NULL_PTR
+  nullify(f_data)
+  total_message_size = 0
+  content_size = 0
 
   ! Say hi to the consumer processes
   header % length  = int(message_header_size_int(), kind=4)

@@ -143,7 +143,6 @@ end subroutine channel_process
 
 function receive_message(context, dcb, client_id, verify_message) result(finished)
   use ioserver_data_check_module
-  use ioserver_memory_mod
   implicit none
   type(ioserver_context),            intent(inout) :: context
   type(distributed_circular_buffer), intent(inout) :: dcb
@@ -154,9 +153,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   logical :: success
 
   ! File management
-  character(len=:), allocatable :: filename
-  type(server_stream), pointer  :: file_ptr
-  integer                       :: i_file, num_flushed
+  character(len=:), allocatable        :: filename
+  type(shared_server_stream), pointer  :: file_ptr
+  integer                              :: i_file, num_flushed
 
   ! Message reading
   integer(C_INT64_T)   :: capacity

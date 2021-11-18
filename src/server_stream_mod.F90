@@ -15,7 +15,7 @@ module server_stream_module
 
   public :: block_meta, subgrid, grid, cmeta
 
-  type, public :: server_stream
+  type, public :: shared_server_stream
     private
     integer :: stream_id = -1     ! File ID, for internal use
     integer :: unit = -1          ! Fortran file unit, when open
@@ -23,30 +23,29 @@ module server_stream_module
     integer :: mutex_value = 0    ! For later, if we need to lock this file with a mutex
     character(len=:), allocatable :: name
 
-    type(heap) :: data_heap = heap()
     type(grid_assembly) :: partial_grid_data = grid_assembly(grid_assembly_line())
 
     contains
-    procedure :: open
-    procedure :: close
+    procedure :: open  => shared_server_stream_open
+    procedure :: close => shared_server_stream_close
     procedure :: put_data
     procedure :: flush_data
 
     procedure :: is_open
     procedure :: is_valid
-    procedure :: print => server_stream_print
+    procedure :: print => shared_server_stream_print
     procedure :: is_same_name
     procedure :: get_owner_id
-    final     :: server_stream_finalize
+    final     :: shared_server_stream_finalize
 
     procedure, nopass, private :: make_full_filename
-  end type server_stream
+  end type shared_server_stream
 
 contains
 
-  function open(this, stream_id, file_name, owner_id) result(success)
+  function shared_server_stream_open(this, stream_id, file_name, owner_id) result(success)
     implicit none
-    class(server_stream), intent(inout) :: this
+    class(shared_server_stream), intent(inout) :: this
     integer,              intent(in)    :: stream_id
     character(len=*),     intent(in)    :: file_name
     integer,              intent(in)    :: owner_id
@@ -62,11 +61,11 @@ contains
       print '(A, A, A, I4, A, I6, A, I4)', 'Opened file, name = ', this % name, ', stream = ', this % stream_id, ', unit = ', this % unit, ', owner ID = ', this % owner_id
       success = .true.
     end if
-  end function open
+  end function shared_server_stream_open
 
-  function close(this) result(success)
+  function shared_server_stream_close(this) result(success)
     implicit none
-    class(server_stream), intent(inout) :: this
+    class(shared_server_stream), intent(inout) :: this
     logical :: success
 
     integer :: num_flushed, num_incomplete
@@ -87,11 +86,11 @@ contains
       this % owner_id = -1
       success = .true.
     end if
-  end function close
+  end function shared_server_stream_close
 
   function put_data(this, record, subgrid_data) result(success)
     implicit none
-    class(server_stream), intent(inout) :: this
+    class(shared_server_stream), intent(inout) :: this
     class(model_record),  intent(in)    :: record
     integer, intent(in), dimension(record % ni, record % nj) :: subgrid_data
     logical :: success
@@ -101,7 +100,7 @@ contains
 
   function flush_data(this) result(num_lines_flushed)
     implicit none
-    class(server_stream), intent(inout) :: this
+    class(shared_server_stream), intent(inout) :: this
     integer :: num_lines_flushed
 
     num_lines_flushed = this % partial_grid_data % flush_completed_grids(this % unit)
@@ -109,14 +108,14 @@ contains
 
   function is_valid(this)
     implicit none
-    class(server_stream), intent(in) :: this
+    class(shared_server_stream), intent(in) :: this
     logical :: is_valid
     is_valid = (this % stream_id > 0)
   end function is_valid
 
   function is_open(this)
     implicit none
-    class(server_stream), intent(in) :: this
+    class(shared_server_stream), intent(in) :: this
     logical :: is_open
     is_open = .false.
     if (this % is_valid()) is_open = (this % unit .ne. -1)
@@ -131,7 +130,7 @@ contains
 
   function is_same_name(this, filename)
     implicit none
-    class(server_stream), intent(in) :: this
+    class(shared_server_stream), intent(in) :: this
     character(len=*),     intent(in) :: filename
     logical :: is_same_name
 
@@ -140,14 +139,14 @@ contains
 
   function get_owner_id(this) result(owner_id)
     implicit none
-    class(server_stream), intent(in) :: this
+    class(shared_server_stream), intent(in) :: this
     integer :: owner_id
     owner_id = this % owner_id
   end function get_owner_id
 
-  subroutine server_stream_finalize(this)
+  subroutine shared_server_stream_finalize(this)
     implicit none
-    type(server_stream), intent(inout) :: this
+    type(shared_server_stream), intent(inout) :: this
 
     logical :: success
     if (this % is_open()) then
@@ -155,16 +154,16 @@ contains
     else
       success = .true.
     end if
-  end subroutine server_stream_finalize
+  end subroutine shared_server_stream_finalize
 
-  subroutine server_stream_print(this)
+  subroutine shared_server_stream_print(this)
     implicit none
-    class(server_stream), intent(in) :: this
+    class(shared_server_stream), intent(in) :: this
     if (allocated(this % name)) then
       print '(A, I4, I4, I4, I4)', this % name, this % stream_id, this % unit, this % owner_id, this % mutex_value
     else
       print '(I4, I4, I4, I4)', this % stream_id, this % unit, this % owner_id, this % mutex_value
     end if
-  end subroutine server_stream_print
+  end subroutine shared_server_stream_print
 
 end module server_stream_module

@@ -70,6 +70,7 @@ set(PUBLIC_MODULES
    ${MODULE_DIR}/heap_module.mod
    ${MODULE_DIR}/ioserver_context_module.mod
    ${MODULE_DIR}/ioserver_message_module.mod
+   ${MODULE_DIR}/ioserver_run_module.mod
    ${MODULE_DIR}/jar_module.mod
    ${MODULE_DIR}/model_stream_module.mod
 )

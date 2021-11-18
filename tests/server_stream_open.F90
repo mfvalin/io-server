@@ -16,9 +16,9 @@ program test_server_stream_open
   type(simple_mutex), dimension(:), allocatable :: mutexes
 
   integer(C_INT), dimension(:), pointer :: int_array
-  type(server_stream), dimension(:), pointer :: file_array
+  type(shared_server_stream), dimension(:), pointer :: file_array
 
-  type(server_stream) :: dummy_server_stream
+  type(shared_server_stream) :: dummy_server_stream
   character(len=11) :: file_name
 
   logical :: success
@@ -46,7 +46,7 @@ program test_server_stream_open
 
   if (rank == 0) then
     do i = 1, NUM_FILES
-      file_array(i) = server_stream()
+      file_array(i) = shared_server_stream()
     end do
   end if
 
