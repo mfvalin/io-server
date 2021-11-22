@@ -34,12 +34,7 @@ module heap_module
   !> \brief tkr code for real arrays
   integer, parameter :: TKR_REAL    = 2
 
-! type of a heap element (must be consistent with circular buffer and io-server definition)
-#if defined(DATA_ELEMENT_64)
   integer, parameter :: HEAP_ELEMENT =  C_INT64_T     !<  type of a heap element (must be consistent with C code)
-#else
-  integer, parameter :: HEAP_ELEMENT =  C_INT  !<  type of a heap element (must be consistent with C code)
-#endif
 !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, public, bind(C) :: block_meta_c
@@ -69,6 +64,7 @@ module heap_module
     type(C_PTR) :: p   = C_NULL_PTR   !< array address
 
   contains
+    procedure, pass :: print => block_meta_print
     !> \return array type code (1=integer, 2=real)
     procedure :: t
     !> \return array kind (1/2/4/8 bytes)
@@ -407,6 +403,12 @@ module heap_module
 !   ===========================  type bound procedures used by heap user type ===========================
 !> \endcond
   contains
+
+  subroutine block_meta_print(this)
+    implicit none
+    class(block_meta_f08), intent(in) :: this
+    print *, 'BLOCK META tkr, k: ', this % a % tkr, this % k()
+  end subroutine block_meta_print
 
   function get_base(this) result(addr)
     implicit none

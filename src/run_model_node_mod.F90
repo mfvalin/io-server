@@ -87,10 +87,11 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   integer(C_INT64_T) :: dcb_capacity
 
   integer :: i_data_check
-  integer :: total_message_size, model_message_size, end_cap, content_size
+  integer :: total_message_size, content_size, filename_size
   logical :: finished, success, skip_message
   integer, dimension(:), allocatable :: cb_message
   integer, dimension(:), allocatable :: expected_message
+  integer(C_INT) :: message_header_tag
 
   integer, dimension(:), pointer :: f_data
   type(C_PTR) :: c_data
@@ -99,9 +100,11 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
   type(model_record)   :: record
   type(message_header) :: header
+  type(message_cap)    :: end_cap
   type(jar)            :: dcb_message_jar
-  integer              :: jar_ok, num_jar_elem
-  integer, dimension(:), pointer :: dcb_message
+  integer              :: jar_ok
+  integer(JAR_ELEMENT) :: num_jar_elem
+  integer(JAR_ELEMENT), dimension(:), pointer :: dcb_message
   logical, dimension(:), allocatable :: model_finished
 
   print *, 'Server-bound relay process'
@@ -123,7 +126,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
   client_id = data_buffer % get_server_bound_client_id()
   dcb_capacity            = data_buffer % get_capacity(CB_KIND_INTEGER_4)
-  dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT)
+  dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure we have a bit of loose space
 
   jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
   if (jar_ok .ne. 0) then
@@ -139,10 +142,13 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   content_size = 0
 
   ! Say hi to the consumer processes
-  header % length  = int(message_header_size_int(), kind=4)
-  header % command = MSG_COMMAND_DUMMY
+  header % content_length     = 0
+  header % command            = MSG_COMMAND_DUMMY
+  header % sender_global_rank = context % get_global_rank()
+  end_cap % msg_length = header % content_length
+
   success = data_buffer % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .true.)
-  success = data_buffer % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success ! Append size
+  success = data_buffer % put_elems(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success ! Append size
 
   if (.not. success) then
     print *, 'ERROR saying HI to the consumer...'
@@ -169,47 +175,43 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       if (cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_4) == 0) cycle ! The buffer is empty, move on to the next
 
       ! From this point on, we know there is something in the buffer
-      success = cb_list(i_compute) % peek(model_message_size, 1_8, CB_KIND_INTEGER_4)
+      success = cb_list(i_compute) % peek(message_header_tag, 1_8, CB_KIND_INTEGER_4)
 
-      if (model_message_size < message_header_size_int()) then
-        print *, 'AAAHHHHhhh message size is smaller than a message header!', model_message_size, message_header_size_int()
+      if (message_header_tag .ne. MSG_HEADER_TAG) then
+        print *, 'ERROR: Message does not start with the message header tag', message_header_tag, MSG_HEADER_TAG
+        error stop 1
       end if
 
+      !---------------------------
+      ! Get the header and check
       success = cb_list(i_compute) % get(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) ! Header
       if (.not. success) then
         print *, 'ERROR when getting message header from CIO_OUT', i_compute
         error stop 1
       end if
 
-      ! call message_header_print(header)
+      content_size = header % content_length
 
+      ! call print_message_header(header)
+
+      !------------------------------
+      ! Extract/process message data
       if (header % command == MSG_COMMAND_DATA) then
         success = cb_list(i_compute) % get(record, model_record_size_int(), CB_KIND_INTEGER_4, .false.) ! Record 
-        success = cb_list(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
+        ! TODO  Get compression metadata
+        ! TODO  Get other metadata
 
         if (.not. success) then
           print *, 'ERROR Could not get record from data message'
           error stop 1
         end if
 
-        if (record % record_length .ne. end_cap .or. (record % record_length .ne. header % length)) then
-          print *, 'We have a problem with message size (end cap does not match)'
-          error stop 1
-        end if
-
-        ! TODO take compression meta and other meta stuff into account
-
         c_data = context % ptr_translate_from(record % data, MODEL_COLOR, i_compute)
         num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
         call c_f_pointer(c_data, f_data, [num_data])
-        
-        ! print *, 'f_data: ', f_data, num_data
-        ! print '(A12, I4, I5, I3, I4, I4, I4, I4, I4, I4, I4, I3, I3, I4, I4)', 'Record info: ', &
-        !   record % record_length, record % tag, record % stream, &
-        !   record % ni, record % nj, record % gnignj, &
-        !   record % gin, record % gout, record % i0, record % j0, &
-        !   record % nk, record % nvar, record % csize, record % msize
 
+        ! call print_model_record(record)
+        
         if (do_expensive_checks) then
 
           if (.not. allocated(expected_message)) then
@@ -233,27 +235,52 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
           end if
         end if
 
-        record % record_length = record % record_length + num_data
-        header % length = record % record_length
-        total_message_size = INT(message_header_size_int(), kind=4) + record % record_length + 1
+        header % content_length = header % content_length + (record % data_size_byte + 1) / 4
+        total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4) + header % content_length
 
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
         model_finished(i_compute) = .true.
         print *, 'Model is finished ', i_compute
 
+        total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4)
+
       else if (header % command == MSG_COMMAND_CLOSE_FILE) then
         ! Do nothing, just send the header along
-      else
-        content_size = header % length
-        if (header % command == MSG_COMMAND_OPEN_FILE) content_size = num_char_to_num_int(header % length)
+        total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4)
 
-        total_message_size = INT(message_header_size_int(), kind=4) + content_size + 1
+      else if (header % command == MSG_COMMAND_OPEN_FILE) then
+        filename_size = num_char_to_num_int(header % content_length)
+        if (.not. allocated(cb_message)) then
+          allocate(cb_message(filename_size))
+        else if (size(cb_message) < filename_size) then
+          deallocate(cb_message)
+          allocate(cb_message(filename_size))
+        end if
+
+        success = cb_list(i_compute) % get(cb_message, int(filename_size, kind=8), CB_KIND_INTEGER_4, .true.)
+        total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4) + filename_size
+
+      else
+        print *, 'ERROR: Unknown message type'
+        call print_message_header(header)
+        error stop 1
       end if
 
+      !----------------------------------
+      ! Check the end cap at this point
+      success = cb_list(i_compute) % get(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.)
+      if ((.not. success) .or. (content_size .ne. end_cap % msg_length) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
+        print *, 'ERROR We have a problem with message size (end cap does not match)'
+        call print_message_header(header)
+        print *, end_cap % cap_tag, end_cap % msg_length, success, content_size
+        error stop 1
+      end if
+
+      !------------------------------------
       ! If the DCB message buffer is too full to contain that new package, flush it now
       if (dcb_message_jar % high() + total_message_size > dcb_message_buffer_size) then
         print *, 'Sending data ', dcb_message_jar % high()
-        success = data_buffer % put_elems(dcb_message, INT(dcb_message_jar % high(), C_SIZE_T), CB_KIND_INTEGER_4, .true.)
+        success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), JAR_ELEMENT_KIND, .true.)
         call dcb_message_jar % reset()
 
         if (.not. success) then
@@ -262,53 +289,44 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
         end if
       end if
 
-      ! Copy the message header
-      ! call message_header_print(header)
+      !-----------------------------
+      ! Copy message header
+
+      ! print *, 'Sending'
+      ! call print_message_header(header)
       num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
 
+      !----------------------------
+      ! Copy message body
       if (header % command == MSG_COMMAND_DATA) then
-        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record)                 ! Data header
-        !TODO compression and other meta
-        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))             ! The data
-        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record % record_length) ! End cap
+        ! call print_model_record(record)
+        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record)      ! Data header
+        !TODO                                                     ! Compression metadata
+        !TODO                                                     ! Other metadata
+        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))  ! The data
 
-        f_data(2) = -1
         h_status = heap_list(i_compute) % free(c_data)
         if (h_status .ne. 0) then
           print*, 'ERROR: Unable to free heap data (from RELAY)'
           error stop 1
         end if
 
-      else if (header % command == MSG_COMMAND_MODEL_STOP) then
-        success = cb_list(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.)
-        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header % length) ! Sending it along, gotta put the end cap
+      else if (header % command == MSG_COMMAND_OPEN_FILE) then
 
-      else if (header % command == MSG_COMMAND_CLOSE_FILE) then
-        success = cb_list(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.)
-        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header % length) ! Sending it along, gotta put the end cap
-
-      else
-
-        if (.not. allocated(cb_message)) then
-          allocate(cb_message(content_size))
-        else if (size(cb_message) < content_size) then
-          deallocate(cb_message)
-          allocate(cb_message(content_size))
-        end if
-
-        success = cb_list(i_compute) % get(cb_message, int(content_size, kind=8), CB_KIND_INTEGER_4, .true.)
-        success = cb_list(i_compute) % get(end_cap, 1_8, CB_KIND_INTEGER_4, .true.) ! End cap
-        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:content_size))
-        ! print *, '(cmd d)  Jar high = ', dcb_message_jar % high()
-        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header % length)
-        ! print *, '(cmdlen) Jar high = ', dcb_message_jar % high()
+        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:filename_size))
       end if
+
+      !---------------------
+      ! Put message end cap
+      end_cap % msg_length = header % content_length
+      num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, end_cap)
+
     end do
   end do
 
   ! Send the remaining data
   print *, 'Sending remaining data: ', dcb_message_jar % high()
-  success = data_buffer % put_elems(dcb_message, INT(dcb_message_jar % high(), C_SIZE_T), CB_KIND_INTEGER_4, .true.)
+  success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), JAR_ELEMENT_KIND, .true.)
 
   if (.not. success) then
     print *, 'ERROR sending remaining data!'

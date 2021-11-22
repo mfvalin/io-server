@@ -34,9 +34,9 @@ void init_array(data_element* array, const int num_elements, const int rank) {
 }
 
 int fill_test(int argc, char** argv) {
-  const int NUM_BUFFER_BYTES = 128 * 4;
-  const int NUM_TEST_ELEM    = NUM_BUFFER_BYTES / 4 * 2;
-  const int NUM_TEST_BYTES   = NUM_TEST_ELEM * 4;
+  const int NUM_BUFFER_BYTES = 128 * 8;
+  const int NUM_TEST_ELEM    = NUM_BUFFER_BYTES / 8 * 2;
+  const int NUM_TEST_BYTES   = NUM_TEST_ELEM * 8;
   const int READ_DELAY_US    = 1000;
   const int WRITE_DELAY_US   = 1000;
 
@@ -66,6 +66,8 @@ int fill_test(int argc, char** argv) {
   circular_buffer_p  local_buffer = CB_from_pointer_bytes(base_mem_ptr, NUM_BUFFER_BYTES);
   circular_buffer_p* all_buffers  = NULL;
   const int          success      = (local_buffer != NULL);
+
+  // Retrieve local address of every CB as seen on the root process
   if (my_rank == 0) {
     all_buffers = (circular_buffer_p*)malloc((size_t)num_procs * sizeof(circular_buffer_p));
     for (int i = 1; i < num_procs; ++i) {
@@ -80,7 +82,7 @@ int fill_test(int argc, char** argv) {
   //---------------------------
 
   if (!success)
-    num_errors++;
+    return ++num_errors;
 
   const size_t max_num_bytes = CB_get_available_space_bytes(local_buffer);
   const size_t capacity      = CB_get_capacity_bytes(local_buffer);
@@ -90,12 +92,14 @@ int fill_test(int argc, char** argv) {
     if (capacity != max_num_bytes) {
       printf("Ahhhh inconsistency between free space (%ld) and capacity (%ld)!\n", max_num_bytes, capacity);
       num_errors++;
+      return num_errors;
     }
 
     const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT);
     if (expected_error != -1) {
       printf("Wrong return value after trying to put more than max into the buffer! %d\n", expected_error);
       num_errors++;
+      return num_errors;
     }
 
     const int status = CB_put(local_buffer, local_data, capacity, CB_COMMIT);
@@ -103,8 +107,11 @@ int fill_test(int argc, char** argv) {
     {
       printf("ERROR put failed (capacity)\n");
       num_errors++;
+      return num_errors;
     }
   }
+
+  // Now all buffers except the root one are full
 
   //---------------------------
   MPI_Barrier(MPI_COMM_WORLD);
@@ -125,7 +132,8 @@ int fill_test(int argc, char** argv) {
       }
     }
     else {
-      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*4, CB_COMMIT);
+      // At first, buffer is full, so we can't put anything in it (hence the delay)
+      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*8, CB_COMMIT);
       IO_timer_stop(&put_time);
 
       const double t = IO_time_ms(&put_time);
@@ -135,6 +143,7 @@ int fill_test(int argc, char** argv) {
       {
         printf("Error in delay (READ)\n");
         num_errors++;
+        return num_errors;
       }
     }
   }
@@ -153,14 +162,15 @@ int fill_test(int argc, char** argv) {
 
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
-        CB_get(all_buffers[i], received_data, max_num_bytes - NUM_BUFFER_BYTES / 2 + 2*4, CB_COMMIT);
+        CB_get(all_buffers[i], received_data, max_num_bytes - NUM_BUFFER_BYTES / 2 + 2*8, CB_COMMIT);
         IO_timer_stop(&read_time);
-        IO_timer_start(&read_time);
+        // IO_timer_start(&read_time);
         const double t = IO_time_ms(&read_time);
         if (t * 1000 < WRITE_DELAY_US * i)
         {
-          printf("Error in delay! (WRITE)\n");
+          printf("Error in delay! (WRITE) t = %f ms, i = %d\n", t, i);
           num_errors++;
+          return num_errors;
         }
 
         //        printf("Read in %f ms\n", t);
@@ -169,12 +179,13 @@ int fill_test(int argc, char** argv) {
         if (expected_error != -1) {
           printf("Wrong return code after trying to read more than max buffer size! (%d)\n", expected_error);
           num_errors++;
+          return num_errors;
         }
       }
     }
     else {
       sleep_us(WRITE_DELAY_US * my_rank);
-      CB_put(local_buffer, local_data, 1*4, CB_COMMIT);
+      CB_put(local_buffer, local_data, 1*8, CB_COMMIT);
     }
   }
 
@@ -187,6 +198,7 @@ int fill_test(int argc, char** argv) {
     {
       printf("Should be 0 available bytes!!\n");
       num_errors++;
+      return num_errors;
     }
   }
 
@@ -211,6 +223,10 @@ int fill_test(int argc, char** argv) {
       printf("Circular buffer fill and wait test successful\n");
     }
   }
+
+  //---------------------------
+  MPI_Barrier(MPI_COMM_WORLD);
+  //---------------------------
 
   free(local_data);
   free(received_data);

@@ -2,6 +2,7 @@
 module ioserver_message_module
   use ISO_C_BINDING
   use ioserver_constants
+  use jar_module
   implicit none
   private
 
@@ -36,46 +37,61 @@ module ioserver_message_module
   end type
 
   type, public :: subgrid
-    integer :: i0            ! starting point of this subgrid in the x direction
-    integer :: ni            ! number of points of this subgrid in the x direction
-    integer :: j0            ! starting point of this subgrid in the y direction
-    integer :: nj            ! number of points of this subgrid in the y direction
-    integer :: nk            ! number of vertical levels
-    integer :: nv            ! number of variables
+    integer :: i0 = -1           ! starting point of this subgrid in the x direction
+    integer :: ni = -1           ! number of points of this subgrid in the x direction
+    integer :: j0 = -1           ! starting point of this subgrid in the y direction
+    integer :: nj = -1           ! number of points of this subgrid in the y direction
+    integer :: nk = -1           ! number of vertical levels
+    integer :: nv = -1           ! number of variables
   end type
 
   type, private :: data_header        ! record : data_header , metadata(nm integers) , subgrid(ni * nj * nk * nv elements)
-    integer :: nw            ! number of elements in record
-    integer :: nbits         ! number of bits per subgrid element in record
-    integer :: tag           ! unique sequence tag
-    integer :: weight        ! number of pieces in parcel (normally 1)
-    integer :: np            ! number of pieces to reassemble
-    integer :: grid          ! grid id
+    integer :: nw    = -1        ! number of elements in record
+    integer :: nbits = -1        ! number of bits per subgrid element in record
+    integer :: tag   = -1        ! unique sequence tag
+    integer :: weight = -1       ! number of pieces in parcel (normally 1)
+    integer :: np    = -1        ! number of pieces to reassemble
+    integer :: grid  = -1        ! grid id
     type(subgrid) :: s       ! subgrid description
-    integer :: nm            ! length of metadata "jar" (32 bit units)
+    integer :: nm    = -1        ! length of metadata "jar" (32 bit units)
   end type
 
-  ! Type used as a header when writing data (from a model process)
-  type, public :: model_record
-    integer(C_INT) :: record_length    ! global record length = size of model_record + csize + msize
-    integer(C_INT) :: tag, stream
-    integer(C_INT) :: ni, nj
-    integer(C_INT) :: grid_size_i, grid_size_j, gnignj
-    integer(C_INT) :: output_grid
-    integer(C_INT) :: i0, j0
-    integer(C_INT) :: nk, nvar
-    integer(C_INT) :: type_kind_rank
-    type(C_PTR)    :: data
-    integer(C_INT) :: csize, msize
+  ! Type used as a header when writing data to a stream from a model process
+  type, public, bind(C) :: model_record
+    type(C_PTR)    :: data                !< Will be translated to its own memory space by relay. We want it to be 64-bit aligned!!
+    integer(C_INT) :: data_size_byte      !< Size in ?? of the data packet itself
+    integer(C_INT) :: cmeta_size          !< Size of the compression metadata included
+    integer(JAR_ELEMENT) :: meta_size     !< Size of other metadata included
+
+    integer(C_INT) :: tag                 !< Tag associated with this particular message (to be able to group with that of other model PEs)
+    integer(C_INT) :: stream              !< Stream to which the data is being sent
+
+    integer(C_INT) :: ni, nj              !< Number of data points in the x and y direction (in this particular data packet)
+    integer(C_INT) :: nk                  !< Number of data points in the vertical
+    integer(C_INT) :: nvar                !< Number of variables per data point
+    integer(C_INT) :: type_kind_rank      !< Type/kind/rank of the data
+
+    integer(C_INT) :: i0, j0              !< Position of this particular subgrid within the global input (output??) grid
+    integer(C_INT) :: grid_size_i, grid_size_j, gnignj !< Global input grid size (x, y, and total)
+    integer(C_INT) :: output_grid_id      !< ID of the grid where the data is being sent
   end type model_record
 
-  type, public :: message_header
-    integer(C_INT) :: length      = -1
-    integer(C_INT) :: command     = -1
-    integer(C_INT) :: stream_id   = -1
-    integer(C_INT) :: tag         = -1
-    integer(C_INT) :: sender_global_rank = -1
+  integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101
+  integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010
+  type, public, bind(C) :: message_header
+    integer(C_INT) :: header_tag      = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
+    integer(C_INT) :: content_length  = -1    !< Message length (excluding this header). Units depend on content of message
+    integer(C_INT) :: command         = -1    !< What this message contains
+    integer(C_INT) :: stream_id       = -1    !< To what stream this message is destined
+    integer(C_INT) :: tag             = -1    !< A collective tag associated with messages from model processes (incremented at every message)
+    integer(C_INT) :: sender_global_rank = -1 !< Who is sending that message
+    ! integer(C_INT) :: dummy_to_make_this_64_bit_aligned = -1
   end type message_header
+
+  type, public, bind(C) :: message_cap
+    integer(C_INT) :: cap_tag    = MSG_CAP_TAG
+    integer(C_INT) :: msg_length = -1
+  end type message_cap
 
   integer, parameter, public :: MSG_COMMAND_DATA        = 0
   integer, parameter, public :: MSG_COMMAND_DUMMY       = 1
@@ -85,7 +101,7 @@ module ioserver_message_module
   integer, parameter, public :: MSG_COMMAND_RELAY_STOP  = 5
   integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 6
 
-  public :: message_header_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message, message_header_print
+  public :: message_header_size_int, message_cap_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message, print_message_header, print_model_record
 contains
 
   function message_header_size_int()
@@ -97,6 +113,16 @@ contains
 
     message_header_size_int = storage_size(dummy_header) / storage_size(dummy_int)
   end function message_header_size_int
+
+  function message_cap_size_int()
+    implicit none
+    integer(C_INT64_T) :: message_cap_size_int
+
+    type(message_cap) :: dummy_cap
+    integer(kind=4)   :: dummy_int
+
+    message_cap_size_int = storage_size(dummy_cap) / storage_size(dummy_int)
+  end function message_cap_size_int
 
   function model_record_size_int()
     implicit none
@@ -156,17 +182,20 @@ contains
     logical :: success
 
     type(message_header)  :: header
+    type(message_cap)     :: end_cap
 
     success = .false.
     call this % bump_tag()
 
-    header % length  = msg_size
-    header % command = MSG_COMMAND_DUMMY
-    header % tag     = this % msg_tag_seq
+    header % content_length = msg_size
+    header % command        = MSG_COMMAND_DUMMY
+    header % tag            = this % msg_tag_seq
+
+    end_cap % msg_length = header % content_length
 
     success = buffer % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
     success = buffer % put(message, int(msg_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
-    success = buffer % put(msg_size, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+    success = buffer % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
 
   end function send_server_bound_message
 
@@ -184,11 +213,52 @@ contains
     this % model_crs = model_crs
   end subroutine set_model_crs
 
-  subroutine message_header_print(header)
+  function get_message_command_string(command) result(command_string)
+    implicit none
+    integer, intent(in) :: command
+    character(len=24) :: command_string
+    select case (command)
+    case (MSG_COMMAND_DATA)
+      command_string = 'MSG_COMMAND_DATA'
+    case (MSG_COMMAND_ACKNOWLEDGE)
+      command_string = 'MSG_COMMAND_ACKNOWLEDGE'
+    case (MSG_COMMAND_CLOSE_FILE)
+      command_string = 'MSG_COMMAND_CLOSE_FILE'
+    case (MSG_COMMAND_DUMMY)
+      command_string = 'MSG_COMMAND_DUMMY'
+    case (MSG_COMMAND_MODEL_STOP)
+      command_string = 'MSG_COMMAND_MODEL_STOP'
+    case (MSG_COMMAND_OPEN_FILE)
+      command_string = 'MSG_COMMAND_OPEN_FILE'
+    case (MSG_COMMAND_RELAY_STOP)
+      command_string = 'MSG_COMMAND_RELAY_STOP'
+    case default
+      command_string = '[ERROR] unknown number'
+    end select
+  end function get_message_command_string
+
+  subroutine print_message_header(header)
     implicit none
     type(message_header), intent(in) :: header
-    print '(A, I8, A, I3, A, I3, A, I8, A, I5)', &
-      'Header: len ', header % length, ', cmd ', header % command, ', stream ', header % stream_id, ', tag ', header % tag, ', rank ', header % sender_global_rank
-  end subroutine message_header_print
+    print '(A, I8, A, I8, A, I3, X, A, A, I3, A, I8, A, I5)', &
+      'Header: header tag ', header % header_tag, &
+      ', len ', header % content_length, &
+      ', cmd ', header % command, get_message_command_string(header % command), &
+      ', stream ', header % stream_id, &
+      ', tag ', header % tag, &
+      ', rank ', header % sender_global_rank
+  end subroutine print_message_header
+
+  subroutine print_model_record(record)
+    implicit none
+    type(model_record), intent(in) :: record
+
+    print '(A12,   A, I6, I4, I4,   A, I7, I4,   A, I4, I4, I4, I3, I7,   A, I5, I5, I6, I6, I8, I4)', 'Record info: ', &
+      'sizes ', record % data_size_byte, record % cmeta_size, record % meta_size, &
+      ', tag+stream ', record % tag, record % stream, &
+      ', dimensions ', record % ni, record % nj, record % nk, record % nvar, record % type_kind_rank, &
+      ', global grid ', record % i0, record % j0, record % grid_size_i, record % grid_size_j, record % gnignj, record % output_grid_id
+
+  end subroutine print_model_record
 
 end module ioserver_message_module

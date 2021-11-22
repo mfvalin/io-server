@@ -25,8 +25,6 @@ module cb_common_module
 
 #include "io-server/cb_data.hf"
 
-  private :: DATA_ELEMENT
-
 contains
 
   !> \brief Compute the size in bytes of a given type ID

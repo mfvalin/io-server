@@ -22,6 +22,7 @@
 
 module jar_module
   use ISO_C_BINDING
+  use cb_common_module
   implicit none
 
   public
@@ -42,7 +43,10 @@ module jar_module
 
   logical, save, private :: debug_mode = .false.
 
-  integer, parameter :: JAR_ELEMENT = C_INT
+  ! We want jar elements to match those of circular buffers
+  integer, parameter :: JAR_ELEMENT      = CB_DATA_ELEMENT
+  integer, parameter :: JAR_ELEMENT_KIND = CB_DATA_ELEMENT_KIND
+
   type, BIND(C) :: c_jar                         ! C interoperable version of jar
     private
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
@@ -119,7 +123,7 @@ module jar_module
     implicit none
     class(jar), intent(INOUT) :: j          ! the data jar
     integer(C_INT), intent(IN), value :: arraysize  ! number of elements in arrray
-    integer(C_INT), dimension(arraysize), intent(IN) :: array    ! DO NOT LIE
+    integer(JAR_ELEMENT), dimension(arraysize), intent(IN) :: array    ! DO NOT LIE
     integer :: ok                            ! 0 if O.K., -1 if error
 
     integer(C_INTPTR_T) :: temp
@@ -173,10 +177,10 @@ module jar_module
 1   format(3I6,(20Z9.8))
   end subroutine print_jar
 
-  function jar_avail(j) result(sz)          ! get amount of available data in jar (32 bit units)
+  function jar_avail(j) result(sz)          ! get amount of available data in jar (JAR_ELEMENT units)
     implicit none
     class(jar), intent(IN) :: j             ! the data jar
-    integer :: sz                           ! available data in jar (32 bit units)
+    integer(JAR_ELEMENT) :: sz              ! available data in jar (JAR_ELEMENT units)
 
     sz = -1
     if(.not. C_ASSOCIATED(j % p)) return
@@ -184,10 +188,10 @@ module jar_module
 
   end function jar_avail
 
-  function jar_top(j) result(sz)            ! get amount of data in jar (32 bit units)
+  function jar_top(j) result(sz)            ! get amount of data in jar (JAR_ELEMENT units)
     implicit none
     class(jar), intent(IN) :: j             ! the data jar
-    integer :: sz                           ! amount of data inserted in jar (32 bit units)
+    integer(JAR_ELEMENT) :: sz              ! amount of data inserted in jar (JAR_ELEMENT units)
 
     sz = -1
     if(.not. C_ASSOCIATED(j % p)) return
@@ -195,10 +199,10 @@ module jar_module
 
   end function jar_top
 
-  function jar_bot(j) result(sz)            ! get amount of data in jar (32 bit units)
+  function jar_bot(j) result(sz)            ! get amount of data in jar (JAR_ELEMENT units)
     implicit none
     class(jar), intent(IN) :: j             ! the data jar
-    integer :: sz                           ! amount of data inserted in jar (32 bit units)
+    integer(JAR_ELEMENT) :: sz              ! amount of data inserted in jar (JAR_ELEMENT units)
 
     sz = -1
     if(.not. C_ASSOCIATED(j % p)) return
@@ -206,10 +210,10 @@ module jar_module
 
   end function jar_bot
 
-  function jar_size(j) result(sz)           ! get data jar capacity (32 bit units)
+  function jar_size(j) result(sz)           ! get data jar capacity (JAR_ELEMENT units)
     implicit none
     class(jar), intent(IN) :: j             ! the data jar
-    integer :: sz                           ! data jar capacity (32 bit units)
+    integer(JAR_ELEMENT) :: sz              ! data jar capacity (JAR_ELEMENT units)
 
     sz = -1
     if(.not. C_ASSOCIATED(j % p)) return
@@ -298,10 +302,10 @@ module jar_module
     class(jar), intent(INOUT) :: j                          ! the data jar
 #include <IgnoreTypeKindRankPlus.hf>
     integer, intent(IN), value :: size                      ! size to insert = storage_size(item) * nb_of_items
-    integer, intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
-    integer :: sz                                           ! position of last inserted element (-1 if error)
+    integer(JAR_ELEMENT), intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
+    integer(JAR_ELEMENT) :: sz                                           ! position of last inserted element (-1 if error)
 
-    integer :: intsize, pos
+    integer(JAR_ELEMENT) :: intsize, pos
     type(C_PTR) :: temp
     integer(JAR_ELEMENT), dimension(:), pointer :: je, content
 
@@ -371,10 +375,10 @@ module jar_module
     class(jar), intent(INOUT) :: j                          ! the data jar
 #include <IgnoreTypeKindRankPlus.hf>
     integer, intent(IN), value :: size                      ! size to insert = storage_size(item) * nb_of_items
-    integer, intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
-    integer :: sz                                           ! position of last extracted element (-1 if error)
+    integer(JAR_ELEMENT), intent(IN), optional, value :: where           ! optional argument to force insertion point (1 = start of jar)
+    integer(JAR_ELEMENT) :: sz                                           ! position of last extracted element (-1 if error)
 
-    integer :: intsize, pos
+    integer(JAR_ELEMENT) :: intsize, pos
     type(C_PTR) :: temp
     integer(JAR_ELEMENT), dimension(:), pointer :: je, content
 

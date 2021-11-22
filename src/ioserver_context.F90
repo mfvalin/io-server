@@ -187,6 +187,7 @@ module ioserver_context_module
     ! Getters
     procedure, pass, public :: get_num_local_model
 
+    procedure, pass, public :: get_global_rank
     procedure, pass, public :: get_crs => IOserver_get_crs
     procedure, pass, public :: get_local_heap => IOserver_get_local_heap
     procedure, pass, public :: get_node_heap => IOserver_get_node_heap
@@ -580,6 +581,13 @@ function get_num_local_model(context) result(num_model)
   num_model = context % num_local_model_proc
 end function get_num_local_model
 
+function get_global_rank(context) result(global_rank)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  integer :: global_rank
+  global_rank = context % global_rank
+end function get_global_rank
+
 function IOserver_get_crs(context, color) result(crs)
   implicit none
   class(ioserver_context), intent(in)        :: context
@@ -770,15 +778,18 @@ subroutine finalize_model(this)
   class(ioserver_context), intent(inout) :: this
 
   type(message_header) :: header
+  type(message_cap)    :: end_cap
   logical :: success
 
   if (this % is_model()) then
       call this % messenger % bump_tag()
-      header % length  = int(message_header_size_int(), kind=4)
-      header % command = MSG_COMMAND_MODEL_STOP
-      header % tag     = this % messenger % get_msg_tag()
+      header % content_length     = 0
+      header % command            = MSG_COMMAND_MODEL_STOP
+      header % tag                = this % messenger % get_msg_tag()
+      header % sender_global_rank = this % global_rank
+      end_cap % msg_length = header % content_length
       success = this % local_server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-      success = this % local_server_bound_cb % put(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+      success = this % local_server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
   else
     print *, 'Should NOT be calling "finish_model"'
   end if
@@ -789,15 +800,19 @@ subroutine finalize_relay(this)
   class(ioserver_context), intent(inout) :: this
 
   type(message_header) :: header
+  type(message_cap)    :: end_cap
   logical :: success
 
   if (this % is_relay()) then
     ! Send a stop signal
     if (this % debug_mode) print *, 'Relay sending STOP signal'
-    header % length = 0
-    header % command = MSG_COMMAND_RELAY_STOP
+    header % content_length     = 0
+    header % command            = MSG_COMMAND_RELAY_STOP
+    header % sender_global_rank = this % global_rank
+    end_cap % msg_length = header % content_length
+
     success = this % local_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % local_dcb % put_elems(header % length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+    success = this % local_dcb % put_elems(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
 
     if (.not. success) then
       if (this % debug_mode) print *, 'WARNING: Could not send a stop signal!!!'

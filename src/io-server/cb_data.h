@@ -1,13 +1,6 @@
 #ifndef IO_SERVER_CB_DATA_H_
 #define IO_SERVER_CB_DATA_H_
 
-#ifndef IN_FORTRAN_CODE
-#include <stdint.h>
-typedef int32_t data_element; //!< Type of individual elements stored in a circular buffer type container
-#else
-integer, parameter :: DATA_ELEMENT = C_INT !< Element type for containers. Must match the size of #data_element
-#endif
-
 #if 0
 // List of defines that are used from both C and Fortran code
 #endif
@@ -49,6 +42,14 @@ enum
         integer, parameter :: CB_KIND_INTEGER_8 = -8
         integer, parameter :: CB_KIND_REAL_4    = -4
         integer, parameter :: CB_KIND_REAL_8    = -8
+#endif
+
+#ifndef IN_FORTRAN_CODE
+#include <stdint.h>
+typedef int64_t data_element; //!< Type of individual elements stored in a circular buffer type container
+#else
+integer, parameter :: CB_DATA_ELEMENT      = C_INT64_T
+integer, parameter :: CB_DATA_ELEMENT_KIND = CB_KIND_INTEGER_8
 #endif
 
 #undef CB_NO_COMMIT_val

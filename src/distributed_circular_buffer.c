@@ -196,26 +196,14 @@ int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose
 
 //! @{ @name Various size calculators
 
-// //! Compute the number of #data_element taken by the given number of bytes (rounded up)
-// static inline data_element num_elem_from_bytes(const size_t num_bytes) {
-//   return num_bytes / sizeof(data_element) + (num_bytes % sizeof(data_element) > 0);
-// }
-
-//! Compute the _even_ number of #data_element needed to contain the given number of bytes. This guarantees that the
-//! final amount will have a size of a multiple of 64 bits (since we use either 32- or 64-bit elements)
-static inline size_t num_elem_from_bytes_aligned64(const size_t num_bytes) {
-  const data_element num_elem_init = num_bytes_to_num_elem(num_bytes);
-  return num_elem_init % 2 == 0 ? num_elem_init : num_elem_init + 1;
-}
-
 //! Gives the minumum _even_ number of #data_element that hold a circular_buffer (its header)
 static inline size_t circular_buffer_header_size() {
-  return num_elem_from_bytes_aligned64(sizeof(circular_buffer));
+  return num_bytes_to_num_elem_64(sizeof(circular_buffer));
 }
 
 //! Compute the _even_ number of #data_element taken by the circular_buffer_instance struct
 static inline size_t instance_header_size() {
-  return num_elem_from_bytes_aligned64(sizeof(circular_buffer_instance));
+  return num_bytes_to_num_elem_64(sizeof(circular_buffer_instance));
 }
 
 //! Size of the common server header, in number of #data_element tokens
@@ -227,13 +215,17 @@ static inline size_t control_data_size(
                            (size_t)num_buffers  * sizeof(data_element) +    // client ranks size (server- and client-bound)
                            (size_t)num_channels * sizeof(data_element) +    // channel (ghost process) ranks size
                            (size_t)num_channels * sizeof(channel_signal_t); // signals size
-  return num_elem_from_bytes_aligned64(num_bytes);
+  return num_bytes_to_num_elem_64(num_bytes);
 }
 
-//! Size of an entire circular buffer instance, based on the number of
-static inline size_t total_circular_buffer_instance_size(const int num_desired_elem) {
-  // Add 2 instead of 1 so that all instances are aligned to 64 bits
-  return instance_header_size() + num_desired_elem + 2;
+//! Size in #data_element of an entire circular buffer instance, based on the number of desired elements
+static inline size_t total_circular_buffer_instance_size(
+  const int num_desired_elem //!< Number of elements we want to be able to store in the buffer
+) {
+  // Always add 1 because there is one wasted slot in the data array (to be able to distinguish between empty and full)
+  // If we're using 32-bit elements, round up the number of desired elements so that they align to 64 bits
+  const int add = 1 + (num_desired_elem * sizeof(data_element)) % 8 == 0 ? 0 : 1;
+  return instance_header_size() + num_desired_elem + add;
 }
 
 //! Compute the total size needed by the shared memory window to fit all circular buffers and metadata, in number of
@@ -1258,6 +1250,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
         buffer->control_metadata.num_server_consumers, buffer->control_metadata.num_server_producers,
         buffer->control_metadata.num_channels,
         buffer->control_metadata.num_server_bound_instances, buffer->control_metadata.num_client_bound_instances);
+
     for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
       const circular_buffer_instance_p instance   = get_circular_buffer_instance(buffer, i, DCB_SERVER_BOUND_TYPE);
       cb_stats_p                       full_stats = &instance->circ_buffer.stats;
@@ -1271,6 +1264,10 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
       full_stats->total_write_time_ms      = remote_stats.total_write_time_ms;
       full_stats->total_write_wait_time_ms = remote_stats.total_write_wait_time_ms;
 
+      if (i == 0) {
+        printf(" -----------------------------\n"
+               "  Server-bound transfer stats  \n");
+      }
       print_instance_stats(instance, i == 0);
 
       total_data_received += remote_stats.num_write_elems;
@@ -1288,6 +1285,10 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
       full_stats->total_write_time_ms      = remote_stats.total_write_time_ms;
       full_stats->total_write_wait_time_ms = remote_stats.total_write_wait_time_ms;
 
+      if (i == 0) {
+        printf(" -----------------------------\n"
+               "  Client-bound transfer stats  \n");
+      }
       print_instance_stats(instance, i == 0);
 
       total_data_sent += remote_stats.num_write_elems;
@@ -1300,6 +1301,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
     readable_element_count(total_data_received / existence_time * 1000.0 * sizeof(data_element), dps_recv_s);
     readable_element_count((double)total_data_sent * sizeof(data_element), total_data_send_s);
     readable_element_count(total_data_sent / existence_time * 1000.0 * sizeof(data_element), dps_send_s);
+    printf(" -----------------------------\n");
     printf("Total data received: %sB (%sB/s)\n", total_data_recv_s, dps_recv_s);
     printf("Total data sent:     %sB (%sB/s)\n", total_data_send_s, dps_send_s);
     printf("------------------------------------------------------------------------------------\n");
@@ -1800,7 +1802,7 @@ int DCB_check_integrity(
         const data_element* end_of_buffer = current_instance->circ_buffer.data + current_instance->circ_buffer.m.limit;
 
         if ((void*)end_of_buffer != (void*)next_instance) {
-          printf("AAAHHHHhhh end of CB %d (%ld) does not match with start of CB %d (%ld)\n", i, (uint64_t)end_of_buffer, i + 1, (uint64_t)next_instance);
+          printf("AAAHHHHhhh end of CB %d (0x%.16lx) does not match with start of CB %d (0x%.16lx)\n", i, (uint64_t)end_of_buffer, i + 1, (uint64_t)next_instance);
           return -1;
         }
       }

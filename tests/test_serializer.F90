@@ -72,10 +72,11 @@ subroutine test_pickling
   implicit none
   logical :: old_debug
   JAR_DECLARE(my_jar)
-  integer :: ok, ne, i
+  integer :: ok, i
+  integer(JAR_ELEMENT) :: ne
   type(machin1) :: a1, x1
   type(machin2), dimension(4) :: a2, x2
-  integer, dimension(:), pointer :: blind_array
+  integer(JAR_ELEMENT), dimension(:), pointer :: blind_array
   ! type(C_PTR) :: c_blind_array
   logical :: success
 
@@ -138,7 +139,7 @@ subroutine test_pickling
   JAR_RESET(my_jar)
   call my_jar%print(20)
   print 1,'(test_pickling) my_jar reset : size, avail =',my_jar%usable(), my_jar%avail()
-  ne = JAR_PUT_ITEM_AT(my_jar, a1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  ne = JAR_PUT_ITEM_AT(my_jar, a1, 2_8)                        ! skip one position, start injectiong at 2 rather than 1
 !   ne = my_jar%put( a1, storage_size(a1), where=2 )
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   call my_jar%print(20)
@@ -149,7 +150,7 @@ subroutine test_pickling
 
   print 2,'before get        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
-  ne = JAR_GET_ITEM_AT(my_jar, x1, 2)                        ! skip one position, start injectiong at 2 rather than 1
+  ne = JAR_GET_ITEM_AT(my_jar, x1, 2_8)                        ! skip one position, start injectiong at 2 rather than 1
   success = success .and. same_machin(a1,x1)
 !   ne = my_jar%get( x1, storage_size(x1), where=2 )
   print *,'         ',a1
@@ -198,7 +199,7 @@ subroutine pass_through(blind_array, n)    !  integer array inbound, jar outboun
     end subroutine level2
   end interface
   integer, intent(IN) :: n
-  integer, dimension(n), intent(IN) :: blind_array
+  integer(JAR_ELEMENT), dimension(n), intent(IN) :: blind_array
   type(jar) :: my_jar
   integer :: ok
   print *,'DIAG(pass_through) :blind_array size is',size(blind_array)
@@ -213,7 +214,7 @@ subroutine level2(my_jar)    ! receives jar, recreated from integer array by pas
   type(jar), intent(INOUT) :: my_jar
   type(machin1) :: x1
   type(machin2), dimension(4) :: x2
-  integer :: ne
+  integer(JAR_ELEMENT) :: ne
 
   print *,'DIAG(level2) :'
   call my_jar%print(20)

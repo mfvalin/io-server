@@ -106,16 +106,19 @@ subroutine shared_mem_test()
   if (.not. success .or. .not. buffer_a % is_valid() .or. .not. buffer_b % is_valid()) then
     print *, 'Buffer initialisation failed ', buffer_a % is_valid(), buffer_b % is_valid()
     errors = errors + 1
+    error stop 1
   end if
 
   if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_b % get_num_elements(CB_KIND_INTEGER_4) .ne. 0)) then
     print *, 'GOT ERROR 0'
     errors = errors + 1
+    error stop 1
   end if
 
   if (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. buffer_b % get_num_spaces(CB_KIND_INTEGER_4)) then
     print *, 'GOT ERROR: buffer spaces are ', buffer_a % get_num_spaces(CB_KIND_INTEGER_4), buffer_b % get_num_spaces(CB_KIND_INTEGER_4)
     errors = errors + 1
+    error stop 1
   end if
 
 
@@ -132,6 +135,7 @@ subroutine shared_mem_test()
   if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) then
     print *, 'GOT ERROR. We did not commit the transaction, but there is data in the buffer!'
     errors = errors + 1
+    error stop 1
   end if
 
   !--------------------------------------
@@ -144,32 +148,36 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD)
   !--------------------------------------
 
-  if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. STEP_SIZE) then
-    print *, 'GOT ERROR. We just committed the previous transaction, so there should be exactly that many elements: ', STEP_SIZE
+  if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) < STEP_SIZE) then
+    print *, 'GOT ERROR. We just committed the previous transaction, so there should at least that many elements: ', STEP_SIZE
     errors = errors + 1
+    error stop 1
   end if
 
   success = buffer_a % peek(received_data, STEP_SIZE, CB_KIND_INTEGER_4)
 
-  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. STEP_SIZE) .or. (.not. success)) then
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) < STEP_SIZE) .or. (.not. success)) then
     print *, 'GOT ERROR. We just peeked at the buffer, but the resulting number of elements is wrong!', &
              buffer_a % get_num_elements(CB_KIND_INTEGER_4), STEP_SIZE
     errors = errors + 1
+    error stop 1
   end if
 
   success = buffer_a % get(received_data, STEP_SIZE, CB_KIND_INTEGER_4, .false.)
-  if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) then
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (.not. success)) then
     print *, 'GOT ERROR. We just read the data, but it looks like the buffer is *not* empty', buffer_a % get_num_elements(CB_KIND_INTEGER_4)
     errors = errors + 1
+    error stop 1
   end if
 
-  if (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. capacity - STEP_SIZE) then
+  if (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) > capacity - STEP_SIZE) then
     print *, 'GOT ERROR. We only read the data without extracting it. The space should not be available'
     errors = errors + 1
+    error stop 1
   end if
 
   success = buffer_a % get(received_data, 0_8, CB_KIND_INTEGER_4, .true.)
-  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. capacity)) then
+  if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_a % get_num_spaces(CB_KIND_INTEGER_4) .ne. capacity) .or. (.not. success)) then
     print *, 'GOT ERROR. Buffer should be completely empty'
     errors = errors + 1
   end if

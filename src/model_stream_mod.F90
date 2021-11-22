@@ -95,6 +95,7 @@ contains
 
     integer :: lname
     type(message_header) :: header
+    type(message_cap)    :: end_cap
 
     success = .false.
 
@@ -114,15 +115,17 @@ contains
     allocate(this % name(lname))
     this % name(1:lname) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
 
-    header % length     = lname
-    header % command    = MSG_COMMAND_OPEN_FILE
-    header % stream_id  = this % stream_id
-    header % tag        = this % messenger % get_msg_tag()
+    header % content_length     = lname
+    header % command            = MSG_COMMAND_OPEN_FILE
+    header % stream_id          = this % stream_id
+    header % tag                = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
+
+    end_cap % msg_length = header % content_length
 
     success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
     success = this % server_bound_cb % put(this % name, int(lname, kind=8), CB_KIND_CHAR, .false.) .and. success
-    success = this % server_bound_cb % put(lname, 1_8, CB_KIND_INTEGER_4, .true.) .and. success       ! Append length and commit message
+    success = this % server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success       ! Append length and commit message
 
   end function open
 
@@ -132,26 +135,29 @@ contains
     logical :: success
 
     type(message_header) :: header
+    type(message_cap)    :: end_cap
 
     success = .false.
     if (.not. this % is_open()) return
 
     call this % messenger % bump_tag()
 
-    header % length = message_header_size_int()
-    header % stream_id = this % stream_id
-    header % tag = this  % messenger % get_msg_tag()
-    header % command = MSG_COMMAND_CLOSE_FILE
+    header % content_length     = 0
+    header % stream_id          = this % stream_id
+    header % tag                = this  % messenger % get_msg_tag()
+    header % command            = MSG_COMMAND_CLOSE_FILE
     header % sender_global_rank = this % global_rank
+
+    end_cap % msg_length = header % content_length
 
     this % stream_id = -1
     deallocate(this % name)
     nullify(this % messenger)
     
     success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % server_bound_cb % put(header % length, 1_8, CB_KIND_INTEGER_4, .true.)  .and. success ! Append length + commit
+    success = this % server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.)  .and. success ! Append length + commit
 
-    call message_header_print(header)
+    ! call print_message_header(header)
 
   end function close
 
@@ -172,35 +178,20 @@ contains
 
     type(model_record)   :: rec
     type(message_header) :: header
-    integer(C_INT), dimension(:), pointer :: metadata
-    integer(C_INT) :: low, high
+    type(message_cap)    :: end_cap
+    integer(JAR_ELEMENT), dimension(:), pointer :: metadata
+    integer(JAR_ELEMENT) :: low, high
     type(C_PTR) :: p
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: d
     integer(C_INT) :: tkr
     integer(C_SIZE_T) :: o
     logical :: dim_ok
 
+    type(block_meta_f08) :: f_block
+
     success = .false.
     if(this % stream_id <= 0) return
 
-    ! transmission layout for circular buffer (compute PE -> relay PE) :
-    ! length                 (32 bits)
-    ! tag number             (32 bits)
-    ! file (stream) number   (32 bits)
-    ! grid segment dimensions(2 x32 bits)
-    ! input grid size (i,j)  (2 x 32 bits)
-    ! global grid size       (32 bits)
-    ! grid_out (code)        (32 bits)
-    ! area lower left corner (2 x 32 bits)
-    ! nk, nvar               (2 x 32 bits)
-    ! array type/kind/rank   (32 bits)
-    ! data pointer           (64 bits)     (will be translated to its own memory space by relay PE)
-    ! cprs size , may be 0   (32 bits)
-    ! meta size, may be 0    (32 bits)
-    ! cprs                   (cprs size x 32 bits)
-    ! meta                   (meta size x 32 bits)
-    ! length                 (32 bits)
-!
     call block_meta_internals(mydata, p, d, tkr, o)        ! grep block_meta private contents
     ! check that dimensions in area are consistent with metadata
     dim_ok = d(1) == area % ni .and. d(2) == area % nj .and. d(3) == area % nk .and. d(4) == area % nv
@@ -208,51 +199,73 @@ contains
     if(.not. dim_ok) return
 
     call this % messenger % bump_tag()
-    rec % csize = 0
-    rec % msize = 0
+
+    !----------------------
+    ! Prepare the message
+
+    ! Size of the various metadata objects included
+    rec % cmeta_size = 0
+    rec % meta_size  = 0
     if(present(cprs)) then
-      rec % csize = int(cmeta_size_int(), kind=4)
+      rec % cmeta_size = int(cmeta_size_int(), kind=4)
     endif
     if(present(meta)) then
-      low = meta % low()
+      low  = meta % low()
       high = meta % high()
-      rec % msize =  high - low       ! useful number of elements
-      metadata    => meta % array()
+      rec % meta_size = high - low       ! useful number of elements
+      metadata => meta % array()
     endif
-    rec % record_length = int(model_record_size_int(), kind=4)
-    rec % record_length = rec % record_length + rec % csize
-    rec % record_length = rec % record_length + rec % msize
-    rec % tag           = this % messenger % get_msg_tag()
-    rec % stream        = this % stream_id
-    rec % ni            = area % ni
-    rec % nj            = area % nj
-    rec % grid_size_i   = grid_in % size_i
-    rec % grid_size_j   = grid_in % size_j
-    rec % gnignj        = grid_in % size_i * grid_in % size_j
-    rec % output_grid   = grid_out % id
-    rec % i0            = area % i0
-    rec % j0            = area % j0
-    rec % nk            = area % nk
-    rec % nvar          = area % nv
-    rec % type_kind_rank = tkr
-    rec % data          = p
 
-    header % length     = rec % record_length
-    header % command    = MSG_COMMAND_DATA
-    header % stream_id  = this % stream_id
-    header % tag        = this % messenger % get_msg_tag()
+    f_block = mydata
+
+    ! call f_block % print()
+
+    rec % tag            = this % messenger % get_msg_tag()
+    rec % stream         = this % stream_id
+
+    rec % ni             = area % ni
+    rec % nj             = area % nj
+    rec % grid_size_i    = grid_in % size_i
+    rec % grid_size_j    = grid_in % size_j
+    rec % gnignj         = grid_in % size_i * grid_in % size_j
+    rec % output_grid_id = grid_out % id
+    rec % i0             = area % i0
+    rec % j0             = area % j0
+    rec % nk             = area % nk
+    rec % nvar           = area % nv
+    rec % type_kind_rank = tkr
+
+    rec % data           = p
+    rec % data_size_byte = rec % ni * rec % nj * rec % nk * rec % nvar * f_block % k()
+
+    ! print *, rec % ni, rec % nj, rec % nk, rec % nvar, f_block % k()
+
+
+    ! print *, 'From model'
+    ! print *, 'Area % nv = ', area % nv
+    ! call print_model_record(rec)
+
+    header % content_length     = int(model_record_size_int() + rec % cmeta_size + rec % meta_size, kind=4)
+    header % command            = MSG_COMMAND_DATA
+    header % stream_id          = this % stream_id
+    header % tag                = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
+
+    end_cap % msg_length = header % content_length
+
+    !-------------------
+    ! Send the message
 
     ! Put header + data
     success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
     success = this % server_bound_cb % put(rec, model_record_size_int(), CB_KIND_INTEGER_4, .false.) .and. success
 
     ! Optional parts of the message
-    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % csize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
-    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % msize, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
 
     ! Add the end cap and commit the message
-    success = this % server_bound_cb % put(rec % record_length, 1_8, CB_KIND_INTEGER_4, .true.) .and. success
+    success = this % server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
   end function write
 
   function read(this) result(status)

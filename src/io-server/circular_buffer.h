@@ -164,7 +164,7 @@ or
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
-static const size_t CB_MIN_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
+static const size_t CB_MIN_BUFFER_SIZE = 128 * 4; //!> Minimum size of a circular buffer, in bytes
 
 //! Circular buffer management variables
 //! Only use 64-bit members in that struct. Better for alignment
@@ -186,6 +186,7 @@ typedef fiol_management* fiol_management_p;
 //! Only use 64-bit members in that struct. Better for alignment
 typedef struct {
   uint64_t num_reads;
+  uint64_t num_unique_reads;
   uint64_t num_read_elems;
   uint64_t num_fractional_reads;
   double   total_read_wait_time_ms;
@@ -245,6 +246,12 @@ static inline size_t num_bytes_to_num_elem(const size_t num_bytes)
 {
   const size_t remainder = num_bytes % sizeof(data_element) > 0 ? 1 : 0;
   return num_bytes / sizeof(data_element) + remainder;
+}
+
+static inline size_t num_bytes_to_num_elem_64(const size_t num_bytes) {
+  const size_t num_elem = num_bytes_to_num_elem(num_bytes);
+  const size_t add = (num_elem * sizeof(data_element)) % 8 == 0 ? 0 : 1;
+  return num_elem + add;
 }
 
 /**

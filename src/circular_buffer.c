@@ -131,7 +131,7 @@
 //!> version marker
 #define FIOL_VERSION 0x1BAD
 
-static const size_t CB_MIN_BUFFER_SIZE = 128 * sizeof(data_element); //!> Minimum size of a circular buffer, in bytes
+static const size_t CB_MIN_BUFFER_SIZE = 128 * 4; //!> Minimum size of a circular buffer, in bytes
 
 //! Circular buffer management variables
 //! Only use 64-bit members in that struct. Better for alignment
@@ -153,6 +153,7 @@ typedef fiol_management* fiol_management_p;
 //! Only use 64-bit members in that struct. Better for alignment
 typedef struct {
   uint64_t num_reads;
+  uint64_t num_unique_reads;
   uint64_t num_read_elems;
   uint64_t num_fractional_reads;
   double   total_read_wait_time_ms;
@@ -214,6 +215,12 @@ static inline size_t num_bytes_to_num_elem(const size_t num_bytes)
   return num_bytes / sizeof(data_element) + remainder;
 }
 
+static inline size_t num_bytes_to_num_elem_64(const size_t num_bytes) {
+  const size_t num_elem = num_bytes_to_num_elem(num_bytes);
+  const size_t add = (num_elem * sizeof(data_element)) % 8 == 0 ? 0 : 1;
+  return num_elem + add;
+}
+
 /**
  * @brief Copy buffer elements into another array (either into or out of the buffer)
  */
@@ -266,6 +273,16 @@ void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to prin
       (long)b->m.out[CB_PARTIAL], (long)b->m.limit, (long)b->m.capacity_byte);
 }
 
+int might_contain_chars(const int num)
+{
+  const char* uchars = (char*)&num;
+  for (int i = 0; i < 4; ++i) {
+    if (uchars[i] < 32 || uchars[i] > 122) return 0;
+  }
+
+  return 1;
+}
+
 //F_StArT
 //  subroutine CB_dump_data(buffer) bind(C, name = 'CB_dump_data')
 //    import :: C_PTR
@@ -278,11 +295,11 @@ void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to pr
                  )
 //C_EnD
 {
-  const int LINE_LENGTH = 30;
+  const int LINE_LENGTH = 10;
   printf("Buffer data:");
   for (uint64_t i = 0; i < buffer->m.limit; ++i)
   {
-    if (i % LINE_LENGTH == 0) printf("\n[%4ld] ", i / LINE_LENGTH);
+    if (i % LINE_LENGTH == 0) printf("\n[%5ld] ", i / LINE_LENGTH);
 
     int add_space = 0;
     if (i == buffer->m.in[CB_PARTIAL]) { printf("\nPARTIAL IN"); add_space = 1; }
@@ -291,16 +308,26 @@ void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to pr
     if (i == buffer->m.out[CB_FULL]) { printf("\nFULL OUT"); add_space = 1; }
 
     if (add_space) {
-      printf("\n[    ] ");
-      for (uint64_t j = 0; j < i % LINE_LENGTH; ++j) printf("      ");
+      printf("\n[     ] ");
+      for (uint64_t j = 0; j < i % LINE_LENGTH; ++j) printf("                   ");
     }
 
-    if (buffer->data[i] > 99999)
-      printf("?%04ld ", (int64_t)buffer->data[i] % 10000);
-    else if (buffer->data[i] < -9999)
-      printf("-?%03ld ", (int64_t)buffer->data[i] % 1000);
-    else
-      printf("%5ld ", (int64_t)buffer->data[i]);
+    const int64_t elem = buffer->data[i];
+    const int32_t* elems = (int32_t*)(&elem);
+
+    for (int j = 0; j < 2; ++j) {
+      if (might_contain_chars(elems[j])) {
+        const char* letters = (const char*)(&elems[j]);
+        printf("    %c%c%c%c ", letters[0], letters[1], letters[2], letters[3]);
+      }
+      else if (elems[j] > 99999999)
+        printf("?%07d ", elems[j] % 10000000);
+      else if (elems[j] < -9999999)
+        printf("-?%06d ", -elems[j] % 1000000);
+      else
+        printf("%8d ", elems[j]);
+    }
+    printf(" ");
   }
   printf("\n");
 }
@@ -352,6 +379,7 @@ circular_buffer_p CB_init_bytes(
   p->m.capacity_byte = (p->m.limit - 1) * sizeof(data_element);
 
   p->stats.num_reads               = 0;
+  p->stats.num_unique_reads        = 0;
   p->stats.num_read_elems          = 0;
   p->stats.num_fractional_reads    = 0;
   p->stats.total_read_time_ms      = 0.0;
@@ -699,13 +727,16 @@ int CB_get(
 
   if (operation != CB_PEEK) {
     buffer->stats.num_read_elems += num_elements;
-    buffer->stats.num_reads++;
+    buffer->stats.num_unique_reads++;
   }
+
+  buffer->stats.num_reads++;
 
   IO_timer_stop(&timer);
   buffer->stats.total_read_time_ms += IO_time_ms(&timer);
 
-  if (num_bytes_1 != num_elements * sizeof(data_element)) buffer->stats.num_fractional_reads++;
+  // Only count fractional reads that won't be read again (so no CB_PEEK)
+  if (num_bytes_1 != num_elements * sizeof(data_element) && operation != CB_PEEK) buffer->stats.num_fractional_reads++;
 
   return 0;
 }
@@ -896,7 +927,7 @@ void CB_print_stats(
   const cb_stats_p stats = &buffer->stats;
 
   const uint64_t num_writes = stats->num_writes;
-  const uint64_t num_reads  = stats->num_reads;
+  const uint64_t num_reads  = stats->num_unique_reads;
 
   const uint64_t num_write_elems = stats->num_write_elems;
   const uint64_t num_read_elems  = stats->num_read_elems;
@@ -931,14 +962,14 @@ void CB_print_stats(
            "rank "
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) |"
            "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) | "
-           "max fill %%    | frac. writes/reads %%\n");
+           "max fill %%    | frac. writes, reads (%%)\n");
   }
 
   printf(
       "%04d: "
       "%s (%s) : %7.1f (%s) : %7.1f (%5.2f) | "
       "%s (%s) : %7.1f (%s) : %7.1f (%5.1f) | "
-      "%s (%3d) | %3d / %3d\n",
+      "%s (%3d) | %3d, %3d\n",
       buffer_id, total_in_s, avg_in_s, total_write_time, write_per_sec_s, stats->total_write_wait_time_ms, avg_wait_w,
       total_out_s, avg_out_s, total_read_time, read_per_sec_s, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,
       max_fill_percent, frac_write_percent, frac_read_percent);

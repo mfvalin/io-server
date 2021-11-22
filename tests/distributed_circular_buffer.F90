@@ -154,10 +154,11 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   if (is_server_bound_client) then
     print *, 'Partially putting a value'
     data_small(1) = SECRET_TEST_VALUE
-    success = buffer % put_elems(data_small, 1_8, CB_KIND_INTEGER_4, .false.)
+    data_small(2) = SECRET_TEST_VALUE
+    success = buffer % put_elems(data_small, 1_8, CB_KIND_INTEGER_8, .false.)
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
 
-    if (num_spaces .ne. capacity - 1 .or. .not. success) then
+    if (num_spaces > capacity - 1 .or. .not. success) then
       print *, 'Put something, but available space is wrong!', num_spaces, capacity - 1
       num_errors = num_errors + 1
       error stop 1
@@ -187,18 +188,18 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   ! (not updating buffer status from server)
   if (is_server_bound_client) then
     print *, 'Fully committing buffer content'
-    success = buffer % put_elems(data_small, 0_8, CB_KIND_INTEGER_4, .true.)
-    num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .false.)
+    success = buffer % put_elems(data_small, 0_8, CB_KIND_INTEGER_8, .true.)
+    num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_8, .false.)
     print *, 'Fully committed buffer content'
 
-    if (num_spaces .ne. capacity - 1) then
+    if (num_spaces > (capacity - 1)  .or. .not. success) then
       print *, 'Put something, but available space is wrong!', num_spaces, capacity - 1
       num_errors = num_errors + 1
       error stop 1
     end if
 
     num_spaces = buffer % get_num_spaces(CB_KIND_CHAR, .false.)
-    if (num_spaces .ne. (capacity - 1) * 4) then 
+    if (num_spaces > (capacity - 1) * 8) then 
       print *, 'Wrong number of spaces (char)', num_spaces
       num_errors = num_errors + 1
       error stop 1
@@ -219,22 +220,22 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   if (server_bound_server_id == 0) then
     do i_prod = 0, num_server_bound_instances - 1
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
-      if (num_elements .ne. 1) then
-        print *, 'There should be exactly 1 4-byte element!', num_elements
+      if (num_elements .ne. 2) then
+        print *, 'There should be exactly 2 4-byte element!', num_elements
         num_errors = num_errors + 1
         error stop 1
       end if
 
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_CHAR)
-      if (num_elements .ne. 4) then 
-        print *, 'There should be exactly 4 characters', num_elements
+      if (num_elements .ne. 8) then 
+        print *, 'There should be exactly 8 characters', num_elements
         num_errors = num_errors + 1
         error stop 1
       end if
 
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_8)
-      if (num_elements .ne. 0) then 
-        print *, 'There should be no 8-byte integers', num_elements
+      if (num_elements .ne. 1) then 
+        print *, 'There should be 1 8-byte integer', num_elements
         num_errors = num_errors + 1
         error stop 1
       end if
@@ -247,8 +248,8 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
       end if
 
       num_elements = buffer % get_num_elements(i_prod, CB_KIND_INTEGER_4)
-      if (num_elements .ne. 1 .or. .not. success) then
-        print *, 'There should be exactly 1 element!'
+      if (num_elements .ne. 2 .or. .not. success) then
+        print *, 'There should be exactly 2 elements (4 bytes each)!'
         num_errors = num_errors + 1
         error stop 1
       end if
@@ -277,8 +278,8 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   ! Clients check that the value is still there
   if (is_server_bound_client) then
     num_spaces = buffer % get_num_spaces(CB_KIND_INTEGER_4, .true.)
-    if (num_spaces .ne. capacity - 1) then
-      print *, 'Server only peeked, available space is wrong', num_spaces, capacity - 1
+    if (num_spaces .ne. capacity - 2) then
+      print *, 'Server only peeked, available space is wrong', num_spaces, capacity - 2
       num_errors = num_errors + 1
       error stop 1
     end if
@@ -605,7 +606,8 @@ program test_distributed_circular_buffer
   if (.not. success) then
     print *, 'Could not create a circular buffer!', rank
     num_errors = num_errors + 1
-    goto 777
+    error stop 1
+    ! goto 777
   end if
 
   server_bound_server_id = circ_buffer % get_server_bound_server_id()
@@ -617,7 +619,8 @@ program test_distributed_circular_buffer
   if (.not. circ_buffer % is_valid()) then
     print *, 'Something wrong with the newly-created buffer!!!'
     num_errors = num_errors + 1
-    goto 777
+    error stop 1
+    ! goto 777
   end if
 
   !---------------------------------------

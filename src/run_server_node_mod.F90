@@ -159,8 +159,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
 
   ! Message reading
   integer(C_INT64_T)   :: capacity
-  integer              :: message_size, end_cap
+  integer              :: header_tag
   type(message_header) :: header
+  type(message_cap)    :: end_cap
 
   ! Data extraction/processing
   type(model_record) :: record
@@ -190,18 +191,15 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     end if
   end do
 
-  success = dcb % peek_elems(client_id, message_size, 1_8, CB_KIND_INTEGER_4)
+  success = dcb % peek_elems(client_id, header_tag, 1_8, CB_KIND_INTEGER_4)
 
   if (.not. success) then
     print *, 'Error after peeking into DCB'
     error stop 1
   end if
 
-  if (message_size > capacity) then
-    print *, 'Message is larger than what we can deal with. That is problematic.'
-    print *, 'Message size:  ', message_size
-    print *, 'capacity     = ', capacity
-    print *, 'client id    = ', client_id
+  if (header_tag .ne. MSG_HEADER_TAG) then
+    print *, 'ERROR: Message header tag is wrong', header_tag, MSG_HEADER_TAG
     error stop 1
   end if
 
@@ -212,7 +210,15 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     error stop 1
   end if
 
-  ! call message_header_print(header)
+  ! call print_message_header(header)
+
+  if (header % content_length > capacity) then
+    print *, 'Message is larger than what we can deal with. That is problematic.'
+    print *, 'Message size:  ', header % content_length
+    print *, 'capacity     = ', capacity
+    print *, 'client id    = ', client_id
+    error stop 1
+  end if
 
   !-------
   ! Data
@@ -223,6 +229,8 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
       print *, 'Error reading record'
       error stop 1
     end if
+
+    ! call print_model_record(record)
 
     ! TODO manage compression + other metadata
 
@@ -251,9 +259,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   !---------------
   ! Open a file
   else if (header % command == MSG_COMMAND_OPEN_FILE) then
-    allocate(character(len=(header % length)) :: filename)
+    allocate(character(len=(header % content_length)) :: filename)
     print *, 'Got OPEN message'
-    success = dcb % get_elems(client_id, filename, INT(header % length, kind=8), CB_KIND_CHAR, .true.)
+    success = dcb % get_elems(client_id, filename, INT(header % content_length, kind=8), CB_KIND_CHAR, .true.)
     print *, 'Opening a file named ', filename
     file_ptr => context % open_file_server(filename, header % stream_id)
     if (.not. file_ptr % is_open()) then
@@ -301,9 +309,12 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     error stop 1
   end if
 
-  success = dcb % get_elems(client_id, end_cap, 1_8, CB_KIND_INTEGER_4, .true.)
-  if (end_cap .ne. header % length) then
-    print *, 'Discrepancy between message length and end cap', header % length, end_cap
+  success = dcb % get_elems(client_id, end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.)
+
+  if ((.not. success) .or. (end_cap % msg_length .ne. header % content_length) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
+    print *, 'Discrepancy between message length and end cap', header % content_length, end_cap % msg_length, end_cap % cap_tag
+    call print_message_header(header)
+    ! call dcb % print(.true.)
     error stop 1
   end if
 
