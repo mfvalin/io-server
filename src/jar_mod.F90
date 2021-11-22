@@ -322,7 +322,7 @@ module jar_module
     if(pos < 0) return                                      ! invalid insertion position
     if(pos > j%top) content(j%top+1:pos) = 0                ! zero fill skipped portion
 
-    intsize = size / storage_size(content(1))
+    intsize = (size + storage_size(content(1)) - 1) / storage_size(content(1))
     if(pos + intsize > j%size) return                       ! jar would overflow
 
 !     temp    = transfer(what,temp)                           ! address of data to insert
