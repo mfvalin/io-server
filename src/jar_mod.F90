@@ -102,13 +102,14 @@ module jar_module
     integer, intent(IN), value :: data_size  ! number of elements in jar
     integer :: ok                            ! 0 if O.K., -1 if error
 
-    integer(C_SIZE_T) :: dsz
+    integer(C_SIZE_T)    :: dsz
+    integer(JAR_ELEMENT) :: dummy_jar_element
 
     ok = -1
     if(C_ASSOCIATED(j % p)) return          ! error, there is already an allocated data container
 
     dsz = data_size
-    j % p = libc_malloc( dsz * 4)              ! size in bytes
+    j % p = libc_malloc( dsz * storage_size(dummy_jar_element) / 8) ! size in bytes
     if(.not. C_ASSOCIATED(j % p)) return    ! malloc failed
     ok = 0
 

@@ -125,7 +125,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   print '(A, I5)', 'RELAY, global ', all_crs % rank
 
   client_id = data_buffer % get_server_bound_client_id()
-  dcb_capacity            = data_buffer % get_capacity(CB_KIND_INTEGER_4)
+  dcb_capacity            = data_buffer % get_capacity(JAR_ELEMENT_KIND)
   dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure we have a bit of loose space
 
   jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
@@ -445,7 +445,7 @@ subroutine pseudo_model_process(context)
     end do
   end block
 
-  success = output_file % close() ! TODO implement that function so that it can send the stop signal
+  success = output_file % close()
   if (.not. success) then
     print *, 'Unable to close model file!!!!'
     error stop 1
