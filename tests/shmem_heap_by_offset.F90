@@ -79,8 +79,8 @@ program shmem_heap_by_offset
 
     p2 = the_heap % address_from_offset(offset)
     if (.not. c_associated(p, p2)) then
-      print *, 'ERROR: Retrieving block address from its offset gives the wrong address!', p2
-      print *, 'Should be                                                               ', p
+      ! print *, 'ERROR: Retrieving block address from its offset gives the wrong address!', p2
+      ! print *, 'Should be                                                              ', p
       error stop 1
     end if
 
