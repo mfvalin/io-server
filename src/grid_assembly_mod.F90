@@ -1,18 +1,23 @@
 module grid_assembly_module
+  use iso_c_binding
+  
   use ioserver_message_module
   use heap_module
+  use simple_mutex_module
   implicit none
   private
 
   integer, parameter :: MAX_ASSEMBLY_LINES = 20
 
   type, public :: grid_assembly_line
-    integer :: tag = -1
-    integer, dimension(:, :), pointer :: data => NULL()
-    integer(kind=8) :: missing_data = -1
+    integer               :: tag = -1
+    integer               :: dim_i = -1
+    integer               :: dim_j = -1
+    integer(HEAP_ELEMENT) :: data_offset = -1
+    integer(kind=8)       :: missing_data = -1
 
   contains
-    procedure, pass :: free_data => grid_assembly_line_free_data
+    ! procedure, pass :: free_data => grid_assembly_line_free_data
   end type
 
   type, public :: grid_assembly
@@ -20,35 +25,25 @@ module grid_assembly_module
 
   contains
     private
-    procedure, pass, public :: put_data => grid_assembly_put_data
+    procedure, pass, public :: put_data              => grid_assembly_put_data
     procedure, pass, public :: flush_completed_grids => grid_assembly_flush_completed_grids
     procedure, pass, public :: get_num_partial_grids
 
     procedure, pass :: is_line_full => grid_assembly_is_line_full
-    procedure, pass :: get_line_id => grid_assembly_get_line_id
+    procedure, pass :: get_line_id  => grid_assembly_get_line_id
+    procedure, pass :: create_line  => grid_assembly_create_line
     procedure, pass :: get_lowest_completed_line
-    procedure, pass :: flush_line => grid_assembly_flush_line
+    procedure, pass :: flush_line   => grid_assembly_flush_line
   end type
 
 contains
 
-  subroutine grid_assembly_line_free_data(this)
-    implicit none
-    class(grid_assembly_line), intent(inout) :: this
-    if (associated(this % data)) then
-      deallocate(this % data)
-      nullify(this % data)
-      ! print *, 'Just freed data for tag ', this % tag
-    else
-      ! print *, 'AAAhhhhh data is not allocated for tag ', this % tag
-    end if
-  end subroutine grid_assembly_line_free_data
 
-  function grid_assembly_get_line_id(this, record, data_heap) result(line_id)
+  function grid_assembly_get_line_id(this, record, free_line_id_out) result(line_id)
     implicit none
     class(grid_assembly), intent(inout) :: this
     type(model_record),   intent(in)    :: record
-    type(heap),           intent(inout) :: data_heap
+    integer, optional,    intent(out)   :: free_line_id_out
     integer :: line_id
 
     integer :: i_line, free_line_id
@@ -63,21 +58,60 @@ contains
         free_line_id = i_line
       end if
     end do
-    
+
+    if (present(free_line_id_out)) free_line_id_out = free_line_id
+  end function grid_assembly_get_line_id
+
+  function grid_assembly_create_line(this, record, data_heap, mutex) result(line_id)
+    implicit none
+    class(grid_assembly), intent(inout) :: this
+    type(model_record),   intent(in)    :: record
+    type(heap),           intent(inout) :: data_heap
+    type(simple_mutex),   intent(inout) :: mutex
+    integer :: line_id
+
+    integer :: free_line_id
+    integer, dimension(:,:), pointer :: data_array
+    type(block_meta) :: data_array_info
+
+    call mutex % lock()
+    ! print *, 'Creating line for ', mutex % get_id()
+
+    line_id = this % get_line_id(record, free_line_id)
+
     if (line_id == -1) then
       if (free_line_id .ne. -1) then
         line_id = free_line_id
-        this % lines(line_id) % tag = record % tag
-        allocate(this % lines(line_id) % data(record % grid_size_i, record % grid_size_j))
+
+        data_array_info = data_heap % allocate(data_array, [record % grid_size_i, record % grid_size_j])
+
+        if (.not. associated(data_array)) then
+          print *, 'ERROR: Could not allocate from the heap!'
+          error stop 1
+        end if
+
+        print *, 'Created line ', line_id, mutex % get_id()
+
+        this % lines(line_id) % data_offset = get_block_meta_offset(data_array_info)
+        this % lines(line_id) % dim_i = record % grid_size_i
+        this % lines(line_id) % dim_j = record % grid_size_j
+
+        ! allocate(this % lines(line_id) % data(record % grid_size_i, record % grid_size_j))
         this % lines(line_id) % missing_data = record % grid_size_i * record % grid_size_j
+
         ! print '(A, I6, I4, I4)', 'Starting assembly for a new grid! Tag = ', record % tag, line_id, free_line_id
         ! print '(A, I4, A, I4, A, I8)', 'Grid size: ', record % grid_size_i, ' x ', record % grid_size_j, ', missing data: ', this % lines(line_id) % missing_data
+
+        this % lines(line_id) % tag = record % tag ! Signal that the assembly line is ready to be used
       else
-        print *, 'ERROR. We have reached the maximum number of grids being assembled! Quitting.'
-        return
+        print *, 'ERROR. We have reached the maximum number of grids being assembled! Will not be able to insert data.'
       end if
+    else
+      print *, 'Looks like the line was created by someone else ', mutex % get_id()
     end if
-  end function grid_assembly_get_line_id
+
+    call mutex % unlock()
+  end function grid_assembly_create_line
 
   function grid_assembly_is_line_full(this, line_id) result(is_line_full)
     implicit none
@@ -91,12 +125,16 @@ contains
     end if
   end function grid_assembly_is_line_full
 
-  function grid_assembly_put_data(this, record, subgrid_data, data_heap) result(success)
+  function grid_assembly_put_data(this, record, subgrid_data, data_heap, mutex) result(success)
     implicit none
     class(grid_assembly), intent(inout) :: this
     type(model_record),   intent(in)    :: record
     integer,              intent(in), dimension(record % ni, record % nj) :: subgrid_data
     type(heap),           intent(inout) :: data_heap
+    type(simple_mutex),   intent(inout) :: mutex
+
+    integer, dimension(:,:), pointer :: full_grid
+    type(C_PTR) :: full_grid_ptr
 
     logical :: success
 
@@ -104,26 +142,35 @@ contains
     integer :: i0, i1, j0, j1, size_x, size_y
 
     success = .false.
-    line_id = this % get_line_id(record, data_heap)
-
+    line_id = this % get_line_id(record)
+    if (line_id < 0) line_id = this % create_line(record, data_heap, mutex)
     if (line_id < 0) return
 
     ! print '(A, I7, A, I4)', 'Putting ', record % ni * record % nj, ' data in partial grid ', line_id
+
+    ! print *, 'Trying to put data in line # (from #)', line_id, mutex % get_id()
+    full_grid_ptr = data_heap % address_from_offset(this % lines(line_id) % data_offset)
+    if (.not. c_associated(full_grid_ptr)) then
+      print *, 'ERROR: Pointer retrieved from heap is not associated!', this % lines(line_id) % data_offset, mutex % get_id()
+      error stop 1
+    end if
+    call c_f_pointer(full_grid_ptr, full_grid, [this % lines(line_id) % dim_i, this % lines(line_id) % dim_j])
 
     i0 = record % i0
     i1 = i0 + record % ni - 1
     j0 = record % j0
     j1 = j0 + (record % nj - 1)
-    this % lines(line_id) % data(i0:i1, j0:j1) = subgrid_data(:, :)
+    full_grid(i0:i1, j0:j1) = subgrid_data(:, :)
     this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - record % ni * record % nj
 
     success = .true.
   end function grid_assembly_put_data
 
-  function grid_assembly_flush_completed_grids(this, file_unit) result(num_flushed)
+  function grid_assembly_flush_completed_grids(this, file_unit, data_heap) result(num_flushed)
     implicit none
     class(grid_assembly), intent(inout) :: this
     integer,              intent(in)    :: file_unit
+    type(heap),           intent(inout) :: data_heap
     integer :: num_flushed
 
     logical :: finished
@@ -135,7 +182,7 @@ contains
       line_id = this % get_lowest_completed_line()
       if (line_id < 0) return
       ! print '(A, I3, A)', 'Line ', line_id, ' is completed'
-      call this % flush_line(line_id, file_unit)
+      call this % flush_line(line_id, file_unit, data_heap)
       num_flushed = num_flushed + 1
     end do
   end function grid_assembly_flush_completed_grids
@@ -160,20 +207,37 @@ contains
     end do
   end function get_lowest_completed_line
 
-  subroutine grid_assembly_flush_line(this, line_id, file_unit)
+  subroutine grid_assembly_flush_line(this, line_id, file_unit, data_heap)
     implicit none
     class(grid_assembly), intent(inout) :: this
     integer,              intent(in)    :: line_id
     integer,              intent(in)    :: file_unit
+    type(heap),           intent(inout) :: data_heap
 
-    print '(A, I4, I8, A)', 'Flushing line ', line_id, size(this % lines(line_id) % data) * 4, ' bytes'
-    ! print *, this % lines(line_id) % data
+    integer, dimension(:,:), pointer :: data_array
+    type(C_PTR) :: data_ptr
+    integer(C_INT) :: free_result
 
-    write(unit=file_unit) this % lines(line_id) % data(:, :)
+    ! print *, 'Trying to flush line #', line_id
+    data_ptr = data_heap % address_from_offset(this % lines(line_id) % data_offset)
+    if (.not. c_associated(data_ptr)) then
+      print *, 'ERROR: Pointer retrieved from heap is not associated!', this % lines(line_id) % data_offset
+      error stop 1
+    end if
+    call c_f_pointer(data_ptr, data_array, [this % lines(line_id) % dim_i, this % lines(line_id) % dim_j])
 
-    call this % lines(line_id) % free_data()
-    this % lines(line_id) % tag = -1
-    this % lines(line_id) % missing_data = -1
+    print '(A, I4, I8, A, I5,A,I5)', 'Flushing line ', line_id, size(data_array) * 4, ' bytes, ', this % lines(line_id) % dim_i, 'x', this % lines(line_id) % dim_j
+    ! print *,  data_array
+
+    write(unit=file_unit) data_array(:, :)
+
+    ! Reset the assembly line
+    free_result = data_heap % free(this % lines(line_id) % data_offset)
+    if (free_result .ne. 0) then
+      print *, 'ERROR: Could not free the assembly line!'
+      error stop 1
+    end if
+    this % lines(line_id) = grid_assembly_line()
   end subroutine grid_assembly_flush_line
 
   function get_num_partial_grids(this) result(num_partial_grids)

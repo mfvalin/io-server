@@ -85,7 +85,7 @@ module ioserver_message_module
     integer(C_INT) :: stream_id       = -1    !< To what stream this message is destined
     integer(C_INT) :: tag             = -1    !< A collective tag associated with messages from model processes (incremented at every message)
     integer(C_INT) :: sender_global_rank = -1 !< Who is sending that message
-    ! integer(C_INT) :: dummy_to_make_this_64_bit_aligned = -1
+    integer(C_INT) :: relay_global_rank = -1  !< Who is transmitting the message
   end type message_header
 
   type, public, bind(C) :: message_cap
@@ -240,13 +240,14 @@ contains
   subroutine print_message_header(header)
     implicit none
     type(message_header), intent(in) :: header
-    print '(A, I8, A, I8, A, I3, X, A, A, I3, A, I8, A, I5)', &
+    print '(A, I8, A, I8, A, I3, X, A, A, I3, A, I8, A, I5, A, I5)', &
       'Header: header tag ', header % header_tag, &
       ', len ', header % content_length, &
       ', cmd ', header % command, get_message_command_string(header % command), &
       ', stream ', header % stream_id, &
       ', tag ', header % tag, &
-      ', rank ', header % sender_global_rank
+      ', rank ', header % sender_global_rank, &
+      ', relay rank ', header % relay_global_rank
   end subroutine print_message_header
 
   subroutine print_model_record(record)

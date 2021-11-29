@@ -10,6 +10,7 @@ set(C_TO_INC_FILES
    distributed_circular_buffer.c
    rpn_extra.c
    shmem_arena.c
+   shmem_heap.c
    timer.c
 )
 

@@ -34,7 +34,7 @@ module ioserver_context_module
   save
 
   ! Publish some types and constants that are useful
-  public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream
+  public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
   public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, NO_COLOR
 
   integer(C_SIZE_T), parameter :: DCB_SERVER_BOUND_SIZE = 4 * MBYTE     ! Size of each server-bound CB within the DCB
@@ -107,13 +107,16 @@ module ioserver_context_module
     type(MPI_Comm) :: relay_smp_comm              = MPI_COMM_NULL  !< relay PEs on current SMP node
     type(MPI_Comm) :: server_bound_relay_smp_comm = MPI_COMM_NULL  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
 
-    type(MPI_Comm) :: all_comm             = MPI_COMM_NULL  !< non NO-OP PEs               (all nodes) (subset of global_comm)
-    type(MPI_Comm) :: allio_comm           = MPI_COMM_NULL  !< all IO PEs (relay + server) (subset of all_comm)
-    type(MPI_Comm) :: modelio_comm         = MPI_COMM_NULL  !< model compute and relay PEs (all nodes) (subset of all_comm)
-    type(MPI_Comm) :: model_comm           = MPI_COMM_NULL  !< model compute PEs           (all nodes) (subset of all_comm and modelio_comm)
-    type(MPI_Comm) :: iorelay_comm         = MPI_COMM_NULL  !< relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
-    type(MPI_Comm) :: server_comm          = MPI_COMM_NULL  !< IO server PEs               (subset of all_comm)
-    type(MPI_Comm) :: server_active_comm   = MPI_COMM_NULL  !< Server PEs that consume relay data (subset of server_comm)
+    type(MPI_Comm) :: all_comm                  = MPI_COMM_NULL  !< non NO-OP PEs               (all nodes) (subset of global_comm)
+    type(MPI_Comm) :: allio_comm                = MPI_COMM_NULL  !< all IO PEs (relay + server) (subset of all_comm)
+    type(MPI_Comm) :: modelio_comm              = MPI_COMM_NULL  !< model compute and relay PEs (all nodes) (subset of all_comm)
+    type(MPI_Comm) :: model_comm                = MPI_COMM_NULL  !< model compute PEs           (all nodes) (subset of all_comm and modelio_comm)
+    type(MPI_Comm) :: iorelay_comm              = MPI_COMM_NULL  !< relay PEs                   (all nodes) (subset of all_comm and modelio_comm)
+
+    type(MPI_Comm) :: server_comm               = MPI_COMM_NULL  !< IO server PEs               (subset of all_comm)
+    type(MPI_Comm) :: server_active_comm        = MPI_COMM_NULL  !< Server PEs that process relay data (subset of server_comm)
+    type(MPI_Comm) :: server_bound_server_comm  = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_active_comm)
+    type(MPI_Comm) :: model_bound_server_comm   = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_active_comm)
 
     integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
     integer :: model_relay_smp_size = 0     !< population of model_relay_smp_comm
@@ -129,14 +132,15 @@ module ioserver_context_module
     type(distributed_circular_buffer) :: local_dcb  !< Distributed circular buffer for communication b/w relay and server processes
     type(heap)             :: node_heap             !< On server node only. Heap that everyone on the node can use
 
-    type(circular_buffer), dimension(:), pointer :: circ_buffer_in   ! The CB objects belonging to model PEs (model-bound)
-    type(circular_buffer), dimension(:), pointer :: circ_buffer_out  ! The CB objects belonging to model PEs (server-bound)
-    type(heap),            dimension(:), pointer :: local_heaps      ! Shared memory heaps belonging to model PEs
+    type(circular_buffer),     dimension(:), pointer :: circ_buffer_in       => NULL() !< The CB objects belonging to model PEs (model-bound)
+    type(circular_buffer),     dimension(:), pointer :: circ_buffer_out      => NULL() !< The CB objects belonging to model PEs (server-bound)
+    type(heap),                dimension(:), pointer :: local_heaps          => NULL() !< Shared memory heaps belonging to model PEs
+    type(local_server_stream), dimension(:), pointer :: local_server_streams => NULL() !< Local stream instances to access the shared ones (on server only)
 
     !---------------------------------------------------
     ! Direct (Fortran) pointers to actual shared memory
-    type(shared_memory), pointer :: mem => NULL() !  Will point to start of control shared memory
-    type(shared_server_stream), dimension(:), pointer :: common_server_streams => NULL()  !< Stream files used to assemble grids and write them (shared mem)
+    type(shared_memory),                      pointer :: mem                   => NULL() !< Will point to start of control shared memory
+    type(shared_server_stream), dimension(:), pointer :: common_server_streams => NULL() !< Stream files used to assemble grids and write them (shared mem)
 
     ! Stuff
     integer :: max_smp_pe = 0
@@ -144,6 +148,8 @@ module ioserver_context_module
     integer :: max_relay_index = -1
     integer, dimension(:), pointer :: node_model_ranks  => NULL()      ! sm_rank of model PEs
     integer :: max_compute_index = -1
+
+    integer :: num_server_bound_server = -1
 
     ! ------------------
     ! Miscellaneous
@@ -298,32 +304,18 @@ function open_file_server(context, filename, stream_id) result(new_file)
   class(ioserver_context), intent(inout) :: context
   character(len=*),        intent(in)    :: filename
   integer,                 intent(in)    :: stream_id
-  type(shared_server_stream), pointer :: new_file
+  type(local_server_stream), pointer :: new_file
 
-  type(shared_server_stream), pointer :: tmp_file
+  type(local_server_stream), pointer :: tmp_file
   logical :: success
 
   nullify(new_file)
-  tmp_file => context % common_server_streams(stream_id)
+  tmp_file => context % local_server_streams(stream_id)
 
-  if (mod(stream_id, context % local_dcb % get_num_server_consumers()) .ne. context % local_dcb % get_server_bound_server_id() + 1) then
-    print *, 'ERROR, this file should be opened by consumer ', stream_id, context % local_dcb % get_server_bound_server_id()
-    error stop 1
-  end if
-
-  if (tmp_file % is_open()) then
-    if (.not. tmp_file % is_same_name(filename)) then
-      print *, 'ERROR, trying to RE-open a file with a different name!', filename
-      error stop 1
-    end if
-    new_file => tmp_file
-    return
-  end if
-
-  success = tmp_file % open(stream_id, filename, context % local_dcb % get_server_bound_server_id())
+  success = tmp_file % open(filename)
   
   if (.not. success) then
-    print *, 'ERROR, unable to properly open stream file ', filename, stream_id
+    print *, 'ERROR: Unable to properly open stream file ', filename, stream_id
     error stop 1
   end if
 
@@ -335,29 +327,16 @@ function close_file_server(context, stream_id) result(success)
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_id
   logical :: success
-
-  type(shared_server_stream), pointer :: the_file
-
-  success = .false.
-  the_file => context % common_server_streams(stream_id)
-  if (the_file % is_open()) then
-    if (the_file % get_owner_id() .ne. context % local_dcb % get_server_bound_server_id()) then
-      print *, 'ERROR, trying to close a file not owned by this consumer', stream_id, context % local_dcb % get_server_bound_server_id()
-      return
-    end if
-    success = the_file % close()
-  else
-    success = .true.
-  end if
+  success = context % local_server_streams(stream_id) % close()
 end function close_file_server
 
 
 ! from OTHER PE space address ==> LOCAL space address (in shared memory arena)
 ! get my address in shared memory arena from a valid address for RELAY_COLOR|MODEL_COLOR|NODE_COLOR of rank N
-function ptr_translate_from(context, from, from_color, from_rank) result(local)
+function ptr_translate_from(context, from_ptr, from_color, from_rank) result(local)
   implicit none
   class(ioserver_context), intent(in)        :: context
-  type(C_PTR),             intent(IN), value :: from
+  type(C_PTR),             intent(IN), value :: from_ptr
   integer(C_INT),          intent(IN), value :: from_color
   integer(C_INT),          intent(IN), value :: from_rank
   type(C_PTR) :: local
@@ -380,7 +359,7 @@ function ptr_translate_from(context, from, from_color, from_rank) result(local)
     return   ! invalid from_color
   endif
 
-  offset = Pointer_offset(new_base, from, 1)      ! offset in other PE space
+  offset = Pointer_offset(new_base, from_ptr, 1)      ! offset in other PE space
   if (offset < 0) print *,'ERROR(ptr_translate_from): negative offset'
   if (offset < 0) return                 ! not in shared memory arena
 
@@ -388,7 +367,7 @@ function ptr_translate_from(context, from, from_color, from_rank) result(local)
   new   = new + offset                   ! add offset to my base
   local = transfer(new, local)           ! honest C pointer
 ! print *,'DEBUG(ptr_translate_from): from, from_color, from_rank, local', &
-!        transfer(from,1_8), from_color, from_rank, transfer(local,1_8)
+!        transfer(from_ptr,1_8), from_color, from_rank, transfer(local,1_8)
 end function ptr_translate_from
 
 ! from LOCAL space address ==> OTHER PE space address (in shared memory arena)
@@ -697,8 +676,8 @@ function IOserver_get_stream(context, stream_id) result(stream)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_id
-  type(shared_server_stream), pointer :: stream
-  stream => context % common_server_streams(stream_id)
+  type(local_server_stream), pointer     :: stream
+  stream => context % local_server_streams(stream_id)
 end function IOserver_get_stream
 
 function get_server_bound_cb_list(context) result(cbs)
@@ -803,19 +782,21 @@ subroutine finalize_relay(this)
   type(message_cap)    :: end_cap
   logical :: success
 
-  if (this % is_relay()) then
+  if (this % is_relay() .and. this % is_server_bound()) then
     ! Send a stop signal
-    if (this % debug_mode) print *, 'Relay sending STOP signal'
+    if (this % debug_mode) print *, 'Relay sending STOP signal', this % local_dcb % get_server_bound_client_id()
     header % content_length     = 0
     header % command            = MSG_COMMAND_RELAY_STOP
     header % sender_global_rank = this % global_rank
+    header % relay_global_rank  = this % global_rank
     end_cap % msg_length = header % content_length
 
     success = this % local_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
     success = this % local_dcb % put_elems(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
 
     if (.not. success) then
-      if (this % debug_mode) print *, 'WARNING: Could not send a stop signal!!!'
+      if (this % debug_mode) print *, 'WARNING: Relay could not send a stop signal!!!'
+      call print_message_header(header)
     end if
   end if
 end subroutine finalize_relay
@@ -824,19 +805,23 @@ subroutine finalize_server(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
-  type(shared_server_stream), pointer :: file
+  type(local_server_stream), pointer :: file
   logical :: success
   integer :: i
 
-  do i = 1, MAX_NUM_SERVER_STREAMS
-    file => this % common_server_streams(i)
-    if (file % is_open()) then
-      if (file % get_owner_id() == this % local_dcb % get_server_bound_server_id()) then
-        print *, 'Heeeeeyyyy forgot to close file #, owned by #', i, file % get_owner_id()
-        success = file % close()
+  if (associated(this % local_server_streams)) then
+    do i = 1, MAX_NUM_SERVER_STREAMS
+      file => this % local_server_streams(i)
+      if (file % is_open()) then
+        if (file % is_owner()) then
+          print *, 'DEBUG: Heeeeeyyyy forgot to close file #, owned by myself'
+          success = file % close()
+        end if
       end if
-    end if
-  end do
+    end do
+    deallocate(this % local_server_streams)
+    nullify(this % local_server_streams)
+  end if
 end subroutine finalize_server
 
 subroutine ioserver_context_finalize_manually(this)
@@ -911,11 +896,12 @@ subroutine build_relay_model_index(context)
   enddo
 end subroutine build_relay_model_index
 
-function IOserver_init_communicators(context, is_on_server, num_relay_per_node, num_channels, num_server_noop) result(success)
+function IOserver_init_communicators(context, is_on_server, num_relay_per_node, num_server_bound_server, num_channels, num_server_noop) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   logical,                 intent(in)    :: is_on_server
   integer,                 intent(in)    :: num_relay_per_node
+  integer,                 intent(in)    :: num_server_bound_server
   integer,                 intent(in)    :: num_channels
   integer,                 intent(in)    :: num_server_noop
 
@@ -939,14 +925,18 @@ function IOserver_init_communicators(context, is_on_server, num_relay_per_node, 
     call MPI_Comm_split(context % global_comm, 0, context % global_rank, temp_comm)
     call MPI_Comm_rank(temp_comm, temp_rank)
     call MPI_Comm_size(temp_comm, temp_size)
-    ! Can only have SERVER_BOUND, CHANNEL and NO_OP for now
+
     if (temp_rank >= temp_size - num_server_noop) then
       context % color = NO_OP_COLOR
     else if (temp_rank >= temp_size - num_server_noop - num_channels) then
       context % color = SERVER_COLOR + CHANNEL_COLOR
-    else
+    else if (temp_rank < num_server_bound_server) then
       context % color = SERVER_COLOR + SERVER_BOUND_COLOR
+    else
+      context % color = SERVER_COLOR + MODEL_BOUND_COLOR
     end if
+
+    context % num_server_bound_server = num_server_bound_server
   else
     call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm)
     context % color = MODEL_COLOR + RELAY_COLOR
@@ -1004,6 +994,13 @@ function IOserver_init_communicators(context, is_on_server, num_relay_per_node, 
       call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm)
     else
       call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_active_comm)
+
+      if (context % is_server_bound()) then
+        call MPI_Comm_split(context % server_active_comm, SERVER_BOUND_COLOR, context % global_rank, context % server_bound_server_comm)
+      else
+        call MPI_Comm_split(context % server_active_comm, MODEL_BOUND_COLOR, context % global_rank, context % model_bound_server_comm)
+      end if
+
     end if
 
   else
@@ -1082,6 +1079,7 @@ function IOserver_init_shared_mem(context) result(success)
   character(len=8)   :: heap_name, cioin_name, cioout_name
 
   integer     :: status, temp, total_errors
+  integer     :: i_stream
   type(C_PTR) :: temp_ptr
   type(shared_server_stream)  :: dummy_server_stream
   ! type(simple_mutex) :: dummy_simple_mutex
@@ -1144,10 +1142,12 @@ function IOserver_init_shared_mem(context) result(success)
 
     call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_SERVER_STREAMS])
 
-    ! Create server shared memory heap
+    ! Create shared data structures
     if (context % server_comm_rank == 0) then
-      temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)  ! Initialize heap
-      context % common_server_streams(:) = shared_server_stream()                                             ! Initialize stream files
+      temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
+      do i_stream = 1, MAX_NUM_SERVER_STREAMS
+        context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_bound_server))  ! Initialize stream files
+      end do
     else
       temp_ptr = context % node_heap % clone(context % server_heap_shmem)
       status   = context % node_heap % register(context % server_heap_shmem)
@@ -1161,6 +1161,19 @@ function IOserver_init_shared_mem(context) result(success)
 
     temp = context % node_heap % set_default()
     call context % node_heap % set_base(context % server_heap_shmem)
+
+    if (context % is_server_bound()) then
+      block
+        integer :: rank
+        type(shared_server_stream), pointer :: tmp_ptr
+        call MPI_Comm_rank(context % server_bound_server_comm, rank)
+        allocate(context % local_server_streams(MAX_NUM_SERVER_STREAMS))
+        do i_stream = 1, MAX_NUM_SERVER_STREAMS
+          tmp_ptr => context % common_server_streams(i_stream)
+          call context % local_server_streams(i_stream) % init(rank, tmp_ptr, context % node_heap)
+        end do
+      end block
+    end if
 
   else
     ! =========================================================================
@@ -1315,15 +1328,22 @@ function IOserver_init_shared_mem(context) result(success)
 
     ! Create DCB
     if (context % is_relay()) then
+      ! Relay process
       if (context % is_server_bound()) then
         success = context % local_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
       else if (context % is_model_bound()) then
         success = context % local_dcb % create_bytes(context % allio_comm, MPI_COMM_NULL, DCB_CLIENT_BOUND_TYPE, 0_8, 0_8)
       end if
-    else if (context % is_channel()) then
+    else if (context % is_channel()) then 
+      ! Channel process
       success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
     else
-      success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_SERVER_BOUND_TYPE, DCB_SERVER_BOUND_SIZE, DCB_MODEL_BOUND_SIZE)
+      ! "Working" server process
+      if (context % is_server_bound()) then
+        success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_SERVER_BOUND_TYPE, DCB_SERVER_BOUND_SIZE, DCB_MODEL_BOUND_SIZE)
+      else
+        success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_CLIENT_BOUND_TYPE, DCB_SERVER_BOUND_SIZE, DCB_MODEL_BOUND_SIZE)
+      end if
     end if
     if (.not. success) num_errors = num_errors + 1
   endif
@@ -1339,11 +1359,12 @@ function IOserver_init_shared_mem(context) result(success)
   success = .true.
 end function IOserver_init_shared_mem
 
-function IOserver_int_init(context, is_on_server, num_relay_per_node, num_channels, num_server_noop, in_debug_mode) result(success)
+function IOserver_int_init(context, is_on_server, num_relay_per_node, num_server_bound_server, num_channels, num_server_noop, in_debug_mode) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   logical,                 intent(in)    :: is_on_server
   integer,                 intent(in)    :: num_relay_per_node
+  integer,                 intent(in)    :: num_server_bound_server
   integer,                 intent(in)    :: num_channels
   integer,                 intent(in)    :: num_server_noop
   logical, optional,       intent(in)    :: in_debug_mode
@@ -1356,7 +1377,7 @@ function IOserver_int_init(context, is_on_server, num_relay_per_node, num_channe
   context % debug_mode = .false.
   if (present(in_debug_mode)) context % debug_mode = in_debug_mode
 
-  success = context % init_communicators(is_on_server, num_relay_per_node, num_channels, num_server_noop)
+  success = context % init_communicators(is_on_server, num_relay_per_node, num_server_bound_server, num_channels, num_server_noop)
 
   if (.not. success) then
     print *, 'ERROR were not able to properly initialize all communicators!'

@@ -41,6 +41,7 @@ module simple_mutex_module
     procedure, pass :: is_locked
     procedure, pass :: is_locked_by_me
     procedure, pass :: reset
+    procedure, pass :: get_id
   end type simple_mutex
 
 contains
@@ -141,4 +142,11 @@ contains
     class(simple_mutex), intent(inout) :: this
     if (this % is_valid()) call reset_lock(this % c_location)
   end subroutine reset
+
+  function get_id(this) result(id)
+    implicit none
+    class(simple_mutex), intent(in) :: this
+    integer(C_INT) :: id
+    id = this % id
+  end function get_id
 end module simple_mutex_module

@@ -135,12 +135,26 @@ static heap_item heap_table[MAX_HEAPS] ;
 //!> default heap (used by some functions if heap address is NULL)
 static void *default_heap = NULL ;
 
+//F_StArT
+//  interface
+//F_EnD
+
+// F_StArT
+// function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset')
+//   import :: C_INTPTR_T, C_PTR, C_INT
+//   implicit none
+//   type(C_PTR), intent(IN), value    :: ref
+//   type(C_PTR), intent(IN), value    :: to
+//   integer(C_INT), intent(IN), value :: szeof
+//   integer(C_INTPTR_T)               :: offset
+// end function Pointer_offset
+// F_EnD
 //  C_StArT
 //! get offset between 2 pointers in specified units (1/2/4/8/16 bytes)
 //! @return offset between 2 pointers in specified units (1/2/4/8/16 bytes)
 intptr_t Pointer_offset(
   void *ref,                //!< [in]  reference address
-  void *to,                 //!< [in]  pointer for whic a difference with ref is sought
+  void *to,                 //!< [in]  pointer for which a difference with ref is sought
   uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
   ){
 //  C_EnD
@@ -150,6 +164,16 @@ intptr_t Pointer_offset(
 }
 
 
+// F_StArT
+// function Pointer_add_offset(ref, offset, szeof) result(to) bind(C,name='Pointer_add_offset')
+//   import :: C_INTPTR_T, C_PTR, C_INT
+//   implicit none
+//   type(C_PTR), intent(IN), value          :: ref
+//   integer(C_INTPTR_T), intent(IN), value  :: offset
+//   integer(C_INT), intent(IN), value       :: szeof
+//   type(C_PTR)                             :: to
+// end function Pointer_add_offset
+// F_EnD
 //  C_StArT
 //! add offset to pointer in specified units (1/2/4/8/16 bytes)
 //! @return pointer after adding offset in specified units (1/2/4/8/16 bytes)
@@ -164,6 +188,11 @@ void *Pointer_add_offset(
   return (void *)(tmp + offset) ;
 }
 
+// F_StArT
+// subroutine ShmemHeapDumpInfo() bind(C,name='ShmemHeapDumpInfo')
+//   implicit none
+// end subroutine ShmemHeapDumpInfo
+// F_EnD
 //  C_StArT
 //! print heap statistics
 //! @return none
@@ -183,6 +212,18 @@ void ShmemHeapDumpInfo(
   printf("===========================================\n");
 }
 
+// F_StArT
+// function ShmemHeapGetInfo(ix, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeapGetInfo')
+//   import :: C_INT, C_LONG_LONG
+//   implicit none
+//   integer(C_INT), intent(IN), value :: ix
+//   integer(C_LONG_LONG), intent(OUT) :: sz
+//   integer(C_LONG_LONG), intent(OUT) :: max
+//   integer(C_LONG_LONG), intent(OUT) :: nblk
+//   integer(C_LONG_LONG), intent(OUT) :: nbyt
+//   integer(C_INT) :: status
+// end function ShmemHeapGetInfo
+// F_EnD
 //  C_StArT
 //! get heap statistics
 //! @return 0 if O.K., nonzero if error
@@ -210,6 +251,13 @@ int ShmemHeapGetInfo(
   return 0 ;
 }
 
+// F_StArT
+// function ShmemHeapGetDefault() result(h) bind(C,name='ShmemHeapGetDefault')
+//   import :: C_PTR
+//   implicit none
+//   type(C_PTR) :: h
+// end function ShmemHeapGetDefault
+// F_EnD
 //  C_StArT
 //! get address of the default heap
 //! @return default heap address (NULL if none)
@@ -219,6 +267,14 @@ void * ShmemHeapGetDefault(
   return (default_heap) ;
 }
 
+// F_StArT
+// function ShmemHeapSetDefault(heap) result(ix) bind(C,name='ShmemHeapSetDefault')
+//   import :: C_PTR, C_INT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(C_INT) :: ix
+// end function ShmemHeapSetDefault
+// F_EnD
 //  C_StArT
 //! set this heap as the default heap
 //! @return index in heap table if a known heap, -1 otherwise
@@ -240,6 +296,14 @@ int32_t ShmemHeapSetDefault(
   return -1 ;                         // not a known heap
 }
 
+// F_StArT
+// function ShmemHeapIndex(heap) result(ix) bind(C,name='ShmemHeapIndex')
+//   import :: C_INT, C_PTR
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(C_INT) :: ix
+// end function ShmemHeapIndex
+// F_EnD
 //  C_StArT
 //! is this a known heap ?
 //! @return index in heap table if a known heap, -1 otherwise
@@ -261,6 +325,14 @@ int32_t ShmemHeapIndex(
   return -1 ;                         // not a known heap
 }
 
+// F_StArT
+// function ShmemHeapSize(heap) result(s) bind(C,name='ShmemHeapSize')
+//   import :: C_PTR, HEAP_ELEMENT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(HEAP_ELEMENT) :: s
+// end function ShmemHeapSize
+// F_EnD
 //  C_StArT
 //! is this a known heap ?
 //! @return size if a known heap, -1 otherwise
@@ -281,6 +353,14 @@ heap_element ShmemHeapSize(
   return -1 ;                         // not a known heap
 }
 
+// F_StArT
+// function ShmemHeapContains(addr) result(p) bind(C,name='ShmemHeapContains')
+//   import :: C_PTR
+//   implicit none
+//   type(C_PTR), intent(IN), value :: addr
+//   type(C_PTR) :: p
+// end function ShmemHeapContains
+// F_EnD
 //  C_StArT
 //! which known heap does this address belong to ?
 //! @return heap base address if within a known heap, NULL otherwise
@@ -299,6 +379,14 @@ heap_element *ShmemHeapContains(
   return NULL ;    // not within a known heap
 }
 
+// F_StArT
+// function ShmemHeapPtr2Offset(addr) result(offset) bind(C,name='ShmemHeapPtr2Offset')
+//   import :: C_PTR, HEAP_ELEMENT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: addr
+//   integer(HEAP_ELEMENT) :: offset
+// end function ShmemHeapPtr2Offset
+// F_EnD
 //  C_StArT
 //! translate address to offset within a heap
 //! @return offset with respect to base of heap in heap_element units (NOT bytes)
@@ -317,6 +405,14 @@ heap_element ShmemHeapPtr2Offset(
   return -1 ; // address not within bounds of known heap
 }
 
+// F_StArT
+// function ShmemHeapValidBlock(addr) result(status) bind(C,name='ShmemHeapValidBlock')
+//   import :: C_INT, C_PTR
+//   implicit none
+//   type(C_PTR), intent(IN), value :: addr
+//   integer(C_INT) :: status
+// end function ShmemHeapValidBlock
+// F_EnD
 //  C_StArT
 //! is this the address of a block belonging to a known heap ?
 //! @return 0 if valid block from known heap,<br>
@@ -332,17 +428,48 @@ int32_t ShmemHeapValidBlock(
 
   if( (h = ShmemHeapContains(addr)) != NULL) { // inside a known heap ?
     b = b - 2 ;                                // base of block structure (2 elements below user block address)
-    if(b[1] != HEAD)         return 1 ;        // invalid HEAD marker below block 
+
+    // Check a few attributes of the block
+    if (b[1] != HEAD) {
+      // invalid HEAD marker below block 
+      // printf("HEAD wrong (%ld, should be %ld)\n", b[1], HEAD);
+      return 1;
+    }
+
     sz = b[0] > 0 ? b[0] : -b[0] ;             // get block size (negative means block is in use)
-    if(sz < 5)               return 1 ;        // invalid block size (cannot be less than 5)
-    if(b + sz >= h + h[0] )  return 1 ;        // top of block would be out of heap
-    if(b[sz-2] != TAIL)      return 1 ;        // invalid TAIL marker above block
-    if(b[sz-1] != sz)        return 1 ;        // wrong trailer size marker
+    if (sz < 5) {
+      // printf("Size wrong (%ld, cannot be less than 5)\n", sz);
+      return 1;
+    }
+
+    if (b + sz >= h + h[0]) {
+      // printf("Block TOP is out of the heap!\n");
+      return 1 ;
+    }
+
+    if (b[sz-2] != TAIL) {
+      // printf("TAIL wrong (%ld, should be %ld)\n", b[sz-2], TAIL);
+      return 1;
+    }
+
+    if (b[sz-1] != sz) {
+      // printf("Trailing size marker is wrong (%ld, should be %ld)\n", b[sz-1], sz);
+      return 1 ;
+    }
+
     return 0 ;                                 // this looks like a valid block
   }
   return -1 ; // address not within bounds of known heap
 }
 
+// F_StArT
+// function ShmemHeapBlockSizeCode(addr) result(bsz) bind(C,name='ShmemHeapBlockSizeCode')
+//   import :: C_PTR, HEAP_ELEMENT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: addr
+//   integer(HEAP_ELEMENT) :: bsz
+// end function ShmemHeapBlockSizeCode
+// F_EnD
 //  C_StArT
 //! is this the address of a block belonging to a known heap ?<br>
 //! same as ShmemHeapValidBlock but returns block size code instead of true/false information
@@ -370,6 +497,16 @@ heap_element ShmemHeapBlockSizeCode(
   return -1 ; // address not within bounds of known heap
 }
 
+// F_StArT
+// function ShmemHeapBlockSize(heap, addr, offset) result(bsz) bind(C,name='ShmemHeapBlockSize')
+//   import :: C_PTR, C_SIZE_T, HEAP_ELEMENT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   type(C_PTR), intent(IN), value :: addr
+//   integer(HEAP_ELEMENT), intent(IN) :: offset
+//   integer(C_SIZE_T) :: bsz
+// end function ShmemHeapBlockSize
+// F_EnD
 //  C_StArT
 //! find the size of a used memory block (in bytes)<br>
 //! uses either address of block or address of heap and offset
@@ -400,6 +537,15 @@ size_t ShmemHeapBlockSize(
   return (bsz - 4) * sizeof(heap_element) ;  // returned size is in bytes
 }
 
+// F_StArT
+// function ShmemHeapPtr(heap, offset) result(p) bind(C,name='ShmemHeapPtr')
+//   import :: C_PTR, HEAP_ELEMENT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(HEAP_ELEMENT), intent(IN), value :: offset
+//   type(C_PTR) :: p
+// end function ShmemHeapPtr
+// F_EnD
 //  C_StArT
 //! translate offset from base of heap into actual address
 //! @return address, NULL if offset out of heap
@@ -417,6 +563,33 @@ void *ShmemHeapPtr(
   return ( offset > (sz -2) ) ? NULL : (h + offset) ;  // offset is too large (out of heap)
 }
 
+// F_StArT
+// function ShmemHeapOffsetFromPtr(heap, block) result(offset) bind(C, name='ShmemHeapOffsetFromPtr')
+//   import :: C_PTR, HEAP_ELEMENT
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   type(C_PTR), intent(IN), value :: block
+//   integer(HEAP_ELEMENT) :: offset
+// end function ShmemHeapOffsetFromPtr
+// F_EnD
+//! Translate address inside heap into an offset (of size of #heap_element). The pointer must be inside the heap!
+// C_StArT
+heap_element ShmemHeapOffsetFromPtr(
+    heap_element *heap, //!< [in] Heap address
+    heap_element *block //!< [in] Address of the block for which we want the offset
+  ) {
+// C_EnD
+  return block - heap;
+}
+
+// F_StArT
+// function ShmemHeapRegister(heap) result(status) bind(C,name='ShmemHeapRegister')
+//   import :: C_INT, C_PTR
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(C_INT) :: status
+// end function ShmemHeapRegister
+// F_EnD
 //  C_StArT
 //! register a  Heap in the heap table
 //! @return number of registered heaps if successful, -1 otherwise
@@ -449,6 +622,15 @@ int32_t ShmemHeapRegister(
   return nheaps ;                 // number of registered heaps
 }
 
+// F_StArT
+// function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
+//   import :: C_PTR, C_SIZE_T
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(C_SIZE_T), intent(IN), value :: nbytes
+//   type(C_PTR) :: h
+// end function ShmemHeapInit
+// F_EnD
 //  C_StArT
 //! initialize a Server Heap
 //! @return address of Server Heap if successful, NULL otherwise
@@ -482,6 +664,16 @@ void *ShmemHeapInit(
   return h ;                    // O.K. return address of Heap
 }
 
+// F_StArT
+// function ShmemHeapCheck(heap, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ShmemHeapCheck')
+//   import :: C_INT, C_PTR, C_SIZE_T
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(C_INT), intent(OUT)    :: free_blocks, used_blocks
+//   integer(C_SIZE_T), intent(OUT) :: free_space, used_space
+//   integer(C_INT) :: status
+// end function ShmemHeapCheck
+// F_EnD
 //  C_StArT
 //! check integrity of Server Heap
 //! @return 0 : O.K.<br>
@@ -549,6 +741,16 @@ int32_t ShmemHeapCheck(
   return 0 ;
 }
 
+// F_StArT
+// function ShmemHeapAllocBlock(heap, nbytes, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
+//   import :: C_INT, C_PTR, C_SIZE_T
+//   implicit none
+//   type(C_PTR), intent(IN), value :: heap
+//   integer(C_SIZE_T), intent(IN), value :: nbytes
+//   integer(C_INT), intent(IN), value :: safe
+//   type(C_PTR) :: b
+// end function ShmemHeapAllocBlock
+// F_EnD
 //  C_StArT
 //! allocate space on a Server Heap
 //! @return address of block, NULL in case of failure to allocate
@@ -623,6 +825,16 @@ void *ShmemHeapAllocBlock(
   return t ;
 }
 
+// F_StArT
+// function ShmemHeapSetBlockMeta(block, metadata, msz) result(status) bind(C,name='ShmemHeapSetBlockMeta')
+//   import :: C_PTR, C_INT, block_meta_c
+//   implicit none
+//   type(C_PTR), intent(IN), value    :: block
+//   type(block_meta_c), intent(IN)    :: metadata
+//   integer(C_INT), intent(IN), value :: msz
+//   integer(C_INT) :: status
+// end function ShmemHeapSetBlockMeta
+// F_EnD
 //  C_StArT
 //! set block metadata
 //! @return 0 if O.K., nonzero if error
@@ -653,6 +865,16 @@ int32_t ShmemHeapSetBlockMeta(
   return 0 ;
 }
 
+// F_StArT
+// function ShmemHeapGetBlockMeta(block, metadata, msz) result(status) bind(C,name='ShmemHeapGetBlockMeta')
+//   import :: C_PTR, C_INT, block_meta_c
+//   implicit none
+//   type(C_PTR), intent(IN), value    :: block
+//   type(block_meta_c), intent(OUT)    :: metadata
+//   integer(C_INT), intent(IN), value :: msz
+//   integer(C_INT) :: status
+// end function ShmemHeapGetBlockMeta
+// F_EnD
 //  C_StArT
 //! get block metadata
 //! @return 0 if O.K., nonzero if error
@@ -679,6 +901,14 @@ int32_t ShmemHeapGetBlockMeta(
   return 0 ;
 }
 
+// F_StArT
+// function ShmemHeapFreeBlock(block) result(status) bind(C,name='ShmemHeapFreeBlock')
+//   import :: C_INT, C_PTR
+//   implicit none
+//   type(C_PTR), intent(IN), value :: block
+//   integer(C_INT) :: status
+// end function ShmemHeapFreeBlock
+// F_EnD
 //  C_StArT
 //! free space on a Server Heap
 //! @return 0 if O.K., nonzero if error
@@ -897,3 +1127,7 @@ int main ( int argc, char *argv[] )
   return 0 ;
 }
 #endif
+
+//F_StArT
+//  end interface
+//F_EnD

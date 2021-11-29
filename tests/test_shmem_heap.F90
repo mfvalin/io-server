@@ -201,7 +201,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         if(ixtab(j) == -1) exit                       ! no more valid blocks
         status = heaps(i)%freebyoffset(ixtab(j))      ! free operation using index (offset) in heap
         print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
-                ', offset =',heaps(i)%offset(heaps(i)%address(ixtab(j)))
+                ', offset =',heaps(i)%offset(heaps(i)%address_from_offset(ixtab(j)))
       enddo
     enddo
   endif
@@ -213,7 +213,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         if(ixtab(j) == -1) exit
         status = heaps(i)%freebyoffset(ixtab(j))
         print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
-                ', offset =',heaps(i)%offset(heaps(i)%address(ixtab(j)))
+                ', offset =',heaps(i)%offset(heaps(i)%address_from_offset(ixtab(j)))
       enddo
     enddo
   endif
@@ -333,7 +333,7 @@ subroutine base_test(nprocs, myrank)
         exit
       endif
       ixtab(i) = h % offset(blocks(i))
-      print *,'ixtab =',ixtab(i),h%offset(h%address(ixtab(i))),h%offset(blocks(i))  ! test of address and offset methods
+      print *,'ixtab =',ixtab(i),h%offset(h%address_from_offset(ixtab(i))),h%offset(blocks(i))  ! test of address and offset methods
     enddo
   endif
 
@@ -359,7 +359,7 @@ subroutine base_test(nprocs, myrank)
       if(ixtab(i) > 0) then                         ! block allocated previously by process 0
 !         status = h % freebyoffset(ixtab(i))
         status = h % free(ixtab(i))                 ! use GENERIC procedure to free blocks
-        print 3,'h%free status =',status,', offset =',h%offset(h%address(ixtab(i)))
+        print 3,'h%free status =',status,', offset =',h%offset(h%address_from_offset(ixtab(i)))
         if(status == 0) ixtab(i) = 0                ! set index to free
       endif
     enddo

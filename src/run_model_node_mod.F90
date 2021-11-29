@@ -37,7 +37,7 @@ subroutine run_model_node(num_relay_per_node, do_expensive_checks_in)
   do_expensive_checks = .false.
   if (present(do_expensive_checks_in)) do_expensive_checks = do_expensive_checks_in
 
-  success = context % init(.false., num_relay_per_node, 0, 0, in_debug_mode = do_expensive_checks)
+  success = context % init(.false., num_relay_per_node, 0, 0, 0, in_debug_mode = do_expensive_checks)
 
   if (.not. success) then
     print *, 'ERROR: could not initialize IO-server context for a model node!'
@@ -80,7 +80,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   type(heap),            dimension(:), pointer :: heap_list
   type(distributed_circular_buffer) :: data_buffer
   type(comm_rank_size)  :: node_crs, local_relay_crs, all_crs
-  integer :: client_id, local_relay_id
+  integer :: client_id, num_clients
   integer :: i_compute
   integer :: num_local_compute, num_local_relays
   integer :: dcb_message_buffer_size
@@ -116,15 +116,14 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   node_crs        = context % get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
   local_relay_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
 
-  local_relay_id    = local_relay_crs % rank
   num_local_relays  = local_relay_crs % size
   num_local_compute = context % get_num_local_model()
 
-  ! print *, 'RELAY, local relay id: ', local_relay_id
   all_crs = context % get_crs(NO_COLOR)
   print '(A, I5)', 'RELAY, global ', all_crs % rank
 
-  client_id = data_buffer % get_server_bound_client_id()
+  client_id               = data_buffer % get_server_bound_client_id()
+  num_clients             = data_buffer % get_num_server_bound_clients()
   dcb_capacity            = data_buffer % get_capacity(JAR_ELEMENT_KIND)
   dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure we have a bit of loose space
 
@@ -145,6 +144,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   header % content_length     = 0
   header % command            = MSG_COMMAND_DUMMY
   header % sender_global_rank = context % get_global_rank()
+  header % relay_global_rank  = context % get_global_rank()
   end_cap % msg_length = header % content_length
 
   success = data_buffer % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .true.)
@@ -165,7 +165,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   do while (.not. finished)
 
     finished = .true.
-    do i_compute = 0, num_local_compute - 1, num_local_relays
+    do i_compute = client_id, num_local_compute - 1, num_clients
       skip_message = .false.
 
       ! print *, 'num elements: ', cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_4), i_compute
@@ -178,7 +178,8 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       success = cb_list(i_compute) % peek(message_header_tag, 1_8, CB_KIND_INTEGER_4)
 
       if (message_header_tag .ne. MSG_HEADER_TAG) then
-        print *, 'ERROR: Message does not start with the message header tag', message_header_tag, MSG_HEADER_TAG
+        print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', message_header_tag, MSG_HEADER_TAG, &
+              ', relay id ', client_id
         error stop 1
       end if
 
@@ -293,6 +294,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       ! Copy message header
 
       ! print *, 'Sending'
+      header % relay_global_rank = all_crs % rank
       ! call print_message_header(header)
       num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
 
@@ -335,7 +337,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
   if (allocated(cb_message)) deallocate(cb_message)
 
-  if (local_relay_id == 0) then
+  if (client_id == 0) then
     call heap_list(0) % dumpinfo()
     do i_compute = 0, num_local_compute - 1
       call cb_list(i_compute) % print_stats(client_id * 100 + i_compute, i_compute == 0)

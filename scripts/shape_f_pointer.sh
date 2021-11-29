@@ -54,7 +54,7 @@ for RI in I R ; do
 !> \brief ${TYPE}*${L} ${D}D array allocator
 function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -87,8 +87,7 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
     bmi%a%d(1:${D}) = di(1:${D})    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ${METADATA}(cptr, bmi%a, bsz)      ! insert metadata into data block
 

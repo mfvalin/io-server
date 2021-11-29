@@ -11,9 +11,9 @@ module run_server_node_module
 
 contains
 
-subroutine run_server_node(num_channels, num_noop, do_expensive_checks_in)
+subroutine run_server_node(num_server_bound, num_channels, num_noop, do_expensive_checks_in)
   implicit none
-  integer, intent(in) :: num_channels, num_noop
+  integer, intent(in) :: num_server_bound, num_channels, num_noop
   logical, optional, intent(in) :: do_expensive_checks_in
   
   type(ioserver_context) :: context
@@ -23,7 +23,7 @@ subroutine run_server_node(num_channels, num_noop, do_expensive_checks_in)
   do_expensive_checks = .false.
   if (present(do_expensive_checks_in)) do_expensive_checks = do_expensive_checks_in
 
-  success = context % init(.true., 0, num_channels, num_noop, in_debug_mode = do_expensive_checks)
+  success = context % init(.true., 0, num_server_bound, num_channels, num_noop, in_debug_mode = do_expensive_checks)
 
   if (.not. success) then
     print *, 'ERROR, could not initialize IO-server context for server process!'
@@ -153,9 +153,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   logical :: success
 
   ! File management
-  character(len=:), allocatable        :: filename
-  type(shared_server_stream), pointer  :: file_ptr
-  integer                              :: i_file, num_flushed
+  character(len=:), allocatable      :: filename
+  type(local_server_stream), pointer :: file_ptr
+  integer                            :: i_file, num_flushed
 
   ! Message reading
   integer(C_INT64_T)   :: capacity
@@ -169,10 +169,15 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   integer            :: i_data_check ! Only for verifying data
   integer, dimension(:),    pointer, contiguous, save :: model_data => NULL(), expected_data => NULL()
   integer, dimension(:, :), pointer, contiguous       :: data_ptr
-  type(heap)         :: data_heap
+  ! type(heap)         :: data_heap
 
-  data_heap = context % get_node_heap()
+  integer :: consumer_id
+
+  ! data_heap = context % get_node_heap()
   capacity = dcb % get_capacity(client_id, CB_KIND_INTEGER_4)
+  consumer_id = dcb % get_server_bound_server_id()
+
+  ! print '(A, I3, A I4)', 'Server ', consumer_id, ' receiving message from client ', client_id
 
   if (.not. associated(model_data)) allocate(model_data(capacity))
   if (.not. associated(expected_data)) allocate(expected_data(capacity))
@@ -183,11 +188,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   ! Flush any completed grid for owned files
   do i_file = 1, MAX_NUM_SERVER_STREAMS
     file_ptr => context % get_stream(i_file)
-    if (file_ptr % get_owner_id() == dcb % get_server_bound_server_id()) then
-      num_flushed = file_ptr % flush_data()
-      if (num_flushed > 0) then
-        print '(A, I4, A)', 'Flushed ', num_flushed, ' completed grids'
-      end if
+    num_flushed = file_ptr % flush_data()
+    if (num_flushed > 0) then
+      print '(A, I4, A)', 'Flushed ', num_flushed, ' completed grids'
     end if
   end do
 
@@ -206,7 +209,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   success = dcb % get_elems(client_id, header, message_header_size_int(), CB_KIND_INTEGER_4, .true.)
 
   if (.not. success) then
-    print *, 'ERROR getting message header from DCB'
+    print *, 'ERROR getting message header from DCB', consumer_id
     error stop 1
   end if
 
@@ -223,7 +226,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   !-------
   ! Data
   if (header % command == MSG_COMMAND_DATA) then
-    print *, 'Got DATA message'
+    print *, 'Got DATA message', consumer_id
     success = dcb % get_elems(client_id, record, model_record_size_int(), CB_KIND_INTEGER_4, .true.)
     if (.not. success) then
       print *, 'Error reading record'
@@ -250,7 +253,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
 
     data_ptr(1:record % ni, 1:record % nj) => model_data
     file_ptr => context % get_stream(header % stream_id)
-    success = file_ptr % put_data(record, data_ptr, data_heap)
+    success = file_ptr % put_data(record, data_ptr)
     if (.not. success) then
       print *, 'ERROR: Could not put data into partial grid!'
       error stop 1
@@ -260,19 +263,23 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   ! Open a file
   else if (header % command == MSG_COMMAND_OPEN_FILE) then
     allocate(character(len=(header % content_length)) :: filename)
-    print *, 'Got OPEN message'
+    print *, 'Got OPEN message', consumer_id
     success = dcb % get_elems(client_id, filename, INT(header % content_length, kind=8), CB_KIND_CHAR, .true.)
     print *, 'Opening a file named ', filename
     file_ptr => context % open_file_server(filename, header % stream_id)
     if (.not. file_ptr % is_open()) then
-      print *, 'Failed to open file ', filename
-      error stop 1
+      if (file_ptr % is_owner()) then
+        print *, 'Failed (?) to open file ', filename
+        error stop 1
+      else
+        print *, "DEBUG: File is not open, be we're not the owner, so it's OK"
+      end if
     end if
 
   !----------------
   ! Close a file
   else if (header % command == MSG_COMMAND_CLOSE_FILE) then
-    print *, 'Got CLOSE FILE message'
+    print *, 'Got CLOSE FILE message', consumer_id
     success = context % close_file_server(header % stream_id)
     if (.not. success) then
       print *, 'ERROR, could not close file', header % stream_id
@@ -282,12 +289,12 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   !----------------
   ! Misc. message
   else if (header % command == MSG_COMMAND_DUMMY) then
-    print *, 'Got a DUMMY message!'
+    print *, 'Got a DUMMY message!', consumer_id
 
   !---------------------------------
   ! Stop receiving from this relay
   else if (header % command == MSG_COMMAND_RELAY_STOP) then
-    print *, 'Got a RELAY STOP message'
+    print *, 'Got a RELAY STOP message', consumer_id
     finished = .true.
 
     ! if (associated(model_data)) then
@@ -300,7 +307,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     ! end if
 
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
-    print *, 'Got a MODEL STOP message'
+    print *, 'Got a MODEL STOP message', consumer_id
 
   !------------
   ! Big no-no

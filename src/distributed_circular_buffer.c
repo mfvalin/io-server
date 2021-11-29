@@ -1733,8 +1733,10 @@ int DCB_get_server(
   instance->circ_buffer.stats.total_read_time_ms += IO_time_ms(&timer);
   if (operation != CB_PEEK) {
     instance->circ_buffer.stats.num_read_elems += num_elements;
-    instance->circ_buffer.stats.num_reads++;
+    instance->circ_buffer.stats.num_unique_reads++;
   }
+
+  instance->circ_buffer.stats.num_reads++;
 
   if (num_bytes != num_elements * sizeof(data_element)) instance->circ_buffer.stats.num_fractional_reads++;
 

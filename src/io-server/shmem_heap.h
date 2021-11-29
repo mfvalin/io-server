@@ -119,7 +119,7 @@ typedef  struct {
 //! @return offset between 2 pointers in specified units (1/2/4/8/16 bytes)
 intptr_t Pointer_offset(
   void *ref,                //!< [in]  reference address
-  void *to,                 //!< [in]  pointer for whic a difference with ref is sought
+  void *to,                 //!< [in]  pointer for which a difference with ref is sought
   uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
   );
 //! add offset to pointer in specified units (1/2/4/8/16 bytes)
@@ -200,6 +200,10 @@ void *ShmemHeapPtr(
   void *addr,                   //!< [in]  heap address
   heap_element offset           //!< [in]  offset into heap
   );
+heap_element ShmemHeapOffsetFromPtr(
+    heap_element *heap, //!< [in] Heap address
+    heap_element *block //!< [in] Address of the block for which we want the offset
+  ) {
 //! register a  Heap in the heap table
 //! @return number of registered heaps if successful, -1 otherwise
 int32_t ShmemHeapRegister(

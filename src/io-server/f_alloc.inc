@@ -35,7 +35,7 @@
 !> \brief integer*1 5D array allocator
 function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -68,8 +68,7 @@ function I1_5D(h, p, di) result(bmi) ! integer*1 5D array allocator
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -136,7 +135,7 @@ end function bm_I15D
 !> \brief integer*1 4D array allocator
 function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -169,8 +168,7 @@ function I1_4D(h, p, di) result(bmi) ! integer*1 4D array allocator
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -237,7 +235,7 @@ end function bm_I14D
 !> \brief integer*1 3D array allocator
 function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -270,8 +268,7 @@ function I1_3D(h, p, di) result(bmi) ! integer*1 3D array allocator
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -338,7 +335,7 @@ end function bm_I13D
 !> \brief integer*1 2D array allocator
 function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -371,8 +368,7 @@ function I1_2D(h, p, di) result(bmi) ! integer*1 2D array allocator
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -439,7 +435,7 @@ end function bm_I12D
 !> \brief integer*1 1D array allocator
 function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -472,8 +468,7 @@ function I1_1D(h, p, di) result(bmi) ! integer*1 1D array allocator
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -540,7 +535,7 @@ end function bm_I11D
 !> \brief integer*2 5D array allocator
 function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -573,8 +568,7 @@ function I2_5D(h, p, di) result(bmi) ! integer*2 5D array allocator
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -641,7 +635,7 @@ end function bm_I25D
 !> \brief integer*2 4D array allocator
 function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -674,8 +668,7 @@ function I2_4D(h, p, di) result(bmi) ! integer*2 4D array allocator
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -742,7 +735,7 @@ end function bm_I24D
 !> \brief integer*2 3D array allocator
 function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -775,8 +768,7 @@ function I2_3D(h, p, di) result(bmi) ! integer*2 3D array allocator
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -843,7 +835,7 @@ end function bm_I23D
 !> \brief integer*2 2D array allocator
 function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -876,8 +868,7 @@ function I2_2D(h, p, di) result(bmi) ! integer*2 2D array allocator
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -944,7 +935,7 @@ end function bm_I22D
 !> \brief integer*2 1D array allocator
 function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -977,8 +968,7 @@ function I2_1D(h, p, di) result(bmi) ! integer*2 1D array allocator
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1045,7 +1035,7 @@ end function bm_I21D
 !> \brief integer*4 5D array allocator
 function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1078,8 +1068,7 @@ function I4_5D(h, p, di) result(bmi) ! integer*4 5D array allocator
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1146,7 +1135,7 @@ end function bm_I45D
 !> \brief integer*4 4D array allocator
 function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1179,8 +1168,7 @@ function I4_4D(h, p, di) result(bmi) ! integer*4 4D array allocator
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1247,7 +1235,7 @@ end function bm_I44D
 !> \brief integer*4 3D array allocator
 function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1280,8 +1268,7 @@ function I4_3D(h, p, di) result(bmi) ! integer*4 3D array allocator
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1348,7 +1335,7 @@ end function bm_I43D
 !> \brief integer*4 2D array allocator
 function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1381,8 +1368,7 @@ function I4_2D(h, p, di) result(bmi) ! integer*4 2D array allocator
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1449,7 +1435,7 @@ end function bm_I42D
 !> \brief integer*4 1D array allocator
 function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1482,8 +1468,7 @@ function I4_1D(h, p, di) result(bmi) ! integer*4 1D array allocator
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1550,7 +1535,7 @@ end function bm_I41D
 !> \brief integer*8 5D array allocator
 function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1583,8 +1568,7 @@ function I8_5D(h, p, di) result(bmi) ! integer*8 5D array allocator
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1651,7 +1635,7 @@ end function bm_I85D
 !> \brief integer*8 4D array allocator
 function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1684,8 +1668,7 @@ function I8_4D(h, p, di) result(bmi) ! integer*8 4D array allocator
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1752,7 +1735,7 @@ end function bm_I84D
 !> \brief integer*8 3D array allocator
 function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1785,8 +1768,7 @@ function I8_3D(h, p, di) result(bmi) ! integer*8 3D array allocator
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1853,7 +1835,7 @@ end function bm_I83D
 !> \brief integer*8 2D array allocator
 function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1886,8 +1868,7 @@ function I8_2D(h, p, di) result(bmi) ! integer*8 2D array allocator
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -1954,7 +1935,7 @@ end function bm_I82D
 !> \brief integer*8 1D array allocator
 function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -1987,8 +1968,7 @@ function I8_1D(h, p, di) result(bmi) ! integer*8 1D array allocator
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2055,7 +2035,7 @@ end function bm_I81D
 !> \brief real*4 5D array allocator
 function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2088,8 +2068,7 @@ function R4_5D(h, p, di) result(bmi) ! real*4 5D array allocator
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2156,7 +2135,7 @@ end function bm_R45D
 !> \brief real*4 4D array allocator
 function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2189,8 +2168,7 @@ function R4_4D(h, p, di) result(bmi) ! real*4 4D array allocator
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2257,7 +2235,7 @@ end function bm_R44D
 !> \brief real*4 3D array allocator
 function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2290,8 +2268,7 @@ function R4_3D(h, p, di) result(bmi) ! real*4 3D array allocator
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2358,7 +2335,7 @@ end function bm_R43D
 !> \brief real*4 2D array allocator
 function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2391,8 +2368,7 @@ function R4_2D(h, p, di) result(bmi) ! real*4 2D array allocator
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2459,7 +2435,7 @@ end function bm_R42D
 !> \brief real*4 1D array allocator
 function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2492,8 +2468,7 @@ function R4_1D(h, p, di) result(bmi) ! real*4 1D array allocator
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2560,7 +2535,7 @@ end function bm_R41D
 !> \brief real*8 5D array allocator
 function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2593,8 +2568,7 @@ function R8_5D(h, p, di) result(bmi) ! real*8 5D array allocator
     bmi%a%d(1:5) = di(1:5)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2661,7 +2635,7 @@ end function bm_R85D
 !> \brief real*8 4D array allocator
 function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2694,8 +2668,7 @@ function R8_4D(h, p, di) result(bmi) ! real*8 4D array allocator
     bmi%a%d(1:4) = di(1:4)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2762,7 +2735,7 @@ end function bm_R84D
 !> \brief real*8 3D array allocator
 function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2795,8 +2768,7 @@ function R8_3D(h, p, di) result(bmi) ! real*8 3D array allocator
     bmi%a%d(1:3) = di(1:3)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2863,7 +2835,7 @@ end function bm_R83D
 !> \brief real*8 2D array allocator
 function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2896,8 +2868,7 @@ function R8_2D(h, p, di) result(bmi) ! real*8 2D array allocator
     bmi%a%d(1:2) = di(1:2)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
@@ -2964,7 +2935,7 @@ end function bm_R82D
 !> \brief real*8 1D array allocator
 function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
   implicit none
-  class(heap), intent(INOUT) :: h    !< heap object
+  class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   type(block_meta)                  :: bmi !< metadata for allocated block
@@ -2997,8 +2968,7 @@ function R8_1D(h, p, di) result(bmi) ! real*8 1D array allocator
     bmi%a%d(1:1) = di(1:1)    ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = transfer(cptr, bmi%a%offset) ! address of array
-    bmi%a%offset = bmi%a%offset - asz           ! minus reference address  (offset in bytes)
+    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
     status = ShmemHeapSetBlockMeta(cptr, bmi%a, bsz)      ! insert metadata into data block
 
