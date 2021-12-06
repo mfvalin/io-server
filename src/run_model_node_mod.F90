@@ -365,14 +365,14 @@ subroutine pseudo_model_process(context)
   type(ioserver_context), intent(inout) :: context
 
   type(heap)            :: node_heap
-  type(model_stream)    :: output_file
+  type(model_stream)    :: output_file_1, output_file_2
   type(circular_buffer) :: data_buffer
   type(comm_rank_size)  :: model_crs, node_crs, global_compute_crs
 
   type(subgrid)    :: local_grid
   type(grid)       :: input_grid, output_grid
-  type(block_meta) :: data_array_info
-  integer(kind=4), dimension(:), pointer :: data_array
+  type(block_meta) :: data_array_info_1, data_array_info_2
+  integer(kind=4), dimension(:), pointer :: data_array_1, data_array_2
 
   integer :: global_rank
   integer :: global_compute_id
@@ -381,15 +381,21 @@ subroutine pseudo_model_process(context)
 
   node_heap = context % get_local_heap()
 
-  output_file = context % open_file_model('model_write_results_')
-  if (.not. output_file % is_open()) then
-    print *, 'Unable to open model file!!!!'
+  output_file_1 = context % open_file_model('pseudo_model_results_1')
+  if (.not. output_file_1 % is_open()) then
+    print *, 'Unable to open model file 1 !!!!'
+    error stop 1
+  end if
+
+  output_file_2 = context % open_file_model('pseudo_model_results_2')
+  if (.not. output_file_2 % is_open()) then
+    print *, 'Unable to open model file 2 !!!!'
     error stop 1
   end if
 
   model_crs = context % get_crs(MODEL_COLOR)
 
-  node_crs          = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
+  node_crs           = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
   global_compute_crs = context % get_crs(MODEL_COLOR)
   global_compute_id  = global_compute_crs % rank
 
@@ -423,21 +429,43 @@ subroutine pseudo_model_process(context)
   block
     integer :: i, j
     do i = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
+      !------------------------
+      ! First stream
+
       ! Get memory and put data in it. Try repeatedly if it failed.
-      data_array_info = node_heap % allocate(data_array, [CB_MESSAGE_SIZE_INT])
-      do while (.not. associated(data_array))
+      data_array_info_1 = node_heap % allocate(data_array_1, [CB_MESSAGE_SIZE_INT])
+      do while (.not. associated(data_array_1))
         call sleep_us(10)
-        data_array_info = node_heap % allocate(data_array, [CB_MESSAGE_SIZE_INT])
+        data_array_info_1 = node_heap % allocate(data_array_1, [CB_MESSAGE_SIZE_INT])
       end do
 
       ! Using i + 2 b/c tag is incremented when opening a file
       do j = 1, CB_MESSAGE_SIZE_INT
-        data_array(j) = compute_data_point(global_rank, i + 1, j)
+        data_array_1(j) = compute_data_point(global_rank, i + 1, j)
       end do
 
       ! Write the data to a file (i.e. send it to the server to do that for us)
-      success = output_file % write(data_array_info, local_grid, input_grid, output_grid)
+      success = output_file_1 % write(data_array_info_1, local_grid, input_grid, output_grid)
 
+      if (.not. success) then
+        print *, 'ERROR while trying to do a WRITE'
+        error stop 1
+      end if
+
+      !------------------------
+      ! Second stream
+      data_array_info_2 = node_heap % allocate(data_array_2, [CB_MESSAGE_SIZE_INT])
+      do while (.not. associated(data_array_2))
+        call sleep_us(10)
+        data_array_info_2 = node_heap % allocate(data_array_2, [CB_MESSAGE_SIZE_INT])
+      end do
+
+      ! Using i + 2 b/c tag is incremented when opening a file
+      do j = 1, CB_MESSAGE_SIZE_INT
+        data_array_2(j) = compute_data_point(global_rank, i + 1, j)
+      end do
+
+      success = output_file_2 % write(data_array_info_2, local_grid, input_grid, output_grid)
       if (.not. success) then
         print *, 'ERROR while trying to do a WRITE'
         error stop 1
@@ -447,7 +475,8 @@ subroutine pseudo_model_process(context)
     end do
   end block
 
-  success = output_file % close()
+  success = output_file_1 % close()
+  success = output_file_2 % close() .and. success
   if (.not. success) then
     print *, 'Unable to close model file!!!!'
     error stop 1

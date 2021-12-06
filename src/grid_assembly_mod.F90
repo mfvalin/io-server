@@ -198,28 +198,17 @@ contains
     class(grid_assembly), intent(inout) :: this
     integer :: line_id
 
-    integer :: i, lowest_tag, lowest_missing
+    integer :: i, lowest_tag
 
     line_id = -1
     lowest_tag = -1
-    lowest_missing = -1
-
 
     do i = 1, MAX_ASSEMBLY_LINES
       if (this % lines(i) % tag > 0 .and. (lowest_tag < 0 .or. lowest_tag > this % lines(i) % tag)) then
-        lowest_tag     = this % lines(i) % tag
-        lowest_missing = this % lines(i) % missing_data
+        lowest_tag = this % lines(i) % tag
+        if (this % is_line_full(i)) line_id = i
       end if
 
-      if (this % is_line_full(i)) then
-          if (this % lines(i) % tag == lowest_tag) then
-            line_id = i
-          else
-            print '(A, I2, A, I5, A, I5, A, I8)', &
-                  'Line ', i, ' with tag ', this % lines(i) % tag, ' is completed, but there is a lower, uncompleted tag ', lowest_tag, ' missing ', lowest_missing
-            error stop 1
-          end if
-      end if
     end do
   end function get_lowest_completed_line
 
