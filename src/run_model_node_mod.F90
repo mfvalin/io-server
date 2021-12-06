@@ -427,10 +427,13 @@ subroutine pseudo_model_process(context)
 
   ! call sleep_us(5000)
   block
-    integer :: i, j
+    integer :: i, j, current_tag
+    current_tag = 1
     do i = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
       !------------------------
       ! First stream
+    
+      current_tag = current_tag + 2
 
       ! Get memory and put data in it. Try repeatedly if it failed.
       data_array_info_1 = node_heap % allocate(data_array_1, [CB_MESSAGE_SIZE_INT])
@@ -441,7 +444,7 @@ subroutine pseudo_model_process(context)
 
       ! Using i + 2 b/c tag is incremented when opening a file
       do j = 1, CB_MESSAGE_SIZE_INT
-        data_array_1(j) = compute_data_point(global_rank, i + 1, j)
+        data_array_1(j) = compute_data_point(global_rank, current_tag, j)
       end do
 
       ! Write the data to a file (i.e. send it to the server to do that for us)
@@ -462,7 +465,7 @@ subroutine pseudo_model_process(context)
 
       ! Using i + 2 b/c tag is incremented when opening a file
       do j = 1, CB_MESSAGE_SIZE_INT
-        data_array_2(j) = compute_data_point(global_rank, i + 1, j)
+        data_array_2(j) = compute_data_point(global_rank, current_tag + 1, j)
       end do
 
       success = output_file_2 % write(data_array_info_2, local_grid, input_grid, output_grid)

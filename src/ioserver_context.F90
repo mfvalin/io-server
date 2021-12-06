@@ -149,7 +149,8 @@ module ioserver_context_module
     integer, dimension(:), pointer :: node_model_ranks  => NULL()      ! sm_rank of model PEs
     integer :: max_compute_index = -1
 
-    integer :: num_server_bound_server = -1
+    integer :: num_server_bound_server  = -1
+    integer :: num_server_stream_owners = -1
 
     ! ------------------
     ! Miscellaneous
@@ -1136,6 +1137,18 @@ function IOserver_init_shared_mem(context) result(success)
 
   ! if (context % debug_mode) temp = sleep(2)  ! to test the NO-OP wait loop, this is only executed on model/relay/server nodes in debug mode
 
+  block
+  ! Determine how many server-bound server processes can actually open streams (it has to be less than the number of relays)
+    integer :: val
+    val = 0
+    if (context % is_server() .or. context % is_relay()) then
+      context % num_server_stream_owners = 0
+      if (context % is_relay() .and. context % is_server_bound()) val = 1
+      call MPI_Allreduce(val, context % num_server_stream_owners, 1, MPI_INTEGER, MPI_SUM, context % allio_comm)
+      context % num_server_stream_owners = min(context % num_server_stream_owners, context % num_server_bound_server)
+    end if
+  end block
+
   if (context % is_server()) then
     ! =========================================================================
     ! ============================ IO server process ==========================
@@ -1157,7 +1170,7 @@ function IOserver_init_shared_mem(context) result(success)
     if (context % server_comm_rank == 0) then
       temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
       do i_stream = 1, MAX_NUM_SERVER_STREAMS
-        context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_bound_server))  ! Initialize stream files
+        context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_stream_owners))  ! Initialize stream files
       end do
     else
       temp_ptr = context % node_heap % clone(context % server_heap_shmem)
