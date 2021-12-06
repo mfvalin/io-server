@@ -240,7 +240,7 @@ contains
   subroutine print_message_header(header)
     implicit none
     type(message_header), intent(in) :: header
-    print '(A, I8, A, I8, A, I3, X, A, A, I3, A, I8, A, I5, A, I5)', &
+    print '(A, I8, A, I8, A, I3, 1X, A, A, I3, A, I8, A, I5, A, I5)', &
       'Header: header tag ', header % header_tag, &
       ', len ', header % content_length, &
       ', cmd ', header % command, get_message_command_string(header % command), &

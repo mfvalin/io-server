@@ -287,7 +287,7 @@ function open_file_model(context, filename) result(new_file)
     error stop 1
   end if
 
-  if (context % debug_mode) print *, 'DEBUG: Opening file with name ', filename
+  if (context % debug_mode) print *, 'DEBUG: (Model) Opening file with name ', filename
 
   new_file = model_stream(context % global_rank, &
                           context % local_heap, &
@@ -322,12 +322,13 @@ function open_file_server(context, filename, stream_id) result(new_file)
   new_file => tmp_file
 end function open_file_server
 
-function close_file_server(context, stream_id) result(success)
+function close_file_server(context, stream_id, force_close) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_id
+  logical,                 intent(in)    :: force_close
   logical :: success
-  success = context % local_server_streams(stream_id) % close()
+  success = context % local_server_streams(stream_id) % close(force_close)
 end function close_file_server
 
 
@@ -466,7 +467,17 @@ subroutine IOserver_set_time_to_quit(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
   context % mem % time_to_quit = 1
-  if (context % debug_mode) print *,'MSG: time to quit'
+  if (context % debug_mode) then 
+    if (context % is_relay()) then
+      print *, 'DEBUG: time to quit (relay)'
+    else if (context % is_model()) then
+      print *, 'DEBUG: time to quit (model)'
+    else if (context % is_server()) then
+      print *, 'DEBUG: time to quit (server)'
+    else
+      print *, 'DEBUG: time to quit (other)'
+    end if
+  end if
 end subroutine IOserver_set_time_to_quit
 
 function IOserver_is_time_to_quit(context) result(is_time_to_quit)
@@ -815,7 +826,7 @@ subroutine finalize_server(this)
       if (file % is_open()) then
         if (file % is_owner()) then
           print *, 'DEBUG: Heeeeeyyyy forgot to close file #, owned by myself'
-          success = file % close()
+          success = file % close(.true.)
         end if
       end if
     end do
@@ -1153,7 +1164,7 @@ function IOserver_init_shared_mem(context) result(success)
       status   = context % node_heap % register(context % server_heap_shmem)
 
       if (status < 0) then
-        print *, 'ERROR Could not register cloned heap on server node!'
+        print *, 'ERROR: Could not register cloned heap on server node!'
         num_errors = num_errors + 1
         goto 2
       end if
@@ -1181,7 +1192,7 @@ function IOserver_init_shared_mem(context) result(success)
     ! =========================================================================
     ! Allocate shared memory used for intra node communication between model and relay PEs
     context % relay_shmem = RPN_allocate_shared(context % relay_shmem_size, context % model_relay_smp_comm)
-    if (context % debug_mode) write(6,*) 'DEBUG: after MPI_Win_allocate_shared relaywin, size, rank =', context % relay_shmem_size, context % model_relay_smp_rank
+    if (context % debug_mode) write(6,'(A, I10, I4)') 'DEBUG: after MPI_Win_allocate_shared, size, rank = ', context % relay_shmem_size, context % model_relay_smp_rank
     call flush(6)
 
     if (context % model_relay_smp_rank == 0) then                   ! PE with rank on node == 0 creates the memory arena

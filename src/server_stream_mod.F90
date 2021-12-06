@@ -109,20 +109,22 @@ contains
     end if
   end function shared_server_stream_open
 
-  function shared_server_stream_close(this, data_heap) result(success)
+  function shared_server_stream_close(this, data_heap, force_close) result(success)
     implicit none
     class(shared_server_stream), intent(inout) :: this
     type(heap),                  intent(inout) :: data_heap
+    logical,                     intent(in)    :: force_close
     logical :: success
 
     integer :: num_flushed, num_incomplete
 
-    integer, parameter :: MAX_NUM_ATTEMPTS = 100
-    integer, parameter :: WAIT_TIME_US     = 100000
+    integer, parameter :: MAX_NUM_ATTEMPTS = 5
+    integer, parameter :: WAIT_TIME_US     = 1000000
     integer :: i
 
     success = .false.
 
+    num_incomplete = 1
     if (this % is_open()) then
       do i = 1, MAX_NUM_ATTEMPTS
         num_flushed = this % partial_grid_data % flush_completed_grids(this % unit, data_heap)
@@ -130,19 +132,22 @@ contains
           print *, 'Flushed ', num_flushed, ' completed grids upon closing ', this % name
         end if
         num_incomplete = this % partial_grid_data % get_num_partial_grids()
-        if (num_incomplete > 0) then
-          print '(A, I4, A, F6.2, A)', ' DEBUG: There are still ', num_incomplete, ' incomplete grids in file, will wait another ', (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, ' second(s)'
+        if (num_incomplete > 0 .and. force_close) then
+          print '(A, I4, A, F6.2, A)', ' DEBUG: There are still ', num_incomplete, ' incomplete grids in file, will wait another ', &
+                (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, ' second(s)'
         else
           exit
         end if
         call sleep_us(WAIT_TIME_US)
       end do
 
-      this % status = STREAM_STATUS_CLOSED
-      close(this % unit)
-      this % stream_id = -1
-      this % owner_id = -1
-      success = .true.
+      if (num_incomplete == 0 .or. force_close) then
+        this % status = STREAM_STATUS_CLOSED
+        close(this % unit)
+        this % stream_id = -1
+        this % owner_id = -1
+        success = (num_incomplete == 0)
+      end if
     end if
   end function shared_server_stream_close
 
@@ -273,15 +278,16 @@ contains
     end if
   end function local_server_stream_open
 
-  function local_server_stream_close(this) result(success)
+  function local_server_stream_close(this, force_close) result(success)
     implicit none
     class(local_server_stream), intent(inout) :: this
+    logical,                    intent(in)    :: force_close
     logical :: success
 
     if (this % is_open() .and. this % is_owner()) then
-      success = this % shared_instance % close(this % data_heap)
+      success = this % shared_instance % close(this % data_heap, force_close)
     else
-      print *, 'DEBUG: Not the owner, so wont even try to close (might be closed already anyway)'
+      ! print *, 'DEBUG: Not the owner, so wont even try to close'
       success = .true.
     end if
   end function local_server_stream_close
@@ -303,8 +309,8 @@ contains
     integer, intent(in), dimension(record % ni, record % nj) :: subgrid_data
     logical :: success
 
-    integer, parameter :: MAX_NUM_ATTEMPTS = 100
-    integer, parameter :: WAIT_TIME_US     = 100000
+    integer, parameter :: MAX_NUM_ATTEMPTS = 30
+    integer, parameter :: WAIT_TIME_US     = 500000
     integer :: i
 
     success = .false.

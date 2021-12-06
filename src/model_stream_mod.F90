@@ -240,7 +240,6 @@ contains
 
     ! print *, rec % ni, rec % nj, rec % nk, rec % nvar, f_block % k()
 
-
     ! print *, 'From model'
     ! print *, 'Area % nv = ', area % nv
     ! call print_model_record(rec)

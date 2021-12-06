@@ -54,11 +54,12 @@ subroutine server_bound_server_process(context, do_expensive_checks_in)
 
   type(comm_rank_size)              :: consumer_crs
   type(distributed_circular_buffer) :: data_buffer
+  type(local_server_stream), pointer :: file_ptr
 
   integer :: server_id, num_consumers, num_producers
   logical, dimension(:), allocatable :: active_producers
-  logical :: server_finished, producer_finished
-  integer :: i_producer, producer_id
+  logical :: server_finished, producer_finished, success
+  integer :: i_producer, producer_id, i_file
   integer :: num_errors
 
   num_errors = 0
@@ -104,7 +105,16 @@ subroutine server_bound_server_process(context, do_expensive_checks_in)
       end if
     end do
   end do
-  print *, 'Server done receiving', server_id
+  print *, 'Server done receiving. Will now close owned files', server_id
+
+  do i_file = 1, MAX_NUM_SERVER_STREAMS
+    file_ptr => context % get_stream(i_file)
+    success = context % close_file_server(i_file, .true.)
+    if (.not. success) then
+      print *, 'ERROR: Unable to close server stream ', i_file, server_id
+      error stop 1
+    end if
+  end do
 
   ! Final check on the buffers' content
   if (do_expensive_checks) then
@@ -226,14 +236,16 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   !-------
   ! Data
   if (header % command == MSG_COMMAND_DATA) then
-    print *, 'Got DATA message', consumer_id
+    ! print *, 'Got DATA message', consumer_id
     success = dcb % get_elems(client_id, record, model_record_size_int(), CB_KIND_INTEGER_4, .true.)
     if (.not. success) then
       print *, 'Error reading record'
       error stop 1
     end if
 
-    ! call print_model_record(record)
+    ! if (record % tag == 2) then
+    !   call print_model_record(record)
+    ! end if
 
     ! TODO manage compression + other metadata
 
@@ -263,27 +275,30 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   ! Open a file
   else if (header % command == MSG_COMMAND_OPEN_FILE) then
     allocate(character(len=(header % content_length)) :: filename)
-    print *, 'Got OPEN message', consumer_id
+    ! print *, 'Got OPEN message', consumer_id
     success = dcb % get_elems(client_id, filename, INT(header % content_length, kind=8), CB_KIND_CHAR, .true.)
-    print *, 'Opening a file named ', filename
+    ! print *, 'Opening a file named ', filename
     file_ptr => context % open_file_server(filename, header % stream_id)
     if (.not. file_ptr % is_open()) then
       if (file_ptr % is_owner()) then
         print *, 'Failed (?) to open file ', filename
         error stop 1
       else
-        print *, "DEBUG: File is not open, be we're not the owner, so it's OK"
+        ! print *, "DEBUG: File is not open, be we're not the owner, so it's OK"
       end if
     end if
 
   !----------------
   ! Close a file
   else if (header % command == MSG_COMMAND_CLOSE_FILE) then
-    print *, 'Got CLOSE FILE message', consumer_id
-    success = context % close_file_server(header % stream_id)
+    ! print *, 'Got CLOSE FILE message', consumer_id
+    success = context % close_file_server(header % stream_id, .false.)
     if (.not. success) then
-      print *, 'ERROR, could not close file', header % stream_id
-      error stop 1
+      file_ptr => context % get_stream(header % stream_id)
+      if (file_ptr % is_owner()) then
+        print *, 'DEBUG: could not close file at this time', header % stream_id, consumer_id
+        ! error stop 1
+      end if
     end if
 
   !----------------
@@ -307,7 +322,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     ! end if
 
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
-    print *, 'Got a MODEL STOP message', consumer_id
+    ! print *, 'Got a MODEL STOP message', consumer_id
 
   !------------
   ! Big no-no

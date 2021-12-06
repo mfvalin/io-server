@@ -79,10 +79,10 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   type(circular_buffer), dimension(:), pointer :: cb_list
   type(heap),            dimension(:), pointer :: heap_list
   type(distributed_circular_buffer) :: data_buffer
-  type(comm_rank_size)  :: node_crs, local_relay_crs, all_crs
+  type(comm_rank_size)  :: node_crs, local_relay_crs
   integer :: client_id, num_clients
   integer :: i_compute
-  integer :: num_local_compute, num_local_relays
+  integer :: num_local_compute, num_local_relays, local_relay_id
   integer :: dcb_message_buffer_size
   integer(C_INT64_T) :: dcb_capacity
 
@@ -117,10 +117,10 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   local_relay_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
 
   num_local_relays  = local_relay_crs % size
+  local_relay_id    = local_relay_crs % rank
   num_local_compute = context % get_num_local_model()
 
-  all_crs = context % get_crs(NO_COLOR)
-  print '(A, I5)', 'RELAY, global ', all_crs % rank
+  ! print '(A, I5)', 'DEBUG: RELAY, global ', context % get_global_rank()
 
   client_id               = data_buffer % get_server_bound_client_id()
   num_clients             = data_buffer % get_num_server_bound_clients()
@@ -151,7 +151,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   success = data_buffer % put_elems(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success ! Append size
 
   if (.not. success) then
-    print *, 'ERROR saying HI to the consumer...'
+    print *, 'ERROR: Failed saying HI to the consumer...'
     error stop 1
   end if
 
@@ -165,7 +165,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   do while (.not. finished)
 
     finished = .true.
-    do i_compute = client_id, num_local_compute - 1, num_clients
+    do i_compute = local_relay_id, num_local_compute - 1, num_local_relays
       skip_message = .false.
 
       ! print *, 'num elements: ', cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_4), i_compute
@@ -179,7 +179,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
       if (message_header_tag .ne. MSG_HEADER_TAG) then
         print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', message_header_tag, MSG_HEADER_TAG, &
-              ', relay id ', client_id
+              ', relay id ', local_relay_id
         error stop 1
       end if
 
@@ -231,7 +231,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
           if (.not. all(expected_message(1:num_data) == f_data(:))) then
             print *, 'Expected: ', expected_message(1:num_data / 100 + 3)
             print *, 'Received: ', f_data(:num_data / 100 + 3)
-            print *, 'i_compute, tag: ', i_compute, record % tag
+            print '(A, I3, A, I5, A, I5)', ' i_compute: ',  i_compute, ', tag: ', record % tag, ', sender_global_rank: ', header % sender_global_rank
             error stop 1
           end if
         end if
@@ -241,7 +241,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
         model_finished(i_compute) = .true.
-        print *, 'Model is finished ', i_compute
+        print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
 
         total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4)
 
@@ -294,7 +294,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       ! Copy message header
 
       ! print *, 'Sending'
-      header % relay_global_rank = all_crs % rank
+      header % relay_global_rank = context % get_global_rank()
       ! call print_message_header(header)
       num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
 
@@ -337,11 +337,11 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
   if (allocated(cb_message)) deallocate(cb_message)
 
-  if (client_id == 0) then
-    call heap_list(0) % dumpinfo()
-    do i_compute = 0, num_local_compute - 1
-      call cb_list(i_compute) % print_stats(client_id * 100 + i_compute, i_compute == 0)
-    end do
+  if (local_relay_id == 0) then
+    ! call heap_list(0) % dumpinfo()
+    ! do i_compute = 0, num_local_compute - 1
+    !   call cb_list(i_compute) % print_stats(client_id * 100 + i_compute, i_compute == 0)
+    ! end do
   end if
 
 end subroutine server_bound_relay_process
@@ -367,7 +367,7 @@ subroutine pseudo_model_process(context)
   type(heap)            :: node_heap
   type(model_stream)    :: output_file
   type(circular_buffer) :: data_buffer
-  type(comm_rank_size)  :: model_crs, node_crs, local_compute_crs, all_crs
+  type(comm_rank_size)  :: model_crs, node_crs, global_compute_crs
 
   type(subgrid)    :: local_grid
   type(grid)       :: input_grid, output_grid
@@ -375,7 +375,7 @@ subroutine pseudo_model_process(context)
   integer(kind=4), dimension(:), pointer :: data_array
 
   integer :: global_rank
-  integer :: local_compute_id
+  integer :: global_compute_id
 
   logical :: success
 
@@ -390,14 +390,12 @@ subroutine pseudo_model_process(context)
   model_crs = context % get_crs(MODEL_COLOR)
 
   node_crs          = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
-  local_compute_crs = context % get_crs(NODE_COLOR + MODEL_COLOR)
-  local_compute_id  = local_compute_crs % rank
+  global_compute_crs = context % get_crs(MODEL_COLOR)
+  global_compute_id  = global_compute_crs % rank
 
-  all_crs = context % get_crs(NO_COLOR)
-  global_rank = all_crs % rank
+  global_rank = context % get_global_rank()
 
-  ! print *, 'MODEL, local compute id: ', local_compute_id
-  print '(A, I5)', 'MODEL, global ', global_rank
+  ! print '(A, I5)', 'DEBUG: MODEL, global ', global_rank
 
   data_buffer = context % get_server_bound_cb()
   if (.not. data_buffer % is_valid()) then
@@ -406,7 +404,7 @@ subroutine pseudo_model_process(context)
   end if
 
   ! Init area info
-  local_grid % i0 = local_compute_id * CB_MESSAGE_SIZE_INT + 1
+  local_grid % i0 = global_compute_id * CB_MESSAGE_SIZE_INT + 1
   local_grid % ni = CB_MESSAGE_SIZE_INT
   local_grid % j0 = 1 ! cause ARRAYS START AT 1
   local_grid % nj = 1
@@ -418,6 +416,8 @@ subroutine pseudo_model_process(context)
   input_grid % size_j = 1
 
   output_grid % id = 1
+
+  ! print *, 'Created local grid', local_grid % i0, local_grid % i0 + local_grid % ni
 
   ! call sleep_us(5000)
   block

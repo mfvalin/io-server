@@ -90,7 +90,6 @@ contains
           error stop 1
         end if
 
-        print *, 'Created line ', line_id, mutex % get_id()
 
         this % lines(line_id) % data_offset = get_block_meta_offset(data_array_info)
         this % lines(line_id) % dim_i = record % grid_size_i
@@ -98,6 +97,9 @@ contains
 
         ! allocate(this % lines(line_id) % data(record % grid_size_i, record % grid_size_j))
         this % lines(line_id) % missing_data = record % grid_size_i * record % grid_size_j
+
+        print *, 'Created line ', line_id, mutex % get_id(), this % lines(line_id) % missing_data, record % tag
+        ! data_array(:,:) = -1
 
         ! print '(A, I6, I4, I4)', 'Starting assembly for a new grid! Tag = ', record % tag, line_id, free_line_id
         ! print '(A, I4, A, I4, A, I8)', 'Grid size: ', record % grid_size_i, ' x ', record % grid_size_j, ', missing data: ', this % lines(line_id) % missing_data
@@ -161,7 +163,11 @@ contains
     j0 = record % j0
     j1 = j0 + (record % nj - 1)
     full_grid(i0:i1, j0:j1) = subgrid_data(:, :)
+
+    ! TODO Gotta do it better than with a mutex!!!!!!!!!
+    call mutex % lock()
     this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - record % ni * record % nj
+    call mutex % unlock()
 
     success = .true.
   end function grid_assembly_put_data
@@ -181,7 +187,7 @@ contains
     do i = 1, MAX_ASSEMBLY_LINES
       line_id = this % get_lowest_completed_line()
       if (line_id < 0) return
-      ! print '(A, I3, A)', 'Line ', line_id, ' is completed'
+      ! print '(A, I3, A, I5, A)', 'Line ', line_id, ' with tag ', this % lines(line_id) % tag, ' is completed'
       call this % flush_line(line_id, file_unit, data_heap)
       num_flushed = num_flushed + 1
     end do
@@ -192,17 +198,27 @@ contains
     class(grid_assembly), intent(inout) :: this
     integer :: line_id
 
-    integer :: i, lowest_tag
+    integer :: i, lowest_tag, lowest_missing
 
     line_id = -1
     lowest_tag = -1
+    lowest_missing = -1
+
 
     do i = 1, MAX_ASSEMBLY_LINES
+      if (this % lines(i) % tag > 0 .and. (lowest_tag < 0 .or. lowest_tag > this % lines(i) % tag)) then
+        lowest_tag     = this % lines(i) % tag
+        lowest_missing = this % lines(i) % missing_data
+      end if
+
       if (this % is_line_full(i)) then
-        if (lowest_tag < 0 .or. lowest_tag > this % lines(i) % tag) then
-          lowest_tag = this % lines(i) % tag
-          line_id = i
-        end if
+          if (this % lines(i) % tag == lowest_tag) then
+            line_id = i
+          else
+            print '(A, I2, A, I5, A, I5, A, I8)', &
+                  'Line ', i, ' with tag ', this % lines(i) % tag, ' is completed, but there is a lower, uncompleted tag ', lowest_tag, ' missing ', lowest_missing
+            error stop 1
+          end if
       end if
     end do
   end function get_lowest_completed_line
