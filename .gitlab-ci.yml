@@ -116,23 +116,23 @@ test:XC50_intel-19.0.5_job_single_node:
       - BUILD_PATH=`pwd`
       - source ../tests/script/single_node_tests.sh
 
-# test:XC50_intel-19.0.5_job_multi_node:
-#    stage: test
-#    dependencies:
-#       - build:XC50_intel-19.0.5
-#    variables:
-#       NUM_CPUS: "160"
-#       ORD_SOUMET_MACH: ${ECCI_BACKEND}
-#       ORD_SOUMET_C: "${NUM_CPUS}x1"
-#       ORD_SOUMET_W: "30"
-#       ORD_SOUMET_JN: xc50-intel-multi-node
-#       MPI_COMMAND: "aprun"
-#    script:
-#       - set +e
-#       - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-#       - cd build_XC50_intel-19.0.5
-#       - BUILD_PATH=`pwd`
-#       - source ../tests/script/multi_node_tests.sh
+test:XC50_intel-19.0.5_job_multi_node:
+   stage: test
+   dependencies:
+      - build:XC50_intel-19.0.5
+   variables:
+      NUM_CPUS: "160"
+      ORD_SOUMET_MACH: ${ECCI_BACKEND}
+      ORD_SOUMET_C: "${NUM_CPUS}x1"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: xc50-intel-multi-node
+      MPI_COMMAND: "aprun"
+   script:
+      - set +e
+      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
+      - cd build_XC50_intel-19.0.5
+      - BUILD_PATH=`pwd`
+      - source ../tests/script/multi_node_tests.sh
 
 package:XC50_intel-19.0.5:
    stage: package
