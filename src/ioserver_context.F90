@@ -173,6 +173,9 @@ module ioserver_context_module
     procedure, pass         :: build_print_model_index
     procedure, pass         :: fetch_node_shmem_structs
     procedure, pass         :: is_initialized
+    procedure, pass         :: allocate_from_arena
+    procedure, pass         :: create_local_heap
+    procedure, pass         :: create_local_cb
 
     ! Process type query
     procedure, pass, public :: is_relay  => IOserver_is_relay
@@ -535,7 +538,7 @@ subroutine verify_translations(context)  ! chech that address translations are c
     endif
   enddo
   if(errors == 0) then
-    write(6,*) 'INFO: local -> remote address translations are coherent'
+    ! write(6,*) 'INFO: local -> remote address translations are coherent'
   else
     write(6,*) 'INFO: number of errors in local -> remote address translations =',errors
   endif
@@ -552,7 +555,7 @@ subroutine verify_translations(context)  ! chech that address translations are c
     endif
   enddo
   if(errors == 0) then
-    write(6,*) 'INFO: remote -> local address translations are coherent'
+    ! write(6,*) 'INFO: remote -> local address translations are coherent'
   else
     write(6,*) 'INFO: number of errors in remote -> local address translations =',errors
   endif
@@ -711,7 +714,7 @@ subroutine IOserver_set_debug(context, mode)  ! set io server debug mode
   class(ioserver_context), intent(inout) :: context
   logical,                 intent(in)    :: mode
   context % debug_mode = mode
-  print *,'INFO: debug mode =', context % debug_mode
+  print *, 'INFO: debug mode =', context % debug_mode
 end subroutine IOserver_set_debug
 
 subroutine IOserver_set_relay(context, fn)  ! set relay function to call to fn
@@ -908,6 +911,86 @@ subroutine build_relay_model_index(context)
   enddo
 end subroutine build_relay_model_index
 
+function allocate_from_arena(context, num_bytes, name, id) result(ptr)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer(C_SIZE_T),       intent(in)    :: num_bytes
+  character(len=4),        intent(in)    :: name
+  integer,                 intent(in)    :: id
+  type(C_PTR) :: ptr
+
+  character(len=1) :: prefix
+  character(len=8) :: full_block_name
+
+  if (context % is_model()) then
+    prefix = 'M'
+  else if (context % is_relay()) then
+    prefix = 'R'
+  else
+    prefix = '_'
+  end if
+
+  write(full_block_name, '(A1, A4, I3.3)') prefix, name, id
+  ptr = context % arena % newblock(num_bytes, full_block_name)
+
+  if (C_ASSOCIATED(ptr)) print *, 'DEBUG: Allocated block from arena: ', full_block_name
+end function allocate_from_arena
+
+function create_local_heap(context, num_bytes) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer(C_SIZE_T),       intent(in)    :: num_bytes
+  logical :: success
+
+  type(C_PTR)    :: heap_ptr
+  integer(C_INT) :: index
+
+  success = .false.
+
+  heap_ptr = context % allocate_from_arena(num_bytes, 'HEAP', context % mem % pe(context % smp_rank) % rank)
+
+  if (.not. C_ASSOCIATED(heap_ptr)) return
+
+  heap_ptr = context % local_heap % create(heap_ptr, num_bytes)    ! allocate local heap
+  index    = context % local_heap % set_default()                  ! make local_heap the default heap
+  call context % local_heap % set_base(context % arena % addr())   ! set arena address as offset base for heap
+  context % mem % pe(context % smp_rank) % heap = Pointer_offset(context % arena % addr(), heap_ptr, 1)    ! offset of my heap in memory arena
+
+  if (C_ASSOCIATED(heap_ptr) .and. index >= 0) success = .true.
+end function create_local_heap
+
+function create_local_cb(context, num_bytes, is_output) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer(C_SIZE_T),       intent(in)    :: num_bytes
+  logical,                 intent(in)    :: is_output
+  logical :: success
+
+  type(C_PTR)      :: cb_ptr
+  character(len=4) :: name
+
+  success = .false.
+
+  if (is_output) then
+    name = 'OUTB'
+  else
+    name = 'INB_'
+  end if
+
+  cb_ptr = context % allocate_from_arena(num_bytes, name, context % mem % pe(context % smp_rank) % rank)
+
+  if (.not. C_ASSOCIATED(cb_ptr)) return
+
+  if (is_output) then
+    success = context % local_server_bound_cb % create_bytes(cb_ptr, num_bytes)
+    context % mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % arena % addr(), cb_ptr, 1)  ! offset in memory arena
+  else
+    success = context % local_cio_in % create_bytes(cb_ptr, num_bytes)
+    context % mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % arena % addr(), cb_ptr, 1)   ! offset in memory arena
+  end if
+
+end function create_local_cb
+
 function IOserver_init_communicators(context, is_on_server, num_relay_per_node, num_server_bound_server, num_channels, num_server_noop) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
@@ -1086,7 +1169,7 @@ function IOserver_init_shared_mem(context) result(success)
 
   integer            :: num_errors
   integer(C_SIZE_T)  :: cb_size
-  integer(C_INT64_T) :: shmsz64
+  integer(C_INT64_T) :: shmem_num_bytes
   integer            :: sz32
   character(len=8)   :: heap_name, cioin_name, cioout_name
 
@@ -1095,6 +1178,7 @@ function IOserver_init_shared_mem(context) result(success)
   type(C_PTR) :: temp_ptr
   type(shared_server_stream)  :: dummy_server_stream
   ! type(simple_mutex) :: dummy_simple_mutex
+  logical :: alloc_success
 
   success = .false.
   num_errors = 0              ! none so far
@@ -1137,8 +1221,8 @@ function IOserver_init_shared_mem(context) result(success)
 
   ! if (context % debug_mode) temp = sleep(2)  ! to test the NO-OP wait loop, this is only executed on model/relay/server nodes in debug mode
 
-  block
   ! Determine how many server-bound server processes can actually open streams (it has to be less than the number of relays)
+  block
     integer :: val
     val = 0
     if (context % is_server() .or. context % is_relay()) then
@@ -1205,12 +1289,12 @@ function IOserver_init_shared_mem(context) result(success)
     ! =========================================================================
     ! Allocate shared memory used for intra node communication between model and relay PEs
     context % relay_shmem = RPN_allocate_shared(context % relay_shmem_size, context % model_relay_smp_comm)
-    if (context % debug_mode) write(6,'(A, I10, I4)') 'DEBUG: after MPI_Win_allocate_shared, size, rank = ', context % relay_shmem_size, context % model_relay_smp_rank
+    if (context % debug_mode) write(6,'(A, I10, A, I4)') 'DEBUG: after MPI_Win_allocate_shared, size = ', context % relay_shmem_size, ', rank = ', context % model_relay_smp_rank
     call flush(6)
 
     if (context % model_relay_smp_rank == 0) then                   ! PE with rank on node == 0 creates the memory arena
-      shmsz64 = context % relay_shmem_size
-      temp_ptr = context % arena % create(context % relay_shmem, 128, shmsz64)
+      shmem_num_bytes = context % relay_shmem_size
+      temp_ptr = context % arena % create(context % relay_shmem, 256, shmem_num_bytes)
     else
       temp_ptr = context % arena % clone(context % relay_shmem)   !  cloning is O.K. even if arena is not initialized
     endif
@@ -1230,87 +1314,13 @@ function IOserver_init_shared_mem(context) result(success)
     ! wait for memory arena to be initialized by rank 0 before allocating heap and circular buffer(s)
     call MPI_Barrier(context % model_relay_smp_comm)
 
-    if (context % is_relay()) then                            ! io relay processes
-      ! =========================================================================
-      ! ================================ IO relay process =======================
-      ! =========================================================================
-      shmsz64 = context % relay_shmem_size / context % model_relay_smp_size        ! available size (in bytes) per PE on SMP node
-
-      !  allocate nominal heap and circular buffers (8K elements)
-      ! 85%  of per PE size for the heap
-      write(heap_name, '(A5,I3.3)') "RHEAP", context % mem % pe(context % smp_rank) % rank
-      sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in 32-bit elements
-      temp_ptr = context % arena % newblock(sz32, heap_name)
-      if( .not. C_ASSOCIATED(temp_ptr) ) goto 2              ! allocation failed
-      temp_ptr = context % local_heap % create(temp_ptr, sz32)         ! allocate local heap
-      temp     = context % local_heap % set_default()                  ! make local_heap the default heap
-      call context % local_heap % set_base( context % arena % addr() )     ! set arena address as offset base for heap
-      context % mem % pe(context % smp_rank) % heap = Pointer_offset(context % arena % addr(), temp_ptr, 1)    ! offset of my heap in memory arena
-
-      !  4%  of per PE size for inbound circular buffer
-      write(cioin_name ,'(A4,I4.4)') "RCIO", context % mem % pe(context % smp_rank)%rank
-      cb_size = INT(shmsz64 * 0.04_8, 4)                     ! 4% for model-bound CB (in bytes)
-      sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
-      temp_ptr = context % arena % newblock(sz32, cioin_name)
-      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
-      success = context % local_cio_in % create_bytes(temp_ptr, cb_size)
-      if (.not. success) goto 2                              ! cio creation failed
-      context % mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
-
-      !  10%  of per PE size for outbound circular buffer
-      write(cioout_name,'(A4,I4.4)') "RCIO", context % mem % pe(context % smp_rank) % rank + 1000
-      cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound CB (in bytes)
-      sz32    = INT(cb_size / 4, 4)                          ! Size in 32-bit elements
-      temp_ptr = context % arena % newblock(sz32 / 4, cioout_name)
-      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
-      success = context % local_server_bound_cb % create_bytes(temp_ptr, cb_size)
-      if (.not. success) goto 2                              ! cio creation failed
-      context % mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
-
-    else                                                     ! compute processes
-      ! =========================================================================
-      ! ============================ model compute process ======================
-      ! =========================================================================
-      shmsz64 = context % relay_shmem_size / context % model_relay_smp_size      ! available size in bytes per PE on SMP node
-
-      ! 85%  of per PE size for the heap
-      write(heap_name  ,'(A5,I3.3)') "MHEAP", context % mem % pe(context % smp_rank) % rank
-      sz32 = INT(shmsz64 / 4 * 0.85_8, 4)                    ! Heap size in number of 32-bit elements
-      temp_ptr = context % arena % newblock(sz32, heap_name)
-      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
-      if (context % debug_mode) call print_created(temp_ptr, heap_name, sz32)
-      temp_ptr = context % local_heap % create(temp_ptr, sz32)
-      temp     = context % local_heap % set_default()                  ! make local_heap the default heap
-      call context % local_heap % set_base( context % arena % addr() )     ! set arena address as offset base for heap
-      context % mem % pe(context % smp_rank) % heap = Pointer_offset(context % arena % addr() , temp_ptr, 1)    ! offset of my heap in memory arena
-
-      !  4%  of per PE size for relay -> compute circular buffer
-      write(cioin_name ,'(A4,I4.4)') "MCIO", context % mem % pe(context % smp_rank) % rank
-      cb_size = INT(shmsz64 * 0.04_8, 4)                     ! Size in bytes, model-bound CB
-      sz32    = INT(cb_size / 4,      4)                     ! Size in number of 32-bit elements
-      temp_ptr = context % arena % newblock(sz32, cioin_name)
-      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
-      if (context % debug_mode) call print_created(temp_ptr, cioin_name, sz32)
-      success = context % local_cio_in % create_bytes(temp_ptr, cb_size)
-      if (.not. success) goto 2                              ! cio creation failed
-      context % mem % pe(context % smp_rank) % cio_in = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my inbound CIO in memory arena
-
-      ! 10%  of per PE size for compute -> relay circular buffer
-      write(cioout_name,'(A4,I4.4)') "MCIO", context % mem % pe(context % smp_rank) % rank + 1000
-      cb_size = INT(shmsz64 * 0.1_8, 4)                      ! 10% for relay-bound circular buffer (in bytes)
-      sz32    = INT(cb_size / 4,     4)                      ! Size in 32-bit elements
-      temp_ptr = context % arena % newblock(sz32 / 4, cioout_name)
-      if (.not. C_ASSOCIATED(temp_ptr)) goto 2               ! allocation failed
-      if (context % debug_mode) call print_created(temp_ptr, cioout_name, sz32)
-      success = context % local_server_bound_cb % create_bytes(temp_ptr, cb_size)
-      if (.not. success) goto 2                              ! cio creation failed
-      ! inject signature data into outbound buffer to prime the pump
-      !       nfree = local_server_bound_cb % atomic_put( [context % mem % pe(smp_rank) % rank + 10000], 1, .true.)
-      context % mem % pe(context % smp_rank) % cio_out = Pointer_offset(context % arena % addr() , temp_ptr, 1)  ! offset of my outbound CIO in memory arena
-    endif
+    shmem_num_bytes = context % relay_shmem_size / context % model_relay_smp_size        ! available size (in bytes) per PE on SMP node
+    alloc_success = context % create_local_heap(int(shmem_num_bytes * 0.85, kind=C_INT64_T))
+    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.04, kind=C_SIZE_T), .false.) .and. alloc_success
+    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.1, kind=C_SIZE_T), .true.) .and. alloc_success
+    if (.not. alloc_success) goto 2
 
     if (context % debug_mode) then
-      write(6,*)'DEBUG: allocated '//heap_name//' '//cioin_name//' '//cioout_name
       write(6,'(A,3Z18.16)') ' DEBUG: displacements =', &
         context % mem % pe(context % smp_rank) % heap, &
         context % mem % pe(context % smp_rank) % cio_in, &
@@ -1326,7 +1336,7 @@ function IOserver_init_shared_mem(context) result(success)
 
   !  GLOBAL ERROR CHECK  (and synchronization point)
   call MPI_Allreduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, context % all_comm)
-  if (context % debug_mode) print *,'INFO: allocation error(s) detected =', total_errors
+  ! if (context % debug_mode) print *,'INFO: allocation error(s) detected =', total_errors
   call flush(6)
   if(total_errors > 0) then
     print *,'FATAL:',total_errors,' error(s) detected while allocating memory'

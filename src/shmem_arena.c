@@ -513,9 +513,9 @@ int64_t shmem_block_max_size(
 // !> create a named block in a managed 'memory arena'<br>
 // !> ptr = shmem_block_create(mem, size, name)
 // function shmem_block_create(mem, size, name) result(ptr) BIND(C,name='shmem_block_create')
-//   import :: C_PTR, C_INT, C_CHAR, C_INT64_T
+//   import :: C_PTR, C_CHAR, C_SIZE_T
 //   type(C_PTR), intent(IN), value :: mem                    !< pointer to the managed 'memory arena' (see  shmem_arena_init)
-//   integer(C_INT64_T), intent(IN), value :: size            !< desired size of block in bytes
+//   integer(C_SIZE_T), intent(IN), value :: size             !< desired size of block in bytes
 //   character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to create (characters beyond the 8th will be ignored)
 //   type(C_PTR) :: ptr                                       !< local address of created block (NULL if error)
 // end function shmem_block_create
@@ -526,9 +526,9 @@ int64_t shmem_block_max_size(
 //! ptr = shmem_block_create(mem, size, name)
 //! @return local address of created block (NULL if error)
 void *shmem_block_create(
-  void *mem,                        //!< [in]  pointer to the managed 'memory arena' (see  shmem_arena_init)
-  uint64_t size,                    //!< [in]  desired size of block in bytes
-  unsigned char *name               //!< [in]  name of block to find (characters beyond the 8th will be ignored)
+  void *mem,                      //!< [in]  pointer to the managed 'memory arena' (see  shmem_arena_init)
+  size_t size,                    //!< [in]  desired size of block in bytes
+  unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   )
 //C_EnD
 {

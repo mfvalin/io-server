@@ -88,7 +88,7 @@ or
 typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able to contain its own size)
 
 //!> maximum number of registered heaps
-#define MAX_HEAPS 64
+#define MAX_HEAPS 128
 
 //!> HEAD marker below block
 const heap_element HEAD = 0xCAFEFADE;

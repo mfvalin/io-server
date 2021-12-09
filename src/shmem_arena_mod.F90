@@ -116,15 +116,14 @@ module shmem_arena_mod
     p = shmem_block_find(this%p, size64, flags, trim(name)//achar(0))
   end function adrblock
 
-  function newblock(this, size, name) result(p)
+  function newblock(this, num_bytes, name) result(p)
     implicit none
-    class(shmem_arena), intent(IN)       :: this
-    integer(C_INT), intent(IN), value     :: size            !< desired size of block in 32 bit units
-    character(len=*), intent(IN) :: name                     !< name of block to create (characters beyond the 8th will be ignored)
-    type(C_PTR) :: p                                         !< address of memory block, NULL if error
-    integer(C_INT64_T) :: size64
-    size64 = size  * 4       ! convert 32 bit units into bytes
-    p = shmem_block_create(this%p, size64, trim(name)//achar(0))
+    class(shmem_arena), intent(IN)        :: this
+    integer(C_SIZE_T),  intent(IN), value :: num_bytes       !< desired size of block in bytes
+    character(len=*),   intent(IN)        :: name            !< name of block to create (characters beyond the 8th will be ignored)
+    type(C_PTR)        :: p                                  !< address of memory block, NULL if error
+
+    p = shmem_block_create(this%p, num_bytes, trim(name)//achar(0))
   end function newblock
 
   function markblock(this, name) result(p)

@@ -234,9 +234,9 @@ int64_t shmem_block_max_size(
 //! ptr = shmem_block_create(mem, size, name)
 //! @return local address of created block (NULL if error)
 void *shmem_block_create(
-  void *mem,                        //!< [in]  pointer to the managed 'memory arena' (see  shmem_arena_init)
-  uint64_t size,                    //!< [in]  desired size of block in bytes
-  unsigned char *name               //!< [in]  name of block to find (characters beyond the 8th will be ignored)
+  void *mem,                      //!< [in]  pointer to the managed 'memory arena' (see  shmem_arena_init)
+  size_t size,                    //!< [in]  desired size of block in bytes
+  unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
 );
 //! allocate a shared memory segment<br>
 //! ptr = shmem_allocate_shared(shmid, size)
