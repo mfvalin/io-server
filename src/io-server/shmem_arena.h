@@ -195,14 +195,14 @@ void shmem_arena_print_status(
 uint32_t shmem_arena_init(
   void *mem,                   //!< [in] pointer to memory arena
   uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
-  uint64_t size                //!< [in] size of memory area in bytes
+  size_t size                  //!< [in] size of memory area in bytes
 );
 //! find memory block called 'name'<br>
 //! ptr = shmem_block_find(mem, size, flags, name)
 //! @return local address of memory block (NULL if not found)
 void *shmem_block_find(
   void *mem,                      //!< [in]  pointer to memory arena
-  uint64_t *size,                 //!< [OUT] size of memory block in bytes (0 if not found)
+  size_t  *size,                 //!< [OUT] size of memory block in bytes (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
 );
@@ -211,7 +211,7 @@ void *shmem_block_find(
 //! @return local address of memory block (NULL if not found)
 void *shmem_block_find_wait(
   void *mem,                      //!< [in]  pointer to memory arena (see  shmem_arena_init)
-  uint64_t *size,                 //!< [OUT] size of memory block in bytes (0 if not found)
+  size_t *size,                   //!< [OUT] size of memory block in bytes (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   int timeout                     //!< [in]  timeout in milliseconds, -1 means practically forever
@@ -251,7 +251,7 @@ void *shmem_allocate_shared(
 void *shmem_arena_create_from_address(
   void *memaddr,               //!< [in]  user memory address
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
-  uint64_t size                //!< [in]  size of segment in 32 bit units
+  size_t size                  //!< [in]  size of segment in 32 bit units
 );
 //! create a memory arena in shared memory<br>
 //! ptr = shmem_arena_create_shared(shmid, nsym, size)
@@ -259,7 +259,7 @@ void *shmem_arena_create_from_address(
 void *shmem_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
-  uint64_t size                //!< [in]  size of segment in bytes
+  size_t   size                //!< [in]  size of segment in bytes
 );
 //! get memory address associated with shared memory segment id<br>
 //! ptr = shmem_address_from_id(shmid)

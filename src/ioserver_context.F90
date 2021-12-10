@@ -1315,9 +1315,9 @@ function IOserver_init_shared_mem(context) result(success)
     call MPI_Barrier(context % model_relay_smp_comm)
 
     shmem_num_bytes = context % relay_shmem_size / context % model_relay_smp_size        ! available size (in bytes) per PE on SMP node
-    alloc_success = context % create_local_heap(int(shmem_num_bytes * 0.85, kind=C_INT64_T))
-    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.04, kind=C_SIZE_T), .false.) .and. alloc_success
-    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.1, kind=C_SIZE_T), .true.) .and. alloc_success
+    alloc_success = context % create_local_heap(int(shmem_num_bytes * 0.85_8, kind=C_SIZE_T))
+    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.04_8, kind=C_SIZE_T), .false.) .and. alloc_success
+    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.1_8, kind=C_SIZE_T), .true.) .and. alloc_success
     if (.not. alloc_success) goto 2
 
     if (context % debug_mode) then

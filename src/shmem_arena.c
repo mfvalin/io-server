@@ -278,10 +278,10 @@ void shmem_arena_print_status(
 // !> initialize an already allocated 'memory arena' (usually node shared memory)<br>
 // !> id = shmem_arena_init(mem, nsym, size)
 // function shmem_arena_init(mem, nsym, size) result(id) BIND(C,name='shmem_arena_init')
-//   import :: C_PTR, C_INT, C_INT64_T
+//   import :: C_PTR, C_INT, C_SIZE_T
 //   type(C_PTR), intent(IN), value :: mem                 !< pointer to memory arena
 //   integer(C_INT), intent(IN), value :: nsym             !< size of symbol table to allocate (max number of blocks expected)
-//   integer(C_INT64_T), intent(IN), value :: size         !< size of memory area in bytes (max 32GBytes)
+//   integer(C_SIZE_T), intent(IN), value :: size          !< size of memory area in bytes (max 32GBytes)
 //   integer(C_INT) :: id                                  !< id of current owner process (not necessarily me)
 // end function shmem_arena_init
 //
@@ -293,7 +293,7 @@ void shmem_arena_print_status(
 uint32_t shmem_arena_init(
   void *mem,                   //!< [in] pointer to memory arena
   uint32_t nsym,               //!< [in] size of symbol table to allocate (max number of blocks expected)
-  uint64_t size                //!< [in] size of memory area in bytes
+  size_t size                  //!< [in] size of memory area in bytes
   )
 //C_EnD
 {
@@ -355,9 +355,9 @@ static inline int32_t find_block_64(shmem_arena *ma, symtab_entry_64 *sym, uint6
 // !> find memory block called 'name'<br>
 // !> ptr = shmem_block_find(mem, size, flags, name)
 // function shmem_block_find(mem, size, flags, name) result(ptr) BIND(C,name='shmem_block_find')
-//   import :: C_PTR, C_INT, C_CHAR, C_INT64_T
+//   import :: C_PTR, C_INT, C_CHAR, C_SIZE_T
 //   type(C_PTR), intent(IN), value :: mem                    !< pointer to memory arena (see  shmem_arena_init)
-//   integer(C_INT64_T), intent(OUT) :: size                  !< size of memory block in bytes (0 if not found)
+//   integer(C_SIZE_T), intent(OUT) :: size                   !< size of memory block in bytes (0 if not found)
 //   integer(C_INT), intent(OUT) :: flags                     !< block flags (0 if not found)
 //   character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
 //   type(C_PTR) :: ptr                                       !< local address of memory block (NULL if not found)
@@ -370,7 +370,7 @@ static inline int32_t find_block_64(shmem_arena *ma, symtab_entry_64 *sym, uint6
 //! @return local address of memory block (NULL if not found)
 void *shmem_block_find(
   void *mem,                      //!< [in]  pointer to memory arena
-  uint64_t *size,                 //!< [OUT] size of memory block in bytes (0 if not found)
+  size_t  *size,                 //!< [OUT] size of memory block in bytes (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name             //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   )
@@ -402,9 +402,9 @@ void *shmem_block_find(
 // !> same as shmem_block_find, but wait until block is created or timeout (in milliseconds) expires<br>
 // !> ptr = shmem_block_find_wait(mem, size, flags, name, timeout)
 // function shmem_block_find_wait(mem, size, flags, name, timeout) result(ptr) BIND(C,name='shmem_block_find_wait')
-//   import :: C_PTR, C_INT, C_CHAR, C_INT64_T
+//   import :: C_PTR, C_INT, C_CHAR, C_SIZE_T
 //   type(C_PTR), intent(IN), value :: mem                    !< pointer to memory arena (see  shmem_arena_init)
-//   integer(C_INT64_T), intent(OUT) :: size                  !< size of memory block in bytes (0 if not found)
+//   integer(C_SIZE_T), intent(OUT) :: size                  !< size of memory block in bytes (0 if not found)
 //   integer(C_INT), intent(OUT) :: flags                     !< block flags (0 if not found)
 //   character(C_CHAR), dimension(*), intent(IN) :: name      !< name of block to find (characters beyond the 8th will be ignored)
 //   integer(C_INT), intent(IN), value :: timeout             !< timeout in milliseconds, -1 means practically forever
@@ -418,7 +418,7 @@ void *shmem_block_find(
 //! @return local address of memory block (NULL if not found)
 void *shmem_block_find_wait(
   void *mem,                      //!< [in]  pointer to memory arena (see  shmem_arena_init)
-  uint64_t *size,                 //!< [OUT] size of memory block in bytes (0 if not found)
+  size_t *size,                   //!< [OUT] size of memory block in bytes (0 if not found)
   uint32_t *flags,                //!< [OUT] block flags (0 if not found)
   unsigned char *name,            //!< [in]  name of block to find (characters beyond the 8th will be ignored)
   int timeout                     //!< [in]  timeout in milliseconds, -1 means practically forever
@@ -635,10 +635,10 @@ void *shmem_allocate_shared(
 // !> create a memory arena in user memory<br>
 // !> ptr = shmem_arena_create_from_address(memaddr, nsym, size)
 // function shmem_arena_create_from_address(memaddr, nsym, size) result(ptr) BIND(C,name='shmem_arena_create_from_address')
-//   import :: C_PTR, C_INT, C_INT64_T
+//   import :: C_PTR, C_INT, C_SIZE_T
 //   type(C_PTR), intent(IN), value :: memaddr      !< user memory address
 //   integer(C_INT), intent(IN), value :: nsym      !< size of symbol table to allocate (max number of blocks expected)
-//   integer(C_INT64_T), intent(IN), value :: size  !< size of arena in bytes
+//   integer(C_SIZE_T), intent(IN), value :: size   !< size of arena in bytes
 //   type(C_PTR) :: ptr                             !< address of memory arena (NULL if error)
 // end function shmem_arena_create_from_address
 //
@@ -650,7 +650,7 @@ void *shmem_allocate_shared(
 void *shmem_arena_create_from_address(
   void *memaddr,               //!< [in]  user memory address
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
-  uint64_t size                //!< [in]  size of segment in 32 bit units
+  size_t size                  //!< [in]  size of segment in 32 bit units
   )
 //C_EnD
 {
@@ -668,10 +668,10 @@ void *shmem_arena_create_from_address(
 // !> create a memory arena in shared memory<br>
 // !> ptr = shmem_arena_create_shared(shmid, nsym, size)
 // function shmem_arena_create_shared(shmid, nsym, size) result(ptr) BIND(C,name='shmem_arena_create_shared')
-//   import :: C_PTR, C_INT, C_INT64_T
+//   import :: C_PTR, C_INT, C_SIZE_T
 //   integer(C_INT), intent(OUT) :: shmid           !< shared memory id of segment (see shmget)
 //   integer(C_INT), intent(IN), value :: nsym      !< size of symbol table to allocate (max number of blocks expected)
-//   integer(C_INT64_T), intent(IN), value :: size  !< size of arena in bytes
+//   integer(C_SIZE_T), intent(IN), value :: size   !< size of arena in bytes
 //   type(C_PTR) :: ptr                             !< local address of memory arena
 // end function shmem_arena_create_shared
 //
@@ -683,7 +683,7 @@ void *shmem_arena_create_from_address(
 void *shmem_arena_create_shared(
   int *shmid,                  //!< [out] shared memory id of segment (see shmget)
   uint32_t nsym,               //!< [in]  size of symbol table to allocate (max number of blocks expected)
-  uint64_t size                //!< [in]  size of segment in bytes
+  size_t   size                //!< [in]  size of segment in bytes
   )
 //C_EnD
 {
