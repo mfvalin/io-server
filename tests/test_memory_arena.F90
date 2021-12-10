@@ -4,7 +4,7 @@ program test_memory_arena
   use mpi_f08
   implicit none
 
-#define DBLK 20
+#define DBLK (20*4)
 #define STR(a) trim(a)//achar(0)
 #define NBLKS 399
 #define NSYM (NBLKS+32)
@@ -125,7 +125,7 @@ program test_memory_arena
   ierr = 0
   do i = rank, NBLKS, size                          ! create blocks
     write(bname,'(A,I4.4)') 'BLCK', i            ! create block name BLCKnnnn
-    pp(i) = m%newblock(int(XTRA+i, kind=8), bname)             ! create the block
+    pp(i) = m%newblock(int((XTRA+i)*4, kind=8), bname)             ! create the block
     if( .not. C_ASSOCIATED(pp(i)) ) ierr = ierr + 1
   enddo
   if(ierr .ne. 0) then
