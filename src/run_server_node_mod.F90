@@ -109,7 +109,7 @@ subroutine server_bound_server_process(context, do_expensive_checks_in)
 
   do i_file = 1, MAX_NUM_SERVER_STREAMS
     file_ptr => context % get_stream(i_file)
-    success = context % close_file_server(i_file, .true.)
+    success = context % close_stream_server(i_file, .true.)
     if (.not. success) then
       print *, 'ERROR: Unable to close server stream ', i_file, server_id
       error stop 1
@@ -278,7 +278,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     ! print *, 'Got OPEN message', consumer_id
     success = dcb % get_elems(client_id, filename, INT(header % content_length, kind=8), CB_KIND_CHAR, .true.)
     ! print *, 'Opening a file named ', filename
-    file_ptr => context % open_file_server(filename, header % stream_id)
+    file_ptr => context % open_stream_server(filename, header % stream_id)
     if (.not. file_ptr % is_open()) then
       if (file_ptr % is_owner()) then
         print *, 'Failed (?) to open file ', filename
@@ -292,7 +292,7 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   ! Close a file
   else if (header % command == MSG_COMMAND_CLOSE_FILE) then
     ! print *, 'Got CLOSE FILE message', consumer_id
-    success = context % close_file_server(header % stream_id, .false.)
+    success = context % close_stream_server(header % stream_id, .false.)
     if (.not. success) then
       file_ptr => context % get_stream(header % stream_id)
       if (file_ptr % is_owner()) then

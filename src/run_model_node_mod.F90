@@ -381,13 +381,13 @@ subroutine pseudo_model_process(context)
 
   node_heap = context % get_local_heap()
 
-  output_file_1 = context % open_file_model('pseudo_model_results_1')
+  output_file_1 = context % open_stream_model('pseudo_model_results_1')
   if (.not. output_file_1 % is_open()) then
     print *, 'Unable to open model file 1 !!!!'
     error stop 1
   end if
 
-  output_file_2 = context % open_file_model('pseudo_model_results_2')
+  output_file_2 = context % open_stream_model('pseudo_model_results_2')
   if (.not. output_file_2 % is_open()) then
     print *, 'Unable to open model file 2 !!!!'
     error stop 1
