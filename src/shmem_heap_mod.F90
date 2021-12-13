@@ -25,17 +25,16 @@ module heap_module
   use ISO_C_BINDING
   implicit none
 
-  !> \brief maximum number of allowed dimensions for an array in this heap type
-  integer, parameter :: MAX_ARRAY_RANK = 5
+  private
 
-  !> \brief tkr code for integer arrays
-  integer, parameter :: TKR_INTEGER = 1
+  integer, parameter, public :: HEAP_ELEMENT =  C_INT64_T !<  type of a heap element (must be consistent with C code)
+  integer, parameter, public :: MAX_ARRAY_RANK = 5        !< maximum number of allowed dimensions for an array in this heap type
+  integer, parameter         :: TKR_INTEGER = 1           !< tkr code for integer arrays
+  integer, parameter         :: TKR_REAL    = 2           !< tkr code for real arrays
 
-  !> \brief tkr code for real arrays
-  integer, parameter :: TKR_REAL    = 2
 
-  integer, parameter :: HEAP_ELEMENT =  C_INT64_T     !<  type of a heap element (must be consistent with C code)
-!   ===========================  metadata types and type bound procedures ===========================
+  public :: get_block_meta_offset, Pointer_offset, block_meta_internals, bm_to_ptr, ptr_to_bm
+  !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, public, bind(C) :: block_meta_c
     private
@@ -45,6 +44,7 @@ module heap_module
     integer(C_INT)    :: tkr = 0           !< array type, kind, rank
     integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely)
   end type block_meta_c
+
 
   include 'io-server/shmem_heap.inc'
 
@@ -207,14 +207,14 @@ module heap_module
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
-  interface sm_allocate   ! generic non type bound procedure
-    module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &   !  8 bit integer functions
-                     I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &   ! 16 bit integer functions
-                     I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &   ! 32 bit integer functions
-                     I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &   ! 64 bit integer functions
-                     R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &   ! 32 bit real functions, 
-                     R8_5D, R8_4D, R8_3D, R8_2D, R8_1D      ! 64 bit real functions
-  end interface
+  ! interface sm_allocate   ! generic non type bound procedure
+  !   module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &   !  8 bit integer functions
+  !                    I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &   ! 16 bit integer functions
+  !                    I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &   ! 32 bit integer functions
+  !                    I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &   ! 64 bit integer functions
+  !                    R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &   ! 32 bit real functions, 
+  !                    R8_5D, R8_4D, R8_3D, R8_2D, R8_1D      ! 64 bit real functions
+  ! end interface
 
   interface ptr_to_bm
     module procedure I15D_bm, I14D_bm, I13D_bm, I12D_bm, I11D_bm, &   !  8 bit integer functions

@@ -5,33 +5,31 @@
 !
 program put_error
     use iso_c_binding
-    use mpi
+    use mpi_f08
     implicit none
  
     integer :: gsize, grank ! number of processors and rank on comm world
     integer :: lsize, lrank ! size and rank on local (split) communicator
     ! integer :: colour ! used to split world into two
     integer :: ierr ! mpi error var
-    !type(mpi_comm) :: lcomm
-    integer :: lcomm
+    type(MPI_Comm) :: lcomm
  
     integer, parameter :: numel = 1000000 ! number of elements to send to each other process
  
-    !type(mpi_win) :: mpi_window ! handle for MPI RMA window
-    integer :: mpi_window
+    type(MPI_Win) :: mpi_window ! handle for MPI RMA window
     integer, pointer, dimension(:) :: rma_buffer ! to be allocated by mpi_win_allocate
     integer, allocatable, dimension(:) :: local_buffer ! local send buffer
     integer(kind=mpi_address_kind) :: winsize
     integer :: disp_unit
     !type(mpi_info) :: info_obj
-    integer :: info_obj
+    type(MPI_Info) :: info_obj
     type(c_ptr) :: winptr ! C-pointer to allocated window
  
     call mpi_init(ierr)
  
     ! Get global size/rank
-    call mpi_comm_size(mpi_comm_world, gsize,ierr)
-    call mpi_comm_rank(mpi_comm_world, grank, ierr)
+    call mpi_comm_size(MPI_COMM_WORLD, gsize,ierr)
+    call mpi_comm_rank(MPI_COMM_WORLD, grank, ierr)
  
  !   if (grank >= gsize/2) then
  !      colour = 1
