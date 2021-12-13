@@ -74,7 +74,7 @@ module ioserver_context_module
     ! Shared memory areas (raw C pointers and area sizes)
 
     ! control memory, shared by all PEs on a given SMP node (whether active PEs or NO-OP PEs)
-    type(C_PTR)       :: ctrl_shmem_c      = C_NULL_PTR         !< Address of main (control) shared memory area on this node
+    type(C_PTR)       :: ctrl_shmem_c      = C_NULL_PTR       !< Address of main (control) shared memory area on this node
     integer(C_SIZE_T) :: ctrl_shmem_size = MBYTE              !< Size of control shared memory
 
     ! information for model compute and IO relay PEs on a given SMP node
