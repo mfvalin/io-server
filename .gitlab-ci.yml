@@ -102,6 +102,8 @@ test:XC50_intel-19.0.5_job_single_node:
    stage: test
    dependencies:
       - build:XC50_intel-19.0.5
+   tags:
+      - XC50-login
    variables:
       NUM_CPUS: "40"
       ORD_SOUMET_MACH: ${ECCI_BACKEND}
@@ -120,6 +122,8 @@ test:XC50_intel-19.0.5_job_multi_node:
    stage: test
    dependencies:
       - build:XC50_intel-19.0.5
+   tags:
+      - XC50-login
    variables:
       NUM_CPUS: "160"
       ORD_SOUMET_MACH: ${ECCI_BACKEND}
