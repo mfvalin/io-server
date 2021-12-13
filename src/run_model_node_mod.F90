@@ -350,7 +350,7 @@ subroutine model_bound_relay_process(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
 
-  print *, 'Model-bound relay process'
+  if (context % has_debug_mode()) print *, 'Model-bound relay process'
 end subroutine model_bound_relay_process
 
 subroutine pseudo_model_process(context)

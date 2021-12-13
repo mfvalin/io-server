@@ -21,6 +21,10 @@
 
 program test_circular_buffer
   implicit none
+  interface
+    subroutine shared_mem_test()
+    end subroutine shared_mem_test
+  end interface
 
   call shared_mem_test()
 

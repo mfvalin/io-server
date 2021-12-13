@@ -133,7 +133,7 @@ subroutine model_bound_server_process(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
 
-  print *, 'Model-bound server process'
+  if (context % has_debug_mode()) print *, 'Model-bound server process'
 end subroutine model_bound_server_process
 
 subroutine channel_process(context)

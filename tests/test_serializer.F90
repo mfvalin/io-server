@@ -16,12 +16,6 @@
 ! include serializer macros
 #include <serializer.hf>
 
-program test_jar
-  implicit none
-  call test_free
-  call test_pickling
-end program
-
 module machins
   type :: machin1
     integer, dimension(3) :: ip
@@ -65,6 +59,11 @@ module machins
     endif
   end function same_machin2
 end module
+
+module test_procedures
+  implicit none
+
+contains
 
 subroutine test_pickling
   use jar_module
@@ -122,7 +121,7 @@ subroutine test_pickling
   success = success .and. same_machin(a2(2),x2(1)) .and. same_machin(a2(3),x2(2))
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   print 2,'after get #2        ',blind_array(my_jar%low()+1:my_jar%high()),-1
-  call my_jar%print(15)
+  call my_jar%print(15_8)
 
   JAR_REWIND(my_jar)
 
@@ -137,16 +136,16 @@ subroutine test_pickling
 
   print *,''
   JAR_RESET(my_jar)
-  call my_jar%print(20)
+  call my_jar%print(20_8)
   print 1,'(test_pickling) my_jar reset : size, avail =',my_jar%usable(), my_jar%avail()
   ne = JAR_PUT_ITEM_AT(my_jar, a1, 2_8)                        ! skip one position, start injectiong at 2 rather than 1
 !   ne = my_jar%put( a1, storage_size(a1), where=2 )
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-  call my_jar%print(20)
+  call my_jar%print(20_8)
   ne = JAR_PUT_ITEMS_AT(my_jar, a2(2:4), my_jar%high()+2)    ! skip one position, start at top + 2
 !   ne = my_jar%put(a2(2:4), storage_size(a2(2:4))*size(a2(2:4)), where=my_jar%high()+2 )
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
-  call my_jar%print(20)
+  call my_jar%print(20_8)
 
   print 2,'before get        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
@@ -192,12 +191,6 @@ end subroutine test_pickling
 subroutine pass_through(blind_array, n)    !  integer array inbound, jar outbound
   use jar_module
   implicit none
-  interface
-    subroutine level2(my_jar)
-    import :: jar
-    type(jar), intent(INOUT) :: my_jar
-    end subroutine level2
-  end interface
   integer, intent(IN) :: n
   integer(JAR_ELEMENT), dimension(n), intent(IN) :: blind_array
   type(jar) :: my_jar
@@ -217,7 +210,7 @@ subroutine level2(my_jar)    ! receives jar, recreated from integer array by pas
   integer(JAR_ELEMENT) :: ne
 
   print *,'DIAG(level2) :'
-  call my_jar%print(20)
+  call my_jar%print(20_8)
   ne = JAR_GET_ITEM(my_jar, x1)
   print *,'x1    =',x1
   ne = JAR_GET_ITEMS(my_jar, x2(1:2))
@@ -297,3 +290,12 @@ subroutine test_jar_finalize
   if(myjar%usable() .ne. 1024) print *,'unexpected size'
   print *,'jar going out of scope in subroutine test_jar_finalize'
 end subroutine test_jar_finalize
+
+end module test_procedures
+
+program test_jar
+  use test_procedures
+  implicit none
+  call test_free
+  call test_pickling
+end program
