@@ -19,13 +19,9 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020/2021
 !     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
 
-program test_circular_buffer_single_thread
+module cb_single_test_procudures
   implicit none
-
-  call basic_test()
-
-end program test_circular_buffer_single_thread
-
+contains
 
 subroutine basic_test()
 
@@ -134,3 +130,12 @@ subroutine basic_test()
   end if
 
 end subroutine basic_test
+end module cb_single_test_procudures
+
+program test_circular_buffer_single_thread
+  use cb_single_test_procudures
+  implicit none
+
+  call basic_test()
+
+end program test_circular_buffer_single_thread

@@ -169,7 +169,7 @@ module jar_module
   subroutine print_jar(j, max_elem)         ! print jar info
     implicit none
     class(jar), intent(IN) :: j             ! the data jar
-    integer, intent(IN), value :: max_elem  ! max data elements to print
+    integer(JAR_ELEMENT), intent(IN), value :: max_elem  ! max data elements to print
 
     integer, dimension(:), pointer :: data
 

@@ -23,38 +23,13 @@
 #define NPTEST 125
 #define MAXINDEXES  1024
 
-program test_shmen_heap
-  use mpi_f08
+module test_shmem_heap_module
   implicit none
-  integer :: myrank, nprocs, ierr
-  character(len=128) :: arg
-
-  myrank = 0
-  nprocs = 1
-  ! MPI multiprocess test
-  call mpi_init(ierr)
-  call mpi_comm_size(MPI_COMM_WORLD, nprocs, ierr)
-  call mpi_comm_rank(MPI_COMM_WORLD, myrank, ierr)
-  print 3,'this is PE', myrank+1, ' of', nprocs
-
-  arg = '0'
-  if(COMMAND_ARGUMENT_COUNT() >= 1) call GET_COMMAND_ARGUMENT(1, arg)
-
-  if(arg(1:1) == '0') then
-    call base_test(nprocs, myrank)
-  else
-    call relay_test(nprocs, myrank)
-  endif
-
-  call Mpi_Finalize(ierr)
-  stop
-3 format(2(A,I8))
-end program
-
+contains
 subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE traffic
   use ISO_C_BINDING
   ! heap and block management functions
-  use heap_module, only : heap, HEAP_ELEMENT, MAX_ARRAY_RANK, block_meta_f08, block_meta
+  use heap_module
   use mpi_f08
   implicit none
   integer, intent(IN) :: myrank, nprocs
@@ -265,8 +240,9 @@ end subroutine relay_test
 #define NBLKS 128
 
 subroutine base_test(nprocs, myrank)
-  use heap_module
+  use iso_c_binding
   use mpi_f08
+  use heap_module
   implicit none
   integer, intent(IN) :: myrank, nprocs
 
@@ -383,4 +359,35 @@ subroutine base_test(nprocs, myrank)
 3 format(2(A,I8))
 4 format(A,20I8)
 end subroutine base_test
+end module test_shmem_heap_module
+
+program test_shmen_heap
+  use mpi_f08
+  use test_shmem_heap_module
+  implicit none
+  integer :: myrank, nprocs, ierr
+  character(len=128) :: arg
+
+  myrank = 0
+  nprocs = 1
+  ! MPI multiprocess test
+  call mpi_init(ierr)
+  call mpi_comm_size(MPI_COMM_WORLD, nprocs, ierr)
+  call mpi_comm_rank(MPI_COMM_WORLD, myrank, ierr)
+  print 3,'this is PE', myrank+1, ' of', nprocs
+
+  arg = '0'
+  if(COMMAND_ARGUMENT_COUNT() >= 1) call GET_COMMAND_ARGUMENT(1, arg)
+
+  if(arg(1:1) == '0') then
+    call base_test(nprocs, myrank)
+  else
+    call relay_test(nprocs, myrank)
+  endif
+
+  call Mpi_Finalize(ierr)
+  stop
+3 format(2(A,I8))
+end program
+
 !> \endcond
