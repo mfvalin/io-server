@@ -10,7 +10,7 @@ program disk_bandwidth
   use disk_bandwidth_module
   implicit none
   integer(C_INT64_T) :: time0, time1
-  integer, parameter :: MAX_NUM_PROCS = 20
+  integer, parameter :: MAX_NUM_PROCS = 12
   integer, parameter :: TOTAL_DATA_GB = 20
   integer, parameter :: MAX_BUFFER_SIZE_KB = 5000
   integer, parameter :: NUM_BUFFER_ELEMENTS = MAX_BUFFER_SIZE_KB * 1000 / 4
@@ -59,14 +59,14 @@ program disk_bandwidth
   if (rank == 0) then
     print *, 'Total data: ', TOTAL_DATA_GB, ' GB'
     print *, 'Rates in GB/s'
-    print '(A3, I7, I7, I7, I7, I7, I7, I7)', '', buf_elem_counts(:) * 4 / 1000
+    print '(A3, I7, I7, I7, I7, I7, I7, I7, A)', '', buf_elem_counts(:) * 4 / 1000, ' (Buffer size in kB)'
   end if
 
   do j = 1, max_proc
 
     do i_buf_elem_count = 1, NUM_BUF_ELEM_COUNTS
       num_elem = buf_elem_counts(i_buf_elem_count)
-      process_data_kb = TOTAL_DATA_GB * 1000000 / j
+      process_data_kb = TOTAL_DATA_GB * 1000000 !/ j
       num_writes = process_data_kb / num_elem * 1000 / 4
       ! if (rank == 0) then
       !   print *, 'num_elem, process data Kb, num writes: ', num_elem, process_data_kb, num_writes
@@ -90,14 +90,14 @@ program disk_bandwidth
       !---------------------------------------
       time1 = get_current_time_us()
       total_time =  real(time1 - time0, 4) / 1000000.0
-      rates(i_buf_elem_count) = TOTAL_DATA_GB / total_time
+      rates(i_buf_elem_count) = TOTAL_DATA_GB * j / total_time
       ! if (rank == 0) then
       !   print *, 'total time, rate', total_time, rates(i_buf_elem_count)
       ! end if
     end do
 
     if (rank == 0) then
-        print '(I3, F7.2, F7.2, F7.2, F7.2, F7.2, F7.2, F7.2)', j, rates(:)
+        print '(I3, F7.1, F7.1, F7.1, F7.1, F7.1, F7.1, F7.1)', j, rates(:)
         ! print *, TOTAL_DATA_GB / total_time, ' GB/s'
         ! print *, 'Took ', (time1 - time0) / 1000000.0, ' s'
     end if
