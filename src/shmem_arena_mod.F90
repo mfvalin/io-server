@@ -32,9 +32,9 @@ module shmem_arena_mod
 
   function init(this, nsym, size) result(id)              !< initial setup of memory arena
     implicit none
-    class(shmem_arena), intent(INOUT)    :: this
-    integer(C_INT), intent(IN), value     :: nsym         !< size of symbol table to allocate (max number of blocks expected)
-    integer(C_INT64_T), intent(IN), value :: size         !< size of memory area in bytes (max 32GBytes)
+    class(shmem_arena), intent(INOUT)     :: this
+    integer(C_INT),     intent(IN), value :: nsym         !< size of symbol table to allocate (max number of blocks expected)
+    integer(C_SIZE_T),  intent(IN), value :: size         !< size of memory area in bytes (max 32GBytes)
     integer(C_INT) :: id                                  !< id of current owner process (not necessarily me)
     id = shmem_arena_init(this%p, nsym, size)
   end function init
@@ -51,9 +51,9 @@ module shmem_arena_mod
   function create_from_address(this, memaddr, nsym, size) result(p)   !< use supplied address, initialize arena
     implicit none
     class(shmem_arena), intent(INOUT)    :: this
-    type(C_PTR), intent(IN), value        :: memaddr      !< user memory address
-    integer(C_INT), intent(IN), value     :: nsym         !< size of symbol table to allocate (max number of blocks expected)
-    integer(C_INT64_T), intent(IN), value :: size         !< size of arena in bytes
+    type(C_PTR), intent(IN), value       :: memaddr      !< user memory address
+    integer(C_INT), intent(IN), value    :: nsym         !< size of symbol table to allocate (max number of blocks expected)
+    integer(C_SIZE_T), intent(IN), value :: size         !< size of arena in bytes
     type(C_PTR) :: p
     this%p = shmem_arena_create_from_address(memaddr, nsym, size)
     p      = this%p                                       !< address of memory arena, NULL if error
@@ -61,10 +61,10 @@ module shmem_arena_mod
 
   function create_shared(this, shmid, nsym, size) result(p)  !< allocate shared memory, initialize arena, return id of shared memory segment
     implicit none
-    class(shmem_arena), intent(INOUT)    :: this
-    integer(C_INT), intent(OUT)           :: shmid        !< shared memory id of segment (see shmget)
-    integer(C_INT), intent(IN), value     :: nsym         !< size of symbol table to allocate (max number of blocks expected)
-    integer(C_INT64_T), intent(IN), value :: size         !< size of arena in bytes
+    class(shmem_arena), intent(INOUT)     :: this
+    integer(C_INT),     intent(OUT)       :: shmid        !< shared memory id of segment (see shmget)
+    integer(C_INT),     intent(IN), value :: nsym         !< size of symbol table to allocate (max number of blocks expected)
+    integer(C_SIZE_T),  intent(IN), value :: size         !< size of arena in bytes
     type(C_PTR) :: p                                      !< address of memory arena, NULL if error
     this%p = shmem_arena_create_shared(shmid, nsym, size)
     p      = this%p
@@ -78,7 +78,7 @@ module shmem_arena_mod
     character(len=*), intent(IN) :: name                     !< name of block to find (characters beyond the 8th will be ignored)
     integer(C_INT), intent(IN), value     :: timeout         !< timeout in milliseconds, -1 means practically forever
     type(C_PTR) :: p                                         !< address of memory block, NULL if error
-    integer(C_INT64_T) :: size64
+    integer(C_SIZE_T) :: size64
     p = shmem_block_find_wait(this%p, size64, flags, trim(name)//achar(0), timeout)
     size = INT(size64 / 4, 4)       ! convert into 32 bit units
   end function getblockw
@@ -89,8 +89,8 @@ module shmem_arena_mod
     character(len=*), intent(IN) :: name                     !< name of block to find (characters beyond the 8th will be ignored)
     integer(C_INT), intent(IN), value     :: timeout         !< timeout in milliseconds, -1 means practically forever
     type(C_PTR) :: p                                         !< address of memory block, NULL if error
-    integer(C_INT)           :: flags                        ! block flags (0 if not found)
-    integer(C_INT64_T)       :: size64
+    integer(C_INT)    :: flags                        ! block flags (0 if not found)
+    integer(C_SIZE_T) :: size64
     p = shmem_block_find_wait(this%p, size64, flags, trim(name)//achar(0), timeout)
   end function adrblockw
 
@@ -101,18 +101,18 @@ module shmem_arena_mod
     integer(C_INT), intent(OUT)           :: flags           !< block flags (0 if not found)
     character(len=*), intent(IN) :: name                     !< name of block to find (characters beyond the 8th will be ignored)
     type(C_PTR) :: p                                         !< address of memory block, NULL if error
-    integer(C_INT64_T)       :: size64
+    integer(C_SIZE_T)       :: size64
     p = shmem_block_find(this%p, size64, flags, trim(name)//achar(0))
     size = INT(size64 / 4, 4)       ! convert into 32 bit units
   end function getblock
 
   function adrblock(this, name) result(p)              !< get address of a block
     implicit none
-    class(shmem_arena), intent(IN)       :: this
-    character(len=*), intent(IN) :: name                     !< name of block to find (characters beyond the 8th will be ignored)
+    class(shmem_arena), intent(IN) :: this
+    character(len=*),   intent(IN) :: name                   !< name of block to find (characters beyond the 8th will be ignored)
     type(C_PTR) :: p                                         !< address of memory block, NULL if error
-    integer(C_INT)      :: flags                             ! block flags (0 if not found)
-    integer(C_INT64_T) :: size64
+    integer(C_INT)    :: flags                               ! block flags (0 if not found)
+    integer(C_SIZE_T) :: size64
     p = shmem_block_find(this%p, size64, flags, trim(name)//achar(0))
   end function adrblock
 

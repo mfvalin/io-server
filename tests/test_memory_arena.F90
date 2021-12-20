@@ -4,7 +4,7 @@ program test_memory_arena
   use mpi_f08
   implicit none
 
-#define DBLK 20
+#define DBLK (20*4)
 #define STR(a) trim(a)//achar(0)
 #define NBLKS 399
 #define NSYM (NBLKS+32)
@@ -87,19 +87,19 @@ program test_memory_arena
     id2 = m % init(NSYM, shmsz64)
     call m % dump()
     print 1,"id2, rank, address =", id2, rank,transfer(memadr,shmsz64)
-    p = m%newblock(DBLK*1, "BLOCK000") ! p = memory_block_create(memadr, DBLK*1, STR("BLOCK000"))
+    p = m%newblock(DBLK*1_8, "BLOCK000") ! p = memory_block_create(memadr, DBLK*1, STR("BLOCK000"))
     p = m%markblock("BLOCK000")        ! p = memory_block_mark_init(memadr, STR("BLOCK000"))
     print 2,"BLOCK000 created at address",transfer(p,shmsz64)
-    p = m%newblock(DBLK*2, "BLOCK001") ! p = memory_block_create(memadr, DBLK*2, STR("BLOCK001"))
+    p = m%newblock(DBLK*2_8, "BLOCK001") ! p = memory_block_create(memadr, DBLK*2, STR("BLOCK001"))
     p = m%markblock("BLOCK001")        ! p = memory_block_mark_init(memadr, STR("BLOCK001"))
     print 2,"BLOCK001 created at address",transfer(p,shmsz64)
-    p = m%newblock(DBLK*3, "BLOCK002") ! p = memory_block_create(memadr, DBLK*3, STR("BLOCK002"))
+    p = m%newblock(DBLK*3_8, "BLOCK002") ! p = memory_block_create(memadr, DBLK*3, STR("BLOCK002"))
     p = m%markblock("BLOCK002")        ! p = memory_block_mark_init(memadr, STR("BLOCK002"))
     print 2,"BLOCK002 created at address",transfer(p,shmsz64)
-    p = m%newblock(DBLK*4, "BLOCK003") ! p = memory_block_create(memadr, DBLK*4, STR("BLOCK003"))
+    p = m%newblock(DBLK*4_8, "BLOCK003") ! p = memory_block_create(memadr, DBLK*4, STR("BLOCK003"))
     p = m%markblock("BLOCK003")        ! p = memory_block_mark_init(memadr, STR("BLOCK003"))
     print 2,"BLOCK003 created at address",transfer(p,shmsz64)
-    p = m%newblock(DBLK*5, "BLOCK004") ! p = memory_block_create(memadr, DBLK*5, STR("BLOCK004"))
+    p = m%newblock(DBLK*5_8, "BLOCK004") ! p = memory_block_create(memadr, DBLK*5, STR("BLOCK004"))
 !     p = m%markblock("BLOCK004")        ! p = memory_block_mark_init(memadr, STR("BLOCK004"))
     print 2,"BLOCK004 created, not marked, at address",transfer(p,shmsz64)
   endif
@@ -125,7 +125,7 @@ program test_memory_arena
   ierr = 0
   do i = rank, NBLKS, size                          ! create blocks
     write(bname,'(A,I4.4)') 'BLCK', i            ! create block name BLCKnnnn
-    pp(i) = m%newblock(XTRA+i, bname)             ! create the block
+    pp(i) = m%newblock(int((XTRA+i)*4, kind=8), bname)             ! create the block
     if( .not. C_ASSOCIATED(pp(i)) ) ierr = ierr + 1
   enddo
   if(ierr .ne. 0) then

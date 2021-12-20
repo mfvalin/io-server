@@ -244,6 +244,34 @@ contains
     end do
 
   end subroutine run_test_set
+
+  subroutine relay_process(msg_comm, msg_size, msg_count, window, target_channel, offset, msg_buffer)
+    implicit none
+
+    type(MPI_Comm), intent(in) :: msg_comm
+    integer,        intent(in) :: msg_size, msg_count
+    type(MPI_Win),  intent(in) :: window
+    integer,        intent(in) :: target_channel
+    integer(MPI_ADDRESS_KIND), intent(in) :: offset
+    integer, dimension(MAX_MESSAGE_SIZE), intent(inout) :: msg_buffer
+    integer :: i, rank
+
+    if (msg_count == 1) then
+      call MPI_Comm_rank(msg_comm, rank)
+      ! print *, 'Sending message from rank ', rank
+      do i = 1, msg_size
+        msg_buffer(i) = compute_data_element(rank, i)
+      end do
+    end if
+
+    do i = 1, msg_count
+      call MPI_Win_lock(LOCK_TYPE, target_channel, LOCK_ASSERT, window)
+      call MPI_Put(msg_buffer, msg_size, MPI_INTEGER, target_channel, offset, MAX_MESSAGE_SIZE, MPI_INTEGER, window)
+      call MPI_Win_unlock(target_channel, window)
+    end do
+
+  end subroutine relay_process
+
 end module mpi_bw_mod
 
 program mpi_bandwidth
@@ -399,31 +427,4 @@ program mpi_bandwidth
 end program mpi_bandwidth
 
 
-subroutine relay_process(msg_comm, msg_size, msg_count, window, target_channel, offset, msg_buffer)
-  use mpi_bw_mod
-  implicit none
-
-  type(MPI_Comm), intent(in) :: msg_comm
-  integer,        intent(in) :: msg_size, msg_count
-  type(MPI_Win),  intent(in) :: window
-  integer,        intent(in) :: target_channel
-  integer(MPI_ADDRESS_KIND), intent(in) :: offset
-  integer, dimension(MAX_MESSAGE_SIZE), intent(inout) :: msg_buffer
-  integer :: i, rank
-
-  if (msg_count == 1) then
-    call MPI_Comm_rank(msg_comm, rank)
-    ! print *, 'Sending message from rank ', rank
-    do i = 1, msg_size
-      msg_buffer(i) = compute_data_element(rank, i)
-    end do
-  end if
-
-  do i = 1, msg_count
-    call MPI_Win_lock(LOCK_TYPE, target_channel, LOCK_ASSERT, window)
-    call MPI_Put(msg_buffer, msg_size, MPI_INTEGER, target_channel, offset, MAX_MESSAGE_SIZE, MPI_INTEGER, window)
-    call MPI_Win_unlock(target_channel, window)
-  end do
-
-end subroutine relay_process
 

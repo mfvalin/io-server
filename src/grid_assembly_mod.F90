@@ -140,8 +140,8 @@ contains
 
     logical :: success
 
-    integer :: i_line, line_id
-    integer :: i0, i1, j0, j1, size_x, size_y
+    integer :: line_id
+    integer :: i0, i1, j0, j1
 
     success = .false.
     line_id = this % get_line_id(record)
