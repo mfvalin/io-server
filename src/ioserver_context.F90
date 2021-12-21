@@ -175,6 +175,7 @@ module ioserver_context_module
     procedure, pass         :: allocate_from_arena
     procedure, pass         :: create_local_heap
     procedure, pass         :: create_local_cb
+    procedure, nopass       :: check_cb_jar_elem
 
     ! Process type query
     procedure, pass, public :: is_relay  => IOserver_is_relay
@@ -1048,6 +1049,15 @@ function create_local_cb(context, num_bytes, is_output) result(success)
 
 end function create_local_cb
 
+!> Check whether CB element type is the same as JAR elements
+function check_cb_jar_elem() result(success)
+  use jar_module
+  implicit none
+  logical :: success
+
+  success = CB_DATA_ELEMENT == JAR_ELEMENT
+end function check_cb_jar_elem
+
 !> Create all MPI communicators that will be used within this IO-server context, based on the given number of each kind of process.
 !> This must be called by every process that want to participate in the IO-server
 function IOserver_init_communicators(context, is_on_server, num_relay_per_node, num_server_bound_server, num_channels, num_server_noop) result(success)
@@ -1484,6 +1494,11 @@ function IOserver_init(context, is_on_server, num_relay_per_node, num_server_bou
   success = .false.
   context % debug_mode = .false.
   if (present(in_debug_mode)) context % debug_mode = in_debug_mode
+
+  if (.not.  check_cb_jar_elem()) then
+    print *, 'ERROR: CB elements are not the same as JAR elements. That is a problem.'
+    return
+  end if
 
   success = context % init_communicators(is_on_server, num_relay_per_node, num_server_bound_server, num_channels, num_server_noop)
 

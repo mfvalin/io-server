@@ -11,7 +11,8 @@
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 !  Lesser General Public License for more details.
 !
-! Author:   M.Valin , Recherche en Prevision Numerique, April 2021
+! Authors:   M.Valin   , Recherche en Prevision Numerique, 2021
+!            V.Magnoux , Recherche en Prevision Numerique, 2021
 !
 ! _the Cray Fortran compiler treats loc() as a type(C_PTR), other compilers as integer(C_INTPTR_T)
 #if defined(_CRAYFTN)
@@ -22,10 +23,9 @@
 
 module jar_module
   use ISO_C_BINDING
-  use cb_common_module
   implicit none
 
-  public
+  private
 
   interface
     function libc_malloc(sz) result(p) BIND(C,name='malloc')
@@ -43,11 +43,9 @@ module jar_module
 
   logical, save, private :: debug_mode = .false.
 
-  ! We want jar elements to match those of circular buffers
-  integer, parameter :: JAR_ELEMENT      = CB_DATA_ELEMENT
-  integer, parameter :: JAR_ELEMENT_KIND = CB_DATA_ELEMENT_KIND
+  integer, parameter, public :: JAR_ELEMENT = C_INT64_T !< We want 64-bit elements in the jars
 
-  type, BIND(C) :: c_jar                         ! C interoperable version of jar
+  type, public, BIND(C) :: c_jar                         ! C interoperable version of jar
     private
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
     integer(JAR_ELEMENT) :: top  = 0             ! last posision "written" (cannot write beyond size)
@@ -56,7 +54,7 @@ module jar_module
     type(C_PTR)          :: p = C_NULL_PTR       ! address of actual data
   end type
 
-  type :: jar                                    ! same as c_jar, but with type bound procedures
+  type, public :: jar                                    ! same as c_jar, but with type bound procedures
     private
     integer(JAR_ELEMENT) :: size = 0             ! capacity of jar
     integer(JAR_ELEMENT) :: top  = 0             ! last posision "written" (cannot write beyond size)

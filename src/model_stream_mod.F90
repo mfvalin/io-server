@@ -163,6 +163,7 @@ contains
 
   ! cprs and meta only need to be supplied by one of the writing PEs
   function write(this, mydata, area, grid_in, grid_out, cprs, meta) result(success)
+    use iso_c_binding
     use jar_module
     implicit none
     class(model_stream), intent(INOUT) :: this

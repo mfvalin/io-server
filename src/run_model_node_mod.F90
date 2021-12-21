@@ -124,7 +124,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
   client_id               = data_buffer % get_server_bound_client_id()
   num_clients             = data_buffer % get_num_server_bound_clients()
-  dcb_capacity            = data_buffer % get_capacity(JAR_ELEMENT_KIND)
+  dcb_capacity            = data_buffer % get_capacity(CB_DATA_ELEMENT_KIND)
   dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure we have a bit of loose space
 
   jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
@@ -281,7 +281,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       ! If the DCB message buffer is too full to contain that new package, flush it now
       if (dcb_message_jar % high() + total_message_size > dcb_message_buffer_size) then
         print *, 'Sending data ', dcb_message_jar % high()
-        success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), JAR_ELEMENT_KIND, .true.)
+        success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
         call dcb_message_jar % reset()
 
         if (.not. success) then
@@ -328,7 +328,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
   ! Send the remaining data
   print *, 'Sending remaining data: ', dcb_message_jar % high()
-  success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), JAR_ELEMENT_KIND, .true.)
+  success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
 
   if (.not. success) then
     print *, 'ERROR sending remaining data!'
