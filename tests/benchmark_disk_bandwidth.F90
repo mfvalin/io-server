@@ -10,7 +10,7 @@ program disk_bandwidth
   use disk_bandwidth_module
   implicit none
   integer(C_INT64_T) :: time0, time1
-  integer, parameter :: MAX_NUM_PROCS = 12
+  integer, parameter :: MAX_NUM_PROCS = 16
   integer, parameter :: TOTAL_DATA_GB = 20
   integer, parameter :: MAX_BUFFER_SIZE_KB = 5000
   integer, parameter :: NUM_BUFFER_ELEMENTS = MAX_BUFFER_SIZE_KB * 1000 / 4
@@ -19,8 +19,10 @@ program disk_bandwidth
 
   real :: total_time
   integer :: size, rank
-  integer :: i, j
-  integer :: max_proc
+  integer :: i, i_proc, i_node
+  integer :: max_proc, num_nodes
+  type(MPI_Comm) :: node_comm, controller_comm
+  integer :: node_rank, node_size, node_id
 
   integer, parameter :: NUM_BUF_ELEM_COUNTS = 7
   integer, dimension(NUM_BUF_ELEM_COUNTS) :: buf_elem_counts
@@ -36,8 +38,30 @@ program disk_bandwidth
   call MPI_Comm_rank(MPI_COMM_WORLD, rank)
   call MPI_Comm_size(MPI_COMM_WORLD, size)
 
+  call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, node_comm)
+  call MPI_Comm_rank(node_comm, node_rank)
+  call MPI_Comm_size(node_comm, node_size)
+
+  ! Find out how many MPI nodes there are
+  block
+    integer :: count
+    type(MPI_Comm) :: tmp_comm
+    count = 0
+    if (node_rank == 0) count = 1
+    call MPI_Allreduce(count, num_nodes, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD)
+
+    if (node_rank == 0) then
+      call MPI_Comm_split(MPI_COMM_WORLD, 0, rank, controller_comm)
+      call MPI_Comm_rank(controller_comm, node_id)
+    else
+      call MPI_Comm_split(MPI_COMM_WORLD, 1, rank, tmp_comm)
+    end if
+
+    call MPI_Bcast(node_id, 1, MPI_INTEGER, 0, node_comm)
+  end block
+
   write(file_name,'(A6, I4.4, A4)') 'SERVER', rank, '.out'
-  print *, 'Writing to file: ', file_name
+  ! print *, 'Writing to file: ', file_name
 
   if (rank == 0) print *, 'Num writes: ', num_writes
 
@@ -56,51 +80,66 @@ program disk_bandwidth
   buf_elem_counts(6) = 500000
   buf_elem_counts(7) = 1000000
 
+  !---------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD)
+  !---------------------------------------
   if (rank == 0) then
     print *, 'Total data: ', TOTAL_DATA_GB, ' GB'
     print *, 'Rates in GB/s'
-    print '(A3, I7, I7, I7, I7, I7, I7, I7, A)', '', buf_elem_counts(:) * 4 / 1000, ' (Buffer size in kB)'
+    print '(A6, I7, I7, I7, I7, I7, I7, I7, A)', '', buf_elem_counts(:) * 4 / 1000, ' (Buffer size in kB)'
   end if
 
-  do j = 1, max_proc
+  do i_node = 1, num_nodes
+    do i_proc = 1, max_proc
 
-    do i_buf_elem_count = 1, NUM_BUF_ELEM_COUNTS
-      num_elem = buf_elem_counts(i_buf_elem_count)
-      process_data_kb = TOTAL_DATA_GB * 1000000 !/ j
-      num_writes = process_data_kb / num_elem * 1000 / 4
-      ! if (rank == 0) then
-      !   print *, 'num_elem, process data Kb, num writes: ', num_elem, process_data_kb, num_writes
-      ! end if
-      !---------------------------------------
-      call MPI_Barrier(MPI_COMM_WORLD)
-      !---------------------------------------
-      time0 = get_current_time_us()
-      !---------------------------------------
-      call MPI_Barrier(MPI_COMM_WORLD)
-      !---------------------------------------
-      if (rank < j) then
-        open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
-        do i = 1, num_writes
-            write(file_unit) buffer(1:num_elem)
-        end do
-        close(file_unit)
+      if (i_proc > 1 .and. mod(i_proc, 2) .ne. 0) cycle
+      if (i_proc > 1 .and. i_node > 1 .and. mod(i_proc, 4) .ne. 0) cycle
+
+      do i_buf_elem_count = 1, NUM_BUF_ELEM_COUNTS
+        if (i_proc < 5) then
+          process_data_kb = TOTAL_DATA_GB * 1000000 
+        else if (i_proc < 13) then
+          process_data_kb = TOTAL_DATA_GB * 1000000 / 2
+        else
+          process_data_kb = TOTAL_DATA_GB * 1000000 / 4
+        end if
+
+        num_elem   = buf_elem_counts(i_buf_elem_count)
+        num_writes = process_data_kb / num_elem * 1000 / 4
+        ! if (rank == 0) then
+        !   print *, 'num_elem, process data Kb, num writes: ', num_elem, process_data_kb, num_writes
+        ! end if
+        !---------------------------------------
+        call MPI_Barrier(MPI_COMM_WORLD)
+        !---------------------------------------
+        time0 = get_current_time_us()
+        !---------------------------------------
+        call MPI_Barrier(MPI_COMM_WORLD)
+        !---------------------------------------
+        if (node_rank < i_proc .and. node_id < i_node) then
+          open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
+          do i = 1, num_writes
+              write(file_unit) buffer(1:num_elem)
+          end do
+          close(file_unit)
+        end if
+        !---------------------------------------
+        call MPI_Barrier(MPI_COMM_WORLD)
+        !---------------------------------------
+        time1 = get_current_time_us()
+        total_time =  real(time1 - time0, 4) / 1000000.0
+        rates(i_buf_elem_count) = process_data_kb / 1000000 * i_proc * i_node / total_time
+        ! if (rank == 0) then
+        !   print *, 'total time, rate', total_time, rates(i_buf_elem_count)
+        ! end if
+      end do
+
+      if (rank == 0) then
+          print '(I2, 1X, I3, F7.1, F7.1, F7.1, F7.1, F7.1, F7.1, F7.1)', i_node, i_proc, rates(:)
+          ! print *, TOTAL_DATA_GB / total_time, ' GB/s'
+          ! print *, 'Took ', (time1 - time0) / 1000000.0, ' s'
       end if
-      !---------------------------------------
-      call MPI_Barrier(MPI_COMM_WORLD)
-      !---------------------------------------
-      time1 = get_current_time_us()
-      total_time =  real(time1 - time0, 4) / 1000000.0
-      rates(i_buf_elem_count) = TOTAL_DATA_GB * j / total_time
-      ! if (rank == 0) then
-      !   print *, 'total time, rate', total_time, rates(i_buf_elem_count)
-      ! end if
     end do
-
-    if (rank == 0) then
-        print '(I3, F7.1, F7.1, F7.1, F7.1, F7.1, F7.1, F7.1)', j, rates(:)
-        ! print *, TOTAL_DATA_GB / total_time, ' GB/s'
-        ! print *, 'Took ', (time1 - time0) / 1000000.0, ' s'
-    end if
   end do
 
   call MPI_Finalize()
