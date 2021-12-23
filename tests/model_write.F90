@@ -134,15 +134,15 @@ program pseudomodelandserver
   ! if(rank >= nserv) then
   ! if(mod(rank, NUM_NODES) .ne. 0) then
   if (.not. server_node) then
-    call ioserver_run_model_node(num_relay_per_node, do_expensive_checks_in = CHECK_CB_MESSAGES)
+    call ioserver_run_model_node(num_relay_per_node, use_debug_mode_in = CHECK_CB_MESSAGES)
   else
     if (node_rank < nserv) then
-      call ioserver_run_server_node(nserv - num_channels, num_channels, num_noop, do_expensive_checks_in = CHECK_DCB_MESSAGES)
+      call ioserver_run_server_node(nserv - num_channels, num_channels, num_noop, use_debug_mode_in = CHECK_DCB_MESSAGES)
     else 
       if (single_node) then
-        call ioserver_run_model_node(num_relay_per_node, do_expensive_checks_in = CHECK_CB_MESSAGES)
+        call ioserver_run_model_node(num_relay_per_node, use_debug_mode_in = CHECK_CB_MESSAGES)
       else
-        call ioserver_run_server_node(nserv - num_channels, num_channels, num_noop, do_expensive_checks_in = CHECK_DCB_MESSAGES)
+        call ioserver_run_server_node(nserv - num_channels, num_channels, num_noop, use_debug_mode_in = CHECK_DCB_MESSAGES)
       end if
     end if
 

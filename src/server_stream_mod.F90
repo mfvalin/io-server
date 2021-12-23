@@ -14,7 +14,7 @@ module server_stream_module
 
   private
 
-  public :: block_meta, subgrid, grid, cmeta
+  public :: block_meta, subgrid_t, grid_t, cmeta
 
   integer, parameter :: STREAM_STATUS_UNINITIALIZED = -1 !< Not even initialized
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open
@@ -345,9 +345,9 @@ contains
   !> @return The result of the operation on the underlying stream, if it is open, .false. otherwise
   function local_server_stream_put_data(this, record, subgrid_data) result(success)
     implicit none
-    class(local_server_stream), intent(inout) :: this
-    type(model_record),         intent(in)    :: record                       !< [in] Record that describes the data to insert
-    integer, intent(in), dimension(record % ni, record % nj) :: subgrid_data  !< [in] Pointer to the data itself
+    class(local_server_stream), intent(inout)  :: this
+    type(model_record),         intent(in)     :: record                    !< [in] Record that describes the data to insert
+    integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 
     integer, parameter :: MAX_NUM_ATTEMPTS = 30

@@ -67,31 +67,20 @@ module heap_module
 
   contains
     procedure, pass :: print => block_meta_print
-    !> \return array type code (1=integer, 2=real)
-    procedure :: t
-    !> \return array kind (1/2/4/8 bytes)
-    procedure :: k
-    !> \return array rank (1/2/3/../MAX_ARRAY_RANK)
-    procedure :: r
-    !> \return array(MAX_ARRAY_RANK) containing dimensions
-    procedure :: dims
-    !> \return status, 0 if O.K. non zero otherwise
-    procedure :: metadata
-    !> \return                              none
+    
+    procedure :: get_ptr  !< \return The stored pointer
+    procedure :: t        !< \return array type code (1=integer, 2=real)
+    procedure :: k        !< \return array kind (1/2/4/8 bytes)
+    procedure :: r        !< \return array rank (1/2/3/../MAX_ARRAY_RANK)
+    procedure :: dims     !< \return array(MAX_ARRAY_RANK) containing dimensions
+    procedure :: metadata !< \return status, 0 if O.K. non zero otherwise
     procedure :: reset                      !< nullify operator
-    !> \return                              none
     procedure :: assign                     !< assignment operator, block_meta_f08 = block_meta_f08
-    !> \return                              none
     procedure :: assign_meta                !< assignment operator, block_meta_f08 = block_meta
-    !> \return                              none
     GENERIC :: ASSIGNMENT(=) => assign, assign_meta      !< generic assignment operator
-    !> \return                              .true. if equal, .false. if not equal
     procedure :: equal                      !< equality operator
-    !> \return                              .true. if equal, .false. if not equal
     GENERIC :: operator(==) => equal        !< equality operator
-    !> \return                              .false. if equal, .true. if not equal
-    procedure :: unequal_meta                !< non equality operator
-    !> \return                              .false. if equal, .true. if not equal
+    procedure :: unequal_meta               !< non equality operator
     GENERIC :: operator(/=) => unequal_meta !< non equality operator
   end type block_meta_f08
 
@@ -311,6 +300,13 @@ module heap_module
     msz = C_SIZEOF(t)
     status = ShmemHeapGetBlockMeta(block, this%a, msz)
   end function metadata
+
+  function get_ptr(this) result(this_ptr)
+    implicit none
+    class(block_meta_f08), intent(IN) :: this
+    type(C_PTR) :: this_ptr
+    this_ptr = this % p
+  end function get_ptr
 
   !> \brief get array type from Fortran block metadata
   function t(this) result(n)

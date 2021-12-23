@@ -25,19 +25,19 @@ module run_model_node_module
 
 contains
 
-subroutine run_model_node(num_relay_per_node, do_expensive_checks_in)
+subroutine run_model_node(num_relay_per_node, use_debug_mode_in)
   implicit none
   integer, intent(in) :: num_relay_per_node
-  logical, optional, intent(in) :: do_expensive_checks_in
+  logical, optional, intent(in) :: use_debug_mode_in
 
   type(ioserver_context) :: context
   logical :: success
-  logical :: do_expensive_checks
+  logical :: use_debug_mode
   
-  do_expensive_checks = .false.
-  if (present(do_expensive_checks_in)) do_expensive_checks = do_expensive_checks_in
+  use_debug_mode = .false.
+  if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
 
-  success = context % init(.false., num_relay_per_node, 0, 0, 0, in_debug_mode = do_expensive_checks)
+  success = context % init(.false., num_relay_per_node, 0, 0, 0, in_debug_mode = use_debug_mode)
 
   if (.not. success) then
     print *, 'ERROR: could not initialize IO-server context for a model node!'
@@ -48,7 +48,7 @@ subroutine run_model_node(num_relay_per_node, do_expensive_checks_in)
     call pseudo_model_process(context)
   else if (context % is_relay()) then
     if (context % is_server_bound()) then
-      call server_bound_relay_process(context, do_expensive_checks)
+      call server_bound_relay_process(context)
     else if (context % is_model_bound()) then
       call model_bound_relay_process(context)
     else
@@ -62,7 +62,7 @@ subroutine run_model_node(num_relay_per_node, do_expensive_checks_in)
 
 end subroutine run_model_node
 
-subroutine server_bound_relay_process(context, do_expensive_checks)
+subroutine server_bound_relay_process(context)
   use ISO_C_BINDING
 
   use circular_buffer_module
@@ -72,7 +72,6 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   implicit none
 
   type(ioserver_context), intent(inout) :: context
-  logical,                intent(in)    :: do_expensive_checks
 
   integer, parameter :: MAX_DCB_MESSAGE_SIZE_INT = 50000
 
@@ -86,16 +85,15 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
   integer :: dcb_message_buffer_size
   integer(C_INT64_T) :: dcb_capacity
 
-  integer :: i_data_check
-  integer :: total_message_size, content_size, filename_size
+  integer :: total_message_size, content_size
+  integer(C_INT64_T) :: filename_size
   logical :: finished, success, skip_message
   integer, dimension(:), allocatable :: cb_message
-  integer, dimension(:), allocatable :: expected_message
   integer(C_INT) :: message_header_tag
 
   integer, dimension(:), pointer :: f_data
   type(C_PTR) :: c_data
-  integer :: num_data
+  integer :: num_data_int
   integer :: h_status
 
   type(model_record)   :: record
@@ -185,7 +183,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
       !---------------------------
       ! Get the header and check
-      success = cb_list(i_compute) % get(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) ! Header
+      success = cb_list(i_compute) % get(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.) ! Extract header
       if (.not. success) then
         print *, 'ERROR when getting message header from CIO_OUT', i_compute
         error stop 1
@@ -198,7 +196,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       !------------------------------
       ! Extract/process message data
       if (header % command == MSG_COMMAND_DATA) then
-        success = cb_list(i_compute) % get(record, model_record_size_int(), CB_KIND_INTEGER_4, .false.) ! Record 
+        success = cb_list(i_compute) % get(record, model_record_size_int(), CB_KIND_INTEGER_4, .false.) ! Extract record 
         ! TODO  Get compression metadata
         ! TODO  Get other metadata
 
@@ -207,40 +205,16 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
           error stop 1
         end if
 
-        c_data = context % ptr_translate_from(record % data, MODEL_COLOR, i_compute)
-        num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size into account!!!!
-        call c_f_pointer(c_data, f_data, [num_data])
+        num_data_int = (record % data_size_byte + 3) / 4
+        c_data = context % ptr_translate_from(record % data, MODEL_COLOR, i_compute) ! Get proper pointer to data in shared memory
+        call c_f_pointer(c_data, f_data, [num_data_int])                             ! Access it using a fortran pointer, for easy copy into the jar
 
-        ! call print_model_record(record)
-        
-        if (do_expensive_checks) then
-
-          if (.not. allocated(expected_message)) then
-            allocate(expected_message(num_data))
-          else if (size(expected_message) < num_data) then
-            deallocate(expected_message)
-            allocate(expected_message(num_data))
-          end if
-
-          do i_data_check = 1, num_data
-            expected_message(i_data_check) = compute_data_point(header % sender_global_rank, record % tag, i_data_check)
-          end do
-          ! if (i_compute == 0) then
-          !   print *, 'Got ', f_data(1:3), transfer(record % data, tmp)
-          ! end if
-          if (.not. all(expected_message(1:num_data) == f_data(:))) then
-            print *, 'Expected: ', expected_message(1:num_data / 100 + 3)
-            print *, 'Received: ', f_data(:num_data / 100 + 3)
-            print '(A, I3, A, I5, A, I5)', ' i_compute: ',  i_compute, ', tag: ', record % tag, ', sender_global_rank: ', header % sender_global_rank
-            error stop 1
-          end if
-        end if
-
-        header % content_length = header % content_length + (record % data_size_byte + 1) / 4
+        header % content_length = header % content_length + num_data_int             ! Update message header
         total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4) + header % content_length
 
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
-        model_finished(i_compute) = .true.
+        model_finished(i_compute) = .true.  ! Indicate this model won't be active anymore
+
         print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
 
         total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4)
@@ -251,6 +225,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
 
       else if (header % command == MSG_COMMAND_OPEN_FILE) then
         filename_size = num_char_to_num_int(header % content_length)
+
         if (.not. allocated(cb_message)) then
           allocate(cb_message(filename_size))
         else if (size(cb_message) < filename_size) then
@@ -258,8 +233,8 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
           allocate(cb_message(filename_size))
         end if
 
-        success = cb_list(i_compute) % get(cb_message, int(filename_size, kind=8), CB_KIND_INTEGER_4, .true.)
-        total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4) + filename_size
+        success = cb_list(i_compute) % get(cb_message, filename_size, CB_KIND_INTEGER_4, .true.) ! Extract file name
+        total_message_size = INT(message_header_size_int() + message_cap_size_int() + filename_size, kind=4)
 
       else
         print *, 'ERROR: Unknown message type'
@@ -293,21 +268,20 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       !-----------------------------
       ! Copy message header
 
-      ! print *, 'Sending'
       header % relay_global_rank = context % get_global_rank()
-      ! call print_message_header(header)
       num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
 
       !----------------------------
       ! Copy message body
       if (header % command == MSG_COMMAND_DATA) then
-        ! call print_model_record(record)
+
         num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record)      ! Data header
         !TODO                                                     ! Compression metadata
         !TODO                                                     ! Other metadata
         num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))  ! The data
 
-        h_status = heap_list(i_compute) % free(c_data)
+        
+        h_status = heap_list(i_compute) % free(c_data)            ! Free the shared memory
         if (h_status .ne. 0) then
           print*, 'ERROR: Unable to free heap data (from RELAY)'
           error stop 1
@@ -316,6 +290,7 @@ subroutine server_bound_relay_process(context, do_expensive_checks)
       else if (header % command == MSG_COMMAND_OPEN_FILE) then
 
         num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:filename_size))
+
       end if
 
       !---------------------
@@ -365,12 +340,12 @@ subroutine pseudo_model_process(context)
   type(ioserver_context), intent(inout) :: context
 
   type(heap)            :: node_heap
-  type(model_stream)    :: output_file_1, output_file_2
+  type(model_stream)    :: output_stream_1, output_stream_2
   type(circular_buffer) :: data_buffer
   type(comm_rank_size)  :: model_crs, node_crs, global_compute_crs
 
-  type(subgrid)    :: local_grid
-  type(grid)       :: input_grid, output_grid
+  type(subgrid_t)  :: local_grid
+  type(grid_t)     :: input_grid, output_grid
   type(block_meta) :: data_array_info_1, data_array_info_2
   integer(kind=4), dimension(:), pointer :: data_array_1, data_array_2
 
@@ -381,14 +356,14 @@ subroutine pseudo_model_process(context)
 
   node_heap = context % get_local_heap()
 
-  output_file_1 = context % open_stream_model('pseudo_model_results_1')
-  if (.not. output_file_1 % is_open()) then
+  output_stream_1 = context % open_stream_model('pseudo_model_results_1')
+  if (.not. output_stream_1 % is_open()) then
     print *, 'Unable to open model file 1 !!!!'
     error stop 1
   end if
 
-  output_file_2 = context % open_stream_model('pseudo_model_results_2')
-  if (.not. output_file_2 % is_open()) then
+  output_stream_2 = context % open_stream_model('pseudo_model_results_2')
+  if (.not. output_stream_2 % is_open()) then
     print *, 'Unable to open model file 2 !!!!'
     error stop 1
   end if
@@ -410,16 +385,13 @@ subroutine pseudo_model_process(context)
   end if
 
   ! Init area info
-  local_grid % i0 = global_compute_id * CB_MESSAGE_SIZE_INT + 1
-  local_grid % ni = CB_MESSAGE_SIZE_INT
-  local_grid % j0 = 1 ! cause ARRAYS START AT 1
-  local_grid % nj = 1
-  local_grid % nk = 1
-  local_grid % nv = 1
+  local_grid % offset(1) = global_compute_id * CB_MESSAGE_SIZE_INT + 1
+  local_grid % size(1)   = CB_MESSAGE_SIZE_INT
 
   input_grid % id = 1
-  input_grid % size_i = CB_MESSAGE_SIZE_INT * model_crs % size
-  input_grid % size_j = 1
+  input_grid % size(1) = CB_MESSAGE_SIZE_INT * model_crs % size
+  input_grid % size(2) = 1
+  input_grid % elem_size = 4
 
   output_grid % id = 1
 
@@ -448,10 +420,10 @@ subroutine pseudo_model_process(context)
       end do
 
       ! Write the data to a file (i.e. send it to the server to do that for us)
-      success = output_file_1 % write(data_array_info_1, local_grid, input_grid, output_grid)
+      success = output_stream_1 % write(data_array_info_1, local_grid, input_grid, output_grid)
 
       if (.not. success) then
-        print *, 'ERROR while trying to do a WRITE'
+        print *, 'ERROR: Write into model stream failed'
         error stop 1
       end if
 
@@ -468,7 +440,7 @@ subroutine pseudo_model_process(context)
         data_array_2(j) = compute_data_point(global_rank, current_tag + 1, j)
       end do
 
-      success = output_file_2 % write(data_array_info_2, local_grid, input_grid, output_grid)
+      success = output_stream_2 % write(data_array_info_2, local_grid, input_grid, output_grid)
       if (.not. success) then
         print *, 'ERROR while trying to do a WRITE'
         error stop 1
@@ -478,8 +450,8 @@ subroutine pseudo_model_process(context)
     end do
   end block
 
-  success = output_file_1 % close()
-  success = output_file_2 % close() .and. success
+  success = output_stream_1 % close()
+  success = output_stream_2 % close() .and. success
   if (.not. success) then
     print *, 'Unable to close model file!!!!'
     error stop 1

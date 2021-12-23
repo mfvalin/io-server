@@ -1,6 +1,7 @@
 
 module ioserver_message_module
   use ISO_C_BINDING
+  use heap_module, only: MAX_ARRAY_RANK
   use ioserver_constants
   use jar_module
   implicit none
@@ -31,53 +32,37 @@ module ioserver_message_module
     integer, dimension(MAXPACK) :: pack_info
   end type
 
-  type, public :: grid
-    integer :: id             ! grid id
-    integer :: size_i, size_j ! horizontal dimensions of full grid
-  end type
+  type, public, bind(C) :: grid_t
+    integer(C_INT) :: id
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: size = 1 !< Number of elements in the grid in each possible dimension
+    integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
+  end type grid_t
 
-  type, public :: subgrid
-    integer :: i0 = -1           ! starting point of this subgrid in the x direction
-    integer :: ni = -1           ! number of points of this subgrid in the x direction
-    integer :: j0 = -1           ! starting point of this subgrid in the y direction
-    integer :: nj = -1           ! number of points of this subgrid in the y direction
-    integer :: nk = -1           ! number of vertical levels
-    integer :: nv = -1           ! number of variables
-  end type
-
-  type, private :: data_header        ! record : data_header , metadata(nm integers) , subgrid(ni * nj * nk * nv elements)
-    integer :: nw    = -1        ! number of elements in record
-    integer :: nbits = -1        ! number of bits per subgrid element in record
-    integer :: tag   = -1        ! unique sequence tag
-    integer :: weight = -1       ! number of pieces in parcel (normally 1)
-    integer :: np    = -1        ! number of pieces to reassemble
-    integer :: grid  = -1        ! grid id
-    type(subgrid) :: s       ! subgrid description
-    integer :: nm    = -1        ! length of metadata "jar" (32 bit units)
-  end type
+  type, public, bind(C) :: subgrid_t
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: size   = 1  !< Number of elements of the subgrid in each possible dimension
+    integer(C_INT), dimension(MAX_ARRAY_RANK) :: offset = 1  !< Offset of the subgrid within the larger one in each possible dimension
+    ! integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
+  end type subgrid_t
 
   ! Type used as a header when writing data to a stream from a model process
   type, public, bind(C) :: model_record
-    type(C_PTR)    :: data                !< Will be translated to its own memory space by relay. We want it to be 64-bit aligned!!
-    integer(C_INT) :: data_size_byte      !< Size in ?? of the data packet itself
-    integer(C_INT) :: cmeta_size          !< Size of the compression metadata included
-    integer(JAR_ELEMENT) :: meta_size     !< Size of other metadata included
+    type(C_PTR)    :: data              !< Will be translated to its own memory space by relay. We want it to be 64-bit aligned!!
+    integer(C_INT) :: data_size_byte    !< Size of the data packet itself, in bytes
+    integer(C_INT) :: cmeta_size        !< Size of the compression metadata included
+    integer(JAR_ELEMENT) :: meta_size   !< Size of other metadata included
 
-    integer(C_INT) :: tag                 !< Tag associated with this particular message (to be able to group with that of other model PEs)
-    integer(C_INT) :: stream              !< Stream to which the data is being sent
+    integer(C_INT) :: tag               !< Tag associated with this particular message (to be able to group with that of other model PEs)
+    integer(C_INT) :: stream            !< Stream to which the data is being sent
 
-    integer(C_INT) :: ni, nj              !< Number of data points in the x and y direction (in this particular data packet)
-    integer(C_INT) :: nk                  !< Number of data points in the vertical
-    integer(C_INT) :: nvar                !< Number of variables per data point
-    integer(C_INT) :: type_kind_rank      !< Type/kind/rank of the data
+    type(subgrid_t) :: subgrid_area
+    type(grid_t)    :: global_grid
 
-    integer(C_INT) :: i0, j0              !< Position of this particular subgrid within the global input (output??) grid
-    integer(C_INT) :: grid_size_i, grid_size_j, gnignj !< Global input grid size (x, y, and total)
-    integer(C_INT) :: output_grid_id      !< ID of the grid where the data is being sent
+    integer(C_INT) :: elem_size         !< Size of the grid elements in bytes
+    integer(C_INT) :: output_grid_id    !< ID of the grid where the data is being sent
   end type model_record
 
-  integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101
-  integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010
+  integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
+  integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010 !< (Second-to-)Last entry of every message. Helps debugging
   type, public, bind(C) :: message_header
     integer(C_INT) :: header_tag      = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
     integer(C_INT) :: content_length  = -1    !< Message length (excluding this header). Units depend on content of message
@@ -89,17 +74,17 @@ module ioserver_message_module
   end type message_header
 
   type, public, bind(C) :: message_cap
-    integer(C_INT) :: cap_tag    = MSG_CAP_TAG
-    integer(C_INT) :: msg_length = -1
+    integer(C_INT) :: cap_tag    = MSG_CAP_TAG !< Signals the end of a message
+    integer(C_INT) :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
   end type message_cap
 
-  integer, parameter, public :: MSG_COMMAND_DATA        = 0
-  integer, parameter, public :: MSG_COMMAND_DUMMY       = 1
-  integer, parameter, public :: MSG_COMMAND_OPEN_FILE   = 2
-  integer, parameter, public :: MSG_COMMAND_CLOSE_FILE  = 3
-  integer, parameter, public :: MSG_COMMAND_MODEL_STOP  = 4
-  integer, parameter, public :: MSG_COMMAND_RELAY_STOP  = 5
-  integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 6
+  integer, parameter, public :: MSG_COMMAND_DATA        = 0 !< Indicate a message that contains grid data
+  integer, parameter, public :: MSG_COMMAND_DUMMY       = 1 !< Indicate a message without content or purpose
+  integer, parameter, public :: MSG_COMMAND_OPEN_FILE   = 2 !< Indicate a message that wants to open a file
+  integer, parameter, public :: MSG_COMMAND_CLOSE_FILE  = 3 !< Indicate a message that wants to close a file
+  integer, parameter, public :: MSG_COMMAND_MODEL_STOP  = 4 !< Indicate that the model that sends this message will no longer send anything
+  integer, parameter, public :: MSG_COMMAND_RELAY_STOP  = 5 !< Indicate that the relay that sends this message will no longer send anything
+  integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 6 !< Indicate a message without content, but with the purpose to acknowledge something?
 
   public :: message_header_size_int, message_cap_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message, print_message_header, print_model_record
 contains
@@ -254,11 +239,12 @@ contains
     implicit none
     type(model_record), intent(in) :: record
 
-    print '(A12,   A, I6, I4, I4,   A, I7, I4,   A, I4, I4, I4, I3, I7,   A, I5, I5, I6, I6, I8, I4)', 'Record info: ', &
-      'sizes ', record % data_size_byte, record % cmeta_size, record % meta_size, &
-      ', tag+stream ', record % tag, record % stream, &
-      ', dimensions ', record % ni, record % nj, record % nk, record % nvar, record % type_kind_rank, &
-      ', global grid ', record % i0, record % j0, record % grid_size_i, record % grid_size_j, record % gnignj, record % output_grid_id
+    print *, 'print_model_record() not implemented', record % tag
+    ! print '(A12,   A, I6, I4, I4,   A, I7, I4,   A, I4, I4, I4, I3, I7,   A, I5, I5, I6, I6, I8, I4)', 'Record info: ', &
+    !   'sizes ', record % data_size_byte, record % cmeta_size, record % meta_size, &
+    !   ', tag+stream ', record % tag, record % stream, &
+    !   ', dimensions ', record % ni, record % nj, record % nk, record % nvar, record % type_kind_rank, &
+    !   ', global grid ', record % i0, record % j0, record % grid_size_i, record % grid_size_j, record % gnignj, record % output_grid_id
 
   end subroutine print_model_record
 

@@ -11,19 +11,19 @@ module run_server_node_module
 
 contains
 
-subroutine run_server_node(num_server_bound, num_channels, num_noop, do_expensive_checks_in)
+subroutine run_server_node(num_server_bound, num_channels, num_noop, use_debug_mode_in)
   implicit none
   integer, intent(in) :: num_server_bound, num_channels, num_noop
-  logical, optional, intent(in) :: do_expensive_checks_in
+  logical, optional, intent(in) :: use_debug_mode_in
   
   type(ioserver_context) :: context
   logical :: success
-  logical :: do_expensive_checks
+  logical :: use_debug_mode
 
-  do_expensive_checks = .false.
-  if (present(do_expensive_checks_in)) do_expensive_checks = do_expensive_checks_in
+  use_debug_mode = .false.
+  if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
 
-  success = context % init(.true., 0, num_server_bound, num_channels, num_noop, in_debug_mode = do_expensive_checks)
+  success = context % init(.true., 0, num_server_bound, num_channels, num_noop, in_debug_mode = use_debug_mode)
 
   if (.not. success) then
     print *, 'ERROR, could not initialize IO-server context for server process!'
@@ -33,7 +33,7 @@ subroutine run_server_node(num_server_bound, num_channels, num_noop, do_expensiv
   if (context % is_channel()) then
     call channel_process(context)
   else if (context % is_server_bound()) then
-    call server_bound_server_process(context, do_expensive_checks_in = do_expensive_checks)
+    call server_bound_server_process(context, use_debug_mode)
   else if (context % is_model_bound()) then
     call model_bound_server_process(context)
   else
@@ -45,12 +45,12 @@ subroutine run_server_node(num_server_bound, num_channels, num_noop, do_expensiv
 
 end subroutine run_server_node
 
-subroutine server_bound_server_process(context, do_expensive_checks_in)
+subroutine server_bound_server_process(context, use_debug_mode_in)
   implicit none
   type(ioserver_context), intent(inout) :: context
-  logical, optional,      intent(in)    :: do_expensive_checks_in
+  logical, optional,      intent(in)    :: use_debug_mode_in
 
-  logical :: do_expensive_checks
+  logical :: use_debug_mode
 
   type(comm_rank_size)              :: consumer_crs
   type(distributed_circular_buffer) :: data_buffer
@@ -63,8 +63,8 @@ subroutine server_bound_server_process(context, do_expensive_checks_in)
   integer :: num_errors
 
   num_errors = 0
-  do_expensive_checks = .false.
-  if (present(do_expensive_checks_in)) do_expensive_checks = do_expensive_checks_in
+  use_debug_mode = .false.
+  if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
 
   ! Prepare reception of messages
   data_buffer = context % get_dcb()
@@ -96,7 +96,7 @@ subroutine server_bound_server_process(context, do_expensive_checks_in)
       producer_id = i_producer
       if (.not. active_producers(i_producer)) cycle
 
-      producer_finished = receive_message(context, data_buffer, producer_id, do_expensive_checks)
+      producer_finished = receive_message(context, data_buffer, producer_id)
       if (producer_finished) then
         active_producers(i_producer) = .false.
         print *, 'Producer has sent the STOP signal', producer_id
@@ -117,7 +117,7 @@ subroutine server_bound_server_process(context, do_expensive_checks_in)
   end do
 
   ! Final check on the buffers' content
-  if (do_expensive_checks) then
+  if (use_debug_mode) then
     do i_producer = server_id, num_producers - 1, num_consumers
       if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 0) then
         num_errors = num_errors + 1 
@@ -151,20 +151,19 @@ subroutine channel_process(context)
   end if
 end subroutine channel_process
 
-function receive_message(context, dcb, client_id, verify_message) result(finished)
+function receive_message(context, dcb, client_id) result(finished)
   use ioserver_data_check_module
   implicit none
   type(ioserver_context),            intent(inout) :: context
   type(distributed_circular_buffer), intent(inout) :: dcb
   integer,                           intent(in) :: client_id
-  logical,                           intent(in) :: verify_message
   logical :: finished
 
   logical :: success
 
   ! File management
   character(len=:), allocatable      :: filename
-  type(local_server_stream), pointer :: file_ptr
+  type(local_server_stream), pointer :: stream_ptr
   integer                            :: i_file, num_flushed
 
   ! Message reading
@@ -176,29 +175,25 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
   ! Data extraction/processing
   type(model_record) :: record
   integer(C_INT64_T) :: num_data
-  integer            :: i_data_check ! Only for verifying data
-  integer, dimension(:),    pointer, contiguous, save :: model_data => NULL(), expected_data => NULL()
-  integer, dimension(:, :), pointer, contiguous       :: data_ptr
-  ! type(heap)         :: data_heap
+  integer(kind = 8), dimension(:), pointer, contiguous, save :: model_data => NULL()
 
   integer :: consumer_id
 
   ! data_heap = context % get_node_heap()
-  capacity = dcb % get_capacity(client_id, CB_KIND_INTEGER_4)
+  capacity = dcb % get_capacity(client_id, CB_KIND_INTEGER_8)
   consumer_id = dcb % get_server_bound_server_id()
 
   ! print '(A, I3, A I4)', 'Server ', consumer_id, ' receiving message from client ', client_id
 
   if (.not. associated(model_data)) allocate(model_data(capacity))
-  if (.not. associated(expected_data)) allocate(expected_data(capacity))
 
   ! print *, 'Receiving a message'
   finished = .false.
 
   ! Flush any completed grid for owned files
   do i_file = 1, MAX_NUM_SERVER_STREAMS
-    file_ptr => context % get_stream(i_file)
-    num_flushed = file_ptr % flush_data()
+    stream_ptr => context % get_stream(i_file)
+    num_flushed = stream_ptr % flush_data()
     if (num_flushed > 0) then
       print '(A, I4, A)', 'Flushed ', num_flushed, ' completed grids'
     end if
@@ -249,23 +244,11 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
 
     ! TODO manage compression + other metadata
 
-    num_data = record % ni * record % nj * record % nk * record % nvar ! TODO: take var size (tkr) into account
-    success = dcb % get_elems(client_id, model_data, num_data, CB_KIND_INTEGER_4, .true.)
+    num_data = (record % data_size_byte + 7) / 8
+    success = dcb % get_elems(client_id, model_data, num_data, CB_KIND_INTEGER_8, .true.) ! Extract data
 
-    if (verify_message) then
-      do i_data_check = 1, int(num_data, 4)
-          expected_data(i_data_check) = compute_data_point(header % sender_global_rank, record % tag, i_data_check)
-      end do
-      if (.not. all(expected_data(1:num_data) == model_data(1:num_data))) then
-        print *, 'Expected: ', expected_data(1:num_data)
-        print *, 'Received: ', model_data(1:num_data)
-        error stop 1
-      end if
-    end if
-
-    data_ptr(1:record % ni, 1:record % nj) => model_data
-    file_ptr => context % get_stream(header % stream_id)
-    success = file_ptr % put_data(record, data_ptr)
+    stream_ptr => context % get_stream(header % stream_id)   ! Retrieve stream ptr
+    success = stream_ptr % put_data(record, model_data)      ! Put data in its proper place within a global grid
     if (.not. success) then
       print *, 'ERROR: Could not put data into partial grid!'
       error stop 1
@@ -278,9 +261,9 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     ! print *, 'Got OPEN message', consumer_id
     success = dcb % get_elems(client_id, filename, INT(header % content_length, kind=8), CB_KIND_CHAR, .true.)
     ! print *, 'Opening a file named ', filename
-    file_ptr => context % open_stream_server(filename, header % stream_id)
-    if (.not. file_ptr % is_open()) then
-      if (file_ptr % is_owner()) then
+    stream_ptr => context % open_stream_server(filename, header % stream_id)
+    if (.not. stream_ptr % is_open()) then
+      if (stream_ptr % is_owner()) then
         print *, 'Failed (?) to open file ', filename
         error stop 1
       else
@@ -294,8 +277,8 @@ function receive_message(context, dcb, client_id, verify_message) result(finishe
     ! print *, 'Got CLOSE FILE message', consumer_id
     success = context % close_stream_server(header % stream_id, .false.)
     if (.not. success) then
-      file_ptr => context % get_stream(header % stream_id)
-      if (file_ptr % is_owner()) then
+      stream_ptr => context % get_stream(header % stream_id)
+      if (stream_ptr % is_owner()) then
         print *, 'DEBUG: could not close file at this time', header % stream_id, consumer_id
         ! error stop 1
       end if
