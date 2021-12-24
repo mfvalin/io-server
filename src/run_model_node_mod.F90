@@ -1,7 +1,7 @@
 module ioserver_data_check_module
   implicit none
-  integer, parameter :: CB_MESSAGE_SIZE_INT       = 500                      ! Size of each data batch put in a CB
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = 2000                     ! How much total data to send (for each CB)
+  integer, parameter :: CB_MESSAGE_SIZE_INT       = 1024                     ! Size of each data batch put in a CB. Must be divisible by 16 for the tests
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = 4096                     ! How much total data to send (for each CB)
 contains
   function compute_data_point(compute_rank, tag, index) result(data_point)
     implicit none
@@ -342,15 +342,17 @@ subroutine pseudo_model_process(context)
   type(heap)            :: node_heap
   type(model_stream)    :: output_stream_1, output_stream_2
   type(circular_buffer) :: data_buffer
-  type(comm_rank_size)  :: model_crs, node_crs, global_compute_crs
+  type(comm_rank_size)  :: model_crs, node_crs
 
   type(subgrid_t)  :: local_grid
-  type(grid_t)     :: input_grid, output_grid
+  type(grid_t)     :: input_grid_4, input_grid_8, output_grid
   type(block_meta) :: data_array_info_1, data_array_info_2
-  integer(kind=4), dimension(:), pointer :: data_array_1, data_array_2
+  integer(kind=4), dimension(:,:), pointer :: data_array_4
+  integer(kind=8), dimension(:,:), pointer :: data_array_8
 
   integer :: global_rank
-  integer :: global_compute_id
+  integer :: global_model_id
+  integer :: compute_width, compute_height, block_width, block_height
 
   logical :: success
 
@@ -370,9 +372,8 @@ subroutine pseudo_model_process(context)
 
   model_crs = context % get_crs(MODEL_COLOR)
 
-  node_crs           = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
-  global_compute_crs = context % get_crs(MODEL_COLOR)
-  global_compute_id  = global_compute_crs % rank
+  node_crs         = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
+  global_model_id  = model_crs % rank
 
   global_rank = context % get_global_rank()
 
@@ -384,14 +385,37 @@ subroutine pseudo_model_process(context)
     error stop 1
   end if
 
-  ! Init area info
-  local_grid % offset(1) = global_compute_id * CB_MESSAGE_SIZE_INT + 1
-  local_grid % size(1)   = CB_MESSAGE_SIZE_INT
+  print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
 
-  input_grid % id = 1
-  input_grid % size(1) = CB_MESSAGE_SIZE_INT * model_crs % size
-  input_grid % size(2) = 1
-  input_grid % elem_size = 4
+  block_width  = CB_MESSAGE_SIZE_INT / 4
+  block_height = 4
+
+  ! Init area info
+  if (mod(model_crs % size, 4) == 0) then
+    compute_width  = model_crs % size / 4
+    compute_height = 4
+  else if (mod(model_crs % size, 2) == 0) then
+    compute_width  = model_crs % size / 2
+    compute_height = 2
+  else
+    compute_width  = model_crs % size
+    compute_height = 1
+  end if
+
+  local_grid % offset(1) = mod(global_model_id, compute_width) * block_width + 1
+  local_grid % offset(2) = (global_model_id / compute_width) * block_height + 1
+  local_grid % size(1)   = block_width
+  local_grid % size(2)   = block_height
+
+  input_grid_4 % id = 1
+  input_grid_4 % size(1) = block_width * compute_width
+  input_grid_4 % size(2) = block_height * compute_height
+  input_grid_4 % elem_size = 4
+
+  input_grid_8 % id = 1
+  input_grid_8 % size(1) = block_width * compute_width
+  input_grid_8 % size(2) = block_height * compute_height
+  input_grid_8 % elem_size = 8
 
   output_grid % id = 1
 
@@ -399,28 +423,30 @@ subroutine pseudo_model_process(context)
 
   ! call sleep_us(5000)
   block
-    integer :: i, j, current_tag
+    integer :: i_msg, i_data, j_data, current_tag
     current_tag = 1
-    do i = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
+    do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
       !------------------------
       ! First stream
     
       current_tag = current_tag + 2
 
       ! Get memory and put data in it. Try repeatedly if it failed.
-      data_array_info_1 = node_heap % allocate(data_array_1, [CB_MESSAGE_SIZE_INT])
-      do while (.not. associated(data_array_1))
+      data_array_info_1 = node_heap % allocate(data_array_4, [CB_MESSAGE_SIZE_INT/4, 4])
+      do while (.not. associated(data_array_4))
         call sleep_us(10)
-        data_array_info_1 = node_heap % allocate(data_array_1, [CB_MESSAGE_SIZE_INT])
+        data_array_info_1 = node_heap % allocate(data_array_4, [CB_MESSAGE_SIZE_INT/4, 4])
       end do
 
       ! Using i + 2 b/c tag is incremented when opening a file
-      do j = 1, CB_MESSAGE_SIZE_INT
-        data_array_1(j) = compute_data_point(global_rank, current_tag, j)
+      do i_data = 1, CB_MESSAGE_SIZE_INT/4
+        do j_data = 1, 4
+          data_array_4(i_data,j_data) = compute_data_point(global_rank, current_tag, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
+        end do
       end do
 
       ! Write the data to a file (i.e. send it to the server to do that for us)
-      success = output_stream_1 % write(data_array_info_1, local_grid, input_grid, output_grid)
+      success = output_stream_1 % write(data_array_info_1, local_grid, input_grid_4, output_grid)
 
       if (.not. success) then
         print *, 'ERROR: Write into model stream failed'
@@ -429,18 +455,20 @@ subroutine pseudo_model_process(context)
 
       !------------------------
       ! Second stream
-      data_array_info_2 = node_heap % allocate(data_array_2, [CB_MESSAGE_SIZE_INT])
-      do while (.not. associated(data_array_2))
+      data_array_info_2 = node_heap % allocate(data_array_8, [CB_MESSAGE_SIZE_INT/4, 4])
+      do while (.not. associated(data_array_8))
         call sleep_us(10)
-        data_array_info_2 = node_heap % allocate(data_array_2, [CB_MESSAGE_SIZE_INT])
+        data_array_info_2 = node_heap % allocate(data_array_8, [CB_MESSAGE_SIZE_INT/4, 4])
       end do
 
       ! Using i + 2 b/c tag is incremented when opening a file
-      do j = 1, CB_MESSAGE_SIZE_INT
-        data_array_2(j) = compute_data_point(global_rank, current_tag + 1, j)
+      do i_data = 1, CB_MESSAGE_SIZE_INT / 4
+        do j_data = 1, 4
+          data_array_8(i_data,j_data) = compute_data_point(global_rank, current_tag + 1, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
+        end do
       end do
 
-      success = output_stream_2 % write(data_array_info_2, local_grid, input_grid, output_grid)
+      success = output_stream_2 % write(data_array_info_2, local_grid, input_grid_8, output_grid)
       if (.not. success) then
         print *, 'ERROR while trying to do a WRITE'
         error stop 1
