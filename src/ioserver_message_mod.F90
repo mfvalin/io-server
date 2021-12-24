@@ -33,7 +33,7 @@ module ioserver_message_module
   end type
 
   type, public, bind(C) :: grid_t
-    integer(C_INT) :: id
+    integer(C_INT) :: id = -1
     integer(C_INT), dimension(MAX_ARRAY_RANK) :: size = 1 !< Number of elements in the grid in each possible dimension
     integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
   end type grid_t

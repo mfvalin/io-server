@@ -12,10 +12,10 @@ module grid_assembly_module
   !> Object used to perform the assembly of a single grid within a stream
   !> Located in shared memory
   type, public :: grid_assembly_line
-    integer               :: tag = -1           !< Message tag associated with this specific grid to assemble
-    type(grid_t)          :: global_grid        !< Grid info
-    integer(HEAP_ELEMENT) :: data_offset = -1   !< Offset of the data region where the grid is being assembled in the shared memory heap
-    integer(kind=8)       :: missing_data = -1  !< Number of elements left to insert into the grid being assembled
+    integer               :: tag = -1               !< Message tag associated with this specific grid to assemble
+    type(grid_t)          :: global_grid = grid_t() !< Grid info
+    integer(HEAP_ELEMENT) :: data_offset = -1       !< Offset of the data region where the grid is being assembled in the shared memory heap
+    integer(kind=8)       :: missing_data = -1      !< Number of elements left to insert into the grid being assembled
 
   contains
     ! procedure, pass :: free_data => grid_assembly_line_free_data
