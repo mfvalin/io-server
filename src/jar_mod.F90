@@ -1,5 +1,5 @@
 !  serializer for FORTRAN programming
-!  Copyright (C) 2021  Recherche en Prevision Numerique
+!  Copyright (C) 2022  Recherche en Prevision Numerique
 ! 
 !  This software is free software; you can redistribute it and/or
 !  modify it under the terms of the GNU Lesser General Public
@@ -11,8 +11,8 @@
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 !  Lesser General Public License for more details.
 !
-! Authors:   M.Valin   , Recherche en Prevision Numerique, 2021
-!            V.Magnoux , Recherche en Prevision Numerique, 2021
+! Authors:   M.Valin   , Recherche en Prevision Numerique, 2020-2022
+!            V.Magnoux , Recherche en Prevision Numerique, 2020-2022
 !
 ! _the Cray Fortran compiler treats loc() as a type(C_PTR), other compilers as integer(C_INTPTR_T)
 #if defined(_CRAYFTN)

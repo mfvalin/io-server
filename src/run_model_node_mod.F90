@@ -1,18 +1,23 @@
-module ioserver_data_check_module
-  implicit none
-  integer, parameter :: CB_MESSAGE_SIZE_INT       = 1024                     ! Size of each data batch put in a CB. Must be divisible by 16 for the tests
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = 4096                     ! How much total data to send (for each CB)
-contains
-  function compute_data_point(compute_rank, tag, index) result(data_point)
-    implicit none
-    integer, intent(in) :: compute_rank
-    integer, intent(in) :: tag
-    integer, intent(in) :: index
-    integer :: data_point
-
-    data_point = mod(compute_rank, 1000) * 1000000 + mod(tag, 1000) * 1000 + mod(index, 800) + tag / 1000
-  end function compute_data_point
-end module ioserver_data_check_module
+! Copyright (C) 2022  Environnement et Changement climatique Canada
+!
+! This is free software; you can redistribute it and/or
+! modify it under the terms of the GNU Lesser General Public
+! License as published by the Free Software Foundation,
+! version 2.1 of the License.
+!
+! This software is distributed in the hope that it will be useful,
+! but WITHOUT ANY WARRANTY; without even the implied warranty of
+! MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+! Lesser General Public License for more details.
+!
+! You should have received a copy of the GNU Lesser General Public
+! License along with this software; if not, write to the
+! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+! Boston, MA 02111-1307, USA.
+!
+! Authors:
+!     M. Valin,   Recherche en Prevision Numerique, 2020-2022
+!     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 #include <serializer.hf>
 
@@ -21,22 +26,42 @@ module run_model_node_module
   implicit none
   private
 
-  public :: run_model_node
+  public :: run_model_node, ioserver_function_template
+
+  abstract interface
+    subroutine ioserver_function_template(context)
+      import ioserver_context
+      implicit none
+      type(ioserver_context), intent(inout) :: context
+    end subroutine ioserver_function_template
+  end interface
 
 contains
 
-subroutine run_model_node(num_relay_per_node, use_debug_mode_in)
+subroutine run_model_node(num_relay_per_node, use_debug_mode_in, custom_server_bound_relay_function, model_function)
   implicit none
   integer, intent(in) :: num_relay_per_node
   logical, optional, intent(in) :: use_debug_mode_in
+  procedure(ioserver_function_template), pointer, intent(in), optional :: custom_server_bound_relay_function
+  procedure(ioserver_function_template), pointer, intent(in), optional :: model_function
 
   type(ioserver_context) :: context
   logical :: success
   logical :: use_debug_mode
-  
+
+  procedure(ioserver_function_template), pointer :: server_bound_relay_fn, model_fn
+
   use_debug_mode = .false.
   if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
 
+  server_bound_relay_fn => server_bound_relay_process
+  if (present(custom_server_bound_relay_function)) server_bound_relay_fn => custom_server_bound_relay_function
+
+  model_fn => pseudo_model_process
+  if (present(model_function)) then
+    if (associated(model_function)) model_fn => model_function
+  end if
+  
   success = context % init(.false., num_relay_per_node, 0, 0, 0, in_debug_mode = use_debug_mode)
 
   if (.not. success) then
@@ -45,10 +70,11 @@ subroutine run_model_node(num_relay_per_node, use_debug_mode_in)
   end if
 
   if (context % is_model()) then
-    call pseudo_model_process(context)
+    call model_fn(context)
   else if (context % is_relay()) then
     if (context % is_server_bound()) then
-      call server_bound_relay_process(context)
+      ! call server_bound_relay_process(context)
+      call server_bound_relay_fn(context)
     else if (context % is_model_bound()) then
       call model_bound_relay_process(context)
     else
@@ -123,7 +149,7 @@ subroutine server_bound_relay_process(context)
   client_id               = data_buffer % get_server_bound_client_id()
   num_clients             = data_buffer % get_num_server_bound_clients()
   dcb_capacity            = data_buffer % get_capacity(CB_DATA_ELEMENT_KIND)
-  dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure we have a bit of loose space
+  dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure there will be a bit of loose space in the server-side buffer
 
   jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
   if (jar_ok .ne. 0) then
@@ -339,24 +365,11 @@ subroutine pseudo_model_process(context)
 
   type(ioserver_context), intent(inout) :: context
 
-  type(heap)            :: node_heap
-  type(model_stream)    :: output_stream_1, output_stream_2
+  type(model_stream)    :: output_stream_1
   type(circular_buffer) :: data_buffer
-  type(comm_rank_size)  :: model_crs, node_crs
-
-  type(subgrid_t)  :: local_grid
-  type(grid_t)     :: input_grid_4, input_grid_8, output_grid
-  type(block_meta) :: data_array_info_1, data_array_info_2
-  integer(kind=4), dimension(:,:), pointer :: data_array_4
-  integer(kind=8), dimension(:,:), pointer :: data_array_8
-
-  integer :: global_rank
-  integer :: global_model_id
-  integer :: compute_width, compute_height, block_width, block_height
-
   logical :: success
 
-  node_heap = context % get_local_heap()
+  print *, 'Using default pseudo-model function. This does not do much.'
 
   output_stream_1 = context % open_stream_model('pseudo_model_results_1')
   if (.not. output_stream_1 % is_open()) then
@@ -364,122 +377,13 @@ subroutine pseudo_model_process(context)
     error stop 1
   end if
 
-  output_stream_2 = context % open_stream_model('pseudo_model_results_2')
-  if (.not. output_stream_2 % is_open()) then
-    print *, 'Unable to open model file 2 !!!!'
-    error stop 1
-  end if
-
-  model_crs = context % get_crs(MODEL_COLOR)
-
-  node_crs         = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
-  global_model_id  = model_crs % rank
-
-  global_rank = context % get_global_rank()
-
-  ! print '(A, I5)', 'DEBUG: MODEL, global ', global_rank
-
   data_buffer = context % get_server_bound_cb()
   if (.not. data_buffer % is_valid()) then
     print *, 'ERROR: CB received from context is not valid!'
     error stop 1
   end if
 
-  print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
-
-  block_width  = CB_MESSAGE_SIZE_INT / 4
-  block_height = 4
-
-  ! Init area info
-  if (mod(model_crs % size, 4) == 0) then
-    compute_width  = model_crs % size / 4
-    compute_height = 4
-  else if (mod(model_crs % size, 2) == 0) then
-    compute_width  = model_crs % size / 2
-    compute_height = 2
-  else
-    compute_width  = model_crs % size
-    compute_height = 1
-  end if
-
-  local_grid % offset(1) = mod(global_model_id, compute_width) * block_width + 1
-  local_grid % offset(2) = (global_model_id / compute_width) * block_height + 1
-  local_grid % size(1)   = block_width
-  local_grid % size(2)   = block_height
-
-  input_grid_4 % id = 1
-  input_grid_4 % size(1) = block_width * compute_width
-  input_grid_4 % size(2) = block_height * compute_height
-  input_grid_4 % elem_size = 4
-
-  input_grid_8 % id = 1
-  input_grid_8 % size(1) = block_width * compute_width
-  input_grid_8 % size(2) = block_height * compute_height
-  input_grid_8 % elem_size = 8
-
-  output_grid % id = 1
-
-  ! print *, 'Created local grid', local_grid % i0, local_grid % i0 + local_grid % ni
-
-  ! call sleep_us(5000)
-  block
-    integer :: i_msg, i_data, j_data, current_tag
-    current_tag = 1
-    do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
-      !------------------------
-      ! First stream
-    
-      current_tag = current_tag + 2
-
-      ! Get memory and put data in it. Try repeatedly if it failed.
-      data_array_info_1 = node_heap % allocate(data_array_4, [CB_MESSAGE_SIZE_INT/4, 4])
-      do while (.not. associated(data_array_4))
-        call sleep_us(10)
-        data_array_info_1 = node_heap % allocate(data_array_4, [CB_MESSAGE_SIZE_INT/4, 4])
-      end do
-
-      ! Using i + 2 b/c tag is incremented when opening a file
-      do i_data = 1, CB_MESSAGE_SIZE_INT/4
-        do j_data = 1, 4
-          data_array_4(i_data,j_data) = compute_data_point(global_rank, current_tag, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
-        end do
-      end do
-
-      ! Write the data to a file (i.e. send it to the server to do that for us)
-      success = output_stream_1 % write(data_array_info_1, local_grid, input_grid_4, output_grid)
-
-      if (.not. success) then
-        print *, 'ERROR: Write into model stream failed'
-        error stop 1
-      end if
-
-      !------------------------
-      ! Second stream
-      data_array_info_2 = node_heap % allocate(data_array_8, [CB_MESSAGE_SIZE_INT/4, 4])
-      do while (.not. associated(data_array_8))
-        call sleep_us(10)
-        data_array_info_2 = node_heap % allocate(data_array_8, [CB_MESSAGE_SIZE_INT/4, 4])
-      end do
-
-      ! Using i + 2 b/c tag is incremented when opening a file
-      do i_data = 1, CB_MESSAGE_SIZE_INT / 4
-        do j_data = 1, 4
-          data_array_8(i_data,j_data) = compute_data_point(global_rank, current_tag + 1, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
-        end do
-      end do
-
-      success = output_stream_2 % write(data_array_info_2, local_grid, input_grid_8, output_grid)
-      if (.not. success) then
-        print *, 'ERROR while trying to do a WRITE'
-        error stop 1
-      end if
-
-      call sleep_us(50)
-    end do
-  end block
-
   success = output_stream_1 % close()
-  success = output_stream_2 % close() .and. success
   if (.not. success) then
     print *, 'Unable to close model file!!!!'
     error stop 1

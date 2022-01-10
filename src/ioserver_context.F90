@@ -1,5 +1,5 @@
 !  functions for C and FORTRAN programming
-!  Copyright (C) 2021  Recherche en Prevision Numerique
+!  Copyright (C) 2022  Recherche en Prevision Numerique
 ! 
 !  This software is free software; you can redistribute it and/or
 !  modify it under the terms of the GNU Lesser General Public
@@ -12,8 +12,8 @@
 !  Lesser General Public License for more details.
 !
 ! Authors:
-!     M. Valin,   Recherche en Prevision Numerique, 2020/2021
-!     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
+!     M. Valin,   Recherche en Prevision Numerique, 2020-2022
+!     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 !
 module ioserver_context_module
   !> Module description

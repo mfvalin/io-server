@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright (C) 2021  Environnement et Changement climatique Canada
+ * Copyright (C) 2022  Environnement et Changement climatique Canada
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -17,8 +17,8 @@
  * Boston, MA 02111-1307, USA.
  *
  * Authors:
- *     M. Valin,   Recherche en Prevision Numerique, 2020/2021
- *     V. Magnoux, Recherche en Prevision Numerique, 2020/2021
+ *     M. Valin,   Recherche en Prevision Numerique, 2020-2022
+ *     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
  */
 
 #include <immintrin.h>

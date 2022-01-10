@@ -31,13 +31,15 @@ file(GLOB PROJECT_INCLUDE_FILES
    io-server/*.hf
 )
 
+set(COPYRIGHT_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/common_header.txt)
+
 # Fortran headers
 set(EXTRACT_FORTRAN_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/extract_fortran_interfaces.sh)
 foreach(C_FILE ${C_TO_INC_FILES})
    get_filename_component(FILE_NAME ${C_FILE} NAME_WLE)
    set(IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${C_FILE}")
    set(OUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/io-server/${FILE_NAME}.inc")
-   add_custom_command(OUTPUT ${OUT_FILE} COMMAND ${EXTRACT_FORTRAN_SCRIPT} ${IN_FILE} > ${OUT_FILE} DEPENDS ${C_FILE} ${EXTRACT_FORTRAN_SCRIPT})
+   add_custom_command(OUTPUT ${OUT_FILE} COMMAND ${EXTRACT_FORTRAN_SCRIPT} ${IN_FILE} > ${OUT_FILE} DEPENDS ${C_FILE} ${EXTRACT_FORTRAN_SCRIPT} ${COPYRIGHT_HEADER})
    list(APPEND PROJECT_INCLUDE_FILES ${OUT_FILE})
 endforeach(C_FILE)
 
@@ -47,7 +49,7 @@ foreach(C_FILE ${C_TO_H_FILES})
    get_filename_component(FILE_NAME ${C_FILE} NAME_WLE)
    set(IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${C_FILE}")
    set(OUT_FILE "${CMAKE_CURRENT_SOURCE_DIR}/io-server/${FILE_NAME}.h")
-   add_custom_command(OUTPUT ${OUT_FILE} COMMAND ${EXTRACT_C_SCRIPT} ${IN_FILE} > ${OUT_FILE} DEPENDS ${C_FILE} ${EXTRACT_C_SCRIPT})
+   add_custom_command(OUTPUT ${OUT_FILE} COMMAND ${EXTRACT_C_SCRIPT} ${IN_FILE} > ${OUT_FILE} DEPENDS ${C_FILE} ${EXTRACT_C_SCRIPT} ${COPYRIGHT_HEADER})
    list(APPEND PROJECT_INCLUDE_FILES ${OUT_FILE})
 endforeach(C_FILE)
 
