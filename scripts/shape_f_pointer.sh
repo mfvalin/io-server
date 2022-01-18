@@ -52,17 +52,19 @@ for RI in I R ; do
     cat <<EOT
 !! ===============================  ${TYPE}*${L} ${D}D  ===============================
 !> \brief ${TYPE}*${L} ${D}D array allocator
-function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
+function allocate_${RI}${L}_${D}D(h, p, di, use_safe_alloc) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
   integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref
-  type(block_meta_c)   :: bmc
-  type(C_PTR) :: cptr, ref
-  integer(C_SIZE_T) :: asz
-  integer :: tkr, status, bsz
+  type(block_meta_c)  :: bmc
+  type(C_PTR)         :: cptr, ref
+  integer(C_SIZE_T)   :: asz
+  integer             :: tkr, status, bsz
+  integer(C_INT)      :: safe_alloc_flag
   ${PARAM_DECLARE}
 
   nullify(p)                        ! in case of allocation failure
@@ -76,15 +78,22 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
 
     bsz = C_SIZEOF(bmc)                      ! size of C metadata
     asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-    cptr = ${MALLOC}(h%p, asz, 0)            ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return     ! allocation failed
+
+    ! Determine value of "safe allocation" flag to use
+    safe_alloc_flag = 0
+    if (present(use_safe_alloc)) then
+      if (use_safe_alloc) safe_alloc_flag = 1
+    end if
+
+    cptr = ${MALLOC}(h%p, asz, safe_alloc_flag) ! allocate block in heap
+    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
 
     call C_F_POINTER(cptr, p, [di]) ! make Fortran array pointer from C pointer
 
-    tkr = 256*${L}+16*${RI}+${D}    ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr = tkr                 ! build C interoperable metadata
-    bmi%a%d         = 1             ! set all 5 dimensions to 1
-    bmi%a%d(1:${D}) = di(1:${D})    ! set relevant dimensions to correct value
+    tkr          = 256*${L}+16*${RI}+${D}     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+    bmi%a%tkr    = tkr              ! build C interoperable metadata
+    bmi%a%d      = 1                ! set all 5 dimensions to 1
+    bmi%a%d(1:${D}) = di(1:${D})          ! set relevant dimensions to correct value
     ref          = h%get_base()                 ! get reference address for this heap
     asz          = transfer(ref, asz)           ! reference address
     bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
@@ -92,9 +101,9 @@ function ${RI}${L}_${D}D(h, p, di) result(bmi) ! ${TYPE}*${L} ${D}D array alloca
     status = ${METADATA}(cptr, bmi%a, bsz)      ! insert metadata into data block
 
   endif
-end function ${RI}${L}_${D}D
+end function allocate_${RI}${L}_${D}D
 
-function ${RI}${L}${D}D_bm(p, bm) result(status)  ! fortran pointer to metadata translation
+function ptr_to_blockmeta_${RI}${L}${D}D(p, bm) result(status)  ! fortran pointer to metadata translation
   implicit none
   $TYPE($KIND), dimension($DIMENSION), intent(IN), pointer :: p
   type(block_meta), intent(OUT) :: bm
@@ -117,9 +126,9 @@ function ${RI}${L}${D}D_bm(p, bm) result(status)  ! fortran pointer to metadata 
   bm % p = transfer(LOC(p), bm % p) ! array address
   
   status = 0
-end function ${RI}${L}${D}D_bm
+end function ptr_to_blockmeta_${RI}${L}${D}D
 
-function bm_${RI}${L}${D}D(p, bm, strict) result(status)  ! metadata to pointer translation
+function blockmeta_to_ptr_${RI}${L}${D}D(p, bm, strict) result(status)  ! metadata to pointer translation
   implicit none
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p
   type(block_meta), intent(IN) :: bm
@@ -148,7 +157,7 @@ function bm_${RI}${L}${D}D(p, bm, strict) result(status)  ! metadata to pointer 
 
   call C_F_POINTER(bm % p, p, bm % a % d(1:${D}))   ! make Fortran array pointer from C pointer
   status = 0
-end function bm_${RI}${L}${D}D
+end function blockmeta_to_ptr_${RI}${L}${D}D
 
 EOT
     done

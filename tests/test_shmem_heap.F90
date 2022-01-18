@@ -65,6 +65,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   type(block_meta_f08), dimension(128) :: metas
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
   integer(C_LONG_LONG) :: sz64, max64, nblk64, nbyt64  ! to get heap stats
+  logical :: success
 
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
@@ -80,7 +81,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     print 3, 'model PE, rank =',myrank
   endif
 
-  if( C_ASSOCIATED(h%ptr()) ) then                  ! check initialization clause in declaration
+  if( C_ASSOCIATED(h%get_ptr()) ) then                  ! check initialization clause in declaration
     print *,"FAIL: uninitialized heap C pointer is not NULL"
   else
     print *,"PASS: uninitialized heap C pointer is NULL"
@@ -115,7 +116,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     ixtab = -1                                        ! invalidate indexes
     p = memory%pheap                                  ! p points to the local heap
     p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he))   ! create heap h, 8 K + 8*rank elements
-    if( C_ASSOCIATED(h%ptr()) ) print *,"PASS: heap is successfully initialized, C pointer is not NULL"
+    if( C_ASSOCIATED(h%get_ptr()) ) print *,"PASS: heap is successfully initialized, C pointer is not NULL"
     !  ================================= allocate arrays in the heaps =================================
     blocks = C_NULL_PTR                               ! fill pointer table with NULLs
     lastblock = 0                                     ! no block successfully allocated
@@ -134,13 +135,13 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         exit                                          ! exit loop as all subsequent allocations would fail (heap full)
       endif
       blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
-      print 7,'INFO: block ',i,', allocated at index =',h%offset(blocks(i)),', shape :',shape(demo)
+      print 7,'INFO: block ',i,', allocated at index =',h%get_offset_from_address(blocks(i)),', shape :',shape(demo)
       call blk_meta%reset()                           ! nullify blk_meta
       status = blk_meta%metadata(blocks(i))           ! get metadata for allocated array
       array_rank = blk_meta%r()                       ! get rank of array
       ad = blk_meta%dims()                            ! get all MAX_ARRAY_RANK potential dimensions
       print 6,'INFO: array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
-      ixtab(i) = h%offset(blocks(i))                  ! offset of blocks in heap
+      ixtab(i) = h%get_offset_from_address(blocks(i))                  ! offset of blocks in heap
       lastblock = i
     enddo
     print 6,'INFO: ixtab =', ixtab(1:lastblock)             ! print used portion of index table
@@ -161,9 +162,13 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       nheaps = heaps(i)%register(memories(i)%pheap)        ! register heap for PE of rank i
       print 3,'INFO: nheaps =',nheaps,', nindexes =',memories(i)%nindexes
       print 6,'INFO: ixtab =', ixtab(1:10)                       ! print index table for PE of rank i
-      status = heaps(i)%check(free_blocks, free_space, used_blocks, used_space)   ! heap sanity check for PE of rank i
+      success = heaps(i)%check(free_blocks, free_space, used_blocks, used_space)   ! heap sanity check for PE of rank i
       print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
              ,free_space,' free bytes,',used_space,' bytes in use'
+      if (.not. success) then
+        print *, 'ERROR: Check failed'
+        error stop 1
+      end if
     enddo
   endif
 
@@ -176,7 +181,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         if(ixtab(j) == -1) exit                       ! no more valid blocks
         status = heaps(i)%freebyoffset(ixtab(j))      ! free operation using index (offset) in heap
         print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
-                ', offset =',heaps(i)%offset(heaps(i)%address_from_offset(ixtab(j)))
+                ', offset =',heaps(i)%get_offset_from_address(heaps(i)%get_address_from_offset(ixtab(j)))
       enddo
     enddo
   endif
@@ -188,7 +193,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
         if(ixtab(j) == -1) exit
         status = heaps(i)%freebyoffset(ixtab(j))
         print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
-                ', offset =',heaps(i)%offset(heaps(i)%address_from_offset(ixtab(j)))
+                ', offset =',heaps(i)%get_offset_from_address(heaps(i)%get_address_from_offset(ixtab(j)))
       enddo
     enddo
   endif
@@ -202,9 +207,13 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     enddo
     print *,""
   else                                                ! "model" PE, check what is left on heap
-    status = h%check(free_blocks, free_space, used_blocks, used_space)
+    success = h%check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
             ,free_space,' free bytes,',used_space,' bytes in use'
+    if (.not. success) then
+      print *, 'ERROR: Check failed'
+      error stop 1
+    end if
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)              ! wait 
@@ -268,6 +277,7 @@ subroutine base_test(nprocs, myrank)
   integer(C_INT), dimension(:), pointer :: demo
   type(block_meta_f08) :: blk_meta
   type(block_meta)     :: meta
+  logical :: success
 
   print 3,'==================== BASIC TEST ===================='
   winsize = 1024*1024
@@ -308,8 +318,8 @@ subroutine base_test(nprocs, myrank)
         print *,'allocation failed for block',i
         exit
       endif
-      ixtab(i) = h % offset(blocks(i))
-      print *,'ixtab =',ixtab(i),h%offset(h%address_from_offset(ixtab(i))),h%offset(blocks(i))  ! test of address and offset methods
+      ixtab(i) = h % get_offset_from_address(blocks(i))
+      print *,'ixtab =',ixtab(i),h%get_offset_from_address(h%get_address_from_offset(ixtab(i))),h%get_offset_from_address(blocks(i))  ! test of address and offset methods
     enddo
   endif
 
@@ -323,9 +333,13 @@ subroutine base_test(nprocs, myrank)
     print *,'process',myrank,', nheaps =',i
     iaddress = transfer(p,iaddress)
     print 1 , 'RAM address  :',loc(ram), ', HEAP address :', iaddress
-    status = h % check(free_blocks, free_space, used_blocks, used_space)
+    success = h % check(free_blocks, free_space, used_blocks, used_space)
     print 2,free_blocks,' free block(s),',used_blocks,' used block(s)'  &
            ,free_space,' free bytes,',used_space,' bytes in use'
+    if (.not. success) then
+      print *, 'ERROR: Check failed'
+      error stop 1
+    end if
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! allow check to complete for all processes before freeing blocks
@@ -335,7 +349,7 @@ subroutine base_test(nprocs, myrank)
       if(ixtab(i) > 0) then                         ! block allocated previously by process 0
 !         status = h % freebyoffset(ixtab(i))
         status = h % free(ixtab(i))                 ! use GENERIC procedure to free blocks
-        print 3,'h%free status =',status,', offset =',h%offset(h%address_from_offset(ixtab(i)))
+        print 3,'h%free status =',status,', offset =',h%get_offset_from_address(h%get_address_from_offset(ixtab(i)))
         if(status == 0) ixtab(i) = 0                ! set index to free
       endif
     enddo
@@ -343,12 +357,16 @@ subroutine base_test(nprocs, myrank)
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! allow all free operations to complete
 
-  status = h % check(free_blocks, free_space, used_blocks, used_space)
+  success = h % check(free_blocks, free_space, used_blocks, used_space)
   print 2,free_blocks,' free block(s),',used_blocks,' used block(s)' &
          ,free_space,' free bytes,',used_space,' bytes in use'
   if(myrank == 0) then
     print 4, 'IXTAB(1:10) =',ixtab(1:10)
   endif
+  if (.not. success) then
+    print *, 'ERROR: Check failed'
+    error stop 1
+  end if
 
 ! 777 continue
 

@@ -33,7 +33,9 @@ module heap_module
   integer, parameter         :: TKR_REAL    = 2           !< tkr code for real arrays
 
 
-  public :: get_block_meta_offset, Pointer_offset, block_meta_internals, bm_to_ptr, ptr_to_bm
+  public :: get_block_meta_offset, get_block_meta_address, block_meta_internals
+  public :: Pointer_offset, bm_to_ptr, ptr_to_bm
+  public :: get_heap_from_address
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, public, bind(C) :: block_meta_c
@@ -68,7 +70,7 @@ module heap_module
   contains
     procedure, pass :: print => block_meta_print
     
-    procedure :: get_ptr  !< \return The stored pointer
+    procedure :: get_ptr => block_meta_get_ptr !< \return The stored pointer
     procedure :: t        !< \return array type code (1=integer, 2=real)
     procedure :: k        !< \return array kind (1/2/4/8 bytes)
     procedure :: r        !< \return array rank (1/2/3/../MAX_ARRAY_RANK)
@@ -93,65 +95,35 @@ module heap_module
     type(C_PTR) :: ref = C_NULL_PTR      !< reference address to compute offsets into memory arena for this heap
   contains
 
-    !> \return                          none
-    procedure :: set_base               !< set reference address to compute offsets into memory arena
+    procedure :: set_base     !< Set reference address to compute offsets into memory arena
+    procedure :: get_base     !< \return Base address to compute offsets for this heap
 
-    !> \return                          base address to compute offsets for this heap
-    procedure :: get_base               !< set reference address to compute offsets into memory arena
-
-    !> \return                          address of heap
-    procedure :: createb                !< create, initialize, register a heap at specified address (size in uint64_t bytes)
-
-    !> \return                          address of heap
-    procedure :: createw               !< create, initialize, register a heap at specified address (size in uint32_t 32 bit words)
-
+    procedure :: createb      !< create, initialize, register a heap at specified address (size in uint64_t bytes). \return address of heap
+    procedure :: createw      !< create, initialize, register a heap at specified address (size in uint32_t 32 bit words). \return address of heap
     GENERIC   :: create => createb, createw
 
-    !> \return                          address of default heap
-    procedure :: get_default            !< get address of the default heap
+    procedure :: get_default  !< \return Address of the default heap
+    procedure :: set_default  !< Make this heap the default heap. \return Index in heap table, -1 if unknown heap
 
-    !> \return                          index in table, -1 if unknown heap
-    procedure :: set_default            !< make this heap the default heap
-
-    !> \return                          address of heap
-    procedure :: clone_h                !< clone a heap object using the address of an existing heap
+    procedure :: clone_h      !< Clone a heap object using the address of an existing heap. \return The given address
     GENERIC   :: clone => clone_h
 
-    !> \return                          address of heap
-    procedure :: register               !< register an existing heap at specified address
+    procedure :: register     !< Register an existing heap at specified address. \return Number of registered heap if successful, -1 otherwise
+    procedure :: check        !< Check integrity of heap. \return 0 if OK, something else otherwise
 
-    !> \return                          0 if O.K., nonzero if not
-    procedure :: check                  !< heap integrity check
+    procedure, NOPASS :: get_heap_from_address    !< Find if address belongs to a registered heap. \return Address of heap, NULL if error
+    procedure, NOPASS :: get_offset_from_address  !< Translate address to offset in a heap. \return Offset within the correct heap, -1 if error
 
-    !> \return                          address of heap (NULL if not in a registered heap)
-    procedure, NOPASS :: inheap         !< find if address belongs to a registered heap
+    procedure, NOPASS :: is_valid_block           !< \return Whether the given address belongs to a registered heap
+    procedure, NOPASS :: get_blocksize            !< \return block size (bytes) of a given heap block (negative if error)
 
-    !> \return                          offset in heap (-1 if not in a registered heap)
-    procedure, NOPASS :: offset => heap_offset        !< translate address to offset in heap
+    procedure :: get_address_from_offset  !< \return Block address that corresponds to the given offset in the heap. NULL if error
+    procedure :: get_ptr => heap_get_ptr  !< \return Internal pointer to heap
 
-    !> \return                          address from offset in heap, NULL if not a heap
-    procedure :: address_from_offset    !< translate offset in heap into actual address
+    procedure :: get_size               !< \return Size of heap, -1 if error
+    procedure :: alloc                  !< Allocate a block from a heap.  \return block address, NULL if allocation fails
 
-    !> \return                          internal pointer to heap, NULL if not a heap
-    procedure :: ptr                    !< get internal pointer to heap
-
-    !> \return                          0 if valid block, -1 unknown heap, 1 not block pointer
-    procedure, NOPASS :: block_status     !< find if address belongs to a registered heap
-
-    !> \return                          block size marker if valid block, -1 unknown heap, 1 not block pointer
-    procedure, NOPASS :: blockcode     !< get block size (elements) of a heap block (negative if block in use)
-
-    !> \return                          block size marker if valid block, -1 unknown heap, 1 not block pointer
-    procedure, NOPASS :: blocksize     !< get block size (elements) of a heap block (negative if block in use)
-
-    !> \return                          size of heap in bytes , -1 if error
-    procedure :: heapsize              !< get size of a known heap
-
-    !> \return                          block address, NULL if allocation fails
-    procedure :: alloc                  !< allocate a block in a registered heap
-
-    !> \return                          0 if O.K., nonzero if error
-    procedure, NOPASS :: freebyaddress  !< free an allocated block by address in memory
+    procedure, NOPASS :: freebyaddress  !< Free an allocated block by address in memory.  \return  0 if O.K., nonzero if error
 
     !> \return                          0 if O.K., nonzero if error
     procedure, NOPASS :: freebymeta     !< free an allocated block using its metadata
@@ -177,21 +149,21 @@ module heap_module
 !   ===========================  interfaces to script generated functions  ===========================
     !> \return                           a fortran pointer
     procedure   ::            &  !< specific procedures needed for generic type bound allocator
-                              I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
-                              I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
-                              I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
-                              I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
-                              R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D 
+                              allocate_I1_5D, allocate_I1_4D, allocate_I1_3D, allocate_I1_2D, allocate_I1_1D, &
+                              allocate_I2_5D, allocate_I2_4D, allocate_I2_3D, allocate_I2_2D, allocate_I2_1D, &
+                              allocate_I4_5D, allocate_I4_4D, allocate_I4_3D, allocate_I4_2D, allocate_I4_1D, &
+                              allocate_I8_5D, allocate_I8_4D, allocate_I8_3D, allocate_I8_2D, allocate_I8_1D, &
+                              allocate_R4_5D, allocate_R4_4D, allocate_R4_3D, allocate_R4_2D, allocate_R4_1D, &
+                              allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D 
 !> \endcond
     !> \return     a fortran pointer to integer and real arrays of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
     GENERIC   :: allocate =>  &  !< generic Fortran array type bound allocator
-                              I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &
-                              I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &
-                              I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &
-                              I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &
-                              R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &
-                              R8_5D, R8_4D, R8_3D, R8_2D, R8_1D
+                              allocate_I1_5D, allocate_I1_4D, allocate_I1_3D, allocate_I1_2D, allocate_I1_1D, &
+                              allocate_I2_5D, allocate_I2_4D, allocate_I2_3D, allocate_I2_2D, allocate_I2_1D, &
+                              allocate_I4_5D, allocate_I4_4D, allocate_I4_3D, allocate_I4_2D, allocate_I4_1D, &
+                              allocate_I8_5D, allocate_I8_4D, allocate_I8_3D, allocate_I8_2D, allocate_I8_1D, &
+                              allocate_R4_5D, allocate_R4_4D, allocate_R4_3D, allocate_R4_2D, allocate_R4_1D, &
+                              allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D
   end type heap
 
 ! tell doxygen to ignore the following block (for now)
@@ -206,21 +178,21 @@ module heap_module
   ! end interface
 
   interface ptr_to_bm
-    module procedure I15D_bm, I14D_bm, I13D_bm, I12D_bm, I11D_bm, &   !  8 bit integer functions
-                     I25D_bm, I24D_bm, I23D_bm, I22D_bm, I21D_bm, &   ! 16 bit integer functions
-                     I45D_bm, I44D_bm, I43D_bm, I42D_bm, I41D_bm, &   ! 32 bit integer functions
-                     I85D_bm, I84D_bm, I83D_bm, I82D_bm, I81D_bm, &   ! 64 bit integer functions
-                     R45D_bm, R44D_bm, R43D_bm, R42D_bm, R41D_bm, &   ! 32 bit real functions, 
-                     R85D_bm, R84D_bm, R83D_bm, R82D_bm, R81D_bm      ! 64 bit real functions
+    module procedure ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
+                     ptr_to_blockmeta_I25D, ptr_to_blockmeta_I24D, ptr_to_blockmeta_I23D, ptr_to_blockmeta_I22D, ptr_to_blockmeta_I21D, &   ! 16 bit integer functions
+                     ptr_to_blockmeta_I45D, ptr_to_blockmeta_I44D, ptr_to_blockmeta_I43D, ptr_to_blockmeta_I42D, ptr_to_blockmeta_I41D, &   ! 32 bit integer functions
+                     ptr_to_blockmeta_I85D, ptr_to_blockmeta_I84D, ptr_to_blockmeta_I83D, ptr_to_blockmeta_I82D, ptr_to_blockmeta_I81D, &   ! 64 bit integer functions
+                     ptr_to_blockmeta_R45D, ptr_to_blockmeta_R44D, ptr_to_blockmeta_R43D, ptr_to_blockmeta_R42D, ptr_to_blockmeta_R41D, &   ! 32 bit real functions, 
+                     ptr_to_blockmeta_R85D, ptr_to_blockmeta_R84D, ptr_to_blockmeta_R83D, ptr_to_blockmeta_R82D, ptr_to_blockmeta_R81D      ! 64 bit real functions
   end interface
 
   interface bm_to_ptr
-    module procedure bm_I15D, bm_I14D, bm_I13D, bm_I12D, bm_I11D, &   !  8 bit integer functions
-                     bm_I25D, bm_I24D, bm_I23D, bm_I22D, bm_I21D, &   ! 16 bit integer functions
-                     bm_I45D, bm_I44D, bm_I43D, bm_I42D, bm_I41D, &   ! 32 bit integer functions
-                     bm_I85D, bm_I84D, bm_I83D, bm_I82D, bm_I81D, &   ! 64 bit integer functions
-                     bm_R45D, bm_R44D, bm_R43D, bm_R42D, bm_R41D, &   ! 32 bit real functions, 
-                     bm_R85D, bm_R84D, bm_R83D, bm_R82D, bm_R81D      ! 64 bit real functions
+    module procedure blockmeta_to_ptr_I15D, blockmeta_to_ptr_I14D, blockmeta_to_ptr_I13D, blockmeta_to_ptr_I12D, blockmeta_to_ptr_I11D, &   !  8 bit integer functions
+                     blockmeta_to_ptr_I25D, blockmeta_to_ptr_I24D, blockmeta_to_ptr_I23D, blockmeta_to_ptr_I22D, blockmeta_to_ptr_I21D, &   ! 16 bit integer functions
+                     blockmeta_to_ptr_I45D, blockmeta_to_ptr_I44D, blockmeta_to_ptr_I43D, blockmeta_to_ptr_I42D, blockmeta_to_ptr_I41D, &   ! 32 bit integer functions
+                     blockmeta_to_ptr_I85D, blockmeta_to_ptr_I84D, blockmeta_to_ptr_I83D, blockmeta_to_ptr_I82D, blockmeta_to_ptr_I81D, &   ! 64 bit integer functions
+                     blockmeta_to_ptr_R45D, blockmeta_to_ptr_R44D, blockmeta_to_ptr_R43D, blockmeta_to_ptr_R42D, blockmeta_to_ptr_R41D, &   ! 32 bit real functions, 
+                     blockmeta_to_ptr_R85D, blockmeta_to_ptr_R84D, blockmeta_to_ptr_R83D, blockmeta_to_ptr_R82D, blockmeta_to_ptr_R81D      ! 64 bit real functions
   end interface
   
 !   ===========================  type bound procedures used by heap user type ===========================
@@ -301,12 +273,12 @@ module heap_module
     status = ShmemHeapGetBlockMeta(block, this%a, msz)
   end function metadata
 
-  function get_ptr(this) result(this_ptr)
+  function block_meta_get_ptr(this) result(this_ptr)
     implicit none
     class(block_meta_f08), intent(IN) :: this
     type(C_PTR) :: this_ptr
     this_ptr = this % p
-  end function get_ptr
+  end function block_meta_get_ptr
 
   !> \brief get array type from Fortran block metadata
   function t(this) result(n)
@@ -553,57 +525,72 @@ module heap_module
   end function register 
   
   !> \brief check integrity of a heap
-  !> <br>example :<br>type(heap) :: h<brinteger(C_INT) :: free_blocks,used_blocks>
+  !> <br>example :<br>type(heap) :: h<br>
   !> <br>integer(C_SIZE_T) :: free_space,used_space<br>integer(C_INT) :: status<br>
   !> status = h\%check(free_blocks, free_space, used_blocks, used_space)
-  function check(h, free_blocks, free_space, used_blocks, used_space) result(status)
+  function check(h, free_blocks_out, free_space_out, used_blocks_out, used_space_out) result(is_ok)
     implicit none
-    class(heap), intent(INOUT) :: h             !< heap object
-    integer(C_INT), intent(OUT)    :: free_blocks   !< number of free blocks in heap
-    integer(C_INT), intent(OUT)    :: used_blocks   !< number of used blocks in heap
-    integer(C_SIZE_T), intent(OUT) :: free_space    !< available space in heap (bytes)
-    integer(C_SIZE_T), intent(OUT) :: used_space    !< used space in heap (bytes)
-    integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
+    class(heap),       intent(INOUT)         :: h                 !< heap object
+    integer(C_INT),    intent(OUT), optional :: free_blocks_out   !< number of free blocks in heap
+    integer(C_SIZE_T), intent(OUT), optional :: free_space_out    !< available space in heap (bytes)
+    integer(C_INT),    intent(OUT), optional :: used_blocks_out   !< number of used blocks in heap
+    integer(C_SIZE_T), intent(OUT), optional :: used_space_out    !< used space in heap (bytes)
+
+    integer(C_INT)    :: free_blocks   !< number of free blocks in heap
+    integer(C_INT)    :: used_blocks   !< number of used blocks in heap
+    integer(C_SIZE_T) :: free_space    !< available space in heap (bytes)
+    integer(C_SIZE_T) :: used_space    !< used space in heap (bytes)
+    integer(C_INT)    :: status        !< 0 if O.K., nonzero if error
+    logical           :: is_ok
+
     status = ShmemHeapCheck(h%p, free_blocks, free_space, used_blocks, used_space)
+    is_ok = (status == 0)
+
+    if (present(free_blocks_out)) free_blocks_out = free_blocks
+    if (present(free_space_out))  free_space_out  = free_space
+    if (present(used_blocks_out)) used_blocks_out = used_blocks
+    if (present(used_space_out))  used_space_out  = used_space
   end function check 
   
   !> \brief find if address belongs to a registered heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>type(C_PTR) :: p<br>
-  !> p = h\%inheap(addr)
-  function inheap(addr) result(p)
+  !> p = h\%get_heap_from_address(addr)
+  function get_heap_from_address(addr) result(p)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
     type(C_PTR) :: p                            !< address of heap (NULL if not in a registered heap)
     p = ShmemHeapContains(addr)
-  end function inheap 
+  end function get_heap_from_address 
   
-  !> \brief find if address belongs to a block from a registered heap
+  !> \brief Find if given address belongs to a block from a registered heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: status<br>
-  !> status = h\%block_status(addr)
-  function block_status(addr) result(status)
+  !> status = h\%is_valid_block(addr)
+  function is_valid_block(addr) result(is_valid)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
+    logical :: is_valid                         !< Whether the given address points to a valid block in a known heap
     integer(C_INT) :: status                    !< 0 if valid block from registered heap, 
                                                 !< -1 if unknown heap, 
                                                 !< 1 if not a proper block pointer
     status = ShmemHeapValidBlock(addr)
-  end function block_status 
+    is_valid = (status == 0)
+  end function is_valid_block 
   
   !> \brief get the size of a heap
   !> <br>example :<br>type(heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
-  !> bsz = h\%heapsize()
-  function heapsize(h) result(bsz)
+  !> bsz = h\%get_size()
+  function get_size(h) result(bsz)
     implicit none
     class(heap), intent(INOUT) :: h             !< heap object
     integer(C_SIZE_T) :: bsz                    !< size if known heap, -1 otherwise
     bsz = ShmemHeapSize(h%p)
-  end function heapsize
+  end function get_size
   
   !> \brief get the size code of a heap block
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(HEAP_ELEMENT) :: offset<br>integer(C_SIZE_T) :: bsz<br>
-  !> bsz = h\%blocksize(p, addr, offset)<br>
-  !> bsz = h\%blocksize(h\%address(0), addr, offset)
-  function blocksize(p, addr, offset) result(bsz)
+  !> bsz = h\%get_blocksize(p, addr, offset)<br>
+  !> bsz = h\%get_blocksize(h\%address(0), addr, offset)
+  function get_blocksize(p, addr, offset) result(bsz)
     implicit none
     type(C_PTR), intent(IN), value :: p         !< address of heap (if C_NULL_PTR, addr is needed)
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
@@ -612,51 +599,38 @@ module heap_module
                                                 !< -1 if unknown heap, 
                                                 !< 1 if not a proper block pointer
     bsz = ShmemHeapBlockSize(p, addr, offset)
-  end function blocksize
+  end function get_blocksize
   
-  !> \brief get the size code of a heap block
-  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(HEAP_ELEMENT) :: bsz<br>
-  !> bsz = h\%blockcode(addr)
-  function blockcode(addr) result(bsz)
-    implicit none
-    type(C_PTR), intent(IN), value :: addr      !< memory address to check
-    integer(HEAP_ELEMENT) :: bsz                !< size marker if valid block from registered heap, (< 0 if block in use)
-                                                !< -1 if unknown heap, 
-                                                !< 1 if inside a registered heap but not a proper block pointer
-    bsz = ShmemHeapBlockSizeCode(addr)
-  end function blockcode
-  
-  !> \brief get offset into heap for a memory address
+  !> \brief Get offset into a heap for a given memory address
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: off<br>
   !> off = h\%offset(addr)
-  function heap_offset(addr) result(off)
+  function get_offset_from_address(addr) result(off)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< memory address to check
-    integer(HEAP_ELEMENT) :: off                       !< offset from base of registered heap, 
-                                                !< -1 if unknown heap, 
-    off = ShmemHeapPtr2Offset(addr)
-  end function heap_offset 
+    integer(HEAP_ELEMENT) :: off                !< offset from base of *some* registered heap, -1 if unknown heap
+    off = ShmemHeapPtrToOffset(addr)
+  end function get_offset_from_address 
   
   !> \brief get internal pointer(address) to heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p<br>
-  !> p = h\%ptr()
-  function ptr(h) result(p)
+  !> p = h\%get_ptr()
+  function heap_get_ptr(h) result(p)
     implicit none
     class(heap), intent(INOUT) :: h             !< heap object
     type(C_PTR) :: p                            !< internal address, NULL if not initialized
     p = h%p
-  end function ptr 
+  end function heap_get_ptr 
   
   !> \brief translate offset in heap into address
   !> <br>example :<br>type(heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br>type(C_PTR) :: p<br>
-  !> p = h\%address_from_offset(offset)
-  function address_from_offset(h, offset) result(p)
+  !> p = h\%get_address_from_offset(offset)
+  function get_address_from_offset(h, offset) result(p)
     implicit none
-    class(heap), intent(INOUT) :: h             !< heap object
-    integer(HEAP_ELEMENT), intent(IN), value :: offset    !< offset into heap
+    class(heap), intent(INOUT) :: h                     !< heap object
+    integer(HEAP_ELEMENT), intent(IN), value :: offset  !< offset into heap
     type(C_PTR) :: p                            !< address, NULL if invalid offset/heap combination
     p = ShmemHeapPtr(h%p, offset)
-  end function address_from_offset
+  end function get_address_from_offset
 
   function get_block_meta_offset(b) result(offset)
     implicit none
@@ -664,6 +638,13 @@ module heap_module
     integer(C_SIZE_T) :: offset
     offset = b % a % offset
   end function get_block_meta_offset
+
+  function get_block_meta_address(b) result(address)
+    implicit none
+    type(block_meta), intent(in) :: b
+    type(C_PTR) :: address
+    address = b % p
+  end function get_block_meta_address
 
   subroutine block_meta_internals(b, p, d, tkr, o)   ! accessor for block_meta private data
     implicit none

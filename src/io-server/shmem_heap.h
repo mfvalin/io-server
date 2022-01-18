@@ -90,11 +90,11 @@ typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 128
 
-//!> HEAD marker below block
-const heap_element HEAD = 0xCAFEFADE;
+const heap_element HEAD = 0xCAFEFADE; //!< HEAD marker below block
+const heap_element TAIL = 0xBEBEFADA; //!< TAIL marker above block
 
-//!> TAIL marker above block
-const heap_element TAIL = 0xBEBEFADA;
+const uint64_t BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
+const uint64_t MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
 
 //!> heap statistics
 typedef struct{
@@ -107,7 +107,7 @@ typedef struct{
 typedef struct{
   heap_element *bot ;     //!< bottom of heap (lowest address)
   heap_element *top ;     //!< top of heap (highest address + 1)
-  heap_stats   *inf ;     //!< pointer to heap statistics
+  heap_stats   *stats ;   //!< pointer to heap statistics
 } heap_item ;
 
 //!> metadata description for Fortran (up to 5D arrays)
@@ -157,7 +157,7 @@ int32_t ShmemHeapIndex(
   void *addr                          //!< [in]  address possibly of a known heap
   );
 //! is this a known heap ?
-//! @return size if a known heap, -1 otherwise
+//! @return size (in bytes) if a known heap, -1 otherwise
 heap_element ShmemHeapSize(
   void *addr                    //!< [in]  address possibly of a known heap
   );
@@ -168,7 +168,7 @@ heap_element *ShmemHeapContains(
   );
 //! translate address to offset within a heap
 //! @return offset with respect to base of heap in heap_element units (NOT bytes)
-heap_element ShmemHeapPtr2Offset(
+heap_element ShmemHeapPtrToOffset(
   void *addr                    //!< [in]  address to translate to index
   );
 //! is this the address of a block belonging to a known heap ?
@@ -176,14 +176,6 @@ heap_element ShmemHeapPtr2Offset(
 //!        -1 if unknown heap,<br>
 //!         1 if inside a known heap but not a valid block pointer
 int32_t ShmemHeapValidBlock(
-  void *addr                    //!< [in]  putative valid block address
-  );
-//! is this the address of a block belonging to a known heap ?<br>
-//! same as ShmemHeapValidBlock but returns block size code instead of true/false information
-//! @return block size code if valid block from known heap,<br>
-//!        -1 if unknown heap,<br>
-//!         1 if inside known heap but not a proper block
-heap_element ShmemHeapBlockSizeCode(
   void *addr                    //!< [in]  putative valid block address
   );
 //! find the size of a used memory block (in bytes)<br>
@@ -213,7 +205,7 @@ int32_t ShmemHeapRegister(
 //! @return address of Server Heap if successful, NULL otherwise
 void *ShmemHeapInit(
   void *addr,                    //!< [in]  desired heap address, if NULL, allocate space with malloc
-  size_t sz                      //!< [in]  size in bytes of space pointed to by addr
+  size_t num_bytes               //!< [in]  size in bytes of space pointed to by addr
   );
 //! check integrity of Server Heap
 //! @return 0 : O.K.<br>
@@ -231,9 +223,9 @@ int32_t ShmemHeapCheck(
 //! allocate space on a Server Heap
 //! @return address of block, NULL in case of failure to allocate
 void *ShmemHeapAllocBlock(
-  void *addr,                      //!< [in]  address of Server Heap
-  size_t bsz,                      //!< [in]  size in bytes of block to allocate
-  int32_t safe                     //!< [in]  if nonzero, perform operation under lock
+  void          *addr,                //!< [in]  address of Server Heap
+  const size_t  num_requested_bytes,  //!< [in]  size in bytes of block to allocate
+  const int32_t safe                  //!< [in]  if nonzero, perform operation under lock
   );
 //! set block metadata
 //! @return 0 if O.K., nonzero if error

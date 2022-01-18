@@ -110,16 +110,19 @@ contains
         block
           integer(kind = 4), dimension(:,:,:,:,:), pointer :: data_array_4
           integer(kind = 8), dimension(:,:,:,:,:), pointer :: data_array_8
+
+          print *, 'heap size = ', data_heap % get_size()
+
           if (record % elem_size == 4) then
             data_array_info = data_heap % allocate(data_array_4, record % global_grid % size)
             if (.not. associated(data_array_4)) then
-              print *, 'ERROR: Could not allocate from the heap!'
+              print *, 'ERROR: Could not allocate from the heap! (4)'
               error stop 1
             end if
           else if (record % elem_size == 8) then
             data_array_info = data_heap % allocate(data_array_8, record % global_grid % size)
             if (.not. associated(data_array_8)) then
-              print *, 'ERROR: Could not allocate from the heap!'
+              print *, 'ERROR: Could not allocate from the heap! (8)'
               error stop 1
             end if
           else
@@ -194,7 +197,7 @@ contains
     if (line_id < 0) return
 
     ! Retrieve full grid from heap
-    full_grid_ptr = data_heap % address_from_offset(this % lines(line_id) % data_offset)
+    full_grid_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
     if (.not. c_associated(full_grid_ptr)) then
       print *, 'ERROR: Pointer retrieved from heap is not associated!', this % lines(line_id) % data_offset, mutex % get_id()
       error stop 1
@@ -208,6 +211,7 @@ contains
     block
       integer(kind = 4), dimension(:,:,:,:,:), pointer :: full_grid_4, subgrid_4
       integer(kind = 8), dimension(:,:,:,:,:), pointer :: full_grid_8, subgrid_8
+      print *, 'GOTTA REDUCE THIS if-else INTO A ONE-LINER'
       if (record % elem_size == 4) then
         call c_f_pointer(full_grid_ptr, full_grid_4, this % lines(line_id) % global_grid % size)
         call c_f_pointer(subgrid_ptr, subgrid_4, record % subgrid_area % size)
@@ -281,7 +285,7 @@ contains
     integer :: num_bytes
 
     ! print *, 'Trying to flush line #', line_id
-    data_ptr = data_heap % address_from_offset(this % lines(line_id) % data_offset)
+    data_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
     if (.not. c_associated(data_ptr)) then
       print *, 'ERROR: Pointer retrieved from heap is not associated!', this % lines(line_id) % data_offset
       error stop 1

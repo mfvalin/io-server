@@ -22,8 +22,8 @@
 module model_write_parameters
   implicit none
 
-  integer, parameter :: CB_MESSAGE_SIZE_INT       = 1024                     ! Size of each data batch put in a CB. Must be divisible by 16 for the tests
-  integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = 4096                     ! How much total data to send (for each CB)
+  integer, parameter :: CB_MESSAGE_SIZE_INT       = 16384                     !< Size of each data batch put in a CB. Must be divisible by 16 for the tests
+  integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = CB_MESSAGE_SIZE_INT * 16  !< How much total data to send (for each CB)
 contains
 
   function compute_data_point(compute_rank, tag, index) result(data_point)
@@ -226,8 +226,6 @@ contains
     end if
   end subroutine pseudo_model_process
 end module model_write_parameters
-
-#include <serializer.hf>
 
 program pseudomodelandserver
   use ISO_C_BINDING

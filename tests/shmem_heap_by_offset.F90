@@ -91,12 +91,12 @@ program shmem_heap_by_offset
       error stop 1
     end if
 
-    if (the_heap % block_status(p) .ne. 0) then
+    if (.not. the_heap % is_valid_block(p)) then
       print *, 'ERROR: C pointer does not point to a valid block!'
       error stop 1
     end if
 
-    p2 = the_heap % address_from_offset(offset)
+    p2 = the_heap % get_address_from_offset(offset)
     if (.not. c_associated(p, p2)) then
       ! print *, 'ERROR: Retrieving block address from its offset gives the wrong address!', p2
       ! print *, 'Should be                                                              ', p

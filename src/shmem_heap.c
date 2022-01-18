@@ -98,11 +98,11 @@ typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able 
 //!> maximum number of registered heaps
 #define MAX_HEAPS 128
 
-//!> HEAD marker below block
-const heap_element HEAD = 0xCAFEFADE;
+const heap_element HEAD = 0xCAFEFADE; //!< HEAD marker below block
+const heap_element TAIL = 0xBEBEFADA; //!< TAIL marker above block
 
-//!> TAIL marker above block
-const heap_element TAIL = 0xBEBEFADA;
+const uint64_t BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
+const uint64_t MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
 
 //!> heap statistics
 typedef struct{
@@ -115,7 +115,7 @@ typedef struct{
 typedef struct{
   heap_element *bot ;     //!< bottom of heap (lowest address)
   heap_element *top ;     //!< top of heap (highest address + 1)
-  heap_stats   *inf ;     //!< pointer to heap statistics
+  heap_stats   *stats ;   //!< pointer to heap statistics
 } heap_item ;
 
 //!> metadata description for Fortran (up to 5D arrays)
@@ -127,7 +127,7 @@ typedef  struct {
 // \endcond
 
 //!> number of registered heaps
-static int32_t nheaps = 0 ;
+static int32_t num_heaps = 0 ;
 
 //!> table containing registered heap information
 static heap_item heap_table[MAX_HEAPS] ;
@@ -205,8 +205,8 @@ void ShmemHeapDumpInfo(
     if( heap_table[i].bot != NULL) {
       printf("heap %2d, (%p : %p), high point: %ld bytes, allocated %ld blocks (%ld bytes)\n",
              i, (void*)heap_table[i].bot, (void*)heap_table[i].top, 
-             (heap_table[i].inf)->max * sizeof(heap_element), 
-             (heap_table[i].inf)->nblk, (heap_table[i].inf)->nbyt) ;
+             (heap_table[i].stats)->max * sizeof(heap_element), 
+             (heap_table[i].stats)->nblk, (heap_table[i].stats)->nbyt) ;
     }
   }
   printf("===========================================\n");
@@ -245,9 +245,9 @@ int ShmemHeapGetInfo(
 
   *size = (heap_table[index].top - heap_table[index].bot) * sizeof(heap_element) ;
   *max  = sizeof(heap_element) ;
-  *max  *= (heap_table[index].inf)->max ;
-  *nblk = (heap_table[index].inf)->nblk ;
-  *nbyt = (heap_table[index].inf)->nbyt ;
+  *max  *= (heap_table[index].stats)->max ;
+  *nblk = (heap_table[index].stats)->nblk ;
+  *nbyt = (heap_table[index].stats)->nbyt ;
   return 0 ;
 }
 
@@ -287,7 +287,7 @@ int32_t ShmemHeapSetDefault(
 
   if(addr == NULL) return -1 ;        // obviously not a heap
 
-  for(i=0 ; i<nheaps ; i++){
+  for(i=0 ; i<num_heaps ; i++){
     if( h == heap_table[i].bot ){     // does the heap base address match ?
       default_heap = addr ;           // set this heap as the default heap
       return i ;                      // index in heap table
@@ -317,7 +317,7 @@ int32_t ShmemHeapIndex(
   if(addr == NULL) addr = default_heap ;   // use default heap if address id NULL
   if(addr == NULL) return -1 ;        // obviously not a heap
 
-  for(i=0 ; i<nheaps ; i++){
+  for(i=0 ; i<num_heaps ; i++){
     if( b == heap_table[i].bot ){     // does the heap base address match ?
       return i ;                      // index in heap table
     }
@@ -335,7 +335,7 @@ int32_t ShmemHeapIndex(
 // F_EnD
 //  C_StArT
 //! is this a known heap ?
-//! @return size if a known heap, -1 otherwise
+//! @return size (in bytes) if a known heap, -1 otherwise
 heap_element ShmemHeapSize(
   void *addr                    //!< [in]  address possibly of a known heap
   ){
@@ -345,9 +345,9 @@ heap_element ShmemHeapSize(
 
   if(addr == NULL) return -1 ;        // obviously not a heap
 
-  for(i=0 ; i<nheaps ; i++){
-    if( b == heap_table[i].bot ){     // does the heap base address match ?
-      return b[0] ;                   // size of heap
+  for(i=0 ; i<num_heaps ; i++){
+    if( b == heap_table[i].bot ){         // does the heap base address match ?
+      return b[0] * sizeof(heap_element); // size of heap
     }
   }
   return -1 ;                         // not a known heap
@@ -369,9 +369,8 @@ heap_element *ShmemHeapContains(
   ){
 //  C_EnD
   heap_element *b = (heap_element *) addr ;
-  int i;
 
-  for(i=0 ; i<nheaps ; i++){
+  for(int i=0 ; i<num_heaps ; i++){
     if( (b >= heap_table[i].bot ) && (b < heap_table[i].top) ){ // address is within heap boundaries
       return heap_table[i].bot ;                          // base address of heap this address belongs to
     }
@@ -380,17 +379,17 @@ heap_element *ShmemHeapContains(
 }
 
 // F_StArT
-// function ShmemHeapPtr2Offset(addr) result(offset) bind(C,name='ShmemHeapPtr2Offset')
+// function ShmemHeapPtrToOffset(addr) result(offset) bind(C,name='ShmemHeapPtrToOffset')
 //   import :: C_PTR, HEAP_ELEMENT
 //   implicit none
 //   type(C_PTR), intent(IN), value :: addr
 //   integer(HEAP_ELEMENT) :: offset
-// end function ShmemHeapPtr2Offset
+// end function ShmemHeapPtrToOffset
 // F_EnD
 //  C_StArT
 //! translate address to offset within a heap
 //! @return offset with respect to base of heap in heap_element units (NOT bytes)
-heap_element ShmemHeapPtr2Offset(
+heap_element ShmemHeapPtrToOffset(
   void *addr                    //!< [in]  address to translate to index
   ){
 //  C_EnD
@@ -462,15 +461,6 @@ int32_t ShmemHeapValidBlock(
   return -1 ; // address not within bounds of known heap
 }
 
-// F_StArT
-// function ShmemHeapBlockSizeCode(addr) result(bsz) bind(C,name='ShmemHeapBlockSizeCode')
-//   import :: C_PTR, HEAP_ELEMENT
-//   implicit none
-//   type(C_PTR), intent(IN), value :: addr
-//   integer(HEAP_ELEMENT) :: bsz
-// end function ShmemHeapBlockSizeCode
-// F_EnD
-//  C_StArT
 //! is this the address of a block belonging to a known heap ?<br>
 //! same as ShmemHeapValidBlock but returns block size code instead of true/false information
 //! @return block size code if valid block from known heap,<br>
@@ -479,7 +469,6 @@ int32_t ShmemHeapValidBlock(
 heap_element ShmemHeapBlockSizeCode(
   void *addr                    //!< [in]  putative valid block address
   ){
-//  C_EnD
   heap_element *b = (heap_element *) addr ;
   heap_element *h ;
   heap_element sz ;
@@ -597,29 +586,36 @@ int32_t ShmemHeapRegister(
   void *addr                    //!< [in]  heap address
   ){
 //  C_EnD
-  heap_element *h = (heap_element *) addr ;
-  int i;
-  int target = -1 ;
+  heap_element *h = (heap_element *) addr;
 
-  if(nheaps == 0){                    // first time around, initialize heaps
-    for(i=0 ; i<MAX_HEAPS ; i++) {
+  if (h[0] < (int64_t)BLOCK_SPLIT_SIZE) return -1; // Heap is too small, can't be valid
+
+  // first time around, initialize heaps
+  if(num_heaps == 0){
+    for(int i=0 ; i<MAX_HEAPS ; i++) {
       heap_table[i].bot = NULL ;
       heap_table[i].top = NULL ;
-      heap_table[i].inf = NULL ;
+      heap_table[i].stats = NULL ;
     }
   }
 
-  for(i=0 ; i<MAX_HEAPS ; i++) if(heap_table[i].bot == NULL) {
-    target = i ;                  // unused entry found in table ?
-    break;
+  // Look for unused entries in the table
+  int target = -1 ;
+  for (int i = 0; i < MAX_HEAPS; i++) {
+    if (heap_table[i].bot == NULL) {
+      target = i; // Found one
+      break;
+    }
   }
-  if(target == -1) return -1 ;    // table is full, sorry !
 
-  heap_table[target].bot = h ;          // base of heap
-  heap_table[target].top = h + h[0] ;   // 1 element beyond top of heap
-  heap_table[target].inf = (heap_stats *) heap_table[target].top ;
-  if(target >= nheaps)nheaps++ ;  // bump heaps counter if not recycling an entry
-  return nheaps ;                 // number of registered heaps
+  if(target == -1) return -1; // table is full, sorry !
+
+  heap_table[target].bot   = h ;          // base of heap
+  heap_table[target].top   = h + h[0] ;   // 1 element beyond top of heap
+  heap_table[target].stats = (heap_stats *) heap_table[target].top ;
+  if (target >= num_heaps) num_heaps++ ;  // bump heaps counter if not recycling an entry
+
+  return num_heaps ;                      // number of registered heaps
 }
 
 // F_StArT
@@ -636,32 +632,32 @@ int32_t ShmemHeapRegister(
 //! @return address of Server Heap if successful, NULL otherwise
 void *ShmemHeapInit(
   void *addr,                    //!< [in]  desired heap address, if NULL, allocate space with malloc
-  size_t sz                      //!< [in]  size in bytes of space pointed to by addr
+  size_t num_bytes               //!< [in]  size in bytes of space pointed to by addr
   ){
 //  C_EnD
-  heap_element *h = (heap_element *) addr ;
-  size_t heap_sz ;
+  heap_element *heap = (heap_element *) addr ;
+  size_t num_elem;
   heap_stats *stats ;
 
-  if(h == NULL) h = (heap_element *) malloc(sz) ;
-  if(h == NULL) return NULL ;
+  if(heap == NULL) heap = (heap_element *) malloc(num_bytes) ;
+  if(heap == NULL) return NULL ;
 
-  sz = sz - sizeof(heap_stats) ;          // subtract size of stas area
-  heap_sz = sz / sizeof(heap_element) ;   // convert to heap element units
-  h[0] = heap_sz ;              // size of heap
-  h[1] = heap_sz -2 ;           // size of first block (head)
-  h[2] = HEAD ;
-  h[heap_sz - 3] = TAIL ;
-  h[heap_sz - 2] = heap_sz-2 ;  // size of first block (tail)
-  h[heap_sz - 1] = 0 ;          // last block (not locked)
+  num_bytes = num_bytes - sizeof(heap_stats) ;    // subtract size of stas area
+  num_elem = num_bytes / sizeof(heap_element) ;   // convert to heap element units
+  heap[0] = num_elem ;              // size of heap
+  heap[1] = num_elem -2 ;           // size of first block (head)
+  heap[2] = HEAD ;
+  heap[num_elem - 3] = TAIL ;
+  heap[num_elem - 2] = num_elem-2 ; // size of first block (tail)
+  heap[num_elem - 1] = 0 ;          // last block (not locked)
 
-  stats = (heap_stats *) (h + heap_sz) ;
+  stats = (heap_stats *) (heap + num_elem) ;
   stats->max  = 0 ;             // high water mark
   stats->nblk = 0 ;             // allocated blocks
   stats->nbyt = 0 ;             // bytes allocated
 
-  ShmemHeapRegister(h) ;        // register Heap for block validation purpose
-  return h ;                    // O.K. return address of Heap
+  ShmemHeapRegister(heap);        // register Heap for block validation purpose
+  return heap;                    // O.K. return address of Heap
 }
 
 // F_StArT
@@ -755,74 +751,102 @@ int32_t ShmemHeapCheck(
 //! allocate space on a Server Heap
 //! @return address of block, NULL in case of failure to allocate
 void *ShmemHeapAllocBlock(
-  void *addr,                      //!< [in]  address of Server Heap
-  size_t bsz,                      //!< [in]  size in bytes of block to allocate
-  int32_t safe                     //!< [in]  if nonzero, perform operation under lock
+  void          *addr,                //!< [in]  address of Server Heap
+  const size_t  num_requested_bytes,  //!< [in]  size in bytes of block to allocate
+  const int32_t safe                  //!< [in]  if nonzero, perform operation under lock
   ){
 //  C_EnD
-  heap_element *h = (heap_element *) addr ;
-  heap_element sz, limit, cur, next ;
-  heap_element *t ;
-  int32_t index ;
-  size_t nbyt = bsz ;
+  heap_element *heap = (heap_element *) addr;
 
-  index = ShmemHeapIndex(addr) ;
-  if(index == -1) return NULL ;
+  // Verify that the heap is registered (and get its index)
+  const int32_t heap_index = ShmemHeapIndex(addr);
+  if (heap_index == -1) return NULL;
 
-  sz = h[0] ;
-  limit = sz - 1 ;
-// printf("request block size = %d, sz = %d, limit = %d\n",bsz,sz,limit);
-  bsz = (bsz + sizeof(heap_element) -1) / sizeof(heap_element) ;  // round size UP (size in heap elements)
-  t = NULL ;
-  if(h[limit] > 1  || h[limit] < -1) return NULL  ;  // not a Server Heap or corrupted information
-  if(safe){                                          // lock heap
-//     while(! __sync_bool_compare_and_swap(h + limit, 0, -1) ) ;  // wait for 0, then set to -1 to indicate lock
-    while(! __sync_bool_compare_and_swap(h + limit, 0, 1) ) ;  // wait for 0, then set to 1 to indicate lock
+  const heap_element num_heap_elem = heap[0];
+  const heap_element limit = num_heap_elem - 1;
+
+  const size_t num_block_elem =
+      (num_requested_bytes + sizeof(heap_element) -1) / sizeof(heap_element)  // round size UP (size in heap elements)
+      + 4;                                                                    // Add head + tail + size elements
+  printf("request block size = %ld, num block elem = %ld, num heap elem = %ld, limit = %ld\n", num_requested_bytes, num_block_elem, num_heap_elem,limit);
+
+  if (heap[limit] > 1  || heap[limit] < -1) return NULL;  // not a Server Heap or corrupted information
+
+  // Lock the heap (if requested)
+  if (safe) {
+    while(! __sync_bool_compare_and_swap(heap + limit, 0, 1) );  // wait for 0, then set to 1 to indicate lock
   }
-  bsz += 2 * sizeof(heap_element);                   // add head + tail elements
-  for(cur = 1 ; cur < limit ; cur += sz){            // scan block list to find/make a large enough free block
-    sz = (h[cur] < 0) ? -h[cur] : h[cur] ;           // abs(h[cur])
-    if(h[cur] < 0) continue ;                        // block is not free
-    next = cur + sz ;                                // next block
-    while(next < limit && h[next] > 2) {             // next block is free
-//       printf("coalescing blocks\n");
-      sz += h[next] ;                                // coalesce blocks
-      next = cur + sz ;                              // new next after block coalescing
-      h[cur]      = sz ;                             // head size marker
-      h[cur+1]    =  HEAD ;
-      h[next - 2] = TAIL ;
-      h[next - 1] = sz ;                             // tail size marker
-    }
-    if(bsz <= (size_t)sz){                           // block large enough to satisfy request
-      t = h + cur + 2 ;                              // point to element following size marker
-      (heap_table[index].inf)->nblk += 1 ;
-      (heap_table[index].inf)->nbyt += nbyt ;
-      if (sz - bsz > 64) {             //  split block if worth it (more than 64 extra elements)
-        h[cur]       =  -bsz ;        // head count (lower block)
-        h[cur+1]     =  HEAD ;        // low  marker
-        h[cur+bsz-2] =  TAIL ;        // tail marker
-        h[cur+bsz-1] =   bsz ;        // tail count (lower block)
-        if( (cur + bsz) > (heap_table[index].inf)->max ) (heap_table[index].inf)->max = (cur + bsz) ;
-        h[cur+bsz]      = sz - bsz ;  // head count (upper block)
-        h[cur+bsz+1]    = HEAD ;      // low  marker
-        h[cur + sz - 2] = TAIL ;      // tail marker
-        h[cur + sz - 1] = sz - bsz ;  // tail count (upper block)
+
+  heap_element* allocated_block = NULL;
+  heap_element num_current_block_elem = 0;
+
+  // Scan block list to find/make a large enough free block
+  for (heap_element block_index = 1; block_index < limit; block_index += num_current_block_elem) {
+
+    num_current_block_elem = (heap[block_index] < 0) ? -heap[block_index] : heap[block_index];   // retrieve absolute block size (negative if block is not free)
+    if (heap[block_index] < 0) continue; // block is not free, skip to next one
+
+    // Coalesce blocks, if possible
+    {
+      heap_element next_index = block_index + num_block_elem;   // next block
+      while(next_index < limit && heap[next_index] > 2) {       // next block is free, fuse if with the current one
+        // printf("Coalescing blocks\n");
+        num_current_block_elem += heap[next_index];             // combined size
+        next_index = block_index + num_current_block_elem;      // new next after block coalescing
+
+        // Update current block
+        heap[block_index]     = num_current_block_elem;         // head size marker
+        heap[block_index + 1] = HEAD;
+        heap[next_index - 2]  = TAIL;
+        heap[next_index - 1]  = num_current_block_elem;         // tail size marker
       }
-      else {
-        h[cur] = -sz;
-        if ((uint64_t)(cur + sz) > (heap_table[index].inf)->max) {
-          (heap_table[index].inf)->max = (cur + sz);
+    }
+
+    if (num_block_elem <= (size_t)num_current_block_elem) {     // block large enough to satisfy request
+      allocated_block = heap + block_index + 2;                 // point to element following size marker
+      // printf("Found block at %p (block_index + 2 = %ld), heap at %p\n", (void*)allocated_block, block_index + 2, (void*)heap);
+      (heap_table[heap_index].stats)->nblk += 1 ;
+      (heap_table[heap_index].stats)->nbyt += num_requested_bytes;
+
+      // Split block if worth it
+      if (num_current_block_elem - num_block_elem > BLOCK_SPLIT_SIZE) {
+        heap[block_index]                      = -num_block_elem; // head count (lower block)
+        heap[block_index + 1]                  = HEAD;            // low  marker
+        heap[block_index + num_block_elem - 2] = TAIL;            // tail marker
+        heap[block_index + num_block_elem - 1] = num_block_elem;  // tail count (lower block)
+
+        heap[block_index + num_block_elem]             = num_current_block_elem - num_block_elem ;  // head count (upper block)
+        heap[block_index + num_block_elem + 1]         = HEAD;                                      // low  marker
+        heap[block_index + num_current_block_elem - 2] = TAIL;                                      // tail marker
+        heap[block_index + num_current_block_elem - 1] = num_current_block_elem - num_block_elem ;  // tail count (upper block)
+
+        // Update high-water mark if needed
+        if ( (block_index + num_block_elem) > (heap_table[heap_index].stats)->max ) {
+          (heap_table[heap_index].stats)->max = (block_index + num_block_elem);
         }
       }
-    }else{
-//       printf("block is too small to allocate, need %d, have %d\n", bsz, sz-2);
+      // Or just allocate it directly
+      else {
+        heap[block_index] = -num_current_block_elem;
+
+        // Update high-water mark if needed
+        if ((uint64_t)(block_index + num_current_block_elem) > (heap_table[heap_index].stats)->max) {
+          (heap_table[heap_index].stats)->max = (block_index + num_current_block_elem);
+        }
+      }
     }
-      break ;
+    else {
+      // printf("block is too small to allocate, need %ld, have %ld\n", num_block_elem, num_heap_elem-2);
+    }
+    break ;
   }
-  if(safe){                                          // unlock heap
-    h[limit] = 0 ;
+
+  // Unlock heap if needed
+  if (safe) {
+    heap[limit] = 0;
   }
-  return t ;
+
+  return allocated_block;
 }
 
 // F_StArT

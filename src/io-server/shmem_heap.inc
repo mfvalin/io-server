@@ -95,24 +95,18 @@ implicit none
 type(C_PTR), intent(IN), value :: addr
 type(C_PTR) :: p
 end function ShmemHeapContains
-function ShmemHeapPtr2Offset(addr) result(offset) bind(C,name='ShmemHeapPtr2Offset')
+function ShmemHeapPtrToOffset(addr) result(offset) bind(C,name='ShmemHeapPtrToOffset')
 import :: C_PTR, HEAP_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: addr
 integer(HEAP_ELEMENT) :: offset
-end function ShmemHeapPtr2Offset
+end function ShmemHeapPtrToOffset
 function ShmemHeapValidBlock(addr) result(status) bind(C,name='ShmemHeapValidBlock')
 import :: C_INT, C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: addr
 integer(C_INT) :: status
 end function ShmemHeapValidBlock
-function ShmemHeapBlockSizeCode(addr) result(bsz) bind(C,name='ShmemHeapBlockSizeCode')
-import :: C_PTR, HEAP_ELEMENT
-implicit none
-type(C_PTR), intent(IN), value :: addr
-integer(HEAP_ELEMENT) :: bsz
-end function ShmemHeapBlockSizeCode
 function ShmemHeapBlockSize(heap, addr, offset) result(bsz) bind(C,name='ShmemHeapBlockSize')
 import :: C_PTR, C_SIZE_T, HEAP_ELEMENT
 implicit none
