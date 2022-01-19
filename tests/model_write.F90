@@ -84,9 +84,9 @@ contains
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs
 
-    type(subgrid_t)  :: local_grid
-    type(grid_t)     :: input_grid_4, input_grid_8, output_grid
-    type(block_meta) :: data_array_info_1, data_array_info_2
+    type(subgrid_t)      :: local_grid
+    type(grid_t)         :: input_grid_4, input_grid_8, output_grid
+    type(block_meta_f08) :: data_array_info_1, data_array_info_2
     integer(kind=4), dimension(:,:), pointer :: data_array_4
     integer(kind=8), dimension(:,:), pointer :: data_array_8
 
@@ -164,6 +164,8 @@ contains
     ! call sleep_us(5000)
     block
       integer :: i_msg, i_data, j_data, current_tag
+      integer(C_INT64_T), dimension(2) :: array_dims
+      array_dims = [CB_MESSAGE_SIZE_INT/4, 4]
       current_tag = 1
       do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
         !------------------------
@@ -172,10 +174,10 @@ contains
         current_tag = current_tag + 2
 
         ! Get memory and put data in it. Try repeatedly if it failed.
-        data_array_info_1 = node_heap % allocate(data_array_4, [CB_MESSAGE_SIZE_INT/4, 4])
+        data_array_info_1 = node_heap % allocate(data_array_4, array_dims)
         do while (.not. associated(data_array_4))
           call sleep_us(10)
-          data_array_info_1 = node_heap % allocate(data_array_4, [CB_MESSAGE_SIZE_INT/4, 4])
+          data_array_info_1 = node_heap % allocate(data_array_4, array_dims)
         end do
 
         ! Using i + 2 b/c tag is incremented when opening a file
@@ -195,10 +197,10 @@ contains
 
         !------------------------
         ! Second stream
-        data_array_info_2 = node_heap % allocate(data_array_8, [CB_MESSAGE_SIZE_INT/4, 4])
+        data_array_info_2 = node_heap % allocate(data_array_8, array_dims)
         do while (.not. associated(data_array_8))
           call sleep_us(10)
-          data_array_info_2 = node_heap % allocate(data_array_8, [CB_MESSAGE_SIZE_INT/4, 4])
+          data_array_info_2 = node_heap % allocate(data_array_8, array_dims)
         end do
 
         ! Using i + 2 b/c tag is incremented when opening a file

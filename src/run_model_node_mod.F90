@@ -111,7 +111,7 @@ subroutine server_bound_relay_process(context)
   integer :: dcb_message_buffer_size
   integer(C_INT64_T) :: dcb_capacity
 
-  integer :: total_message_size, content_size
+  integer(C_INT64_T) :: total_message_size, content_size
   integer(C_INT64_T) :: filename_size
   logical :: finished, success, skip_message
   integer, dimension(:), allocatable :: cb_message
@@ -119,8 +119,7 @@ subroutine server_bound_relay_process(context)
 
   integer, dimension(:), pointer :: f_data
   type(C_PTR) :: c_data
-  integer :: num_data_int
-  integer :: h_status
+  integer(C_INT64_T) :: num_data_int
 
   type(model_record)   :: record
   type(message_header) :: header
@@ -250,7 +249,7 @@ subroutine server_bound_relay_process(context)
         total_message_size = INT(message_header_size_int() + message_cap_size_int(), kind=4)
 
       else if (header % command == MSG_COMMAND_OPEN_FILE) then
-        filename_size = num_char_to_num_int(header % content_length)
+        filename_size = num_char_to_num_int(int(header % content_length, 4))
 
         if (.not. allocated(cb_message)) then
           allocate(cb_message(filename_size))
@@ -305,10 +304,9 @@ subroutine server_bound_relay_process(context)
         !TODO                                                     ! Compression metadata
         !TODO                                                     ! Other metadata
         num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))  ! The data
-
         
-        h_status = heap_list(i_compute) % free(c_data)            ! Free the shared memory
-        if (h_status .ne. 0) then
+        success = heap_list(i_compute) % free(c_data)            ! Free the shared memory
+        if (.not. success) then
           print*, 'ERROR: Unable to free heap data (from RELAY)'
           error stop 1
         end if

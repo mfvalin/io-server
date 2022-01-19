@@ -183,15 +183,15 @@ contains
   end function close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
-  function write(this, mydata, subgrid_area, global_grid, grid_out, cprs, meta) result(success)
+  function write(this, my_data, subgrid_area, global_grid, grid_out, cprs, meta) result(success)
     use iso_c_binding
     use jar_module
     implicit none
-    class(model_stream), intent(INOUT) :: this
-    type(block_meta),   intent(IN)     :: mydata           !< array descriptor from h % allocate
-    type(subgrid_t),    intent(IN)     :: subgrid_area     !< area of this subgrid in global grid
-    type(grid_t),       intent(IN)     :: global_grid      !< global grid info
-    type(grid_t),       intent(IN)     :: grid_out         !< output grid
+    class(model_stream),  intent(INOUT) :: this
+    type(block_meta_f08), intent(IN)    :: my_data          !< array descriptor from h % allocate
+    type(subgrid_t),      intent(IN)    :: subgrid_area     !< area of this subgrid in global grid
+    type(grid_t),         intent(IN)    :: global_grid      !< global grid info
+    type(grid_t),         intent(IN)    :: grid_out         !< output grid
 
     type(cmeta), intent(IN), optional  :: cprs             !< compression related metadata (carried serialized)
     type(jar),   intent(IN), optional  :: meta             !< metadata associated with data (carried serialized and blindly)
@@ -203,22 +203,22 @@ contains
     type(message_cap)    :: end_cap
     integer(JAR_ELEMENT), dimension(:), pointer :: metadata
     integer(JAR_ELEMENT) :: low, high
-    type(block_meta_f08) :: f_block
+    ! type(block_meta_f08) :: f_block
 
     success = .false.
     if(this % stream_id <= 0) return
 
-    f_block = mydata
+    ! f_block = mydata
 
     ! Check that dimensions in area are consistent with metadata
-    if (.not. all(f_block % dims() == subgrid_area % size)) then
+    if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
       print *, 'EARLY FAIL 1'
       return
     end if
 
     ! Check that given element size is the same as in the global grid
-    if (f_block % k() .ne. global_grid % elem_size) then
-      print *, 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, f_block % k()
+    if (my_data % get_kind() .ne. global_grid % elem_size) then
+      print *, 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, my_data % get_kind()
     end if
 
     call this % messenger % bump_tag()
@@ -246,12 +246,12 @@ contains
 
     rec % subgrid_area   = subgrid_area
     rec % global_grid    = global_grid
-    rec % global_grid % elem_size = f_block % k()
+    rec % global_grid % elem_size = my_data % get_kind()
 
     rec % output_grid_id = grid_out % id
 
-    rec % elem_size      = f_block % k()
-    rec % data           = f_block % get_ptr()
+    rec % elem_size      = my_data % get_kind()
+    rec % data           = my_data % get_ptr()
     rec % data_size_byte = product(rec % subgrid_area % size) * rec % elem_size
 
     ! print *, rec % ni, rec % nj, rec % nk, rec % nvar, f_block % k()

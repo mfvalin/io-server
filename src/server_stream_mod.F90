@@ -34,7 +34,7 @@ module server_stream_module
 
   private
 
-  public :: block_meta, subgrid_t, grid_t, cmeta
+  public :: block_meta_f08, subgrid_t, grid_t, cmeta
 
   integer, parameter :: STREAM_STATUS_UNINITIALIZED = -1 !< Not even initialized
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open

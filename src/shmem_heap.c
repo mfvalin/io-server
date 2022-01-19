@@ -101,8 +101,8 @@ typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able 
 const heap_element HEAD = 0xCAFEFADE; //!< HEAD marker below block
 const heap_element TAIL = 0xBEBEFADA; //!< TAIL marker above block
 
-const uint64_t BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
-const uint64_t MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
+const heap_element BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
+const heap_element MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
 
 //!> heap statistics
 typedef struct{
@@ -389,20 +389,20 @@ heap_element *ShmemHeapContains(
 //  C_StArT
 //! translate address to offset within a heap
 //! @return offset with respect to base of heap in heap_element units (NOT bytes)
-heap_element ShmemHeapPtrToOffset(
-  void *addr                    //!< [in]  address to translate to index
-  ){
-//  C_EnD
-  heap_element *p = (heap_element *) addr ;
-  heap_element *h ;
+// heap_element ShmemHeapPtrToOffset(
+//   void *addr                    //!< [in]  address to translate to index
+//   ){
+// //  C_EnD
+//   heap_element *p = (heap_element *) addr ;
+//   heap_element *h ;
 
-  h = ShmemHeapContains(addr) ; // address is within a heap if h != NULL
-  if( h != NULL) {              // base of a known heap ?
-    return (p - h) ;            // yes, return displacement with respect to base of heap
-  }
+//   h = ShmemHeapContains(addr) ; // address is within a heap if h != NULL
+//   if( h != NULL) {              // base of a known heap ?
+//     return (p - h) ;            // yes, return displacement with respect to base of heap
+//   }
 
-  return -1 ; // address not within bounds of known heap
-}
+//   return -1 ; // address not within bounds of known heap
+// }
 
 // F_StArT
 // function ShmemHeapValidBlock(addr) result(status) bind(C,name='ShmemHeapValidBlock')
@@ -458,6 +458,7 @@ int32_t ShmemHeapValidBlock(
 
     return 0 ;                                 // this looks like a valid block
   }
+
   return -1 ; // address not within bounds of known heap
 }
 
@@ -765,17 +766,14 @@ void *ShmemHeapAllocBlock(
   const heap_element num_heap_elem = heap[0];
   const heap_element limit = num_heap_elem - 1;
 
-  const size_t num_block_elem =
+  const heap_element num_wanted_block_elem =
       (num_requested_bytes + sizeof(heap_element) -1) / sizeof(heap_element)  // round size UP (size in heap elements)
       + 4;                                                                    // Add head + tail + size elements
-  printf("request block size = %ld, num block elem = %ld, num heap elem = %ld, limit = %ld\n", num_requested_bytes, num_block_elem, num_heap_elem,limit);
 
   if (heap[limit] > 1  || heap[limit] < -1) return NULL;  // not a Server Heap or corrupted information
 
   // Lock the heap (if requested)
-  if (safe) {
-    while(! __sync_bool_compare_and_swap(heap + limit, 0, 1) );  // wait for 0, then set to 1 to indicate lock
-  }
+  if (safe) acquire_idlock((int32_t*)(heap + limit), 0);
 
   heap_element* allocated_block = NULL;
   heap_element num_current_block_elem = 0;
@@ -786,15 +784,15 @@ void *ShmemHeapAllocBlock(
     num_current_block_elem = (heap[block_index] < 0) ? -heap[block_index] : heap[block_index];   // retrieve absolute block size (negative if block is not free)
     if (heap[block_index] < 0) continue; // block is not free, skip to next one
 
-    // Coalesce blocks, if possible
+    // Coalesce blocks, if possible and necessary
     {
-      heap_element next_index = block_index + num_block_elem;   // next block
-      while(next_index < limit && heap[next_index] > 2) {       // next block is free, fuse if with the current one
-        // printf("Coalescing blocks\n");
+      heap_element next_index = block_index + num_current_block_elem;   // next block
+      while(next_index < limit && heap[next_index] > 2 && num_current_block_elem < num_wanted_block_elem) {
+        // Next block is free and within the heap, and the current block is still too small
         num_current_block_elem += heap[next_index];             // combined size
         next_index = block_index + num_current_block_elem;      // new next after block coalescing
 
-        // Update current block
+        // Update (newly formed) current block
         heap[block_index]     = num_current_block_elem;         // head size marker
         heap[block_index + 1] = HEAD;
         heap[next_index - 2]  = TAIL;
@@ -802,49 +800,40 @@ void *ShmemHeapAllocBlock(
       }
     }
 
-    if (num_block_elem <= (size_t)num_current_block_elem) {     // block large enough to satisfy request
+    if (num_wanted_block_elem <= num_current_block_elem) {     // block large enough to satisfy request
       allocated_block = heap + block_index + 2;                 // point to element following size marker
       // printf("Found block at %p (block_index + 2 = %ld), heap at %p\n", (void*)allocated_block, block_index + 2, (void*)heap);
       (heap_table[heap_index].stats)->nblk += 1 ;
       (heap_table[heap_index].stats)->nbyt += num_requested_bytes;
 
       // Split block if worth it
-      if (num_current_block_elem - num_block_elem > BLOCK_SPLIT_SIZE) {
-        heap[block_index]                      = -num_block_elem; // head count (lower block)
-        heap[block_index + 1]                  = HEAD;            // low  marker
-        heap[block_index + num_block_elem - 2] = TAIL;            // tail marker
-        heap[block_index + num_block_elem - 1] = num_block_elem;  // tail count (lower block)
+      if (num_current_block_elem - num_wanted_block_elem > BLOCK_SPLIT_SIZE) {
+        heap[block_index]                             = num_wanted_block_elem; // head count (lower block)
+        heap[block_index + 1]                         = HEAD;
+        heap[block_index + num_wanted_block_elem - 2] = TAIL;
+        heap[block_index + num_wanted_block_elem - 1] = num_wanted_block_elem; // tail count (lower block)
 
-        heap[block_index + num_block_elem]             = num_current_block_elem - num_block_elem ;  // head count (upper block)
-        heap[block_index + num_block_elem + 1]         = HEAD;                                      // low  marker
-        heap[block_index + num_current_block_elem - 2] = TAIL;                                      // tail marker
-        heap[block_index + num_current_block_elem - 1] = num_current_block_elem - num_block_elem ;  // tail count (upper block)
+        heap[block_index + num_wanted_block_elem]      = num_current_block_elem - num_wanted_block_elem ;  // head count (upper block)
+        heap[block_index + num_wanted_block_elem + 1]  = HEAD;
+        heap[block_index + num_current_block_elem - 2] = TAIL;
+        heap[block_index + num_current_block_elem - 1] = num_current_block_elem - num_wanted_block_elem ;  // tail count (upper block)
 
-        // Update high-water mark if needed
-        if ( (block_index + num_block_elem) > (heap_table[heap_index].stats)->max ) {
-          (heap_table[heap_index].stats)->max = (block_index + num_block_elem);
+        num_current_block_elem = num_wanted_block_elem;
         }
-      }
-      // Or just allocate it directly
-      else {
+
         heap[block_index] = -num_current_block_elem;
 
         // Update high-water mark if needed
         if ((uint64_t)(block_index + num_current_block_elem) > (heap_table[heap_index].stats)->max) {
           (heap_table[heap_index].stats)->max = (block_index + num_current_block_elem);
         }
+
+      break; // We have our block, so we can stop iterating now
       }
-    }
-    else {
-      // printf("block is too small to allocate, need %ld, have %ld\n", num_block_elem, num_heap_elem-2);
-    }
-    break ;
   }
 
   // Unlock heap if needed
-  if (safe) {
-    heap[limit] = 0;
-  }
+  if (safe) release_idlock((int32_t*)(heap + limit), 0);
 
   return allocated_block;
 }
@@ -946,8 +935,8 @@ int32_t ShmemHeapFreeBlock(
 
   status = ShmemHeapValidBlock(addr);
 
-  if(status != 0) {   // is this the address of a valid block ?
-    return -1 ;                                      // unknown heap or invalid block pointer 
+  if (status != 0) {   // Not a valid block pointer (maybe bc the heap is unknown)
+    return -1;
   }
 
   h = h - 2;                       // point to count (two elements below block)

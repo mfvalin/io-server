@@ -53,23 +53,23 @@ module ioserver_message_module
   end type
 
   type, public, bind(C) :: grid_t
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: size = 1 !< Number of elements in the grid in each possible dimension
     integer(C_INT) :: id = -1
-    integer(C_INT), dimension(MAX_ARRAY_RANK) :: size = 1 !< Number of elements in the grid in each possible dimension
     integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
   end type grid_t
 
   type, public, bind(C) :: subgrid_t
-    integer(C_INT), dimension(MAX_ARRAY_RANK) :: size   = 1  !< Number of elements of the subgrid in each possible dimension
-    integer(C_INT), dimension(MAX_ARRAY_RANK) :: offset = 1  !< Offset of the subgrid within the larger one in each possible dimension
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: size   = 1  !< Number of elements of the subgrid in each possible dimension
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: offset = 1  !< Offset of the subgrid within the larger one in each possible dimension
     ! integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
   end type subgrid_t
 
   ! Type used as a header when writing data to a stream from a model process
   type, public, bind(C) :: model_record
-    type(C_PTR)    :: data              !< Will be translated to its own memory space by relay. We want it to be 64-bit aligned!!
-    integer(C_INT) :: data_size_byte    !< Size of the data packet itself, in bytes
-    integer(C_INT) :: cmeta_size        !< Size of the compression metadata included
-    integer(JAR_ELEMENT) :: meta_size   !< Size of other metadata included
+    type(C_PTR)           :: data              !< Will be translated to its own memory space by relay. We want it to be 64-bit aligned!!
+    integer(C_INT64_T)    :: data_size_byte    !< Size of the data packet itself, in bytes
+    integer(C_INT)        :: cmeta_size        !< Size of the compression metadata included
+    integer(JAR_ELEMENT)  :: meta_size   !< Size of other metadata included
 
     integer(C_INT) :: tag               !< Tag associated with this particular message (to be able to group with that of other model PEs)
     integer(C_INT) :: stream            !< Stream to which the data is being sent
@@ -84,18 +84,18 @@ module ioserver_message_module
   integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
   integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010 !< (Second-to-)Last entry of every message. Helps debugging
   type, public, bind(C) :: message_header
-    integer(C_INT) :: header_tag      = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
-    integer(C_INT) :: content_length  = -1    !< Message length (excluding this header). Units depend on content of message
-    integer(C_INT) :: command         = -1    !< What this message contains
-    integer(C_INT) :: stream_id       = -1    !< To what stream this message is destined
-    integer(C_INT) :: tag             = -1    !< A collective tag associated with messages from model processes (incremented at every message)
-    integer(C_INT) :: sender_global_rank = -1 !< Who is sending that message
-    integer(C_INT) :: relay_global_rank = -1  !< Who is transmitting the message
+    integer(C_INT)     :: header_tag      = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
+    integer(C_INT)     :: command         = -1    !< What this message contains
+    integer(C_INT64_T) :: content_length  = -1    !< Message length (excluding this header). Units depend on content of message
+    integer(C_INT)     :: stream_id       = -1    !< To what stream this message is destined
+    integer(C_INT)     :: tag             = -1    !< A collective tag associated with messages from model processes (incremented at every message)
+    integer(C_INT)     :: sender_global_rank = -1 !< Who is sending that message
+    integer(C_INT)     :: relay_global_rank = -1  !< Who is transmitting the message
   end type message_header
 
   type, public, bind(C) :: message_cap
-    integer(C_INT) :: cap_tag    = MSG_CAP_TAG !< Signals the end of a message
-    integer(C_INT) :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
+    integer(C_INT)     :: cap_tag    = MSG_CAP_TAG !< Signals the end of a message
+    integer(C_INT64_T) :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
   end type message_cap
 
   integer, parameter, public :: MSG_COMMAND_DATA        = 0 !< Indicate a message that contains grid data

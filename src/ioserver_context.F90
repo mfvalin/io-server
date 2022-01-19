@@ -1329,11 +1329,14 @@ function IOserver_init_shared_mem(context) result(success)
       do i_stream = 1, MAX_NUM_SERVER_STREAMS
         context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_stream_owners))  ! Initialize stream files
       end do
+
+      call MPI_Barrier(context % server_comm) ! Signal heap is ready
     else
       ! Create local accessors to shared structures
       temp_ptr = context % node_heap % clone(context % server_heap_shmem)
-      status   = context % node_heap % register(context % server_heap_shmem)
 
+      call MPI_Barrier(context % server_comm) ! Wait until heap is initialized before registering it TODO remove eventually
+      status   = context % node_heap % register(context % server_heap_shmem)
       if (status < 0) then
         print *, 'ERROR: Could not register cloned heap on server node!'
         num_errors = num_errors + 1

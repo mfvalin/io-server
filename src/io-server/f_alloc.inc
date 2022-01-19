@@ -37,7 +37,7 @@ function allocate_I1_5D(h, p, di, use_safe_alloc) result(bmi) ! integer*1 5D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
@@ -146,7 +146,7 @@ function allocate_I1_4D(h, p, di, use_safe_alloc) result(bmi) ! integer*1 4D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
@@ -255,7 +255,7 @@ function allocate_I1_3D(h, p, di, use_safe_alloc) result(bmi) ! integer*1 3D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
@@ -364,7 +364,7 @@ function allocate_I1_2D(h, p, di, use_safe_alloc) result(bmi) ! integer*1 2D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
@@ -473,7 +473,7 @@ function allocate_I1_1D(h, p, di, use_safe_alloc) result(bmi) ! integer*1 1D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT8_T) :: pref
@@ -582,7 +582,7 @@ function allocate_I2_5D(h, p, di, use_safe_alloc) result(bmi) ! integer*2 5D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
@@ -691,7 +691,7 @@ function allocate_I2_4D(h, p, di, use_safe_alloc) result(bmi) ! integer*2 4D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
@@ -800,7 +800,7 @@ function allocate_I2_3D(h, p, di, use_safe_alloc) result(bmi) ! integer*2 3D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
@@ -909,7 +909,7 @@ function allocate_I2_2D(h, p, di, use_safe_alloc) result(bmi) ! integer*2 2D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
@@ -1018,7 +1018,7 @@ function allocate_I2_1D(h, p, di, use_safe_alloc) result(bmi) ! integer*2 1D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_SHORT) :: pref
@@ -1127,7 +1127,7 @@ function allocate_I4_5D(h, p, di, use_safe_alloc) result(bmi) ! integer*4 5D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
@@ -1236,7 +1236,7 @@ function allocate_I4_4D(h, p, di, use_safe_alloc) result(bmi) ! integer*4 4D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
@@ -1345,7 +1345,7 @@ function allocate_I4_3D(h, p, di, use_safe_alloc) result(bmi) ! integer*4 3D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
@@ -1454,7 +1454,7 @@ function allocate_I4_2D(h, p, di, use_safe_alloc) result(bmi) ! integer*4 2D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
@@ -1563,7 +1563,7 @@ function allocate_I4_1D(h, p, di, use_safe_alloc) result(bmi) ! integer*4 1D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_INT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_INT) :: pref
@@ -1672,7 +1672,7 @@ function allocate_I8_5D(h, p, di, use_safe_alloc) result(bmi) ! integer*8 5D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
@@ -1781,7 +1781,7 @@ function allocate_I8_4D(h, p, di, use_safe_alloc) result(bmi) ! integer*8 4D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
@@ -1890,7 +1890,7 @@ function allocate_I8_3D(h, p, di, use_safe_alloc) result(bmi) ! integer*8 3D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
@@ -1999,7 +1999,7 @@ function allocate_I8_2D(h, p, di, use_safe_alloc) result(bmi) ! integer*8 2D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
@@ -2108,7 +2108,7 @@ function allocate_I8_1D(h, p, di, use_safe_alloc) result(bmi) ! integer*8 1D arr
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to integer array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   integer(C_LONG_LONG) :: pref
@@ -2217,7 +2217,7 @@ function allocate_R4_5D(h, p, di, use_safe_alloc) result(bmi) ! real*4 5D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
@@ -2326,7 +2326,7 @@ function allocate_R4_4D(h, p, di, use_safe_alloc) result(bmi) ! real*4 4D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
@@ -2435,7 +2435,7 @@ function allocate_R4_3D(h, p, di, use_safe_alloc) result(bmi) ! real*4 3D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
@@ -2544,7 +2544,7 @@ function allocate_R4_2D(h, p, di, use_safe_alloc) result(bmi) ! real*4 2D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
@@ -2653,7 +2653,7 @@ function allocate_R4_1D(h, p, di, use_safe_alloc) result(bmi) ! real*4 1D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_FLOAT) :: pref
@@ -2762,7 +2762,7 @@ function allocate_R8_5D(h, p, di, use_safe_alloc) result(bmi) ! real*8 5D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< 5 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
@@ -2871,7 +2871,7 @@ function allocate_R8_4D(h, p, di, use_safe_alloc) result(bmi) ! real*8 4D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< 4 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
@@ -2980,7 +2980,7 @@ function allocate_R8_3D(h, p, di, use_safe_alloc) result(bmi) ! real*8 3D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< 3 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
@@ -3089,7 +3089,7 @@ function allocate_R8_2D(h, p, di, use_safe_alloc) result(bmi) ! real*8 2D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< 2 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref
@@ -3198,7 +3198,7 @@ function allocate_R8_1D(h, p, di, use_safe_alloc) result(bmi) ! real*8 1D array 
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< 1 dimensional pointer to real array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   real(C_DOUBLE) :: pref

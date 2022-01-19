@@ -33,53 +33,51 @@ module heap_module
   integer, parameter         :: TKR_REAL    = 2           !< tkr code for real arrays
 
 
-  public :: get_block_meta_offset, get_block_meta_address, block_meta_internals
   public :: Pointer_offset, bm_to_ptr, ptr_to_bm
   public :: get_heap_from_address
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
-  type, public, bind(C) :: block_meta_c
+  type, private, bind(C) :: block_meta_c
     private
-    !> \private
-    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d  = [0, 0, 0, 0, 0] !< array dimensions
-    !> \private
-    integer(C_INT)    :: tkr = 0           !< array type, kind, rank
-    integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely)
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: d  = [0, 0, 0, 0, 0] !< array dimensions \private
+    integer(C_INT)    :: tkr = 0           !< array type, kind, rank \private
+    integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely) \private
   end type block_meta_c
 
 
   include 'io-server/shmem_heap.inc'
 
   !> \brief C interoperable version of block_meta_f08
-  type, public, bind(C) :: block_meta
+  type, private, bind(C) :: block_meta
     private
-    !> \private
-    type(block_meta_c) :: a           !< array descriptor, C interoperable
-    !> \private
-    type(C_PTR) :: p   = C_NULL_PTR   !< array address
+    type(block_meta_c) :: a           !< array descriptor, C interoperable \private
+    type(C_PTR) :: p   = C_NULL_PTR   !< array address \private
   end type block_meta
 
   !> \brief Fortran 2008 data block metadata (using the C layout)
   type, public :: block_meta_f08
     private
-    !> \private
-    type(block_meta_c) :: a           !< array descriptor, C interoperable
-    !> \private
-    type(C_PTR) :: p   = C_NULL_PTR   !< array address
+    type(block_meta_c) :: a           !< array descriptor, C interoperable \private
+    type(C_PTR) :: p   = C_NULL_PTR   !< array address \private
 
   contains
-    procedure, pass :: print => block_meta_print
+    procedure :: print => block_meta_print
     
     procedure :: get_ptr => block_meta_get_ptr !< \return The stored pointer
-    procedure :: t        !< \return array type code (1=integer, 2=real)
-    procedure :: k        !< \return array kind (1/2/4/8 bytes)
-    procedure :: r        !< \return array rank (1/2/3/../MAX_ARRAY_RANK)
-    procedure :: dims     !< \return array(MAX_ARRAY_RANK) containing dimensions
+    procedure :: get_offset => block_meta_get_offset !< \return The offset of this block within its heap
+    procedure :: t              !< \return array type code (1=integer, 2=real)
+    procedure :: get_kind       !< \return array kind (1/2/4/8 bytes)
+    procedure :: r              !< \return array rank (1/2/3/../MAX_ARRAY_RANK)
+    procedure :: get_dimensions !< \return array(MAX_ARRAY_RANK) containing dimensions
     procedure :: metadata !< \return status, 0 if O.K. non zero otherwise
+
+    procedure :: free => free_by_meta
+
     procedure :: reset                      !< nullify operator
     procedure :: assign                     !< assignment operator, block_meta_f08 = block_meta_f08
     procedure :: assign_meta                !< assignment operator, block_meta_f08 = block_meta
     GENERIC :: ASSIGNMENT(=) => assign, assign_meta      !< generic assignment operator
+
     procedure :: equal                      !< equality operator
     GENERIC :: operator(==) => equal        !< equality operator
     procedure :: unequal_meta               !< non equality operator
@@ -90,9 +88,8 @@ module heap_module
   !> \brief heap user defined type
   type, public :: heap
     private
-    !> \private
-    type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by heap
-    type(C_PTR) :: ref = C_NULL_PTR      !< reference address to compute offsets into memory arena for this heap
+    type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by heap \private
+    type(C_PTR) :: ref = C_NULL_PTR      !< reference address to compute offsets into memory arena for this heap \private
   contains
 
     procedure :: set_base     !< Set reference address to compute offsets into memory arena
@@ -112,7 +109,7 @@ module heap_module
     procedure :: check        !< Check integrity of heap. \return 0 if OK, something else otherwise
 
     procedure, NOPASS :: get_heap_from_address    !< Find if address belongs to a registered heap. \return Address of heap, NULL if error
-    procedure, NOPASS :: get_offset_from_address  !< Translate address to offset in a heap. \return Offset within the correct heap, -1 if error
+    ! procedure, NOPASS :: get_offset_from_address  !< Translate address to offset in a heap. \return Offset within the correct heap, -1 if error
 
     procedure, NOPASS :: is_valid_block           !< \return Whether the given address belongs to a registered heap
     procedure, NOPASS :: get_blocksize            !< \return block size (bytes) of a given heap block (negative if error)
@@ -123,27 +120,13 @@ module heap_module
     procedure :: get_size               !< \return Size of heap, -1 if error
     procedure :: alloc                  !< Allocate a block from a heap.  \return block address, NULL if allocation fails
 
-    procedure, NOPASS :: freebyaddress  !< Free an allocated block by address in memory.  \return  0 if O.K., nonzero if error
+    GENERIC   :: free => free_by_address, free_by_offset
+    procedure, NOPASS :: free_by_address  !< Free an allocated block by address in memory. \return 0 if O.K., nonzero if error
+    procedure :: free_by_offset           !< Free space associated to offset into heap. \return 0 if O.K., nonzero if error
 
-    !> \return                          0 if O.K., nonzero if error
-    procedure, NOPASS :: freebymeta     !< free an allocated block using its metadata
-
-    GENERIC   :: free => freebyaddress, freebymeta, freebyoffset
-
-    !> \return                           0 if O.K., nonzero if error
-    procedure :: freebyoffset           !< free space associated to offset into heap
-
-    !> \return                           index in table, -1 if unknown heap
-    procedure :: GetIndex                !< get heap index in registered table
-
-    !> \return                           0 if O.K., nonzero if error
-    procedure :: GetInfo                 !< get heap statistics using heap address
-
-    !> \return                           0 if O.K., nonzero if error
-    procedure, NOPASS :: GetInfoReg      !< get heap statistics using index in registered table
-
-    !> \return                           NONE
-    procedure, NOPASS :: dumpinfo        !> dump information about all known heaps
+    procedure :: GetInfo                 !< Get heap statistics using heap address. \return 0 if O.K., nonzero if error
+    procedure, NOPASS :: GetInfoReg      !< Get heap statistics using index in registered table. \return 0 if O.K., nonzero if error
+    procedure, NOPASS :: dumpinfo        !< Dump information about all known heaps
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
 !   ===========================  interfaces to script generated functions  ===========================
@@ -178,21 +161,23 @@ module heap_module
   ! end interface
 
   interface ptr_to_bm
-    module procedure ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
-                     ptr_to_blockmeta_I25D, ptr_to_blockmeta_I24D, ptr_to_blockmeta_I23D, ptr_to_blockmeta_I22D, ptr_to_blockmeta_I21D, &   ! 16 bit integer functions
-                     ptr_to_blockmeta_I45D, ptr_to_blockmeta_I44D, ptr_to_blockmeta_I43D, ptr_to_blockmeta_I42D, ptr_to_blockmeta_I41D, &   ! 32 bit integer functions
-                     ptr_to_blockmeta_I85D, ptr_to_blockmeta_I84D, ptr_to_blockmeta_I83D, ptr_to_blockmeta_I82D, ptr_to_blockmeta_I81D, &   ! 64 bit integer functions
-                     ptr_to_blockmeta_R45D, ptr_to_blockmeta_R44D, ptr_to_blockmeta_R43D, ptr_to_blockmeta_R42D, ptr_to_blockmeta_R41D, &   ! 32 bit real functions, 
-                     ptr_to_blockmeta_R85D, ptr_to_blockmeta_R84D, ptr_to_blockmeta_R83D, ptr_to_blockmeta_R82D, ptr_to_blockmeta_R81D      ! 64 bit real functions
+    module procedure &
+      ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
+      ptr_to_blockmeta_I25D, ptr_to_blockmeta_I24D, ptr_to_blockmeta_I23D, ptr_to_blockmeta_I22D, ptr_to_blockmeta_I21D, &   ! 16 bit integer functions
+      ptr_to_blockmeta_I45D, ptr_to_blockmeta_I44D, ptr_to_blockmeta_I43D, ptr_to_blockmeta_I42D, ptr_to_blockmeta_I41D, &   ! 32 bit integer functions
+      ptr_to_blockmeta_I85D, ptr_to_blockmeta_I84D, ptr_to_blockmeta_I83D, ptr_to_blockmeta_I82D, ptr_to_blockmeta_I81D, &   ! 64 bit integer functions
+      ptr_to_blockmeta_R45D, ptr_to_blockmeta_R44D, ptr_to_blockmeta_R43D, ptr_to_blockmeta_R42D, ptr_to_blockmeta_R41D, &   ! 32 bit real functions, 
+      ptr_to_blockmeta_R85D, ptr_to_blockmeta_R84D, ptr_to_blockmeta_R83D, ptr_to_blockmeta_R82D, ptr_to_blockmeta_R81D      ! 64 bit real functions
   end interface
 
   interface bm_to_ptr
-    module procedure blockmeta_to_ptr_I15D, blockmeta_to_ptr_I14D, blockmeta_to_ptr_I13D, blockmeta_to_ptr_I12D, blockmeta_to_ptr_I11D, &   !  8 bit integer functions
-                     blockmeta_to_ptr_I25D, blockmeta_to_ptr_I24D, blockmeta_to_ptr_I23D, blockmeta_to_ptr_I22D, blockmeta_to_ptr_I21D, &   ! 16 bit integer functions
-                     blockmeta_to_ptr_I45D, blockmeta_to_ptr_I44D, blockmeta_to_ptr_I43D, blockmeta_to_ptr_I42D, blockmeta_to_ptr_I41D, &   ! 32 bit integer functions
-                     blockmeta_to_ptr_I85D, blockmeta_to_ptr_I84D, blockmeta_to_ptr_I83D, blockmeta_to_ptr_I82D, blockmeta_to_ptr_I81D, &   ! 64 bit integer functions
-                     blockmeta_to_ptr_R45D, blockmeta_to_ptr_R44D, blockmeta_to_ptr_R43D, blockmeta_to_ptr_R42D, blockmeta_to_ptr_R41D, &   ! 32 bit real functions, 
-                     blockmeta_to_ptr_R85D, blockmeta_to_ptr_R84D, blockmeta_to_ptr_R83D, blockmeta_to_ptr_R82D, blockmeta_to_ptr_R81D      ! 64 bit real functions
+    module procedure &
+      blockmeta_to_ptr_I15D, blockmeta_to_ptr_I14D, blockmeta_to_ptr_I13D, blockmeta_to_ptr_I12D, blockmeta_to_ptr_I11D, &   !  8 bit integer functions
+      blockmeta_to_ptr_I25D, blockmeta_to_ptr_I24D, blockmeta_to_ptr_I23D, blockmeta_to_ptr_I22D, blockmeta_to_ptr_I21D, &   ! 16 bit integer functions
+      blockmeta_to_ptr_I45D, blockmeta_to_ptr_I44D, blockmeta_to_ptr_I43D, blockmeta_to_ptr_I42D, blockmeta_to_ptr_I41D, &   ! 32 bit integer functions
+      blockmeta_to_ptr_I85D, blockmeta_to_ptr_I84D, blockmeta_to_ptr_I83D, blockmeta_to_ptr_I82D, blockmeta_to_ptr_I81D, &   ! 64 bit integer functions
+      blockmeta_to_ptr_R45D, blockmeta_to_ptr_R44D, blockmeta_to_ptr_R43D, blockmeta_to_ptr_R42D, blockmeta_to_ptr_R41D, &   ! 32 bit real functions, 
+      blockmeta_to_ptr_R85D, blockmeta_to_ptr_R84D, blockmeta_to_ptr_R83D, blockmeta_to_ptr_R82D, blockmeta_to_ptr_R81D      ! 64 bit real functions
   end interface
   
 !   ===========================  type bound procedures used by heap user type ===========================
@@ -202,7 +187,7 @@ module heap_module
   subroutine block_meta_print(this)
     implicit none
     class(block_meta_f08), intent(in) :: this
-    print *, 'BLOCK META tkr, k: ', this % a % tkr, this % k()
+    print *, 'BLOCK META tkr, kind: ', this % a % tkr, this % get_kind()
   end subroutine block_meta_print
 
   function get_base(this) result(addr)
@@ -219,22 +204,14 @@ module heap_module
     this % ref = addr
   end subroutine set_base
 
-  !> get heap index in registered table
-  function GetIndex(h) result(ix)
-    implicit none
-    class(heap), intent(IN) :: h                         !< heap object
-    integer(C_INT) :: ix                                 !< index in registered heap table
-    ix = ShmemHeapIndex(h%p)
-  end function GetIndex
-
   !> get heap statistics
   function GetInfoReg(ix, sz, max, nblk, nbyt) result(status)
     implicit none
     integer(C_INT), intent(IN), value :: ix                 !< index into registered heap table
-    integer(C_LONG_LONG), intent(OUT) :: sz                 !< size of heap (bytes)
-    integer(C_LONG_LONG), intent(OUT) :: max                !< high water mark in heap  (highest allocation point) (bytes)
-    integer(C_LONG_LONG), intent(OUT) :: nblk               !< number of blocks that have been allocated
-    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< total number of bytes used by allocated blocks
+    integer(C_LONG_LONG), intent(OUT) :: sz                 !< [out] size of heap (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: max                !< [out] high water mark in heap  (highest allocation point) (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: nblk               !< [out] number of blocks that have been allocated
+    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< [out] total number of bytes used by allocated blocks
     integer(C_INT) :: status                                !< 0 if O.K., nonzero if error
     status = ShmemHeapGetInfo(ix, sz, max, nblk, nbyt)
   end function GetInfoReg
@@ -243,10 +220,10 @@ module heap_module
   function GetInfo(h, sz, max, nblk, nbyt) result(status)
     implicit none
     class(heap), intent(INOUT) :: h                         !< heap object
-    integer(C_LONG_LONG), intent(OUT) :: sz                 !< size of heap (bytes)
-    integer(C_LONG_LONG), intent(OUT) :: max                !< high water mark in heap  (highest allocation point) (bytes)
-    integer(C_LONG_LONG), intent(OUT) :: nblk               !< number of blocks that have been allocated
-    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< total number of bytes used by allocated blocks
+    integer(C_LONG_LONG), intent(OUT) :: sz                 !< [out] size of heap (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: max                !< [out] high water mark in heap  (highest allocation point) (bytes)
+    integer(C_LONG_LONG), intent(OUT) :: nblk               !< [out] number of blocks that have been allocated
+    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< [out] total number of bytes used by allocated blocks
     integer(C_INT) :: status                                !< 0 if O.K., nonzero if error
     integer(C_INT) :: ix
     status = -1
@@ -268,8 +245,8 @@ module heap_module
     type(C_PTR), intent(IN), value :: block            !< address of block
     integer(C_INT) :: status                           !< 0 if O.K., nonzero if error
     integer :: msz
-    type(block_meta_c) :: t
-    msz = C_SIZEOF(t)
+    type(block_meta_c) :: dummy_meta
+    msz = C_SIZEOF(dummy_meta)
     status = ShmemHeapGetBlockMeta(block, this%a, msz)
   end function metadata
 
@@ -296,12 +273,12 @@ module heap_module
   end function BlockMeta_t
 
   !> \brief get array kind from Fortran block metadata
-  function k(this) result(n)
+  function get_kind(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array kind (1/2/4/8 bytes)
     n = and(ishft(this%a%tkr,-8), 15)
-  end function k
+  end function get_kind
   !> \brief get array kind from C block metadata (C callable version)
   function BlockMeta_k(this) result(n) BIND(C,name='BlockMeta_k')
     implicit none
@@ -326,17 +303,17 @@ module heap_module
   end function BlockMeta_r
 
   !> \brief get array dimensions from Fortran block metadata
-  function dims(this) result(d)
+  function get_dimensions(this) result(d)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
-    integer(C_INT), dimension(MAX_ARRAY_RANK) :: d         !< array dimensions
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: d     !< array dimensions
     d = this%a%d
-  end function dims
+  end function get_dimensions
   !> \brief get array dimensions from C block metadata (C callable version)
   subroutine BlockMeta_dims(this, dims) BIND(C,name='BlockMeta_dims')
     implicit none
     type(block_meta_c), intent(IN) :: this              !< block object
-    integer(C_INT), intent(OUT), dimension(MAX_ARRAY_RANK) :: dims   !< array dimensions
+    integer(C_INT64_T), intent(OUT), dimension(MAX_ARRAY_RANK) :: dims   !< array dimensions
     dims = this%d
   end subroutine BlockMeta_dims
 
@@ -477,40 +454,48 @@ module heap_module
   
   !> \brief free block by address in memory
   !> <br>example :<br>type(heap) :: h<br>integer(C_INT) :: status<br>type(C_PTR) :: addr<br>
-  !> status = h\%freebyaddress(addr)
-  function freebyaddress(addr) result(status)
+  !> status = h\%free_by_address(addr)
+  function free_by_address(addr) result(success)
     implicit none
     type(C_PTR), intent(IN), value :: addr      !< address of block to free
+    logical :: success                          !< .true. if the operation succeeded, .false. otherwise
     integer(C_INT) :: status                    !< 0 if O.K., nonzero if error
-    status = ShmemHeapFreeBlock(addr)
-  end function freebyaddress 
+    status  = ShmemHeapFreeBlock(addr)
+    success = (status == 0)
+  end function free_by_address 
   
   !> \brief free block by offset in heap
   !> <br>example :<br>type(heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br> integer(C_INT) :: status<br>
-  !> status = h\%freebyoffset(offset)
-  function freebyoffset(h, offset) result(status)
+  !> status = h\%free_by_offset(offset)
+  function free_by_offset(h, offset) result(success)
     implicit none
-    class(heap), intent(INOUT) :: h                   !< heap object
-    integer(HEAP_ELEMENT), intent(IN), value :: offset       !< offset into heap of block to free
-    integer(C_INT) :: status                          !< 0 if O.K., nonzero if error
-    type(C_PTR) :: addr
+    class(heap), intent(INOUT) :: h                     !< heap object
+    integer(HEAP_ELEMENT), intent(IN), value :: offset  !< offset into heap of block to free
+    logical :: success                                  !< .true. if the operation succeeded, .false. otherwise
 
-    addr   = ShmemHeapPtr(h%p, offset)
-    status = ShmemHeapFreeBlock(addr)
-  end function freebyoffset 
+    integer(C_INT) :: status ! 0 if O.K., nonzero if error
+    type(C_PTR)    :: addr
+
+    addr    = ShmemHeapPtr(h%p, offset)
+    status  = ShmemHeapFreeBlock(addr)
+    success = (status == 0)
+  end function free_by_offset 
   
-  !> \brief free block by metadata in heap
-  !> <br>example :<br>type(heap) :: h<br>type(block_meta_f08) :: meta08<br> integer(C_INT) :: status<br>
-  !> status = h\%freebymeta(meta08)
-  function freebymeta(meta08) result(status)
+  !> \brief Free block from heap
+  !> <br>example :<br>type(block_meta_f08) :: meta08<br> logical :: success<br>
+  !> success = meta08\%free()
+  function free_by_meta(this) result(success)
     implicit none
-    type(block_meta_f08), intent(IN) :: meta08        !< metadata associated to memory block
-    integer(C_INT) :: status                          !< 0 if O.K., nonzero if error
-    type(C_PTR) :: addr
+    class(block_meta_f08), intent(INOUT) :: this      !< metadata associated to memory block
+    logical :: success                                !< .true. if call to underlying C function had no error
 
-    addr   = meta08%p
-    status = ShmemHeapFreeBlock(addr)
-  end function freebymeta 
+    integer(C_INT) :: status                          !< 0 if O.K., nonzero if error
+    type(C_PTR)    :: block_address
+
+    block_address = this % p
+    status        = ShmemHeapFreeBlock(block_address)
+    success       = (status == 0)
+  end function free_by_meta 
   
   !> \brief register a heap, set address
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: nheaps<br>
@@ -604,12 +589,12 @@ module heap_module
   !> \brief Get offset into a heap for a given memory address
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: off<br>
   !> off = h\%offset(addr)
-  function get_offset_from_address(addr) result(off)
-    implicit none
-    type(C_PTR), intent(IN), value :: addr      !< memory address to check
-    integer(HEAP_ELEMENT) :: off                !< offset from base of *some* registered heap, -1 if unknown heap
-    off = ShmemHeapPtrToOffset(addr)
-  end function get_offset_from_address 
+  ! function get_offset_from_address(addr) result(off)
+  !   implicit none
+  !   type(C_PTR), intent(IN), value :: addr      !< memory address to check
+  !   integer(HEAP_ELEMENT) :: off                !< offset from base of *some* registered heap, -1 if unknown heap
+  !   off = ShmemHeapPtrToOffset(addr)
+  ! end function get_offset_from_address 
   
   !> \brief get internal pointer(address) to heap
   !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p<br>
@@ -632,33 +617,11 @@ module heap_module
     p = ShmemHeapPtr(h%p, offset)
   end function get_address_from_offset
 
-  function get_block_meta_offset(b) result(offset)
+  function block_meta_get_offset(this) result(offset)
     implicit none
-    type(block_meta), intent(in) :: b
-    integer(C_SIZE_T) :: offset
-    offset = b % a % offset
-  end function get_block_meta_offset
+    class(block_meta_f08), intent(inout) :: this
+    integer(C_SIZE_T) :: offset !< The offset of this block within its heap
+    offset = this % a % offset
+  end function block_meta_get_offset
 
-  function get_block_meta_address(b) result(address)
-    implicit none
-    type(block_meta), intent(in) :: b
-    type(C_PTR) :: address
-    address = b % p
-  end function get_block_meta_address
-
-  subroutine block_meta_internals(b, p, d, tkr, o)   ! accessor for block_meta private data
-    implicit none
-    type(block_meta), intent(IN) :: b
-    type(C_PTR), intent(OUT) :: p
-    integer(C_INT), dimension(MAX_ARRAY_RANK), intent(OUT) :: d
-    integer(C_INT), intent(OUT) :: tkr
-    integer(C_SIZE_T), intent(OUT) :: o
-
-    p   = b % p
-    d   = b % a % d
-    tkr = b % a % tkr
-    o   = b % a % offset
-
-  end subroutine block_meta_internals
-  
 end module heap_module

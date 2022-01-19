@@ -56,7 +56,7 @@ function allocate_${RI}${L}_${D}D(h, p, di, use_safe_alloc) result(bmi) ! ${TYPE
   implicit none
   class(heap), intent(INOUT)        :: h    !< heap object
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
-  integer, dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref

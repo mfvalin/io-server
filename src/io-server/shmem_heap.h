@@ -93,8 +93,8 @@ typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able 
 const heap_element HEAD = 0xCAFEFADE; //!< HEAD marker below block
 const heap_element TAIL = 0xBEBEFADA; //!< TAIL marker above block
 
-const uint64_t BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
-const uint64_t MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
+const heap_element BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
+const heap_element MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
 
 //!> heap statistics
 typedef struct{
@@ -168,9 +168,9 @@ heap_element *ShmemHeapContains(
   );
 //! translate address to offset within a heap
 //! @return offset with respect to base of heap in heap_element units (NOT bytes)
-heap_element ShmemHeapPtrToOffset(
-  void *addr                    //!< [in]  address to translate to index
-  );
+// heap_element ShmemHeapPtrToOffset(
+//   void *addr                    //!< [in]  address to translate to index
+//   );
 //! is this the address of a block belonging to a known heap ?
 //! @return 0 if valid block from known heap,<br>
 //!        -1 if unknown heap,<br>

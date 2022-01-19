@@ -96,7 +96,7 @@ contains
     integer :: line_id !< Id of the created line
 
     integer :: free_line_id
-    type(block_meta) :: data_array_info
+    type(block_meta_f08) :: data_array_info
 
     call mutex % lock()
 
@@ -132,7 +132,7 @@ contains
 
         ! Initialize the assembly line object
         associate(line => this % lines(line_id))
-          line % data_offset  = get_block_meta_offset(data_array_info)
+          line % data_offset  = data_array_info % get_offset()
           line % global_grid  = record % global_grid
           line % missing_data = product(line % global_grid % size)
           line % tag          = record % tag ! Signal that the assembly line is ready to be used
@@ -162,17 +162,17 @@ contains
 
   subroutine set_data_4(full_grid, subgrid, start, end)
     implicit none
-    integer(kind=4), dimension(:,:,:,:,:), contiguous, intent(inout) :: full_grid
-    integer(kind=4), dimension(:,:,:,:,:), contiguous, intent(inout) :: subgrid
-    integer, dimension(MAX_ARRAY_RANK), intent(in) :: start, end
+    integer(kind=4),    dimension(:,:,:,:,:), contiguous, intent(inout) :: full_grid
+    integer(kind=4),    dimension(:,:,:,:,:), contiguous, intent(inout) :: subgrid
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: start, end
     full_grid(start(1):end(1), start(2):end(2), start(3):end(3), start(4):end(4), start(5):end(5)) = subgrid(:, :, :, :, :)
   end subroutine set_data_4
   
   subroutine set_data_8(full_grid, subgrid, start, end)
     implicit none
-    integer(kind=8), dimension(:,:,:,:,:), contiguous, intent(inout) :: full_grid
-    integer(kind=8), dimension(:,:,:,:,:), contiguous, intent(inout) :: subgrid
-    integer, dimension(MAX_ARRAY_RANK), intent(in) :: start, end
+    integer(kind=8),    dimension(:,:,:,:,:), contiguous, intent(inout) :: full_grid
+    integer(kind=8),    dimension(:,:,:,:,:), contiguous, intent(inout) :: subgrid
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: start, end
     full_grid(start(1):end(1), start(2):end(2), start(3):end(3), start(4):end(4), start(5):end(5)) = subgrid(:, :, :, :, :)
   end subroutine set_data_8
 
@@ -189,7 +189,7 @@ contains
     logical :: success
 
     integer :: line_id
-    integer, dimension(MAX_ARRAY_RANK) :: index_start, index_end
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: index_start, index_end
 
     success = .false.
     line_id = this % get_line_id(record)
@@ -281,7 +281,7 @@ contains
     integer(kind = 4), dimension(:,:,:,:,:), pointer :: data_array_4
     integer(kind = 8), dimension(:,:,:,:,:), pointer :: data_array_8
     type(C_PTR) :: data_ptr
-    integer(C_INT) :: free_result
+    logical :: success
     integer :: num_bytes
 
     ! print *, 'Trying to flush line #', line_id
@@ -307,8 +307,8 @@ contains
     print '(A, I4, I8, A, 5(I5))', 'Flushed line ', line_id, num_bytes, ' bytes, dim ', this % lines(line_id) % global_grid % size
 
     ! Reset the assembly line
-    free_result = data_heap % free(this % lines(line_id) % data_offset)
-    if (free_result .ne. 0) then
+    success = data_heap % free(this % lines(line_id) % data_offset)
+    if (.not. success) then
       print *, 'ERROR: Could not free the assembly line!'
       error stop 1
     end if

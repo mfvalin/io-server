@@ -28,9 +28,9 @@ program shmem_heap_by_offset
 
   integer :: num_procs, rank
 
-  integer(C_SIZE_T), parameter :: SHMEM_HEAP_SIZE_BYTE = 5000
-  integer, parameter :: BLOCK_SIZE_INT_X = 100
-  integer, parameter :: BLOCK_SIZE_INT_Y = 2
+  integer(C_SIZE_T),  parameter :: SHMEM_HEAP_SIZE_BYTE = 5000
+  integer(C_INT64_T), parameter :: BLOCK_SIZE_INT_X = 100
+  integer(C_INT64_T), parameter :: BLOCK_SIZE_INT_Y = 2
 
   type(C_PTR) :: shared_mem
   type(C_PTR) :: tmp_ptr
@@ -39,10 +39,10 @@ program shmem_heap_by_offset
   integer    :: status
 
   integer, dimension(:,:), pointer :: array
-  type(block_meta)                 :: array_info
+  type(block_meta_f08)             :: array_info
   type(C_PTR) :: p, p2
-  integer(C_INT), dimension(MAX_ARRAY_RANK) :: dim
-  integer(C_INT) :: tkr
+  ! integer(C_INT), dimension(MAX_ARRAY_RANK) :: dim
+  ! integer(C_INT) :: tkr
   integer(HEAP_ELEMENT) :: offset
 
   !!!!!!!!!!!!!!!!!!!!!!
@@ -84,7 +84,9 @@ program shmem_heap_by_offset
       error stop 1
     end if
 
-    call block_meta_internals(array_info, p, dim, tkr, offset)        ! grep block_meta private contents
+    ! call block_meta_internals(array_info, p, dim, tkr, offset)        ! grep block_meta private contents
+    p = array_info % get_ptr()
+    offset = array_info % get_offset()
 
     if (.not. c_associated(p)) then
       print *,'ERROR: Corresponding C pointer is not associated!'

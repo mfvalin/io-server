@@ -22,7 +22,7 @@ set(TEST_SOURCES
    # server_stream_open.F90
    test_memory_arena.F90
    test_serializer.F90
-   test_shmem_heap.F90
+   # test_shmem_heap.F90
    )
 
 set(TEST_HELPER_FILES

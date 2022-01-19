@@ -60,7 +60,6 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   integer(C_SIZE_T) :: free_space, used_space
   type(C_PTR), dimension(128) :: blocks   !  addresses of allocated memory blocks
   integer(C_INT), dimension(:,:,:), pointer :: demo    ! the array that will be allocated
-  ! type(block_meta)     :: meta
   type(block_meta_f08) :: blk_meta                     ! metadata for allocated block (Fortran style with bound procedures)
   type(block_meta_f08), dimension(128) :: metas
   integer, dimension(MAX_ARRAY_RANK) :: ad             ! maximum size of dimensions array in metadata
@@ -70,6 +69,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   print 3,'==================== RELAY TEST ===================='
   if(nprocs < 5) then
     print 3,'FAIL: too few processes for relay test, a minimum of 5 is required, got',nprocs
+    error stop 1
     return
   endif
 ! ================================= allocate shared memory =================================
@@ -83,6 +83,7 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
 
   if( C_ASSOCIATED(h%get_ptr()) ) then                  ! check initialization clause in declaration
     print *,"FAIL: uninitialized heap C pointer is not NULL"
+    error stop 1
   else
     print *,"PASS: uninitialized heap C pointer is NULL"
   endif
@@ -116,32 +117,31 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     ixtab = -1                                        ! invalidate indexes
     p = memory%pheap                                  ! p points to the local heap
     p = h%create(p, (8192 + 8*myrank)*C_SIZEOF(he))   ! create heap h, 8 K + 8*rank elements
-    if( C_ASSOCIATED(h%get_ptr()) ) print *,"PASS: heap is successfully initialized, C pointer is not NULL"
+
+    if (.not. c_associated(h % get_ptr())) error stop 1
+    print *,"PASS: heap is successfully initialized, C pointer is not NULL"
+
     !  ================================= allocate arrays in the heaps =================================
     blocks = C_NULL_PTR                               ! fill pointer table with NULLs
     lastblock = 0                                     ! no block successfully allocated
     do i = 1 , 2 + myrank * 2                         ! array allocation loop
-      blk_meta = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
-!       meta     = h%allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
-!       blk_meta = transfer(meta, blk_meta)
-!       blk_meta = meta
+      blk_meta = h % allocate(demo, [(700+i*100+myrank*10)/10,2,5] )    ! allocate a 3D integer array and get metadata
       metas(i) = blk_meta
-!       metas(i) = meta
       if((.not. (metas(i) == blk_meta)) .or. (metas(i) .ne. blk_meta)) print 6,'FAIL: failed equality check for block',i
-      print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta%k(), blk_meta%r(), metas(i)%dims()
+      print 6,'INFO: block type, kind, rank, dimensions :', blk_meta%t(), blk_meta % get_kind(), blk_meta%r(), metas(i)%get_dimensions()
       if( .not. ASSOCIATED(demo) ) then               ! test returned fortran pointer
-        print 6,'WARN: allocation failed for block',i       ! failure expected at some point for high rank PEs
+        print 6,'WARN: allocation failed for block',i ! failure expected at some point for high rank PEs
         print 6,'      failed equality check for this block is expected'
-        exit                                          ! exit loop as all subsequent allocations would fail (heap full)
+        error stop 1
       endif
       blocks(i) = C_LOC(demo(1,1,1))                  ! get address of allocated array if allocation succcedeed
-      print 7,'INFO: block ',i,', allocated at index =',h%get_offset_from_address(blocks(i)),', shape :',shape(demo)
-      call blk_meta%reset()                           ! nullify blk_meta
+      print 7,'INFO: block ', i, ', allocated at index =', blk_meta % get_offset(), ', shape :', shape(demo)
+      call blk_meta % reset()                         ! nullify blk_meta
       status = blk_meta%metadata(blocks(i))           ! get metadata for allocated array
       array_rank = blk_meta%r()                       ! get rank of array
-      ad = blk_meta%dims()                            ! get all MAX_ARRAY_RANK potential dimensions
+      ad = blk_meta % get_dimensions()                ! get all MAX_ARRAY_RANK potential dimensions
       print 6,'INFO: array dimensions fromn metadata=',ad(1:array_rank)   ! but only print the used ones
-      ixtab(i) = h%get_offset_from_address(blocks(i))                  ! offset of blocks in heap
+      ixtab(i) = blk_meta % get_offset()
       lastblock = i
     enddo
     print 6,'INFO: ixtab =', ixtab(1:lastblock)             ! print used portion of index table
@@ -179,9 +179,9 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])   ! ixtab is Fortan array containing index table
       do j = 2, memories(i)%nindexes, 2
         if(ixtab(j) == -1) exit                       ! no more valid blocks
-        status = heaps(i)%freebyoffset(ixtab(j))      ! free operation using index (offset) in heap
-        print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
-                ', offset =',heaps(i)%get_offset_from_address(heaps(i)%get_address_from_offset(ixtab(j)))
+        success = heaps(i) % free(ixtab(j))              ! free operation using index (offset) in heap
+        ! print 3,'INFO: freeing heap',i,', block',j,', success =',success, ', offset =', ixtab(j)
+        if (.not. success) error stop 1
       enddo
     enddo
   endif
@@ -191,9 +191,9 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
       call c_f_pointer(memories(i)%pindex, ixtab, [memories(i)%nindexes])
       do j = 3, memories(i)%nindexes, 2
         if(ixtab(j) == -1) exit
-        status = heaps(i)%freebyoffset(ixtab(j))
-        print 3,'INFO: freeing heap',i,', block',j,', status =',status,   &
-                ', offset =',heaps(i)%get_offset_from_address(heaps(i)%get_address_from_offset(ixtab(j)))
+        success = heaps(i) % free(ixtab(j))
+        ! print 3,'INFO: freeing heap',i,', block',j,', success =',success, ', offset =', ixtab(j)
+        if (.not. success) error stop 1
       enddo
     enddo
   endif
@@ -203,7 +203,11 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
   if(myrank == 0 .or. myrank == nprocs-1) then        ! relay PE
     do i = 1, nprocs-2                                ! heap statistics
       status = heaps(i)%GetInfo(sz64, max64, nblk64, nbyt64)
-      if(status == 0) print 8,"INFO: heap from PE",i, sz64, max64, nblk64, nbyt64
+      if(status == 0) then
+        print 8,"INFO: heap from PE",i, sz64, max64, nblk64, nbyt64
+      else
+        error stop 1
+      end if
     enddo
     print *,""
   else                                                ! "model" PE, check what is left on heap
@@ -227,9 +231,17 @@ subroutine relay_test(nprocs, myrank)     ! simulate model PE to IO relay PE tra
     do i = 0, 8
 !       status = ShmemHeapGetInfo(i, sz64, max64, nblk64, nbyt64)
       status = h % GetInfoReg(i, sz64, max64, nblk64, nbyt64)
-      if(status == 0) print 8,"INFO: heap stats(1)",i, sz64, max64, nblk64, nbyt64
+      if(status == 0) then
+        print 8,"INFO: heap stats(1)",i, sz64, max64, nblk64, nbyt64
+      else
+        error stop 1
+      end if
       status = h%GetInfoReg(i, sz64, max64, nblk64, nbyt64)
-      if(status == 0) print 8,"INFO: heap stats(2)",i, sz64, max64, nblk64, nbyt64
+      if(status == 0) then
+        print 8,"INFO: heap stats(2)",i, sz64, max64, nblk64, nbyt64
+      else
+        error stop 1
+      end if
     enddo
   endif
 
@@ -276,7 +288,6 @@ subroutine base_test(nprocs, myrank)
   logical, parameter :: bugged = .false.
   integer(C_INT), dimension(:), pointer :: demo
   type(block_meta_f08) :: blk_meta
-  type(block_meta)     :: meta
   logical :: success
 
   print 3,'==================== BASIC TEST ===================='
@@ -305,27 +316,25 @@ subroutine base_test(nprocs, myrank)
     ixtab = -1                                      ! this is a bug (potential race condition)
   endif
 
-  if(myrank == 0) then                              ! create, initialize, register the heap
+  if (myrank == 0) then                             ! create, initialize, register the heap
     ixtab = -1
     p = h % create(p, 1024*8*C_SIZEOF(he))          ! create heap, 32 KBytes
     do i = 1, 10
 !       blocks(i) = h%alloc((1022+i)*C_SIZEOF(he), 0)     ! attempt to allocate block
-!       blk_meta = sm_allocate(h, demo, [1022+i])
-      meta     = h % allocate(demo, [1022+i])
-      blk_meta = transfer(meta, blk_meta)
+      blk_meta = h % allocate(demo, [1022+i])
       blocks(i) = C_LOC(demo(1))
       if( .not. C_ASSOCIATED(blocks(i)) ) then
         print *,'allocation failed for block',i
+        error stop 1
         exit
       endif
-      ixtab(i) = h % get_offset_from_address(blocks(i))
-      print *,'ixtab =',ixtab(i),h%get_offset_from_address(h%get_address_from_offset(ixtab(i))),h%get_offset_from_address(blocks(i))  ! test of address and offset methods
+      ixtab(i) = blk_meta % get_offset()
     enddo
   endif
 
   call MPI_Barrier(MPI_COMM_WORLD, ierr)            ! wait for heap creation and block allocation
 
-  if(myrank .ne. 0) then
+  if (myrank .ne. 0) then
     do i = 1, MAXINDEXES
       if(ixtab(i) > 0 .and. myrank == nprocs - 1) print *,'ixtab',i,ixtab(i)
     enddo
@@ -348,9 +357,10 @@ subroutine base_test(nprocs, myrank)
     do i = myrank, used_blocks-1,nprocs-1           ! each process will free some blocks
       if(ixtab(i) > 0) then                         ! block allocated previously by process 0
 !         status = h % freebyoffset(ixtab(i))
-        status = h % free(ixtab(i))                 ! use GENERIC procedure to free blocks
-        print 3,'h%free status =',status,', offset =',h%get_offset_from_address(h%get_address_from_offset(ixtab(i)))
-        if(status == 0) ixtab(i) = 0                ! set index to free
+        success = h % free(ixtab(i))                 ! use GENERIC procedure to free blocks
+        print 3,'h%free status =', success, ', offset =', ixtab(i)
+        if (.not. success) error stop 1
+        ixtab(i) = 0                ! set index to free
       endif
     enddo
   endif
