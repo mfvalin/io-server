@@ -20,11 +20,11 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module default_model_module
+  use mpi_f08
   implicit none
   contains
 
   function am_server_node(node_rank, node_size, single_node)
-    use mpi_f08
     implicit none
 
     integer, intent(out) :: node_rank, node_size
@@ -60,14 +60,12 @@ program default_model
   use ioserver_run_module
   implicit none
 
-  integer :: status
-
   logical :: server_node, single_node
   integer :: node_rank, node_size
 
   integer :: num_relay_per_node, num_noop, num_server_processes, num_channels
 
-  call mpi_init(status)
+  call mpi_init()
 
   server_node = am_server_node(node_rank, node_size, single_node)
 
@@ -92,5 +90,5 @@ program default_model
     end if
 
   endif
-  call mpi_finalize(status)
+  call mpi_finalize()
 end program default_model

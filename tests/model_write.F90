@@ -20,6 +20,8 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module model_write_parameters
+  use iso_c_binding
+  use mpi_f08
   implicit none
 
   integer, parameter :: CB_MESSAGE_SIZE_INT       = 16384                     !< Size of each data batch put in a CB. Must be divisible by 16 for the tests
@@ -37,7 +39,6 @@ contains
   end function compute_data_point
 
   function am_server_node(node_rank, node_size, single_node)
-    use mpi_f08
     implicit none
 
     integer, intent(out) :: node_rank, node_size
@@ -68,11 +69,8 @@ contains
   end function am_server_node
 
   subroutine pseudo_model_process(context)
-    use mpi_f08
-
     use heap_module
     use ioserver_context_module
-    use ioserver_data_check_module
     use ioserver_message_module
     use rpn_extra_module, only: sleep_us
     implicit none

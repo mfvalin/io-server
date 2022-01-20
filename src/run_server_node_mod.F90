@@ -173,7 +173,6 @@ subroutine channel_process(context)
 end subroutine channel_process
 
 function receive_message(context, dcb, client_id) result(finished)
-  use ioserver_data_check_module
   implicit none
   type(ioserver_context),            intent(inout) :: context
   type(distributed_circular_buffer), intent(inout) :: dcb

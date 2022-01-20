@@ -92,7 +92,6 @@ subroutine server_bound_relay_process(context)
   use ISO_C_BINDING
 
   use circular_buffer_module
-  use ioserver_data_check_module
   use ioserver_message_module
   use jar_module
   implicit none
@@ -356,7 +355,6 @@ subroutine pseudo_model_process(context)
   use mpi_f08
 
   use heap_module
-  use ioserver_data_check_module
   use ioserver_message_module
   use rpn_extra_module, only: sleep_us
   implicit none

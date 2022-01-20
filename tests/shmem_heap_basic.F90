@@ -112,7 +112,7 @@ contains
       if (.not. c_associated(heap_from_block_address, heap_address)) then
         print '(A, Z16, A, Z16, A, I2, A, I6)', 'ERROR: get_heap_from_address ', transfer(heap_from_block_address, dummy_intptr),' returns the wrong heap ptr ', &
               transfer(heap_address, dummy_intptr), '. Rank ', rank, ', offset ', offset
-        print '(A, Z16)', 'Block address: ', block_address
+        print '(A, Z16)', 'Block address: ', transfer(block_address, dummy_intptr)
         error stop 1
       end if
 
@@ -140,7 +140,7 @@ contains
         array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .true.) ! Allocate 'safely'
         success = the_heap % free(array_info % get_ptr()) ! Free from block address
         if (.not. success) then
-          print *, 'ERROR: Could not free from block address', array_info % get_ptr()
+          print *, 'ERROR: Could not free from block address'
           error stop 1
         end if
 
