@@ -203,16 +203,13 @@ contains
     type(message_cap)    :: end_cap
     integer(JAR_ELEMENT), dimension(:), pointer :: metadata
     integer(JAR_ELEMENT) :: low, high
-    ! type(block_meta_f08) :: f_block
 
     success = .false.
     if(this % stream_id <= 0) return
 
-    ! f_block = mydata
-
     ! Check that dimensions in area are consistent with metadata
     if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
-      print *, 'EARLY FAIL 1'
+      print *, 'ERROR: Trying to send data array that does not match subgrid dimensions'
       return
     end if
 
@@ -239,8 +236,6 @@ contains
       metadata => meta % array()
     endif
 
-    ! call f_block % print()
-
     rec % tag            = this % messenger % get_msg_tag()
     rec % stream         = this % stream_id
 
@@ -251,7 +246,7 @@ contains
     rec % output_grid_id = grid_out % id
 
     rec % elem_size      = my_data % get_kind()
-    rec % data           = my_data % get_ptr()
+    rec % heap_offset    = my_data % get_offset()
     rec % data_size_byte = product(rec % subgrid_area % size) * rec % elem_size
 
     ! print *, rec % ni, rec % nj, rec % nk, rec % nvar, f_block % k()

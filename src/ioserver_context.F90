@@ -225,13 +225,8 @@ module ioserver_context_module
     procedure, pass, public :: open_stream_server
     procedure, pass, public :: close_stream_server
     
-    ! Pointer translation between processes on the same node
-    procedure, pass, public :: ptr_translate_to
-    procedure, pass, public :: ptr_translate_from
-
     ! Debugging
     procedure, pass :: print_io_colors
-    procedure, pass :: verify_translations
   end type ioserver_context
 
 contains
@@ -356,86 +351,6 @@ function close_stream_server(context, stream_id, force_close) result(success)
   success = context % local_server_streams(stream_id) % close(force_close)
 end function close_stream_server
 
-
-!> Translate an address from *another* PE address space to the *local* address space (in shared memory arena)
-!> get my address in shared memory arena from a valid address for RELAY_COLOR|MODEL_COLOR|NODE_COLOR of rank N
-!> \return The local C_PTR that corresponds to the given C_PTR
-function ptr_translate_from(context, from_ptr, from_color, from_rank) result(local)
-  implicit none
-  class(ioserver_context), intent(in)        :: context
-  type(C_PTR),             intent(IN), value :: from_ptr    !< Address on other PE, that we want to translate
-  integer(C_INT),          intent(IN), value :: from_color  !< Color of the other PE (RELAY_COLOR, MODEL_COLOR)
-  integer(C_INT),          intent(IN), value :: from_rank   !< Rank of the other PE
-  type(C_PTR) :: local
-
-  integer(C_INTPTR_T) :: offset, new
-  type(C_PTR)         :: my_base, new_base
-
-  local = C_NULL_PTR
-  my_base = context % shmem % pe(context % smp_rank) % arena_ptr   ! local address of memory arena
-
-  new_base = C_NULL_PTR                  ! find new base
-  if (from_color == NODE_COLOR) then     ! translate from address of PE of rank from_rank in SMP node
-    new_base = context % shmem % pe(from_rank) % arena_ptr
-  else if (from_color == MODEL_COLOR) then    ! translate from address of compute PE of rank from_rank
-    new_base = context % shmem % pe(context % node_model_ranks(from_rank)) % arena_ptr
-  else if (from_color == RELAY_COLOR) then    ! translate from address of relay PE of rank from_rank
-    new_base = context % shmem % pe(context % node_relay_ranks(from_rank)) % arena_ptr
-  else
-    print *,'ERROR(ptr_translate_from): invalid from_color',from_color
-    return   ! invalid from_color
-  endif
-
-  offset = Pointer_offset(new_base, from_ptr, 1)      ! offset in other PE space
-  if (offset < 0) print *,'ERROR(ptr_translate_from): negative offset'
-  if (offset < 0) return                 ! not in shared memory arena
-
-  new   = transfer(my_base, new)         ! make large integer from C pointer
-  new   = new + offset                   ! add offset to my base
-  local = transfer(new, local)           ! honest C pointer
-  ! print *,'DEBUG(ptr_translate_from): from, from_color, from_rank, local', &
-  !        transfer(from_ptr,1_8), from_color, from_rank, transfer(local,1_8)
-end function ptr_translate_from
-
-!> Translate the given address from *local* address space to the address space of *another* PE (in shared memory arena)
-!> translate my address in shared memory arena into a valid address for RELAY_COLOR|MODEL_COLOR|NODE_COLOR of rank N
-!> \return The C_PTR on *other PE* that corresponds to the given C_PTR
-function ptr_translate_to(context, from, to_color, to_rank) result(to)
-  implicit none
-  class(ioserver_context), intent(in) :: context
-  type(C_PTR),    intent(IN), value :: from     !< Local pointer
-  integer(C_INT), intent(IN), value :: to_color !< Color of the target PE (RELAY_COLOR, MODEL_COLOR)
-  integer(C_INT), intent(IN), value :: to_rank  !< Rank of the target PE
-  type(C_PTR) :: to
-
-  integer(C_INTPTR_T) :: offset, new
-  type(C_PTR)         :: my_base, new_base
-
-  to = C_NULL_PTR
-  my_base = context % shmem % pe(context % smp_rank) % arena_ptr   ! local address of memory arena
-  offset = Pointer_offset(my_base, from, 1)       ! offset in local space
-  if(offset < 0) print *,'ERROR(ptr_translate_to): negative offset'
-  if(offset < 0) return                  ! not in shared memory arena
-
-  new_base = C_NULL_PTR                  ! find new base
-  if (to_color == NODE_COLOR) then       ! translate to address of PE of rank to_rank in SMP node
-    new_base = context % shmem % pe(to_rank) % arena_ptr
-  else if (to_color == MODEL_COLOR) then      ! translate to address of compute PE of rank to_rank
-    new_base = context % shmem % pe(context % node_model_ranks(to_rank)) % arena_ptr
-  else if (to_color == RELAY_COLOR) then      ! translate to address of relay PE of rank to_rank
-    new_base = context % shmem % pe(context % node_relay_ranks(to_rank)) % arena_ptr
-  else
-    print *,'ERROR(ptr_translate_to): invalid to_color', to_color
-    return   ! invalid to_color
-  endif
-
-  new = transfer(new_base, new)          ! make large integer from C pointer
-  new = new + offset                     ! add offset to new base
-  to  = transfer(new, to)                ! honest C pointer
-! print *,'DEBUG(ptr_translate_to): from, to_color, to_rank, to', &
-!         transfer(from,1_8), to_color, to_rank, transfer(to,1_8)
-end function ptr_translate_to
-
 !> Fetch the shared memory structs created by other model PEs on this node and initialize the
 !> corresponding access to them on this PE. There is a set of heap, model-bound CBs and
 !> server-bound CBs
@@ -520,59 +435,6 @@ function IOserver_get_relay_shmem(context) result(p_relay)
   type(C_PTR) :: p_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
   p_relay  = context % model_shmem
 end function IOserver_get_relay_shmem
-
-!> Check that address translations are coherent local <--> remote
-subroutine verify_translations(context)
-  implicit none
-  class(ioserver_context), intent(in) :: context
-  integer(C_INTPTR_T), dimension(0:1024) :: iora1, iora2
-  integer(C_INTPTR_T) :: iora0
-  integer :: i, errors
-  type(C_PTR) :: temp
-  
-  iora0 = transfer(context % model_shmem, iora0)  ! local address of relay shared memory (shared between relay and compute PEs)
-
-  do i = 0, context % smp_size -1              ! model_shmem for all PEs for which it makes sense (put into long integer for later comparison)
-    iora1(i) = transfer(context % shmem % pe(i) % arena_ptr, iora1(i))
-  enddo
-  !   write(6,'(A,/(5Z18.16))') 'IO-RA :', iora1(0:smp_size -1)
-  do i = 0, context % smp_size -1              ! translate local address into other PE address (put into long integer for later comparison)
-    temp = context % ptr_translate_to(context % model_shmem, NODE_COLOR, i)
-    iora2(i) = transfer(temp, iora2(i))
-  enddo
-  !   write(6,'(A,/(5Z18.16))') '      :', iora2(0:smp_size -1)
-  errors = 0
-  ! iora2(0) = 1  ! force error to test detection
-  do i = 0, context % smp_size -1              ! check that local --> remote translation is correct
-    if(iora1(i) .ne. iora2(i) ) then
-      errors = errors + 1
-      write(6,'(A,Z18.16,A,Z18.16)') 'ERROR: bad local -> remote address translation, expected',iora1(i) , ' found', iora2(i)
-    endif
-  enddo
-  if(errors == 0) then
-    ! write(6,*) 'INFO: local -> remote address translations are coherent'
-  else
-    write(6,*) 'INFO: number of errors in local -> remote address translations =',errors
-  endif
-  do i = 0, context % smp_size -1     ! translate other PE adddress into local address (put into long integer for later comparison)
-    temp = context % ptr_translate_from(context % shmem % pe(i) % arena_ptr, NODE_COLOR, i)
-    iora2(i) = transfer(temp, iora2(i))
-  enddo
-  errors = 0
-  ! iora2(0) = 0  ! force error to test detection
-  do i = 0, context % smp_size -1              ! check that remote --> local translation is correct
-    if(iora0 .ne. iora2(i) ) then
-      errors = errors + 1
-      write(6,'(A,Z18.16,A,Z18.16)') 'ERROR: bad remote -> local address translation, expected',iora0 , ' found', iora2(i)
-    endif
-  enddo
-  if(errors == 0) then
-    ! write(6,*) 'INFO: remote -> local address translations are coherent'
-  else
-    write(6,*) 'INFO: number of errors in remote -> local address translations =',errors
-  endif
-
-end subroutine verify_translations
 
 subroutine print_io_colors(context)
     implicit none
@@ -1062,14 +924,14 @@ function IOserver_init_communicators(context, is_on_server, num_relay_per_node, 
 
   type(MPI_Comm) :: temp_comm
   integer :: temp_rank, temp_size
-  logical :: is_initialized
+  logical :: is_mpi_initialized
   integer :: split_color ! Temporary, used to define splits in MPI communicators
 
   success = .false.
 
   ! Initialize MPI if not already done
-  call MPI_Initialized(is_initialized)
-  if(.not. is_initialized) call MPI_Init()
+  call MPI_Initialized(is_mpi_initialized)
+  if(.not. is_mpi_initialized) call MPI_Init()
 
   ! Retrieve global MPI comm info
   call MPI_Comm_rank(context % global_comm, context % global_rank)

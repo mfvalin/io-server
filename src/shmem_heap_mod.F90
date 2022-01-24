@@ -68,7 +68,7 @@ module heap_module
     procedure :: get_kind   => block_meta_get_kind   !< \return Array kind (1/2/4/8 bytes)
     procedure :: get_rank   => block_meta_get_rank   !< \return Array rank (1/2/3/../MAX_ARRAY_RANK)
     procedure :: get_dimensions                      !< \return array(MAX_ARRAY_RANK) containing dimensions
-    procedure :: metadata !< \return status, 0 if O.K. non zero otherwise
+    procedure :: retrieve_metadata                   !< Get metadata from what's stored in the heap. \return 0 if O.K. non zero otherwise
 
     procedure :: reset                      !< nullify operator
     procedure :: assign                     !< assignment operator, block_meta_f08 = block_meta_f08
@@ -203,7 +203,7 @@ module heap_module
   end subroutine dump_info
 
   !> \brief get array type from Fortran block metadata
-  function metadata(this, block) result(status)
+  function retrieve_metadata(this, block) result(status)
     implicit none
     class(block_meta_f08), intent(OUT) :: this         !< block object
     type(C_PTR), intent(IN), value :: block            !< address of block
@@ -212,7 +212,7 @@ module heap_module
     type(block_meta_c) :: dummy_meta
     msz = C_SIZEOF(dummy_meta)
     status = ShmemHeap_get_block_meta(this % p, block, this%a, msz)
-  end function metadata
+  end function retrieve_metadata
 
   function block_meta_get_ptr(this) result(this_ptr)
     implicit none
@@ -484,7 +484,7 @@ module heap_module
   !> Get the offset of the allocated block within its heap
   function block_meta_get_offset(this) result(offset)
     implicit none
-    class(block_meta_f08), intent(inout) :: this
+    class(block_meta_f08), intent(in) :: this
     integer(C_SIZE_T) :: offset !< The offset of this block within its heap
     offset = this % a % offset
   end function block_meta_get_offset

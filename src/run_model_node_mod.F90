@@ -230,7 +230,7 @@ subroutine server_bound_relay_process(context)
         end if
 
         num_data_int = (record % data_size_byte + 3) / 4
-        c_data = context % ptr_translate_from(record % data, MODEL_COLOR, i_compute) ! Get proper pointer to data in shared memory
+        c_data = heap_list(i_compute) % get_address_from_offset(record % heap_offset)  ! Get proper pointer to data in shared memory
         call c_f_pointer(c_data, f_data, [num_data_int])                             ! Access it using a fortran pointer, for easy copy into the jar
 
         header % content_length = header % content_length + num_data_int             ! Update message header

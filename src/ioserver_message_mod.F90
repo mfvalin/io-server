@@ -21,7 +21,7 @@
 
 module ioserver_message_module
   use ISO_C_BINDING
-  use heap_module, only: MAX_ARRAY_RANK
+  use heap_module, only: MAX_ARRAY_RANK, HEAP_ELEMENT
   use ioserver_constants
   use jar_module
   implicit none
@@ -66,7 +66,7 @@ module ioserver_message_module
 
   ! Type used as a header when writing data to a stream from a model process
   type, public, bind(C) :: model_record
-    type(C_PTR)           :: data              !< Will be translated to its own memory space by relay. We want it to be 64-bit aligned!!
+    integer(HEAP_ELEMENT) :: heap_offset       !< Offset of the data within its heap. Allows to retrieve it from another process
     integer(C_INT64_T)    :: data_size_byte    !< Size of the data packet itself, in bytes
     integer(C_INT)        :: cmeta_size        !< Size of the compression metadata included
     integer(JAR_ELEMENT)  :: meta_size   !< Size of other metadata included
