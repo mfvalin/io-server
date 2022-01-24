@@ -67,15 +67,13 @@ contains
   !> Check integrity of the circular buffer: the pointer is valid and the integrity check on the underlying C struct passes.
   !> \sa CB_check_integrity
   !> \return Wether the circular buffer passes all checks
-  function is_valid(this)
+  pure function is_valid(this)
     implicit none
-    class(circular_buffer), intent(INOUT) :: this
+    class(circular_buffer), intent(IN) :: this
     logical :: is_valid
     is_valid = c_associated(this % p)
     if (is_valid) then
       is_valid = (CB_check_integrity(this % p) == 0)
-    else
-      print *, 'ERROR: CB pointer is not even associated'
     end if
   end function is_valid
 
@@ -155,11 +153,11 @@ contains
   !> \brief Get number of empty element slots available in the buffer
   !> num_integers = cb\%get_num_spaces(CB_KIND_INTEGER_4)
   !> \sa CB_get_available_space_bytes()
-  function get_num_spaces(this, type_id) result(num_elements)
+  pure function get_num_spaces(this, type_id) result(num_elements)
     implicit none
-    class(circular_buffer), intent(INOUT) :: this     !< circular_buffer
-    integer, intent(IN)                   :: type_id  !< ID of the type of elements we want to fit
-    integer(C_INT64_T) :: num_elements                !< Number of empty slots available, -1 if error
+    class(circular_buffer), intent(IN) :: this     !< circular_buffer
+    integer, intent(IN)                :: type_id  !< ID of the type of elements we want to fit
+    integer(C_INT64_T) :: num_elements             !< Number of empty slots available, -1 if error
 
     integer            :: type_size
     integer(C_INT64_T) :: num_bytes
@@ -173,11 +171,11 @@ contains
   !> \brief Get current number of data elements from the given type stored in the buffer
   !> <br> num_reals = cb\%get_num_elements(CB_KIND_REAL_8)
   !> \sa CB_get_available_data_bytes()
-  function get_num_elements(this, type_id) result(num_elements)
+  pure function get_num_elements(this, type_id) result(num_elements)
     implicit none
-    class(circular_buffer), intent(INOUT) :: this     !< circular_buffer
-    integer, intent(IN)                   :: type_id  !< ID of the type of elements we want to fit
-    integer(C_INT64_T) :: num_elements                !< Number of (full) data elements stored, -1 if error
+    class(circular_buffer), intent(IN) :: this     !< circular_buffer
+    integer, intent(IN)                :: type_id  !< ID of the type of elements we want to fit
+    integer(C_INT64_T) :: num_elements             !< Number of (full) data elements stored, -1 if error
 
     integer :: type_size
     integer(C_INT64_T) :: num_bytes

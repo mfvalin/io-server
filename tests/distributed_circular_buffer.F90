@@ -558,6 +558,7 @@ program test_distributed_circular_buffer
   ! Initialization
 
   num_errors = 0
+  server_bound_server_id = -1
 
   call MPI_init()
   call MPI_comm_rank(MPI_COMM_WORLD, rank)
@@ -649,7 +650,7 @@ program test_distributed_circular_buffer
   tmp_errors = num_errors
   call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
 
-  if(server_bound_server_id == 0) then  ! check that we got back what we sent
+  if (server_bound_server_id == 0) then  ! check that we got back what we sent
     if(num_errors > 0) then
       print *, 'ERRORS IN DISTRIBUTED BUFFER TEST ', num_errors
     else

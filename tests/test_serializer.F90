@@ -126,7 +126,8 @@ subroutine test_pickling
   print *,'x2(1) =',x2(1)
   print *,'       ',a2(3)
   print *,'x2(2) =',x2(2)
-  success = success .and. same_machin(a2(2),x2(1)) .and. same_machin(a2(3),x2(2))
+  success = same_machin(a2(2),x2(1)) .and. success
+  success = same_machin(a2(3),x2(2)) .and. success
   print 1,'(test_pickling) my_jar : ne, size, avail =',ne, my_jar%usable(), my_jar%avail()
   print 2,'after get #2        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   call my_jar%print(15_8)
@@ -158,14 +159,15 @@ subroutine test_pickling
   print 2,'before get        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x1 = machin1([-1,-1,-1],999999,'    ','  ','  ')
   ne = JAR_GET_ITEM_AT(my_jar, x1, 2_8)                        ! skip one position, start injectiong at 2 rather than 1
-  success = success .and. same_machin(a1,x1)
+  success = same_machin(a1,x1) .and. success
 !   ne = my_jar%get( x1, storage_size(x1), where=2 )
   print *,'         ',a1
   print *,'x1      =',x1
   print 2,'after get #1        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   x2 = machin2(-1, -1, '**')
   ne = JAR_GET_ITEMS_AT(my_jar, x2(1:2), ne+2)                 ! skip one position, start at bot + 2 rather than bot +1
-  success = success .and. same_machin(a2(2),x2(1)) .and. same_machin(a2(3),x2(2))
+  success = same_machin(a2(2),x2(1)) .and. success
+  success = same_machin(a2(3),x2(2)) .and. success
 !   ne = my_jar%get(x2(1:2), storage_size(x2(1:2))*size(x2(1:2)), where=ne+2 )
   print *,'       ',a2(2)
   print *,'x2(1) =',x2(1)
@@ -173,7 +175,7 @@ subroutine test_pickling
   print *,'x2(2) =',x2(2)
   print 2,'after get #2        ',blind_array(my_jar%low()+1:my_jar%high()),-1
   ne = JAR_GET_ITEM(my_jar, x2(3:3))
-  success = success .and. same_machin(a2(4),x2(3))
+  success = same_machin(a2(4),x2(3)) .and. success
   print *,'       ',a2(4)
   print *,'x2(3) =',x2(3)
   print 2,'after get #3        ',blind_array(my_jar%low()+1:my_jar%high()),-1

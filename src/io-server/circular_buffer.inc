@@ -166,13 +166,13 @@ type(C_PTR),       intent(IN), value :: ptr        !< pointer to user supplied m
 integer(C_SIZE_T), intent(IN), value :: num_bytes  !< size in bytes of the circular buffer
 type(C_PTR) :: p                                   !< pointer to created circular buffer
 end function CB_from_pointer_bytes
-function CB_get_available_space_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_space_bytes')
+pure function CB_get_available_space_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_space_bytes')
 import C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
 integer(C_SIZE_T) :: num_bytes           !< How many slots are free
 end function CB_get_available_space_bytes
-function CB_get_available_data_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_data_bytes')
+pure function CB_get_available_data_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_data_bytes')
 import C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
@@ -224,7 +224,7 @@ type(C_PTR),       intent(IN), value :: src                !< source array for d
 integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
 integer(C_INT) :: status                                   !< 0 if success, -1 if failure
 end function CB_put
-function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
+pure function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
 import C_INT, C_PTR
 implicit none
 type(C_PTR), intent(in), value :: buffer

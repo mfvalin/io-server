@@ -520,7 +520,7 @@ circular_buffer_p CB_from_pointer_bytes(
 }
 
 //F_StArT
-//  function CB_get_available_space_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_space_bytes')
+//  pure function CB_get_available_space_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_space_bytes')
 //    import C_PTR, C_SIZE_T
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
@@ -541,7 +541,7 @@ size_t CB_get_available_space_bytes(const circular_buffer_p buffer //!< [in] The
 }
 
 //F_StArT
-//  function CB_get_available_data_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_data_bytes')
+//  pure function CB_get_available_data_bytes(buffer) result(num_bytes) BIND(C, name = 'CB_get_available_data_bytes')
 //    import C_PTR, C_SIZE_T
 //    implicit none
 //    type(C_PTR), intent(in), value :: buffer !< Pointer to a circular buffer
@@ -813,7 +813,7 @@ int CB_put(
 }
 
 //  F_StArT
-//    function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
+//    pure function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
 //      import C_INT, C_PTR
 //      implicit none
 //      type(C_PTR), intent(in), value :: buffer

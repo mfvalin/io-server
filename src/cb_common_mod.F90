@@ -29,17 +29,12 @@ contains
 
   !> \brief Compute the size in bytes of a given type ID
   !> \return The size in bytes of the given type ID. -1 if the ID is invalid
-  function get_type_size(type_id) result(type_size)
+  pure function get_type_size(type_id) result(type_size)
     implicit none
     integer, intent(IN) :: type_id
     integer :: type_size
-
-    if (type_id < 0) then
-      type_size = -type_id
-    else
-      print *, 'ERROR: Trying to query CB space with an invalid element type_id', type_id
-      type_size = -1
-    endif
+    type_size = -1
+    if (type_id < 0) type_size = -type_id
   end function get_type_size
 
   function num_char_to_num_int(num_char) result(num_int)

@@ -150,7 +150,7 @@ contains
 
       call MPI_Reduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
       if (rank == 0) then
-        if (total_errors == 0 .or. .not. the_heap % check()) then
+        if (.not. the_heap % check() .or. total_errors == 0) then
           print *, 'There are 0 errors. This is suspect. Are you sure you are using many concurrent processes for this test?'
           error stop 1
         end if
@@ -204,7 +204,8 @@ contains
           error stop 1
         end if
 
-        success = the_heap % free(array_info) .and. the_heap % free(array_info_2)
+        success = the_heap % free(array_info)
+        success = the_heap % free(array_info_2) .and. success
         if (.not. success) then
           print *, 'ERRROR: Unable to free 2 blocks'
           error stop 1
@@ -454,7 +455,8 @@ contains
         end if
       end if
       
-      success = the_heap % free(array_info1) .and. the_heap % free(array_info2)
+      success = the_heap % free(array_info1)
+      success = the_heap % free(array_info2) .and. success
 
       !------------------------
       call MPI_Barrier(MPI_COMM_WORLD)
