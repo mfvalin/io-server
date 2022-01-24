@@ -17,7 +17,7 @@ set(TEST_SOURCES
    put_error.F90
 #   small_dcb_test.c
    shmem_heap_basic.F90
-   shmem_heap_by_offset.F90
+   # shmem_heap_by_offset.F90
    simple_mutex.F90
    # server_stream_open.F90
    test_memory_arena.F90

@@ -445,9 +445,9 @@ subroutine fetch_node_shmem_structs(context)
 
   integer             :: i
   integer(C_INTPTR_T) :: new
-  type(C_PTR)         :: my_base, local_addr, temp
+  type(C_PTR)         :: my_base, local_addr
   logical             :: success
-  integer :: target_rank, num_heaps
+  integer :: target_rank
 
   my_base = context % shmem % pe(context % smp_rank) % arena_ptr
 
@@ -482,15 +482,7 @@ subroutine fetch_node_shmem_structs(context)
       new        = transfer(my_base, new)
       new        = new + context % shmem % pe(i) % heap_offset
       local_addr = transfer(new, local_addr)
-      temp       = context % local_heaps(target_rank) % clone(local_addr)
-
-      num_heaps = context % local_heaps(target_rank) % register(local_addr)
-      if (num_heaps < 0) then
-        print *, 'ERROR: Could not register other PE heap locally', i
-        error stop 1
-      end if
-
-      call context % local_heaps(target_rank) % set_base(my_base)
+      success    = context % local_heaps(target_rank) % clone(local_addr)
     end if
   end do
 end subroutine fetch_node_shmem_structs
@@ -999,7 +991,6 @@ function create_local_heap(context, num_bytes) result(success)
   logical :: success
 
   type(C_PTR)    :: heap_ptr
-  integer(C_INT) :: index
 
   success = .false.
 
@@ -1007,12 +998,10 @@ function create_local_heap(context, num_bytes) result(success)
 
   if (.not. C_ASSOCIATED(heap_ptr)) return
 
-  heap_ptr = context % local_heap % create(heap_ptr, num_bytes)    ! allocate local heap
-  index    = context % local_heap % set_default()                  ! make local_heap the default heap
-  call context % local_heap % set_base(context % arena % addr())   ! set arena address as offset base for heap
+  success  = context % local_heap % create(heap_ptr, num_bytes)    ! allocate local heap
   context % shmem % pe(context % smp_rank) % heap_offset = Pointer_offset(context % arena % addr(), heap_ptr, 1)    ! offset of my heap in memory arena
 
-  if (C_ASSOCIATED(heap_ptr) .and. index >= 0) success = .true.
+  if (C_ASSOCIATED(heap_ptr)) success = .true.
 end function create_local_heap
 
 !> Allocate a block from the shared memory arena and create a circular buffer in it
@@ -1245,11 +1234,11 @@ function IOserver_init_shared_mem(context) result(success)
   integer            :: num_errors
   integer(C_INT64_T) :: shmem_num_bytes
 
-  integer     :: status, temp, total_errors
+  integer     :: total_errors
   integer     :: i_stream
   type(C_PTR) :: temp_ptr
   type(shared_server_stream)  :: dummy_server_stream
-  logical :: alloc_success
+  logical :: alloc_success, heap_create_success
 
   success = .false.
   num_errors = 0              ! none so far
@@ -1325,27 +1314,15 @@ function IOserver_init_shared_mem(context) result(success)
 
     ! Create shared data structures
     if (context % server_comm_rank == 0) then
-      temp_ptr = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
+      heap_create_success = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
       do i_stream = 1, MAX_NUM_SERVER_STREAMS
         context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_stream_owners))  ! Initialize stream files
       end do
 
-      call MPI_Barrier(context % server_comm) ! Signal heap is ready
     else
       ! Create local accessors to shared structures
-      temp_ptr = context % node_heap % clone(context % server_heap_shmem)
-
-      call MPI_Barrier(context % server_comm) ! Wait until heap is initialized before registering it TODO remove eventually
-      status   = context % node_heap % register(context % server_heap_shmem)
-      if (status < 0) then
-        print *, 'ERROR: Could not register cloned heap on server node!'
-        num_errors = num_errors + 1
-        goto 2
-      end if
+      heap_create_success = context % node_heap % clone(context % server_heap_shmem)
     end if
-
-    temp = context % node_heap % set_default()
-    call context % node_heap % set_base(context % server_heap_shmem)
 
     ! Create local stream instances on server-bound PEs
     if (context % is_server_bound()) then

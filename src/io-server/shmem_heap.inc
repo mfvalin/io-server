@@ -37,6 +37,16 @@
 !******************************************************************************
 
 interface
+subroutine ShmemHeap_lock(heap) bind(C, name='ShmemHeap_lock_f')
+import :: C_PTR
+implicit none
+type(C_PTR), intent(in), value :: heap
+end subroutine ShmemHeap_lock
+subroutine ShmemHeap_unlock(heap) bind(C, name='ShmemHeap_unlock_f')
+import :: C_PTR
+implicit none
+type(C_PTR), intent(in), value :: heap
+end subroutine ShmemHeap_unlock
 function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset')
 import :: C_INTPTR_T, C_PTR, C_INT
 implicit none
@@ -53,131 +63,119 @@ integer(C_INTPTR_T), intent(IN), value  :: offset
 integer(C_INT), intent(IN), value       :: szeof
 type(C_PTR)                             :: to
 end function Pointer_add_offset
-subroutine ShmemHeapDumpInfo() bind(C,name='ShmemHeapDumpInfo')
+subroutine ShmemHeap_dump_info(heap) bind(C,name='ShmemHeap_dump_info')
+import :: C_PTR
 implicit none
-end subroutine ShmemHeapDumpInfo
-function ShmemHeapGetInfo(ix, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeapGetInfo')
-import :: C_INT, C_LONG_LONG
+type(C_PTR), intent(in), value :: heap
+end subroutine ShmemHeap_dump_info
+function ShmemHeap_get_info(heap, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeap_get_info')
+import :: C_INT, C_LONG_LONG, C_PTR
 implicit none
-integer(C_INT), intent(IN), value :: ix
+type(C_PTR), intent(in), value    :: heap
 integer(C_LONG_LONG), intent(OUT) :: sz
 integer(C_LONG_LONG), intent(OUT) :: max
 integer(C_LONG_LONG), intent(OUT) :: nblk
 integer(C_LONG_LONG), intent(OUT) :: nbyt
 integer(C_INT) :: status
-end function ShmemHeapGetInfo
-function ShmemHeapGetDefault() result(h) bind(C,name='ShmemHeapGetDefault')
-import :: C_PTR
-implicit none
-type(C_PTR) :: h
-end function ShmemHeapGetDefault
-function ShmemHeapSetDefault(heap) result(ix) bind(C,name='ShmemHeapSetDefault')
-import :: C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value :: heap
-integer(C_INT) :: ix
-end function ShmemHeapSetDefault
-function ShmemHeapIndex(heap) result(ix) bind(C,name='ShmemHeapIndex')
-import :: C_INT, C_PTR
-implicit none
-type(C_PTR), intent(IN), value :: heap
-integer(C_INT) :: ix
-end function ShmemHeapIndex
-function ShmemHeapSize(heap) result(s) bind(C,name='ShmemHeapSize')
+end function ShmemHeap_get_info
+function ShmemHeap_get_size(heap) result(s) bind(C,name='ShmemHeap_get_size')
 import :: C_PTR, HEAP_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: heap
 integer(HEAP_ELEMENT) :: s
-end function ShmemHeapSize
-function ShmemHeapContains(addr) result(p) bind(C,name='ShmemHeapContains')
-import :: C_PTR
-implicit none
-type(C_PTR), intent(IN), value :: addr
-type(C_PTR) :: p
-end function ShmemHeapContains
-function ShmemHeapPtrToOffset(addr) result(offset) bind(C,name='ShmemHeapPtrToOffset')
-import :: C_PTR, HEAP_ELEMENT
-implicit none
-type(C_PTR), intent(IN), value :: addr
-integer(HEAP_ELEMENT) :: offset
-end function ShmemHeapPtrToOffset
-function ShmemHeapValidBlock(addr) result(status) bind(C,name='ShmemHeapValidBlock')
+end function ShmemHeap_get_size
+function ShmemHeap_is_block_valid(heap, block) result(status) bind(C,name='ShmemHeap_is_block_valid')
 import :: C_INT, C_PTR
 implicit none
-type(C_PTR), intent(IN), value :: addr
-integer(C_INT) :: status
-end function ShmemHeapValidBlock
-function ShmemHeapBlockSize(heap, addr, offset) result(bsz) bind(C,name='ShmemHeapBlockSize')
-import :: C_PTR, C_SIZE_T, HEAP_ELEMENT
-implicit none
 type(C_PTR), intent(IN), value :: heap
-type(C_PTR), intent(IN), value :: addr
-integer(HEAP_ELEMENT), intent(IN) :: offset
-integer(C_SIZE_T) :: bsz
-end function ShmemHeapBlockSize
-function ShmemHeapPtr(heap, offset) result(p) bind(C,name='ShmemHeapPtr')
+type(C_PTR), intent(IN), value :: block
+integer(C_INT) :: status
+end function ShmemHeap_is_block_valid
+function ShmemHeap_ptr_from_offset(heap, offset) result(p) bind(C,name='ShmemHeap_ptr_from_offset')
 import :: C_PTR, HEAP_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: heap
 integer(HEAP_ELEMENT), intent(IN), value :: offset
 type(C_PTR) :: p
-end function ShmemHeapPtr
-function ShmemHeapOffsetFromPtr(heap, block) result(offset) bind(C, name='ShmemHeapOffsetFromPtr')
+end function ShmemHeap_ptr_from_offset
+function ShmemHeap_block_size_from_pointer(heap, block) result(num_bytes) bind(C, name='ShmemHeap_block_size_from_pointer')
+import :: C_PTR, C_SIZE_T
+implicit none
+type(C_PTR), intent(in), value :: heap
+type(C_PTR), intent(in), value :: block
+integer(C_SIZE_T) :: num_bytes
+end function ShmemHeap_block_size_from_pointer
+function ShmemHeap_block_size_from_offset(heap, offset) result(num_bytes) bind(C, name='ShmemHeap_block_size_from_offset')
+import :: C_PTR, HEAP_ELEMENT, C_SIZE_T
+implicit none
+type(C_PTR), intent(in), value :: heap
+integer(HEAP_ELEMENT), intent(in), value :: offset
+integer(C_SIZE_T) :: num_bytes
+end function ShmemHeap_block_size_from_offset
+function ShmemHeap_offset_from_pointer(heap, block) result(offset) bind(C, name='ShmemHeap_offset_from_pointer')
 import :: C_PTR, HEAP_ELEMENT
 implicit none
 type(C_PTR), intent(IN), value :: heap
 type(C_PTR), intent(IN), value :: block
 integer(HEAP_ELEMENT) :: offset
-end function ShmemHeapOffsetFromPtr
-function ShmemHeapRegister(heap) result(status) bind(C,name='ShmemHeapRegister')
-import :: C_INT, C_PTR
-implicit none
-type(C_PTR), intent(IN), value :: heap
-integer(C_INT) :: status
-end function ShmemHeapRegister
-function ShmemHeapInit(heap, nbytes) result(h) bind(C,name='ShmemHeapInit')
+end function ShmemHeap_offset_from_pointer
+function ShmemHeap_init_from_scratch(heap, nbytes) result(h) bind(C,name='ShmemHeap_init_from_scratch')
 import :: C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(IN), value :: heap
 integer(C_SIZE_T), intent(IN), value :: nbytes
 type(C_PTR) :: h
-end function ShmemHeapInit
-function ShmemHeapCheck(heap, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ShmemHeapCheck')
+end function ShmemHeap_init_from_scratch
+function ShmemHeap_clone(shmem_ptr) result(status) bind(C, name='ShmemHeap_clone')
+import :: C_PTR
+implicit none
+type(C_PTR), intent(in), value :: shmem_ptr
+type(C_PTR) :: status
+end function ShmemHeap_clone
+subroutine ShmemHeap_delete(heap) bind(C, name='ShmemHeap_delete')
+import :: C_PTR
+implicit none
+type(C_PTR), intent(in), value :: heap
+end subroutine ShmemHeap_delete
+function ShmemHeap_check(heap, free_blocks, free_space, used_blocks, used_space) result(status) bind(C,name='ShmemHeap_check')
 import :: C_INT, C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(IN), value :: heap
 integer(C_INT), intent(OUT)    :: free_blocks, used_blocks
 integer(C_SIZE_T), intent(OUT) :: free_space, used_space
 integer(C_INT) :: status
-end function ShmemHeapCheck
-function ShmemHeapAllocBlock(heap, nbytes, safe) result(b) bind(C,name='ShmemHeapAllocBlock')
+end function ShmemHeap_check
+function ShmemHeap_alloc_block(heap, nbytes, safe) result(b) bind(C,name='ShmemHeap_alloc_block')
 import :: C_INT, C_PTR, C_SIZE_T
 implicit none
 type(C_PTR), intent(IN), value :: heap
 integer(C_SIZE_T), intent(IN), value :: nbytes
 integer(C_INT), intent(IN), value :: safe
 type(C_PTR) :: b
-end function ShmemHeapAllocBlock
-function ShmemHeapSetBlockMeta(block, metadata, msz) result(status) bind(C,name='ShmemHeapSetBlockMeta')
+end function ShmemHeap_alloc_block
+function ShmemHeap_set_block_meta(heap, block, block_metadata, block_meta_size) result(status) bind(C,name='ShmemHeap_set_block_meta')
 import :: C_PTR, C_INT, block_meta_c
 implicit none
+type(C_PTR), intent(IN), value    :: heap
 type(C_PTR), intent(IN), value    :: block
-type(block_meta_c), intent(IN)    :: metadata
-integer(C_INT), intent(IN), value :: msz
+type(block_meta_c), intent(IN)    :: block_metadata
+integer(C_INT), intent(IN), value :: block_meta_size
 integer(C_INT) :: status
-end function ShmemHeapSetBlockMeta
-function ShmemHeapGetBlockMeta(block, metadata, msz) result(status) bind(C,name='ShmemHeapGetBlockMeta')
+end function ShmemHeap_set_block_meta
+function ShmemHeap_get_block_meta(heap, block, metadata, msz) result(status) bind(C,name='ShmemHeap_get_block_meta')
 import :: C_PTR, C_INT, block_meta_c
 implicit none
+type(C_PTR), intent(IN), value    :: heap
 type(C_PTR), intent(IN), value    :: block
 type(block_meta_c), intent(OUT)    :: metadata
 integer(C_INT), intent(IN), value :: msz
 integer(C_INT) :: status
-end function ShmemHeapGetBlockMeta
-function ShmemHeapFreeBlock(block) result(status) bind(C,name='ShmemHeapFreeBlock')
+end function ShmemHeap_get_block_meta
+function ShmemHeap_free_block(heap, block) result(status) bind(C,name='ShmemHeap_free_block')
 import :: C_INT, C_PTR
 implicit none
+type(C_PTR), intent(IN), value :: heap
 type(C_PTR), intent(IN), value :: block
 integer(C_INT) :: status
-end function ShmemHeapFreeBlock
+end function ShmemHeap_free_block
 end interface

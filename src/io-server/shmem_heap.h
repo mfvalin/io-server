@@ -76,45 +76,52 @@ or
      }
  ******************************************************************************/
 
-/**
- \file
- io-server/shmem_heap.h include file is needed to use shared memory heap functions<br>
- (extracted from file memory_arena.c)
-*/
-#include <io-server/cb_data.h>
+#include <stddef.h>
+#include <stdint.h>
 
-// remain consistent with io-server package
-
+#include "io-server/rpn_extra.h"
 typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able to contain its own size)
-
-//!> maximum number of registered heaps
-#define MAX_HEAPS 128
-
-const heap_element HEAD = 0xCAFEFADE; //!< HEAD marker below block
-const heap_element TAIL = 0xBEBEFADA; //!< TAIL marker above block
-
-const heap_element BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
-const heap_element MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
-
 //!> heap statistics
 typedef struct{
-  uint64_t      max ;     //!< high water of heap (highest allocation point)
-  uint64_t      nblk ;    //!< number of block allocations
-  uint64_t      nbyt ;    //!< number of bytes allocated
-} heap_stats ;
+  uint64_t max_fill;     //!< high water of heap (highest allocation point)
+  uint64_t num_blocks;   //!< number of block allocations
+  uint64_t num_elements; //!< number of elements allocated
+} heap_stats;
 
-//!> heap information
-typedef struct{
-  heap_element *bot ;     //!< bottom of heap (lowest address)
-  heap_element *top ;     //!< top of heap (highest address + 1)
-  heap_stats   *stats ;   //!< pointer to heap statistics
-} heap_item ;
+typedef struct {
+  heap_element marker;            //!< Marker to be able to verify (a little bit) that a heap exists
+  size_t full_size;               //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
+  size_t num_elements;            //!< Number of data elements the heap can hold (maximum possible allocation)
+  heap_element stats_index;       //!< Index of the stats struct within the shared memory region (in number of #heap_element)
+  heap_element first_block_index; //!< Index of the start of the heap itself within the shared memory region (in number of #heap_element)
+  heap_element limit;             //!< Index beyond the last valid index within the heap
+  int32_t lock;                   //!< Variable used to lock/unlock the heap for certain operations
+} heap_metadata;
 
-//!> metadata description for Fortran (up to 5D arrays)
-typedef  struct {
-    int d[5];             //!< the 5 allowed dimensions     (private information, DO NOT USE)
-    int tkr ;             //!< type, kind, rank information (private information, DO NOT USE)
-  } meta_c;
+/**
+ * @brief Local access point to a heap whose data is located in shared memory and thus accessible to other processes.
+ * 
+ * This is basically a set of pointers to the data itself: some metadata, some stats, the heap contents
+ * 
+ */
+typedef struct {
+  heap_metadata* meta;        //!< General information about the state of the heap
+  heap_stats*    stats;       //!< Usage statistics
+  heap_element*  first_block; //!< Start of the heap itself
+} shmem_heap;
+//!> Lock this heap for exclusive access
+static inline void ShmemHeap_lock(
+    shmem_heap* heap //!< [in,out] Pointer to a _valid_ heap
+) {
+  acquire_idlock(&heap->meta->lock, 0);
+}
+
+//!> Relinquish exclusive access to this heap
+static inline void ShmemHeap_unlock(
+    shmem_heap* heap //!< [in,out] Pointer to a _valid_ heap
+) {
+  release_idlock(&heap->meta->lock, 0);
+}
 //! get offset between 2 pointers in specified units (1/2/4/8/16 bytes)
 //! @return offset between 2 pointers in specified units (1/2/4/8/16 bytes)
 intptr_t Pointer_offset(
@@ -131,90 +138,58 @@ void *Pointer_add_offset(
   );
 //! print heap statistics
 //! @return none
-void ShmemHeapDumpInfo(
-     );
+void ShmemHeap_dump_info(
+    shmem_heap *heap
+);
 //! get heap statistics
 //! @return 0 if O.K., nonzero if error
-int ShmemHeapGetInfo(
-  int index,          //!< [in]  heap index in registered heap table
+int ShmemHeap_get_info(
+  shmem_heap *heap,   //!< [in,out]  Pointer to heap
   int64_t *size,      //!< [out] size of heap (bytes)
   int64_t *max,       //!< [out] high water mark in heap  (highest allocation point) (bytes)
   int64_t *nblk,      //!< [out] number of blocks that have been allocated
   int64_t *nbyt       //!< [out] total number of bytes used by allocated blocks
      );
-//! get address of the default heap
-//! @return default heap address (NULL if none)
-void * ShmemHeapGetDefault(
-  );
-//! set this heap as the default heap
-//! @return index in heap table if a known heap, -1 otherwise
-int32_t ShmemHeapSetDefault(
-  void *addr                          //!< [in]  address possibly of a known heap
-  );
-//! is this a known heap ?
-//! @return index in heap table if a known heap, -1 otherwise
-int32_t ShmemHeapIndex(
-  void *addr                          //!< [in]  address possibly of a known heap
-  );
-//! is this a known heap ?
+//! Retrieve size of the heap
 //! @return size (in bytes) if a known heap, -1 otherwise
-heap_element ShmemHeapSize(
-  void *addr                    //!< [in]  address possibly of a known heap
+heap_element ShmemHeap_get_size(
+  shmem_heap *heap                    //!< [in,out]  Heap pointer
   );
-//! which known heap does this address belong to ?
-//! @return heap base address if within a known heap, NULL otherwise
-heap_element *ShmemHeapContains(
-  void *addr                    //!< [in]  address possibly in a known heap
-  );
-//! translate address to offset within a heap
-//! @return offset with respect to base of heap in heap_element units (NOT bytes)
-// heap_element ShmemHeapPtrToOffset(
-//   void *addr                    //!< [in]  address to translate to index
-//   );
-//! is this the address of a block belonging to a known heap ?
-//! @return 0 if valid block from known heap,<br>
-//!        -1 if unknown heap,<br>
-//!         1 if inside a known heap but not a valid block pointer
-int32_t ShmemHeapValidBlock(
-  void *addr                    //!< [in]  putative valid block address
-  );
-//! find the size of a used memory block (in bytes)<br>
-//! uses either address of block or address of heap and offset
-//! @return size of used block in bytes, 0 if not a block or block not in use
-size_t ShmemHeapBlockSize(
-  void *heap,                   //!< [in]  heap address (if NULL, only addr is used, offset is ignored)
-  void *addr,                   //!< [in]  block address (if NULL, heap address and offset must be valid)
-  heap_element offset           //!< [in]  offset into heap (ignored if heap is NULL or addr is not NULL)
+//! Check whether the given block is valid in this heap
+//! @return 0 if the block is valid, -1 if there is an error
+int32_t ShmemHeap_is_block_valid(
+  shmem_heap   *heap,   //!< [in,out] The heap for which we want to check a block
+  heap_element *block   //!< [in]     Pointer to the block we want to check
   );
 //! translate offset from base of heap into actual address
 //! @return address, NULL if offset out of heap
-void *ShmemHeapPtr(
-  void *addr,                   //!< [in]  heap address
+heap_element *ShmemHeap_ptr_from_offset(
+  shmem_heap *heap,             //!< [in]  heap address
   heap_element offset           //!< [in]  offset into heap
   );
-heap_element ShmemHeapOffsetFromPtr(
-    heap_element *heap, //!< [in] Heap address
+heap_element ShmemHeap_offset_from_pointer(
+    shmem_heap   *heap, //!< [in] Heap address (heap must be valid!)
     heap_element *block //!< [in] Address of the block for which we want the offset
   ) {
-//! register a  Heap in the heap table
-//! @return number of registered heaps if successful, -1 otherwise
-int32_t ShmemHeapRegister(
-  void *addr                    //!< [in]  heap address
+//! initialize a Server Heap from a pointer to (empty) shared memory
+//! @return Pointer to heap struct if successful, NULL otherwise
+shmem_heap *ShmemHeap_init_from_scratch(
+  void *shmem_ptr,               //!< [in]  desired heap address in shared memory
+  size_t num_bytes               //!< [in]  size in bytes of space pointed to by shmem_ptr
   );
-//! initialize a Server Heap
-//! @return address of Server Heap if successful, NULL otherwise
-void *ShmemHeapInit(
-  void *addr,                    //!< [in]  desired heap address, if NULL, allocate space with malloc
-  size_t num_bytes               //!< [in]  size in bytes of space pointed to by addr
-  );
+//! Delete a heap. This just frees the local struct for now
+void ShmemHeap_delete(
+  shmem_heap* heap //!< [in,out] Address of the heap to delete
+);
+{
 //! check integrity of Server Heap
 //! @return 0 : O.K.<br>
 //!         1 : bad address<br>
 //!         2 : not a valid heap or corrupted information<br>
 //!         3 : size marker is invalid<br>
 //!         4 : tail size marker not consistent
-int32_t ShmemHeapCheck(
-  void *addr,                     //!< [in]  address of Server Heap to check
+int32_t ShmemHeap_check(
+  shmem_heap *heap,               //!< [in]  Pointer to a shmem heap
   int32_t *free_blocks,           //!< [out] number of free blocks
   size_t *free_space,             //!< [out] available space in bytes
   int32_t *used_blocks,           //!< [out] number of used blocks
@@ -222,44 +197,32 @@ int32_t ShmemHeapCheck(
   );
 //! allocate space on a Server Heap
 //! @return address of block, NULL in case of failure to allocate
-void *ShmemHeapAllocBlock(
-  void          *addr,                //!< [in]  address of Server Heap
+void *ShmemHeap_alloc_block(
+  shmem_heap    *heap,                //!< [in,out] Pointer to heap struct
   const size_t  num_requested_bytes,  //!< [in]  size in bytes of block to allocate
   const int32_t safe                  //!< [in]  if nonzero, perform operation under lock
   );
 //! set block metadata
 //! @return 0 if O.K., nonzero if error
-int32_t ShmemHeapSetBlockMeta(
-  void *addr,                      //!< [in]  address of block
-  unsigned char *meta,             //!< [in]  address of metadata
-  int msz                          //!< [in]  size of metadata (bytes)
+int32_t ShmemHeap_set_block_meta(
+  shmem_heap    *heap,        //!< [in,out] The heap where the block belongs
+  heap_element  *block,       //!< [in]     Address of block
+  unsigned char *block_meta,  //!< [in]     Address of block metadata
+  int           num_bytes     //!< [in]     Size of block metadata (bytes)
   );
 //! get block metadata
 //! @return 0 if O.K., nonzero if error
-int32_t ShmemHeapGetBlockMeta(
-  void *addr,                      //!< [in]  address of block
-  unsigned char *meta,             //!< [out]  address of metadata (user array to receive metadata)
-  int msz                          //!< [in]  size of metadata (bytes)
+int32_t ShmemHeap_get_block_meta(
+    shmem_heap    *heap,          //!< [in,out] Heap where the block is located
+    heap_element  *block,         //!< [in]   address of block
+    unsigned char *meta_dest,     //!< [out]  address of metadata (user array to receive metadata)
+    int           num_bytes       //!< [in]   size of metadata (bytes)
   );
 //! free space on a Server Heap
 //! @return 0 if O.K., nonzero if error
-int32_t ShmemHeapFreeBlock(
-  void *addr                       //!< [in]  address of block
+int32_t ShmemHeap_free_block(
+    shmem_heap   *heap,     //!< [in,out] Heap where the block is located
+    heap_element *block     //!< [in]  address of block
     );
-//! check if Server Heap is locked
-//! @return 0 if not locked, nonzero if locked
-int32_t ShmemHeapIslocked(
-  void *addr                      //!< [in]  address of Server Heap
-  );
-//! lock Server Heap
-//! @return none
-void ShmemHeapLock(
-  void *addr                      //!< [in]  address of Server Heap
-  );
-//! unlock Server Heap
-//! @return none
-void ShmemHeapUnlock(
-  void *addr                      //!< [in]  address of Server Heap
-  );
 
 #endif // IO_SERVER_shmem_heap_GEN_H

@@ -89,36 +89,19 @@ contains
 
     subroutine concurrent_alloc_basic()
       implicit none
-      type(C_PTR)         :: heap_address, block_address, heap_from_block_address
       type(block_meta_f08) :: array_info
       logical :: success
       integer(kind=4), dimension(:), pointer :: array_i4_1
-      integer(C_SIZE_T)   :: offset
-      integer(C_INTPTR_T) :: dummy_intptr
 
       array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .true.) ! Allocate 'safely'
-      offset = array_info % get_offset()
-      ! print *, 'Offset = ', offset
-
       if (.not. associated(array_i4_1)) then
-        print '(A, I2, A, I6)','ERROR: Unable to allocate a 1D 32-bit integer array! Rank ', rank, ', offset ', offset
+        print '(A, I2, A, I6)','ERROR: Unable to allocate a 1D 32-bit integer array! Rank ', rank, ', offset ', array_info % get_offset()
         error stop 1
       end if
 
-      heap_address  = the_heap % get_ptr()
-      block_address = array_info % get_ptr()
-      heap_from_block_address = get_heap_from_address(block_address)
-
-      if (.not. c_associated(heap_from_block_address, heap_address)) then
-        print '(A, Z16, A, Z16, A, I2, A, I6)', 'ERROR: get_heap_from_address ', transfer(heap_from_block_address, dummy_intptr),' returns the wrong heap ptr ', &
-              transfer(heap_address, dummy_intptr), '. Rank ', rank, ', offset ', offset
-        print '(A, Z16)', 'Block address: ', transfer(block_address, dummy_intptr)
-        error stop 1
-      end if
-
-      success = array_info % free() ! Free using block info
+      success = the_heap % free(array_info)
       if (.not. success) then
-        print *, 'ERROR Could not free heap block just from meta info'
+        print *, 'ERROR Could not free heap block'
         error stop 1
       end if
     end subroutine concurrent_alloc_basic
@@ -161,7 +144,7 @@ contains
       total_errors = 0
       do i = 1, 1000
         array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .false.)
-        success = array_info % free()
+        success = the_heap % free(array_info)
         if (.not. success) num_errors = num_errors + 1 ! Concurrency errors are usually seen when freeing the block
       end do
 
@@ -199,7 +182,7 @@ contains
         ! This shoudl also check coalescing small blocks into a bigger one
         array_info = the_heap % allocate(array, [ALLOC_BASE_SIZE], .false.) ! Allocate *not* safely
         offsets(1) = array_info % get_offset()
-        if (.not. the_heap % is_valid_block(array_info % get_ptr())) then
+        if (.not. the_heap % is_valid_block(array_info % get_ptr()) .or. .not. associated(array)) then
           print *, 'ERROR: Allocated block is not valid!'
           error stop 1
         end if
@@ -209,7 +192,7 @@ contains
         call MPI_Send(offsets(1), 1, MPI_INTEGER8, FREEER_RANK, 0, MPI_COMM_WORLD)
         call MPI_Recv(offsets(1), 1, MPI_INTEGER8, FREEER_RANK, 1, MPI_COMM_WORLD, status) ! Wait for reply to make sure the freeing is done
         
-        success = array_info % free()
+        success = the_heap % free(array_info)
         if (success) then
           print *, 'ERROR: Block should have been free already'
           error stop 1
@@ -221,7 +204,7 @@ contains
           error stop 1
         end if
 
-        success = array_info % free() .and. array_info_2 % free()
+        success = the_heap % free(array_info) .and. the_heap % free(array_info_2)
         if (.not. success) then
           print *, 'ERRROR: Unable to free 2 blocks'
           error stop 1
@@ -244,7 +227,7 @@ contains
         call MPI_Recv(offsets(1), 1, MPI_INTEGER8, ALLOCATOR_RANK, 0, MPI_COMM_WORLD, status)
         success = the_heap % free(offsets(1))
         if (.not. success) then
-          print *, 'ERROR: Unable to free...'
+          print *, 'ERROR: Unable to free... Offset ', offsets(1)
           error stop 1
         end if
         call MPI_Send(offsets(1), 1, MPI_INTEGER8, ALLOCATOR_RANK, 1, MPI_COMM_WORLD)
@@ -471,7 +454,7 @@ contains
         end if
       end if
       
-      success = array_info1 % free() .and. array_info2 % free()
+      success = the_heap % free(array_info1) .and. the_heap % free(array_info2)
 
       !------------------------
       call MPI_Barrier(MPI_COMM_WORLD)
@@ -484,13 +467,13 @@ contains
           error stop 1
         end if
 
-        success = array_info1 % free()
+        success = the_heap % free(array_info1)
         if (.not. success) then
           print *, 'ERROR: Unable to free the huge array of size ', big_alloc_size
           error stop 1
         end if
 
-        array_info1 = the_heap % allocate(big_array, [the_heap % get_size()])
+        array_info1 = the_heap % allocate(big_array, [big_alloc_size + 100])
         if (associated(big_array)) then
           print *, 'ERROR: Should not have been able to allocate that much data!'
           error stop 1
@@ -513,10 +496,9 @@ program shmem_heap_basic
   integer :: node_size
 
   type(C_PTR) :: shared_mem
-  type(C_PTR) :: tmp_ptr
 
   type(heap) :: the_heap
-  integer    :: status
+  logical    :: success
 
   !!!!!!!!!!!!!!!!!!!!!!
   ! Initialization
@@ -540,30 +522,29 @@ program shmem_heap_basic
   end if
 
   if (rank == 0) then
-    tmp_ptr = the_heap % create(shared_mem, SHMEM_HEAP_SIZE_BYTE)
+    success = the_heap % create(shared_mem, SHMEM_HEAP_SIZE_BYTE)
   else
-    tmp_ptr = the_heap % clone(shared_mem)
-
+    success = the_heap % clone(shared_mem)
   end if
 
-  if (.not. c_associated(tmp_ptr)) then
+  if (.not. success) then
     print *, 'ERROR: Heap creation failed'
     error stop 1
   end if
 
-  status = the_heap % set_default()
-  call the_heap % set_base(shared_mem)
+  ! status = the_heap % set_default()
+  ! call the_heap % set_base(shared_mem)
 
   !-------------------------------
   call MPI_Barrier(MPI_COMM_WORLD)
   !-------------------------------
-  if (rank .ne. 0) then
-    status  = the_heap % register(shared_mem)
-    if (status .ne. 1) then
-      print *, 'ERROR: Heap registration should give 1 registered heap. Got ', status
-      error stop 1
-    end if
-  end if
+  ! if (rank .ne. 0) then
+  !   status  = the_heap % register(shared_mem)
+  !   if (status .ne. 1) then
+  !     print *, 'ERROR: Heap registration should give 1 registered heap. Got ', status
+  !     error stop 1
+  !   end if
+  ! end if
 
   if (.not. the_heap % check()) then
     print *, 'ERROR: Heap is not valid, before even starting the test!', rank

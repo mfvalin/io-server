@@ -5,8 +5,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 sed -e 's/^\(.*\)$/! &/' < ${SCRIPT_DIR}/common_header.txt
 echo
 
-MALLOC=ShmemHeapAllocBlock
-METADATA=ShmemHeapSetBlockMeta
+MALLOC=ShmemHeap_alloc_block
+METADATA=ShmemHeap_set_block_meta
 # MALLOC=LocalAllocBlock
 # same calling sequence as shared memory heap allocator, but calls malloc
 cat <<EOT
@@ -52,22 +52,22 @@ for RI in I R ; do
     cat <<EOT
 !! ===============================  ${TYPE}*${L} ${D}D  ===============================
 !> \brief ${TYPE}*${L} ${D}D array allocator
-function allocate_${RI}${L}_${D}D(h, p, di, use_safe_alloc) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
+function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: h    !< heap object
-  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< ${D} dimensional pointer to $TYPE array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array p (size(di) must be the same as rank of p)
+  class(heap), intent(INOUT)        :: this    !< heap object
+  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
+  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
   $TYPE($KIND) :: pref
   type(block_meta_c)  :: bmc
-  type(C_PTR)         :: cptr, ref
+  type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
   ${PARAM_DECLARE}
 
-  nullify(p)                        ! in case of allocation failure
+  nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
   if(size(di) .ne. ${D}) then       ! array rank, di dimension mismatch ?
@@ -85,20 +85,18 @@ function allocate_${RI}${L}_${D}D(h, p, di, use_safe_alloc) result(bmi) ! ${TYPE
       if (use_safe_alloc) safe_alloc_flag = 1
     end if
 
-    cptr = ${MALLOC}(h%p, asz, safe_alloc_flag) ! allocate block in heap
+    cptr = ${MALLOC}(this % p, asz, safe_alloc_flag) ! allocate block in heap
     if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
 
-    call C_F_POINTER(cptr, p, [di]) ! make Fortran array pointer from C pointer
+    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
     tkr          = 256*${L}+16*${RI}+${D}     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
     bmi%a%tkr    = tkr              ! build C interoperable metadata
     bmi%a%d      = 1                ! set all 5 dimensions to 1
     bmi%a%d(1:${D}) = di(1:${D})          ! set relevant dimensions to correct value
-    ref          = h%get_base()                 ! get reference address for this heap
-    asz          = transfer(ref, asz)           ! reference address
-    bmi%a%offset = ShmemHeapOffsetFromPtr(h%p, cptr)           ! minus reference address  (offset in number of heap elements)
+    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
     bmi%p        = cptr                         ! actual address of array
-    status = ${METADATA}(cptr, bmi%a, bsz)      ! insert metadata into data block
+    status = ${METADATA}(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
 
   endif
 end function allocate_${RI}${L}_${D}D
