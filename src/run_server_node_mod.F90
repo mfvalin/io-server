@@ -195,7 +195,7 @@ function receive_message(context, dcb, client_id) result(finished)
   ! Data extraction/processing
   type(model_record) :: record
   integer(C_INT64_T) :: num_data
-  integer(kind = 8), dimension(:), pointer, contiguous, save :: model_data => NULL()
+  integer(C_INT64_T), dimension(:), pointer, contiguous, save :: model_data => NULL()
 
   integer :: consumer_id
 

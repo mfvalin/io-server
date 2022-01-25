@@ -79,7 +79,7 @@ program put_error
        ! Loop to get a performance measurement.  If this case triggers the error,
        ! we expect failure on the first loop.
  
-       do loopct=1,4
+       do loopct=1,1
           ! Clear remote buffer
           rma_buffer = 0
  
