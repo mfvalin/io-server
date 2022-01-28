@@ -27,16 +27,20 @@ module model_write_parameters
   integer, parameter :: CB_MESSAGE_SIZE_INT       = 16384                     !< Size of each data batch put in a CB. Must be divisible by 16 for the tests
   integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = CB_MESSAGE_SIZE_INT * 16  !< How much total data to send (for each CB)
 
+  integer, parameter :: block_width  = CB_MESSAGE_SIZE_INT / 4
+  integer, parameter :: block_height = 4
+
   integer, save :: num_compute_x
   integer, save :: num_compute_y
-  integer, save :: num_elem_x
-  integer, save :: num_elem_y
 
   integer(C_INT64_T), parameter :: dim_x = 10
   integer(C_INT64_T), parameter :: dim_y = 37
   integer(C_INT64_T), parameter :: dim_z = 40
   integer(C_INT64_T), parameter :: num_vars = 3
   integer(C_INT64_T), parameter :: num_time_steps = 5
+
+  character(len=*), parameter :: filename1 = 'pseudo_model_1'
+  character(len=*), parameter :: filename2 = 'pseudo_model_2'
 
 contains
 
@@ -65,14 +69,15 @@ contains
     if (present(m)) data_point = data_point + mod(m, 10) * 10000000000_8
   end function compute_real8_data_point
 
-  function am_server_node(node_rank, node_size, single_node)
+  function am_server_node(node_rank, node_size, single_node, num_nodes)
     implicit none
 
     integer, intent(out) :: node_rank, node_size
     logical, intent(out) :: single_node
+    integer, intent(out) :: num_nodes
     logical :: am_server_node
 
-    type(MPI_Comm) :: node_comm
+    type(MPI_Comm) :: node_comm, first_rank_comm
     integer :: global_rank, node_root_global_rank
     integer :: global_size
 
@@ -85,14 +90,19 @@ contains
 
     call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
 
-    am_server_node = .false.
-    if (node_root_global_rank == 0) am_server_node = .true.
-
     call MPI_Comm_size(MPI_COMM_WORLD, global_size)
     call MPI_Comm_size(node_comm, node_size)
 
-    single_node = .false.
-    if (global_size == node_size) single_node = .true.
+    am_server_node = (node_root_global_rank == 0)
+    single_node = (global_size == node_size)
+
+    if (node_rank == 0) then
+      call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, first_rank_comm)
+      call MPI_Comm_size(first_rank_comm, num_nodes)
+    else
+      call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, first_rank_comm)
+      num_nodes = -1
+    end if
   end function am_server_node
 
   subroutine pseudo_model_process(context)
@@ -117,19 +127,19 @@ contains
     real(kind=8), dimension(:,:,:,:,:), pointer :: big_array
 
     integer :: global_model_id
-    integer :: compute_width, compute_height, block_width, block_height
+    integer :: compute_width, compute_height
 
     logical :: success
 
     node_heap = context % get_local_heap()
 
-    output_stream_1 = context % open_stream_model('pseudo_model_results_1')
+    output_stream_1 = context % open_stream_model(filename1)
     if (.not. output_stream_1 % is_open()) then
       print *, 'Unable to open model file 1 !!!!'
       error stop 1
     end if
 
-    output_stream_2 = context % open_stream_model('pseudo_model_results_2')
+    output_stream_2 = context % open_stream_model(filename2)
     if (.not. output_stream_2 % is_open()) then
       print *, 'Unable to open model file 2 !!!!'
       error stop 1
@@ -148,9 +158,6 @@ contains
 
     print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
 
-    block_width  = CB_MESSAGE_SIZE_INT / 4
-    block_height = 4
-
     ! Init area info
     if (mod(model_crs % size, 4) == 0) then
       compute_width  = model_crs % size / 4
@@ -166,8 +173,6 @@ contains
     ! For checking later
     num_compute_x = compute_width
     num_compute_y = compute_height
-    num_elem_x = block_width
-    num_elem_y = block_height
 
     local_grid % offset(1) = mod(global_model_id, compute_width) * block_width + 1
     local_grid % offset(2) = (global_model_id / compute_width) * block_height + 1
@@ -216,7 +221,7 @@ contains
       integer :: i, j, k, l, m
       array_dims = [block_width, block_height]
       big_array_dims = [dim_x, dim_y, dim_z, num_vars, num_time_steps]
-      current_tag = 1
+      current_tag = 0
       do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
         !------------------------
         ! First stream
@@ -296,6 +301,98 @@ contains
       error stop 1
     end if
   end subroutine pseudo_model_process
+
+  !> Verify that one of the files written during the test contains the proper values, with
+  !> the correct structure
+  subroutine check_result()
+    implicit none
+
+    integer(C_INT64_T), dimension(2) :: dims1
+    integer(C_INT64_T), dimension(5) :: dims2
+
+    integer(C_INT8_T), dimension(:,:),       allocatable, target :: read1 ! Array used to read from file (must be bytes)
+    integer(C_INT8_T), dimension(:,:,:,:,:), allocatable, target :: read2 ! Array used to read from file (must be bytes)
+
+    integer(C_INT64_T), dimension(:,:),       pointer :: array1 ! Array used to compare values (must be the value type)
+    real(kind=8),       dimension(:,:,:,:,:), pointer :: array2 ! Array used to compare values (must be the value type)
+
+    type(C_PTR) :: tmp_ptr ! To convert between array types and shapes
+
+    integer :: file_unit
+    integer :: model_id, tag
+    integer :: i_msg
+    integer :: i_comp, j_comp
+    integer :: start_i, end_i, start_j, end_j
+    integer :: i, j, k, l, m
+    real(kind=8) :: expected, val
+
+    dims1(1) = block_width * num_compute_x
+    dims1(2) = block_height * num_compute_y
+
+    dims2(1) = dim_x * num_compute_x
+    dims2(2) = dim_y * num_compute_y
+    dims2(3) = dim_z
+    dims2(4) = num_vars
+    dims2(5) = num_time_steps
+
+    ! Allocate reading space
+    allocate(read1(dims1(1) * 8, dims1(2)))
+    allocate(read2(dims2(1) * 8, dims2(2), dims2(3), dims2(4), dims2(5)))
+
+    ! Set up pointer for right type access
+    tmp_ptr = c_loc(read1)
+    call c_f_pointer(tmp_ptr, array1, dims1)
+
+    tmp_ptr = c_loc(read2)
+    call c_f_pointer(tmp_ptr, array2, dims2)
+
+    open(newunit = file_unit, file = trim(filename2)//'.out', status = 'old', form = 'unformatted', action = 'read')
+
+    tag = 2
+    do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT ! Loop through all pairs of records in this file
+      read(unit=file_unit) read1 ! First one won't be checked
+      read(unit=file_unit) read2 ! This is the one we are interested in
+      ! print *, array1(:,1)
+
+      tag = tag + 3 ! Tags skip three at each iteration. One for the first file (not even considered in this check), and another for the array being ignored
+      model_id = -1
+
+      ! print *, "Checking tag ", tag
+
+      do j_comp = 1, num_compute_y                  ! Number of model PEs in the vertical direction
+        start_j = (j_comp - 1) * int(dim_y,4) + 1   ! Starting index within the global array (not just this PE's block)
+        end_j = start_j + int(dim_y,4) - 1
+        do i_comp = 1, num_compute_x                ! Number of model PEs in the horizontal direction
+          model_id = model_id + 1
+          start_i = (i_comp - 1) * int(dim_x,4) + 1 ! Starting index within the global array (not just this PE's block)
+          end_i   = start_i + int(dim_x,4) - 1
+          do m = 1, num_time_steps
+            do l = 1, num_vars
+              do k = 1, dim_z
+                do j = 1, dim_y
+                  do i = 1, dim_x
+                    val = array2(i + start_i - 1, j + start_j - 1, k, l, m)
+                    expected = compute_real8_data_point(model_id, tag, i, j, k, l, m)
+                    if (abs(val - expected) .gt. 0.0) then
+                      print '(A, E25.14, A, E25.14)', 'AAAAhhhhh!! Got ', val, ', but should be ', expected
+                      print *, 'Model ID ', model_id
+                      print *, 'Index    ', i, j, k, l, m
+                      print *, 'Block ID ', i_comp, j_comp
+                      error stop 1
+                    end if
+                  end do
+                end do
+              end do
+            end do
+          end do
+        end do
+      end do
+    end do
+
+    print *, 'All good'
+
+  end subroutine check_result
+
 end module model_write_parameters
 
 program pseudomodelandserver
@@ -313,9 +410,10 @@ program pseudomodelandserver
   character(len=128) :: arg
 
   logical :: server_node, single_node
-  integer :: node_rank, node_size
+  integer :: node_rank, node_size, global_size, num_nodes
 
   integer :: num_relay_per_node, num_noop
+  integer :: num_model_per_node
 
   logical :: debug_mode
   logical :: CHECK_CB_MESSAGES
@@ -324,6 +422,7 @@ program pseudomodelandserver
   procedure(ioserver_function_template), pointer :: model_fn_ptr
 
   call mpi_init(status)
+  call MPI_Comm_size(MPI_COMM_WORLD, global_size)
 
   debug_mode = .false.
   ! debug_mode = .true. ! activate debug mode
@@ -362,7 +461,7 @@ program pseudomodelandserver
   if(COMMAND_ARGUMENT_COUNT() >= 4) call GET_COMMAND_ARGUMENT(4, arg)
   read(arg,*) nio_node                    ! number of relay processes per node
 
-  server_node = am_server_node(node_rank, node_size, single_node)
+  server_node = am_server_node(node_rank, node_size, single_node, num_nodes)
 
   num_relay_per_node = nio_node
   num_noop = 0
@@ -390,5 +489,32 @@ program pseudomodelandserver
 
   endif
   call mpi_finalize(status)
+
+  if (server_node .and. node_rank == 0) then
+    block
+      integer :: num_model_pes
+      if (single_node) then
+        num_model_per_node = global_size - nserv - num_relay_per_node
+      else
+        num_model_per_node = node_size - num_relay_per_node
+      end if
+
+      num_model_pes = num_model_per_node * num_nodes
+
+      ! Init area info
+      if (mod(num_model_pes, 4) == 0) then
+        num_compute_x = num_model_pes / 4
+        num_compute_y = 4
+      else if (mod(num_model_pes, 2) == 0) then
+        num_compute_x = num_model_pes / 2
+        num_compute_y = 2
+      else
+        num_compute_x = num_model_pes
+        num_compute_y = 1
+      end if
+
+      call check_result()
+    end block
+  end if
 
 end program
