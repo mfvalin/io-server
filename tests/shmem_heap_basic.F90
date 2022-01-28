@@ -463,6 +463,12 @@ contains
       !------------------------
 
       if (rank == 0) then
+        if (abs(the_heap % get_size() - SHMEM_HEAP_SIZE_BYTE) > 200) then
+          print '(A,I12,A,I12)', 'ERROR: The heap should be able to contain approximately the same amount as we asked. Asked for ', &
+              SHMEM_HEAP_SIZE_BYTE, ', got ', the_heap % get_size()
+          error stop 1
+        end if
+
         array_info1 = the_heap % allocate(big_array, [big_alloc_size])
         if (.not. associated(big_array)) then
           print *, 'ERROR: Unable to allocate array of size ', big_alloc_size
@@ -475,7 +481,7 @@ contains
           error stop 1
         end if
 
-        array_info1 = the_heap % allocate(big_array, [big_alloc_size + 100])
+        array_info1 = the_heap % allocate(big_array, [the_heap % get_size() / 8 + 1])
         if (associated(big_array)) then
           print *, 'ERROR: Should not have been able to allocate that much data!'
           error stop 1

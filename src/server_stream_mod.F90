@@ -142,7 +142,7 @@ contains
 
   !> Close this shared stream. Closes the file associated with it
   !> @return .true. if the stream was closed peacefully (i.e. there were no incomplete grids left) or if it was already closed,
-  !> .false. if it didn't close of if there were incomplete grids and it was forcefully closed
+  !> .false. if it didn't close or if there were incomplete grids and it was forcefully closed
   function shared_server_stream_close(this, data_heap, force_close) result(success)
     implicit none
     class(shared_server_stream), intent(inout) :: this
@@ -152,8 +152,8 @@ contains
 
     integer :: num_flushed, num_incomplete
 
-    integer, parameter :: MAX_NUM_ATTEMPTS = 5
-    integer, parameter :: WAIT_TIME_US     = 1000000
+    integer, parameter :: MAX_NUM_ATTEMPTS = 50
+    integer, parameter :: WAIT_TIME_US     = 100000
     integer :: i
 
     success = .false.
@@ -163,12 +163,12 @@ contains
       do i = 1, MAX_NUM_ATTEMPTS
         ! Process completed grids
         num_flushed = this % partial_grid_data % flush_completed_grids(this % unit, data_heap)
-        if (num_flushed > 0) print *, 'Flushed ', num_flushed, ' completed grids upon closing ', this % name
+        ! if (num_flushed > 0) print *, 'Flushed ', num_flushed, ' completed grids upon closing ', this % name
 
         ! Find out how many grids are started but incomplete, and decide whether to wait
         num_incomplete = this % partial_grid_data % get_num_partial_grids()
         if (num_incomplete > 0 .and. force_close) then
-          print '(A, I4, A, F6.2, A)', ' DEBUG: There are still ', num_incomplete, ' incomplete grids in file, will wait another ', &
+          print '(I2, A, I4, A, A, A, F6.2, A)', this % get_owner_id(), ' DEBUG: There are still ', num_incomplete, ' incomplete grids in file "', this % name, '", will wait another ', &
                 (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, ' second(s)'
         else
           exit
@@ -232,9 +232,11 @@ contains
     integer :: last_char
 
     trimmed_filename = trim(filename)
-    last_char = len(trimmed_filename)
-    if (trimmed_filename(last_char:last_char) == achar(0)) last_char = last_char - 1
-    full_filename =  trimmed_filename(1:last_char)// '.out'
+    do last_char = 1, len(trimmed_filename)
+      if (trimmed_filename(last_char:last_char) == achar(0)) exit
+    end do
+    
+    full_filename =  trimmed_filename(:last_char-1)// '.out'
   end function make_full_filename
 
   !> Check whether this stream has been opened with the given base name
@@ -370,9 +372,10 @@ contains
     integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 
-    integer, parameter :: MAX_NUM_ATTEMPTS = 30
-    integer, parameter :: WAIT_TIME_US     = 500000
+    integer, parameter :: MAX_NUM_ATTEMPTS = 300
+    integer, parameter :: WAIT_TIME_US     = 50000
     integer :: i
+    integer :: num_flushed
 
     success = .false.
     if (this % is_open()) then
@@ -380,17 +383,18 @@ contains
       success = .true.
     else if ((.not. this % is_owner()) .and. (this % got_open_request)) then
       ! The stream is not open (yet), so wait until it is, or until we reach a certain timeout
-      print *, "DEBUG: The file is not open yet, let's wait a bit ", MAX_NUM_ATTEMPTS * WAIT_TIME_US / 1000000.0
+      print '(I2, A, I3, A, F6.3)', this % server_id, " DEBUG: File from ", this % shared_instance % get_owner_id(), &
+            " is not open yet, let's wait a bit before trying to put data in it. ", MAX_NUM_ATTEMPTS * WAIT_TIME_US / 1000000.0
       do i = 1, MAX_NUM_ATTEMPTS
         if (this % is_open()) then
           success = .true.
-          print *, 'DEBUG: Done waiting!'
+          ! print *, 'DEBUG: Done waiting!'
           exit
         else if (this % shared_instance % is_closed()) then
           print *, 'ERROR: Stream has been closed, we will no longer be able to put anything in it'
           exit
         end if
-        print *, 'DEBUG: Still waiting...'
+        ! print *, 'DEBUG: Still waiting...'
         call sleep_us(WAIT_TIME_US)
       end do
     end if
@@ -402,6 +406,26 @@ contains
     end if
 
     success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex)
+    ! Try again a few times, after waiting a bit, instead of just crashing right away
+    do i = 1, MAX_NUM_ATTEMPTS
+      if (.not. success) then
+        print '(I2, A, I2, A, I4, A, I3, A)', this % server_id, ' DEBUG: Could not put the data into the grid for owner ', &
+            this % shared_instance % get_owner_id(), '. Trying again in ', &
+            WAIT_TIME_US / 1000, ' ms (', MAX_NUM_ATTEMPTS - i, ' attempts left)'
+
+        num_flushed = this % flush_data() ! Try to flush any completed grid
+
+        ! if (num_flushed > 0) then
+        !   print *, 'Flushed grid(s)!', num_flushed
+        ! end if
+
+        if (num_flushed == 0) call sleep_us(WAIT_TIME_US)
+        success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex)
+      else
+        exit ! We're good, can finish now
+      end if
+    end do
+
   end function local_server_stream_put_data
 
   !> Flush/process any completed grid in the shared instance
@@ -413,5 +437,6 @@ contains
     
     num_flushed = 0
     if (this % is_owner()) num_flushed = this % shared_instance % flush_data(this % data_heap)
+    ! if (num_flushed > 0) print '(I2, A, I2, A)', this % server_id, ' Flushed ', num_flushed, ' grids'
   end function local_server_stream_flush_data
 end module server_stream_module

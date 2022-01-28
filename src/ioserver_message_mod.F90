@@ -24,6 +24,7 @@ module ioserver_message_module
   use heap_module, only: MAX_ARRAY_RANK, HEAP_ELEMENT
   use ioserver_constants
   use jar_module
+  use rpn_extra_module
   implicit none
   private
 
@@ -39,7 +40,6 @@ module ioserver_message_module
     procedure, pass :: bump_tag
     procedure, pass :: get_msg_tag
     procedure, pass :: get_file_tag
-    procedure, pass :: send_server_bound_message
   end type ioserver_messenger
 
   integer, parameter :: MAXPACK = 16
@@ -66,10 +66,10 @@ module ioserver_message_module
 
   ! Type used as a header when writing data to a stream from a model process
   type, public, bind(C) :: model_record
-    integer(HEAP_ELEMENT) :: heap_offset       !< Offset of the data within its heap. Allows to retrieve it from another process
-    integer(C_INT64_T)    :: data_size_byte    !< Size of the data packet itself, in bytes
-    integer(C_INT)        :: cmeta_size        !< Size of the compression metadata included
-    integer(JAR_ELEMENT)  :: meta_size   !< Size of other metadata included
+    integer(HEAP_ELEMENT) :: heap_offset    !< Offset of the data within its heap. Allows to retrieve it from another process
+    integer(C_INT64_T)    :: data_size_byte !< Size of the data packet itself, in bytes
+    integer(C_INT)        :: cmeta_size     !< Size of the compression metadata included, in # of 64-bit elements
+    integer(JAR_ELEMENT)  :: meta_size      !< Size of other metadata included, in number of 64-bit elements
 
     integer(C_INT) :: tag               !< Tag associated with this particular message (to be able to group with that of other model PEs)
     integer(C_INT) :: stream            !< Stream to which the data is being sent
@@ -84,13 +84,13 @@ module ioserver_message_module
   integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
   integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010 !< (Second-to-)Last entry of every message. Helps debugging
   type, public, bind(C) :: message_header
-    integer(C_INT)     :: header_tag      = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
-    integer(C_INT)     :: command         = -1    !< What this message contains
-    integer(C_INT64_T) :: content_length  = -1    !< Message length (excluding this header). Units depend on content of message
-    integer(C_INT)     :: stream_id       = -1    !< To what stream this message is destined
-    integer(C_INT)     :: tag             = -1    !< A collective tag associated with messages from model processes (incremented at every message)
-    integer(C_INT)     :: sender_global_rank = -1 !< Who is sending that message
-    integer(C_INT)     :: relay_global_rank = -1  !< Who is transmitting the message
+    integer(C_INT)     :: header_tag          = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
+    integer(C_INT)     :: command             = -1  !< What this message contains
+    integer(C_INT64_T) :: content_length_int8 = -1  !< Message length (excluding this header), in number of 64-bit elements
+    integer(C_INT)     :: stream_id           = -1  !< To what stream this message is destined
+    integer(C_INT)     :: tag                 = -1  !< A collective tag associated with messages from model processes (incremented at every message)
+    integer(C_INT)     :: sender_global_rank  = -1  !< Who is sending that message
+    integer(C_INT)     :: relay_global_rank   = -1  !< Who is transmitting the message
   end type message_header
 
   type, public, bind(C) :: message_cap
@@ -106,48 +106,66 @@ module ioserver_message_module
   integer, parameter, public :: MSG_COMMAND_RELAY_STOP  = 5 !< Indicate that the relay that sends this message will no longer send anything
   integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 6 !< Indicate a message without content, but with the purpose to acknowledge something?
 
-  public :: message_header_size_int, message_cap_size_int, model_record_size_int, cmeta_size_int, send_server_bound_message, print_message_header, print_model_record
+  public :: message_header_size_int8, message_cap_size_int8, model_record_size_int8, cmeta_size_int8
+  public :: message_header_size_byte, message_cap_size_byte, model_record_size_byte, cmeta_size_byte
+  public :: print_message_header, print_model_record
 contains
 
-  function message_header_size_int()
+  function message_header_size_byte()
     implicit none
-    integer(C_INT64_T) :: message_header_size_int
-
+    integer(C_INT64_T) :: message_header_size_byte !< Size of the message_header type in bytes
     type(message_header) :: dummy_header
-    integer(kind=4) :: dummy_int
 
-    message_header_size_int = storage_size(dummy_header) / storage_size(dummy_int)
-  end function message_header_size_int
+    message_header_size_byte = storage_size(dummy_header) / 8
+  end function message_header_size_byte
 
-  function message_cap_size_int()
+  function message_header_size_int8()
     implicit none
-    integer(C_INT64_T) :: message_cap_size_int
+    integer(C_INT64_T) :: message_header_size_int8 !< How many 64-bit integers are needed to contain a message_header
+    message_header_size_int8 = num_char_to_num_int8(message_header_size_byte())
+  end function message_header_size_int8
 
+  function message_cap_size_byte()
+    implicit none
+    integer(C_INT64_T) :: message_cap_size_byte !< Size of the message_cap type in bytes
     type(message_cap) :: dummy_cap
-    integer(kind=4)   :: dummy_int
 
-    message_cap_size_int = storage_size(dummy_cap) / storage_size(dummy_int)
-  end function message_cap_size_int
+    message_cap_size_byte = storage_size(dummy_cap) / 8
+  end function message_cap_size_byte
 
-  function model_record_size_int()
+  function message_cap_size_int8()
     implicit none
-    integer(C_INT64_T) :: model_record_size_int
+    integer(C_INT64_T) :: message_cap_size_int8 !< How many 64-bit integers are needed to contain a message_cap
+    message_cap_size_int8 = num_char_to_num_int8(message_cap_size_byte())
+  end function message_cap_size_int8
 
+  function model_record_size_byte()
+    implicit none
+    integer(C_INT64_T) :: model_record_size_byte !< Size of the model_record type in bytes
     type(model_record) :: dummy_record
-    integer(kind=4) :: dummy_int
 
-    model_record_size_int = storage_size(dummy_record) / storage_size(dummy_int)
-  end function model_record_size_int
+    model_record_size_byte = storage_size(dummy_record) / 8
+  end function model_record_size_byte
 
-  function cmeta_size_int()
+  function model_record_size_int8()
     implicit none
-    integer(C_INT64_T) :: cmeta_size_int
+    integer(C_INT64_T) :: model_record_size_int8 !< How many 64-bit integers are needed to contain a model_record
+    model_record_size_int8 = num_char_to_num_int8(model_record_size_byte())
+  end function model_record_size_int8
 
+  function cmeta_size_byte()
+    implicit none
+    integer(C_INT64_T) :: cmeta_size_byte !< Size of the cmeta type in bytes
     type(cmeta) :: dummy_cmeta
-    integer(kind=4) :: dummy_int
 
-    cmeta_size_int = storage_size(dummy_cmeta) / storage_size(dummy_int)
-  end function cmeta_size_int
+    cmeta_size_byte = storage_size(dummy_cmeta) / 8
+  end function cmeta_size_byte
+
+  function cmeta_size_int8()
+    implicit none
+    integer(C_INT64_T) :: cmeta_size_int8 !< How many 64-bit integers are needed to contain a cmeta
+    cmeta_size_int8 = num_char_to_num_int8(cmeta_size_byte())
+  end function cmeta_size_int8
 
   subroutine bump_tag(this, new_file)
     implicit none
@@ -175,34 +193,6 @@ contains
     integer :: tag
     tag = this % file_open_seq
   end function get_file_tag
-
-  function send_server_bound_message(this, message, msg_size, buffer) result(success)
-    use circular_buffer_module
-    implicit none
-    class(ioserver_messenger),    intent(inout) :: this
-    integer,                      intent(in)    :: msg_size
-    integer, dimension(msg_size), intent(in)    :: message
-    type(circular_buffer),        intent(inout) :: buffer
-
-    logical :: success
-
-    type(message_header)  :: header
-    type(message_cap)     :: end_cap
-
-    success = .false.
-    call this % bump_tag()
-
-    header % content_length = msg_size
-    header % command        = MSG_COMMAND_DUMMY
-    header % tag            = this % msg_tag_seq
-
-    end_cap % msg_length = header % content_length
-
-    success = buffer % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = buffer % put(message, int(msg_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
-    success = buffer % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
-
-  end function send_server_bound_message
 
   subroutine set_debug(this, debug_mode)
     implicit none
@@ -247,7 +237,7 @@ contains
     type(message_header), intent(in) :: header
     print '(A, I8, A, I8, A, I3, 1X, A, A, I3, A, I8, A, I5, A, I5)', &
       'Header: header tag ', header % header_tag, &
-      ', len ', header % content_length, &
+      ', len ', header % content_length_int8, &
       ', cmd ', header % command, get_message_command_string(header % command), &
       ', stream ', header % stream_id, &
       ', tag ', header % tag, &

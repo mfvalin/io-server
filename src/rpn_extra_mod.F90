@@ -25,4 +25,25 @@ module rpn_extra_module
 
   include 'io-server/rpn_extra.inc'
 
+contains
+
+  !> Compute the number of 32-bit integers into which the given number of characters can entirely fit
+  !> It's basically [num_char] / 4, rounded up
+  function num_char_to_num_int4(num_char) result(num_int)
+    implicit none
+    integer, intent(in) :: num_char !< [in] How many characters we have
+    integer             :: num_int  !< How many 32-bit integers we need to contain every char
+
+    num_int = (num_char + 3) / 4
+  end function num_char_to_num_int4
+
+  !> Compute the number of 64-bit integers into which the given number of characters can entirely fit
+  !> It's basically [num_char] / 8, rounded up
+  function num_char_to_num_int8(num_char) result(num_int8)
+    implicit none
+    integer(kind=8), intent(in) :: num_char !< [in] How many characters we have
+    integer(kind=8)             :: num_int8 !< How many 64-bit integers we need to contain every char
+    num_int8 = (num_char + 7) / 8
+  end function num_char_to_num_int8
+
 end module rpn_extra_module

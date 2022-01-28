@@ -280,7 +280,7 @@ contains
   !> \sa DCB_get_num_server_bound_instances
   function get_num_server_bound_clients(this) result(num_clients)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(in) :: this
     integer(C_INT) :: num_clients
     num_clients = DCB_get_num_server_bound_instances(this % c_buffer)
   end function get_num_server_bound_clients
@@ -299,8 +299,8 @@ contains
   !> \sa DCB_get_capacity_local_bytes
   function get_capacity_local(this, type_id) result(num_elements)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
-    integer,                            intent(in)    :: type_id !< Type of elements we want to count
+    class(distributed_circular_buffer), intent(in) :: this
+    integer,                            intent(in) :: type_id !< Type of elements we want to count
     integer(C_INT64_T) :: num_elements
     num_elements = DCB_get_capacity_local(this % c_buffer) / get_type_size(type_id)
   end function get_capacity_local

@@ -26,9 +26,21 @@ module model_write_parameters
 
   integer, parameter :: CB_MESSAGE_SIZE_INT       = 16384                     !< Size of each data batch put in a CB. Must be divisible by 16 for the tests
   integer, parameter :: CB_TOTAL_DATA_TO_SEND_INT = CB_MESSAGE_SIZE_INT * 16  !< How much total data to send (for each CB)
+
+  integer, save :: num_compute_x
+  integer, save :: num_compute_y
+  integer, save :: num_elem_x
+  integer, save :: num_elem_y
+
+  integer(C_INT64_T), parameter :: dim_x = 10
+  integer(C_INT64_T), parameter :: dim_y = 37
+  integer(C_INT64_T), parameter :: dim_z = 40
+  integer(C_INT64_T), parameter :: num_vars = 3
+  integer(C_INT64_T), parameter :: num_time_steps = 5
+
 contains
 
-  function compute_data_point(compute_rank, tag, index) result(data_point)
+  function compute_int4_data_point(compute_rank, tag, index) result(data_point)
     implicit none
     integer, intent(in) :: compute_rank
     integer, intent(in) :: tag
@@ -36,7 +48,22 @@ contains
     integer :: data_point
 
     data_point = mod(compute_rank, 1000) * 1000000 + mod(tag, 1000) * 1000 + mod(index, 800) + tag / 1000
-  end function compute_data_point
+  end function compute_int4_data_point
+
+  function compute_real8_data_point(compute_id, tag, i, j, k, l, m) result(data_point)
+    implicit none
+    integer, intent(in) :: compute_id
+    integer, intent(in) :: tag
+    integer, intent(in) :: i, j
+    integer, intent(in), optional :: k, l, m
+
+    real(kind=8) :: data_point
+
+    data_point = tag / 100 + mod(compute_id, 100) * 100 + mod(i, 1000) * 100000 + mod(j, 100) * 10000000
+    if (present(k)) data_point = data_point + mod(k, 10) * 100000000
+    if (present(l)) data_point = data_point + mod(l, 10) * 1000000000_8
+    if (present(m)) data_point = data_point + mod(m, 10) * 10000000000_8
+  end function compute_real8_data_point
 
   function am_server_node(node_rank, node_size, single_node)
     implicit none
@@ -82,13 +109,13 @@ contains
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs
 
-    type(subgrid_t)      :: local_grid
-    type(grid_t)         :: input_grid_4, input_grid_8, output_grid
-    type(block_meta_f08) :: data_array_info_1, data_array_info_2
+    type(subgrid_t)      :: local_grid, big_local_grid
+    type(grid_t)         :: input_grid_4, input_grid_8, output_grid, big_grid
+    type(block_meta_f08) :: data_array_info_1, data_array_info_2, big_array_info
     integer(kind=4), dimension(:,:), pointer :: data_array_4
     integer(kind=8), dimension(:,:), pointer :: data_array_8
+    real(kind=8), dimension(:,:,:,:,:), pointer :: big_array
 
-    integer :: global_rank
     integer :: global_model_id
     integer :: compute_width, compute_height, block_width, block_height
 
@@ -113,10 +140,6 @@ contains
     node_crs         = context % get_crs(NODE_COLOR + MODEL_COLOR + RELAY_COLOR)
     global_model_id  = model_crs % rank
 
-    global_rank = context % get_global_rank()
-
-    ! print '(A, I5)', 'DEBUG: MODEL, global ', global_rank
-
     data_buffer = context % get_server_bound_cb()
     if (.not. data_buffer % is_valid()) then
       print *, 'ERROR: CB received from context is not valid!'
@@ -140,6 +163,12 @@ contains
       compute_height = 1
     end if
 
+    ! For checking later
+    num_compute_x = compute_width
+    num_compute_y = compute_height
+    num_elem_x = block_width
+    num_elem_y = block_height
+
     local_grid % offset(1) = mod(global_model_id, compute_width) * block_width + 1
     local_grid % offset(2) = (global_model_id / compute_width) * block_height + 1
     local_grid % size(1)   = block_width
@@ -157,19 +186,42 @@ contains
 
     output_grid % id = 1
 
+    big_local_grid % offset(1) = mod(global_model_id, compute_width) * dim_x + 1
+    big_local_grid % offset(2) = (global_model_id / compute_width) * dim_y + 1
+    big_local_grid % offset(3) = 1
+    big_local_grid % offset(4) = 1
+    big_local_grid % offset(5) = 1
+
+    big_local_grid % size(1) = dim_x
+    big_local_grid % size(2) = dim_y
+    big_local_grid % size(3) = dim_z
+    big_local_grid % size(4) = num_vars
+    big_local_grid % size(5) = num_time_steps
+
+    big_grid % id = 2
+    big_grid % size(1) = dim_x * compute_width
+    big_grid % size(2) = dim_y * compute_height
+    big_grid % size(3) = dim_z
+    big_grid % size(4) = num_vars
+    big_grid % size(5) = num_time_steps
+    big_grid % elem_size = 8
+
     ! print *, 'Created local grid', local_grid % i0, local_grid % i0 + local_grid % ni
 
     ! call sleep_us(5000)
     block
       integer :: i_msg, i_data, j_data, current_tag
       integer(C_INT64_T), dimension(2) :: array_dims
-      array_dims = [CB_MESSAGE_SIZE_INT/4, 4]
+      integer(C_INT64_T), dimension(5) :: big_array_dims
+      integer :: i, j, k, l, m
+      array_dims = [block_width, block_height]
+      big_array_dims = [dim_x, dim_y, dim_z, num_vars, num_time_steps]
       current_tag = 1
       do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
         !------------------------
         ! First stream
       
-        current_tag = current_tag + 2
+        current_tag = current_tag + 3
 
         ! Get memory and put data in it. Try repeatedly if it failed.
         data_array_info_1 = node_heap % allocate(data_array_4, array_dims)
@@ -178,10 +230,10 @@ contains
           data_array_info_1 = node_heap % allocate(data_array_4, array_dims)
         end do
 
-        ! Using i + 2 b/c tag is incremented when opening a file
+        ! Put data in the array
         do i_data = 1, CB_MESSAGE_SIZE_INT/4
           do j_data = 1, 4
-            data_array_4(i_data,j_data) = compute_data_point(global_rank, current_tag, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
+            data_array_4(i_data,j_data) = compute_int4_data_point(global_model_id, current_tag, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
           end do
         end do
 
@@ -201,20 +253,39 @@ contains
           data_array_info_2 = node_heap % allocate(data_array_8, array_dims)
         end do
 
-        ! Using i + 2 b/c tag is incremented when opening a file
+        big_array_info = node_heap % allocate(big_array, big_array_dims)
+        do while (.not. associated(big_array))
+          call sleep_us(10)
+          big_array_info = node_heap % allocate(big_array, big_array_dims)
+        end do
+
+        ! Put data in the arrays
         do i_data = 1, CB_MESSAGE_SIZE_INT / 4
           do j_data = 1, 4
-            data_array_8(i_data,j_data) = compute_data_point(global_rank, current_tag + 1, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
+            data_array_8(i_data,j_data) = compute_int4_data_point(global_model_id, current_tag + 1, (j_data-1) * CB_MESSAGE_SIZE_INT / 4 + i_data)
+          end do
+        end do
+
+        do m = 1, num_time_steps
+          do l = 1, num_vars
+            do k = 1, dim_z
+              do j = 1, dim_y
+                do i = 1, dim_x
+                  big_array(i, j, k, l, m) = compute_real8_data_point(global_model_id, current_tag + 2, i, j, k, l, m)
+                end do
+              end do
+            end do
           end do
         end do
 
         success = output_stream_2 % write(data_array_info_2, local_grid, input_grid_8, output_grid)
+        success = output_stream_2 % write(big_array_info, big_local_grid, big_grid, output_grid) .and. success
         if (.not. success) then
           print *, 'ERROR while trying to do a WRITE'
           error stop 1
         end if
 
-        call sleep_us(50)
+        call sleep_us(500)
       end do
     end block
 
@@ -319,4 +390,5 @@ program pseudomodelandserver
 
   endif
   call mpi_finalize(status)
+
 end program

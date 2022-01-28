@@ -102,6 +102,8 @@ contains
     integer(C_INT8_T), dimension(:,:,:,:,:), pointer :: data_array_byte
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: grid_size
 
+    ! print '(I2,A,I6,A,I3)', mutex % get_id(), ' Trying to create an assembly line for tag ', record % tag, ' for file ', record % stream
+
     call mutex % lock()
 
     line_id = this % get_line_id(record, free_line_id) ! First check if someone else has already created an assembly line for this record
@@ -109,6 +111,8 @@ contains
     if (line_id == -1) then           ! Good, there's no assembly line yet
       if (free_line_id .ne. -1) then  ! Good, there's a free line in the grid assembly object
         line_id = free_line_id
+
+        ! print '(I2, A, I3)', mutex % get_id(), ' Creating line ', line_id
 
         ! Get some shared memory
         grid_size       = record % global_grid % size
@@ -125,13 +129,13 @@ contains
           line % global_grid  = record % global_grid
           line % missing_data = product(line % global_grid % size)
           line % tag          = record % tag ! Signal that the assembly line is ready to be used
-          print *, 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
+          ! print *, 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
         end associate
       else
-        print *, 'ERROR. We have reached the maximum number of grids being assembled! Will not be able to insert data.'
+        print '(I2, A)', mutex % get_id(), ' ERROR (warning?). We have reached the maximum number of grids being assembled! Will not be able to insert data.'
       end if
     else
-      print *, 'Looks like the line was created by someone else ', mutex % get_id()
+      print '(I2, A, I3, A)', mutex % get_id(), ' Looks like line ', line_id, ' was created by someone else '
     end if
 
     call mutex % unlock()
@@ -293,7 +297,7 @@ contains
     num_bytes = size(data_array_byte)
     write(unit=file_unit) data_array_byte
 
-    ! print '(A, I4, I8, A, 5(I5))', 'Flushed line ', line_id, num_bytes, ' bytes, dim ', this % lines(line_id) % global_grid % size
+    ! print '(A, I4, A, I6)', 'Flushed line ', line_id, ', tag ', this % lines(line_id) % tag
 
     ! Reset the assembly line
     success = data_heap % free(this % lines(line_id) % data_offset)

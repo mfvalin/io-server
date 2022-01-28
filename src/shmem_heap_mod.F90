@@ -86,21 +86,15 @@ module heap_module
   type, public :: heap
     private
     type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by heap \private
-    type(C_PTR) :: ref = C_NULL_PTR      !< reference address to compute offsets into memory arena for this heap \private
   contains
 
     procedure :: createb      !< create, initialize, register a heap at specified address (size in uint64_t bytes). \return address of heap
-    ! procedure :: createw      !< create, initialize, register a heap at specified address (size in uint32_t 32 bit words). \return address of heap
     GENERIC   :: create => createb !, createw
 
     procedure :: clone_h      !< Clone a heap object using the address of an existing heap. \return The given address
     GENERIC   :: clone => clone_h
 
-    ! procedure :: register     !< Register an existing heap at specified address. \return Number of registered heap if successful, -1 otherwise
     procedure :: check        !< Check integrity of heap. \return 0 if OK, something else otherwise
-
-    ! procedure, NOPASS :: get_heap_from_address    !< Find if address belongs to a registered heap. \return Address of heap, NULL if error
-    ! procedure, NOPASS :: get_offset_from_address  !< Translate address to offset in a heap. \return Offset within the correct heap, -1 if error
 
     GENERIC :: get_block_size => get_block_size_from_pointer, get_block_size_from_offset
     procedure :: get_block_size_from_pointer

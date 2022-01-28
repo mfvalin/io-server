@@ -23,6 +23,7 @@ module model_stream_module
   use circular_buffer_module
   use heap_module
   use ioserver_message_module
+  use rpn_extra_module
   implicit none
 
   private
@@ -114,7 +115,7 @@ contains
     character(len=*),      intent(IN)    :: name
     logical :: success
 
-    integer :: lname
+    integer(kind=8)      :: filename_num_char
     type(message_header) :: header
     type(message_cap)    :: end_cap
 
@@ -132,21 +133,21 @@ contains
 
     this % stream_id = this % messenger % get_file_tag()
 
-    lname = len(trim(name)) + 1
-    allocate(this % name(lname))
-    this % name(1:lname) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
+    filename_num_char = len(trim(name)) + 1
+    allocate(this % name(filename_num_char))
+    this % name(1:filename_num_char) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
 
-    header % content_length     = lname
-    header % command            = MSG_COMMAND_OPEN_FILE
-    header % stream_id          = this % stream_id
-    header % tag                = this % messenger % get_msg_tag()
-    header % sender_global_rank = this % global_rank
+    header % content_length_int8 = num_char_to_num_int8(filename_num_char)
+    header % command             = MSG_COMMAND_OPEN_FILE
+    header % stream_id           = this % stream_id
+    header % tag                 = this % messenger % get_msg_tag()
+    header % sender_global_rank  = this % global_rank
 
-    end_cap % msg_length = header % content_length
+    end_cap % msg_length = header % content_length_int8
 
-    success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % server_bound_cb % put(this % name, int(lname, kind=8), CB_KIND_CHAR, .false.) .and. success
-    success = this % server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success       ! Append length and commit message
+    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
+    success = this % server_bound_cb % put(this % name, filename_num_char, CB_KIND_CHAR, .false.) .and. success
+    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success       ! Append length and commit message
 
   end function open
 
@@ -163,20 +164,20 @@ contains
 
     call this % messenger % bump_tag()
 
-    header % content_length     = 0
-    header % stream_id          = this % stream_id
-    header % tag                = this  % messenger % get_msg_tag()
-    header % command            = MSG_COMMAND_CLOSE_FILE
-    header % sender_global_rank = this % global_rank
+    header % content_length_int8  = 0
+    header % stream_id            = this % stream_id
+    header % tag                  = this  % messenger % get_msg_tag()
+    header % command              = MSG_COMMAND_CLOSE_FILE
+    header % sender_global_rank   = this % global_rank
 
-    end_cap % msg_length = header % content_length
+    end_cap % msg_length = header % content_length_int8
 
     this % stream_id = -1
     deallocate(this % name)
     nullify(this % messenger)
     
-    success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.)  .and. success ! Append length + commit
+    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
+    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)  .and. success ! Append length + commit
 
     ! call print_message_header(header)
 
@@ -210,6 +211,8 @@ contains
     ! Check that dimensions in area are consistent with metadata
     if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
       print *, 'ERROR: Trying to send data array that does not match subgrid dimensions'
+      ! print *, 'Data dimension: ', my_data % get_dimensions()
+      ! print *, 'Subgrid dims:   ', subgrid_area % size
       return
     end if
 
@@ -227,7 +230,7 @@ contains
     rec % cmeta_size = 0
     rec % meta_size  = 0
     if(present(cprs)) then
-      rec % cmeta_size = int(cmeta_size_int(), kind=4)
+      rec % cmeta_size = int(cmeta_size_int8(), kind=4)
     endif
     if(present(meta)) then
       low  = meta % low()
@@ -255,27 +258,27 @@ contains
     ! print *, 'Area % nv = ', area % nv
     ! call print_model_record(rec)
 
-    header % content_length     = int(model_record_size_int() + rec % cmeta_size + rec % meta_size, kind=4)
-    header % command            = MSG_COMMAND_DATA
-    header % stream_id          = this % stream_id
-    header % tag                = this % messenger % get_msg_tag()
-    header % sender_global_rank = this % global_rank
+    header % content_length_int8  = model_record_size_int8() + rec % cmeta_size + rec % meta_size
+    header % command              = MSG_COMMAND_DATA
+    header % stream_id            = this % stream_id
+    header % tag                  = this % messenger % get_msg_tag()
+    header % sender_global_rank   = this % global_rank
 
-    end_cap % msg_length = header % content_length
+    end_cap % msg_length = header % content_length_int8
 
     !-------------------
     ! Send the message
 
     ! Put header + data
-    success = this % server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % server_bound_cb % put(rec, model_record_size_int(), CB_KIND_INTEGER_4, .false.) .and. success
+    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
+    success = this % server_bound_cb % put(rec, model_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
 
     ! Optional parts of the message
-    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
-    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_4, .false.) .and. success
+    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
+    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
 
     ! Add the end cap and commit the message
-    success = this % server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
+    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success
   end function write
 
   function read(this) result(status)

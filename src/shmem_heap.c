@@ -663,14 +663,19 @@ void *ShmemHeap_alloc_block(
 
   const heap_element num_wanted_block_elem = num_elem_from_bytes(num_requested_bytes) + 4; // Add head + tail + size elements
 
-  // Lock the heap (if requested)
-  if (safe) ShmemHeap_lock(heap);
-
   heap_element* data            = heap->first_block;
   heap_element* allocated_block = NULL;
   heap_element num_current_block_elem = 0;
 
   const heap_element limit = heap->meta->limit;
+
+  if (num_wanted_block_elem >= limit) {
+    printf("WARNING: Asking for %ld elements, which is more than the heap contains (%ld). You won't ever get a block that size.\n", num_wanted_block_elem, limit-1);
+    return NULL;
+  }
+
+  // Lock the heap (if requested)
+  if (safe) ShmemHeap_lock(heap);
 
   // Scan block list to find/make a large enough free block
   for (heap_element block_index = 0; block_index < limit; block_index += num_current_block_elem) {

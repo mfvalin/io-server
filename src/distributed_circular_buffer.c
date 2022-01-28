@@ -372,6 +372,7 @@ static inline void print_control_metadata(
     const data_element* data       //! [in] (Optional) Pointer to the control data. Will be ignored if NULL.
 ) {
   printf(
+      "------------------------------------------\n"
       "Common server header size:  %d elements\n"
       "Num server consumers:       %d\n"
       "Num server producers:       %d\n"
@@ -439,7 +440,7 @@ static inline void print_control_metadata(
       printf("%ld ", (long)signals[i]);
     }
   }
-  printf("\n");
+  printf("\n----------------------------------------\n");
 }
 
 //! @}
@@ -1176,6 +1177,7 @@ void DCB_print(
   int32_t dump_data                     //!< [in] Whether to print content too
 ) {
   printf(
+      "--------------------------------\n"
       "Server-bound server ID: %d\n"
       "Client-bound server ID: %d\n"
       "Server-bound client ID: %d\n"
@@ -1212,6 +1214,7 @@ void DCB_print(
       }
     }
   }
+  printf("------------------------------\n");
 }
 
 //F_StArT

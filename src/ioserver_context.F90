@@ -37,9 +37,6 @@ module ioserver_context_module
   public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
   public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, NO_COLOR
 
-  integer(C_SIZE_T), parameter :: DCB_SERVER_BOUND_SIZE = 4 * MBYTE !< Size of each server-bound CB within the DCB
-  integer(C_SIZE_T), parameter :: DCB_MODEL_BOUND_SIZE  = 2 * MBYTE !< Size of each model-bound CB within the DCB
-
   integer, parameter, public :: MAX_NUM_SERVER_STREAMS = 128 !< How many streams we can open within a single context
   integer, parameter         :: MAX_PES_PER_NODE       = 128 !< How many PEs per node we can manage
 
@@ -81,16 +78,26 @@ module ioserver_context_module
     ! (one heap and 2 circular buffers per compute PE)
     ! this memory is used for communications between IO relay and model compute PEs
     type(C_PTR)       :: model_shmem          = C_NULL_PTR    !< Address of relay+model PEs shared memory area
-    integer(C_SIZE_T) :: model_shmem_size     = GBYTE         !< Size of relay/model shared memory area
+    integer(C_SIZE_T) :: model_shmem_size     = 0             !< Size of relay/model shared memory area
 
     type(C_PTR)       :: server_heap_shmem      = C_NULL_PTR  !< Address of io server PEs shared memory area
-    integer(C_SIZE_T) :: server_heap_shmem_size = 10 * GBYTE  !< Size of server shared memory area (we want a lot on the server for grid assembly)
+    integer(C_SIZE_T) :: server_heap_shmem_size = 0           !< Size of server shared memory area (we want a lot on the server for grid assembly)
 
     type(C_PTR)       :: server_file_shmem      = C_NULL_PTR  !< Address of server shared memory area for holding open file data
     integer(C_SIZE_T) :: server_file_shmem_size = 0           !< Size of server shared memory area for holding open file data (computed at initialization)
 
     type(C_PTR) :: local_arena_ptr                            !< Pointer to start of shared memory arena
     
+    !---------------------------------------------
+    ! Requested size of shared memory objects
+    real :: model_heap_size_mb       = 50.0 !< Size of shared memory heap for each model process
+    real :: server_bound_cb_size_mb  = 5.0  !< Size of buffer for server-bound data for each model process
+    real :: model_bound_cb_size_mb   = 2.0  !< Size of buffer for model-bound data for each model process
+
+    real :: server_heap_size_mb      = 10000.0  !< Size of the server heap where grids will be assembled
+    real :: dcb_server_bound_size_mb = 50.0     !< Size of each server-bound CB within the DCB
+    real :: dcb_model_bound_size_mb  = 2.0      !< Size of each model-bound CB within the DCB
+
     ! -----------------
     ! Communicators
     type(MPI_Comm) :: global_comm   = MPI_COMM_WORLD        !< MPI "WORLD" for this set of PEs
@@ -227,6 +234,7 @@ module ioserver_context_module
     
     ! Debugging
     procedure, pass :: print_io_colors
+    procedure, pass :: print_shared_mem_sizes
   end type ioserver_context
 
 contains
@@ -670,13 +678,13 @@ subroutine finalize_model(this)
   if (this % is_model()) then
     ! Send a signal towards the server to indicate that this PE will no longer send anything
     call this % messenger % bump_tag()
-    header % content_length     = 0
-    header % command            = MSG_COMMAND_MODEL_STOP
-    header % tag                = this % messenger % get_msg_tag()
-    header % sender_global_rank = this % global_rank
-    end_cap % msg_length = header % content_length
-    success = this % local_server_bound_cb % put(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
+    header % content_length_int8  = 0
+    header % command              = MSG_COMMAND_MODEL_STOP
+    header % tag                  = this % messenger % get_msg_tag()
+    header % sender_global_rank   = this % global_rank
+    end_cap % msg_length = header % content_length_int8
+    success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
+    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
   else
     print *, 'Should NOT be calling "finish_model"'
   end if
@@ -694,14 +702,14 @@ subroutine finalize_relay(this)
   if (this % is_relay() .and. this % is_server_bound()) then
     ! Send a stop signal to the server
     if (this % debug_mode) print *, 'Relay sending STOP signal', this % local_dcb % get_server_bound_client_id()
-    header % content_length     = 0
-    header % command            = MSG_COMMAND_RELAY_STOP
-    header % sender_global_rank = this % global_rank
-    header % relay_global_rank  = this % global_rank
-    end_cap % msg_length = header % content_length
+    header % content_length_int8  = 0
+    header % command              = MSG_COMMAND_RELAY_STOP
+    header % sender_global_rank   = this % global_rank
+    header % relay_global_rank    = this % global_rank
+    end_cap % msg_length = header % content_length_int8
 
-    success = this % local_dcb % put_elems(header, message_header_size_int(), CB_KIND_INTEGER_4, .false.)
-    success = this % local_dcb % put_elems(end_cap, message_cap_size_int(), CB_KIND_INTEGER_4, .true.) .and. success
+    success = this % local_dcb % put_elems(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
+    success = this % local_dcb % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
 
     if (.not. success) then
       if (this % debug_mode) print *, 'WARNING: Relay could not send a stop signal!!!'
@@ -816,6 +824,24 @@ subroutine build_relay_model_index(context)
     endif
   enddo
 end subroutine build_relay_model_index
+
+subroutine print_shared_mem_sizes(context)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  if (context % is_server()) then
+    print '(A,F8.1,A)', '(Server node) Shared memory heap: ', context % server_heap_size_mb, ' MB'
+    print '(A,F8.1,A)', '(Server node) Server-bound DCB:   ', context % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(), ' MB (total)'
+    print '(A,F8.1,A)', '(Server node) Model-bound DCB:    ', context % dcb_model_bound_size_mb, ' MB (per client)'
+  else
+    print '(A,F8.1,A)', '(Model node)  Shared memory heap: ', context % model_heap_size_mb, ' MB'
+    print '(A,F8.1,A)', '(Model node)  Server-bound CB:    ', context % server_bound_cb_size_mb, ' MB'
+    print '(A,F8.1,A)', '(Model node)  Model-bound CB:     ', context % model_bound_cb_size_mb, ' MB'
+    if (context % is_relay()) then
+      print '(A,F8.1,A)', '(Relay)  Server-bound DCB:        ', &
+        real(context % local_dcb % get_capacity_local(CB_KIND_CHAR), kind=4) / MBYTE, ' MB'
+    end if
+  end if
+end subroutine print_shared_mem_sizes
 
 !> Allocate a block from the node shared memory arena
 function allocate_from_arena(context, num_bytes, name, id) result(ptr)
@@ -1161,6 +1187,7 @@ function IOserver_init_shared_mem(context) result(success)
     ! =========================================================================
 
     ! Allocate shared memory used for intra node communication between PEs on a server node
+    context % server_heap_shmem_size = int(context % server_heap_size_mb * MBYTE, kind=8)
     context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm) ! The heap
 
     ! Allocate shared memory to hold server stream instances
@@ -1169,7 +1196,7 @@ function IOserver_init_shared_mem(context) result(success)
 
     if (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
       print *, 'ERROR: We have a problem! server_heap_shmem/server_file_shmem are not valid!'
-      error stop 1
+      goto 2
     end if
 
     call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_SERVER_STREAMS])
@@ -1206,10 +1233,18 @@ function IOserver_init_shared_mem(context) result(success)
     ! =========================================================================
 
     ! Allocate shared memory used for intra node communication between model and relay PEs
+    context % model_shmem_size = int( &
+        (context % model_heap_size_mb + context % server_bound_cb_size_mb + context % model_bound_cb_size_mb) &
+        * context % model_relay_smp_size * MBYTE, kind=8)
     context % model_shmem = RPN_allocate_shared(context % model_shmem_size, context % model_relay_smp_comm)
     if (context % debug_mode) then
       write(6,'(A, I10, A, I4)') 'DEBUG: after MPI_Win_allocate_shared, size = ', context % model_shmem_size, ', rank = ', context % model_relay_smp_rank
       call flush(6)
+    end if
+
+    if (.not. c_associated(context % model_shmem)) then
+      print '(A, I9, A)', 'ERROR: Unable to allocated shared memory on model node (', context % model_shmem_size , ' MB)'
+      goto 2
     end if
 
     if (context % model_relay_smp_rank == 0) then
@@ -1297,13 +1332,20 @@ function IOserver_init_shared_mem(context) result(success)
     else
       ! "Working" server process
       if (context % is_server_bound()) then
-        success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_SERVER_BOUND_TYPE, DCB_SERVER_BOUND_SIZE, DCB_MODEL_BOUND_SIZE)
+        success = context % local_dcb % create_bytes(                                               &
+            context % allio_comm, context % server_comm, DCB_SERVER_BOUND_TYPE,                     &
+            int(context % dcb_server_bound_size_mb * MBYTE, kind=8), int(context % dcb_model_bound_size_mb * MBYTE, kind=8))
       else
-        success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_CLIENT_BOUND_TYPE, DCB_SERVER_BOUND_SIZE, DCB_MODEL_BOUND_SIZE)
+        success = context % local_dcb % create_bytes(context % allio_comm, context % server_comm, DCB_CLIENT_BOUND_TYPE, &
+            int(context % dcb_server_bound_size_mb * MBYTE, kind=8), int(context % dcb_model_bound_size_mb * MBYTE, kind=8))
       end if
     end if
     if (.not. success) num_errors = num_errors + 1
   endif
+
+  if (context % debug_mode) then
+    call context % print_shared_mem_sizes()
+  end if
 
   if (context % debug_mode .and. (context % is_relay() .or. context % is_model())) then
     call context % build_print_model_index()
