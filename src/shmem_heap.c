@@ -95,7 +95,11 @@ const heap_element HEAD             = 0xCAFEFADE; //!< HEAD marker below block
 const heap_element TAIL             = 0xBEBEFADA; //!< TAIL marker above block
 
 const heap_element BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
+#if defined(__GNUC__) && __GNUC__ < 8     // Workaround when using GCC 7.x
+const heap_element MIN_HEAP_SIZE = 64 + 4;
+#else
 const heap_element MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
+#endif
 
 //C_StArT
 //!> heap statistics

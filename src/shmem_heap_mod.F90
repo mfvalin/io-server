@@ -36,7 +36,7 @@ module heap_module
   public :: Pointer_offset, bm_to_ptr, ptr_to_bm
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
-  type, private, bind(C) :: block_meta_c
+  type, bind(C) :: block_meta_c
     private
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: d  = [0, 0, 0, 0, 0] !< array dimensions \private
     integer(C_INT)    :: tkr = 0           !< array type, kind, rank \private
@@ -47,7 +47,7 @@ module heap_module
   include 'io-server/shmem_heap.inc'
 
   !> \brief C interoperable version of block_meta_f08
-  type, private, bind(C) :: block_meta
+  type, bind(C) :: block_meta
     private
     type(block_meta_c) :: a           !< array descriptor, C interoperable \private
     type(C_PTR) :: p   = C_NULL_PTR   !< array address \private
