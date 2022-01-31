@@ -140,7 +140,7 @@ contains
     header % content_length_int8 = num_char_to_num_int8(filename_num_char)
     header % command             = MSG_COMMAND_OPEN_FILE
     header % stream_id           = this % stream_id
-    header % tag                 = this % messenger % get_msg_tag()
+    header % message_tag         = this % messenger % get_msg_tag()
     header % sender_global_rank  = this % global_rank
 
     end_cap % msg_length = header % content_length_int8
@@ -166,7 +166,7 @@ contains
 
     header % content_length_int8  = 0
     header % stream_id            = this % stream_id
-    header % tag                  = this  % messenger % get_msg_tag()
+    header % message_tag          = this  % messenger % get_msg_tag()
     header % command              = MSG_COMMAND_CLOSE_FILE
     header % sender_global_rank   = this % global_rank
 
@@ -261,7 +261,7 @@ contains
     header % content_length_int8  = model_record_size_int8() + rec % cmeta_size + rec % meta_size
     header % command              = MSG_COMMAND_DATA
     header % stream_id            = this % stream_id
-    header % tag                  = this % messenger % get_msg_tag()
+    header % message_tag          = this % messenger % get_msg_tag()
     header % sender_global_rank   = this % global_rank
 
     end_cap % msg_length = header % content_length_int8

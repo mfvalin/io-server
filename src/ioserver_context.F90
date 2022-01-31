@@ -63,11 +63,28 @@ module ioserver_context_module
   !> Context that allows to interact with the IO-server library (initialization + the rest of the API)
   type, public :: ioserver_context
     private
-
     integer :: color = NO_COLOR !< Color of this PE. Describes its role (server vs relay vs model, server-bound vs relay-bound, etc.)
 
-    ! -----------------------------------------------------
-    ! Shared memory areas (raw C pointers and area sizes)
+    !> @{ \name Parameters
+    !---------------------------------------------
+    ! Requested size of shared memory objects
+    real :: model_heap_size_mb       = 50.0 !< Size of shared memory heap for each model process
+    real :: server_bound_cb_size_mb  = 5.0  !< Size of buffer for server-bound data for each model process
+    real :: model_bound_cb_size_mb   = 2.0  !< Size of buffer for model-bound data for each model process
+
+    real :: server_heap_size_mb      = 10000.0  !< Size of the server heap where grids will be assembled
+    real :: dcb_server_bound_size_mb = 50.0     !< Size of each server-bound CB within the DCB
+    real :: dcb_model_bound_size_mb  = 2.0      !< Size of each model-bound CB within the DCB
+
+    !----------------------------------
+    ! Other parameters
+    !> Maximum difference of tags that a relay can transmit before starting to wait for the slower model PEs on the node.
+    !> Gotta be lower than MAX_ASSEMBLY_LINES
+    integer :: relay_pipeline_depth = 5
+    !> @}
+
+    ! ----------------------------------------------------------------
+    !> @{ \name Shared memory areas (raw C pointers and area sizes)
 
     ! control memory, shared by all PEs on a given SMP node (whether active PEs or NO-OP PEs)
     type(C_PTR)       :: ctrl_shmem_c      = C_NULL_PTR       !< Address of main (control) shared memory area on this node
@@ -87,19 +104,10 @@ module ioserver_context_module
     integer(C_SIZE_T) :: server_file_shmem_size = 0           !< Size of server shared memory area for holding open file data (computed at initialization)
 
     type(C_PTR) :: local_arena_ptr                            !< Pointer to start of shared memory arena
+    !> @}
     
-    !---------------------------------------------
-    ! Requested size of shared memory objects
-    real :: model_heap_size_mb       = 50.0 !< Size of shared memory heap for each model process
-    real :: server_bound_cb_size_mb  = 5.0  !< Size of buffer for server-bound data for each model process
-    real :: model_bound_cb_size_mb   = 2.0  !< Size of buffer for model-bound data for each model process
-
-    real :: server_heap_size_mb      = 10000.0  !< Size of the server heap where grids will be assembled
-    real :: dcb_server_bound_size_mb = 50.0     !< Size of each server-bound CB within the DCB
-    real :: dcb_model_bound_size_mb  = 2.0      !< Size of each model-bound CB within the DCB
-
     ! -----------------
-    ! Communicators
+    !> @{ \name Communicators
     type(MPI_Comm) :: global_comm   = MPI_COMM_WORLD        !< MPI "WORLD" for this set of PEs
     integer        :: global_rank   = -1                    !< rank in global_comm
     integer        :: global_size   =  0                    !< population of global_comm
@@ -123,14 +131,10 @@ module ioserver_context_module
     type(MPI_Comm) :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
     type(MPI_Comm) :: relay_smp_comm              = MPI_COMM_NULL  !< relay PEs on current SMP node
     type(MPI_Comm) :: server_bound_relay_smp_comm = MPI_COMM_NULL  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
-
-    integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
-    integer :: model_relay_smp_size = 0     !< population of model_relay_smp_comm
-    integer :: server_comm_rank     = -1    !< rank in server_comm
-    integer :: num_local_model_proc = -1    !< Number of model processes on this SMP node
+    !> @}
 
     !----------------------------------------------------
-    ! Local instances of objects located in shared memory
+    !> @{ \name Local instances of objects located in shared memory
     type(shmem_arena)      :: arena                 !< Node memory arena
     type(heap)             :: local_heap            !< Local heap for this process (located in memory arena)
     type(circular_buffer)  :: local_cio_in          !< Model-bound circular buffer for this process (located in memory arena)
@@ -142,13 +146,20 @@ module ioserver_context_module
     type(circular_buffer),     dimension(:), pointer :: server_bound_cbs     => NULL() !< The CB objects belonging to model PEs (server-bound)
     type(heap),                dimension(:), pointer :: local_heaps          => NULL() !< Shared memory heaps belonging to model PEs
     type(local_server_stream), dimension(:), pointer :: local_server_streams => NULL() !< Local stream instances to access the shared ones (on server only)
+    !> @}
 
     !---------------------------------------------------
-    ! Direct (Fortran) pointers to actual shared memory
+    !> @{ \name Direct (Fortran) pointers to actual shared memory
     type(control_shared_memory),              pointer :: shmem                 => NULL() !< Will point to start of control shared memory
     type(shared_server_stream), dimension(:), pointer :: common_server_streams => NULL() !< Stream files used to assemble grids and write them (in shared memory)
+    !> @}
 
-    ! Stuff
+    !> @{ \name Stuff
+    integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
+    integer :: model_relay_smp_size = 0     !< population of model_relay_smp_comm
+    integer :: server_comm_rank     = -1    !< rank in server_comm
+    integer :: num_local_model_proc = -1    !< Number of model processes on this SMP node
+
     integer :: max_smp_pe     =  0 !< Highest ID/rank of PEs on this node
     integer :: max_relay_rank = -1 !< Highest rank of relay PEs on this node
     integer :: max_model_rank = -1 !< Highest rank of model PEs on this node
@@ -157,9 +168,10 @@ module ioserver_context_module
 
     integer :: num_server_bound_server  = -1 !< How many server-bound server processes there are
     integer :: num_server_stream_owners = -1 !< How many server processes can own a stream (can be lower than number of server-bound processes)
+    !> @}
 
     ! ------------------
-    ! Miscellaneous
+    !> @{ \name Miscellaneous
     logical :: debug_mode = .false. !< Whether we are in debug mode (activates additional prints/checks when true)
 
     type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR !< Procedure to call on relay processes (if not NULL)
@@ -167,11 +179,12 @@ module ioserver_context_module
 
     integer, dimension(:), pointer :: iocolors => NULL()     !< Color table for io server and relay processes
     type(ioserver_messenger), pointer :: messenger => NULL() !< Will be shared among open model files
+    !> @}
 
   contains
     private
 
-    ! Initialization
+    !> @{ \name Initialization
     procedure, pass, public :: init => IOserver_init
     procedure, pass         :: init_communicators => IOserver_init_communicators
     procedure, pass         :: init_shared_mem => IOserver_init_shared_mem
@@ -183,18 +196,18 @@ module ioserver_context_module
     procedure, pass         :: create_local_heap
     procedure, pass         :: create_local_cb
     procedure, nopass       :: check_cb_jar_elem
+    !> @}
 
-    ! Process type query
+    !> @{ \name Process type query
     procedure, pass, public :: is_relay  => IOserver_is_relay
     procedure, pass, public :: is_server => IOserver_is_server
     procedure, pass, public :: is_model  => IOserver_is_model
     procedure, pass, public :: is_server_bound => IOserver_is_server_bound
     procedure, pass, public :: is_model_bound  => IOserver_is_model_bound
     procedure, pass, public :: is_channel => IOserver_is_channel
+    !> @}
 
-    procedure, pass, public :: has_debug_mode
-
-    ! Finalization
+    !> @{ \name Finalization
     procedure, pass         :: set_time_to_quit => IOserver_set_time_to_quit
     procedure, pass         :: is_time_to_quit  => IOserver_is_time_to_quit
     procedure, pass         :: finalize_model
@@ -202,8 +215,9 @@ module ioserver_context_module
     procedure, pass         :: finalize_server
     procedure, pass, public :: finalize => ioserver_context_finalize_manually
     final                   :: IOserver_finalize
+    !> @}
 
-    ! Getters
+    !> @{ \name Getters
     procedure, pass, public :: get_num_local_model
 
     procedure, pass, public :: get_global_rank
@@ -217,24 +231,31 @@ module ioserver_context_module
     procedure, pass, public :: get_messenger => IOserver_get_messenger
     procedure, pass, public :: get_local_arena_ptr
     procedure, pass, public :: get_stream => IOserver_get_stream
+    procedure, pass, public :: get_relay_pipeline_depth
 
     procedure, pass, public :: get_server_bound_cb_list
     procedure, pass, public :: get_heap_list
+    !> @}
 
-    ! Process function management
+    !> @{ \name Process function management
     procedure, pass         :: no_op => IOserver_noop
     procedure, pass, public :: set_relay_fn  => IOserver_set_relay
     procedure, pass, public :: set_server_fn => IOserver_set_server
     procedure, pass, public :: set_debug => IOserver_set_debug
+    !> @}
 
-    ! File management
+    !> @{ \name File management
     procedure, pass, public :: open_stream_model
     procedure, pass, public :: open_stream_server
     procedure, pass, public :: close_stream_server
+    !> @}
     
-    ! Debugging
+    !> @{ \name Debugging
+    procedure, pass, public :: has_debug_mode
+
     procedure, pass :: print_io_colors
     procedure, pass :: print_shared_mem_sizes
+    !> @}
   end type ioserver_context
 
 contains
@@ -588,6 +609,14 @@ function IOserver_get_stream(context, stream_id) result(stream)
   stream => context % local_server_streams(stream_id)
 end function IOserver_get_stream
 
+!> Get the value of relay_pipeline_depth
+function get_relay_pipeline_depth(context) result(depth)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  integer :: depth
+  depth = context % relay_pipeline_depth
+end function get_relay_pipeline_depth
+
 !> Get the list of local accessors to the server-bound CBs created on this node
 function get_server_bound_cb_list(context) result(cbs)
   implicit none
@@ -680,7 +709,7 @@ subroutine finalize_model(this)
     call this % messenger % bump_tag()
     header % content_length_int8  = 0
     header % command              = MSG_COMMAND_MODEL_STOP
-    header % tag                  = this % messenger % get_msg_tag()
+    header % message_tag          = this % messenger % get_msg_tag()
     header % sender_global_rank   = this % global_rank
     end_cap % msg_length = header % content_length_int8
     success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)

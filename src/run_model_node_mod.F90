@@ -115,8 +115,7 @@ subroutine server_bound_relay_process(context)
   integer(C_INT64_T) :: filename_size
   logical :: finished, success
   integer(C_INT64_T), dimension(:), allocatable :: cb_message
-  integer(C_INT) :: message_header_tag
-  integer(C_INT) :: lowest_tag, highest_tag, largest_tag_diff
+  integer(C_INT) :: lowest_tag, highest_tag, largest_tag_diff, previous_lowest
   integer :: num_msg_in_pass
 
   integer(C_INT64_T), dimension(:), pointer :: f_data
@@ -130,7 +129,8 @@ subroutine server_bound_relay_process(context)
   integer              :: jar_ok
   integer(JAR_ELEMENT) :: num_jar_elem
   integer(JAR_ELEMENT), dimension(:), pointer :: dcb_message
-  logical, dimension(:), allocatable :: model_finished
+  ! logical, dimension(:), allocatable :: model_finished
+  integer, dimension(:), allocatable :: latest_tags ! Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
 
   print *, 'Server-bound relay process'
 
@@ -183,48 +183,54 @@ subroutine server_bound_relay_process(context)
   end if
 
   ! The main loop
-  allocate(model_finished(0:num_local_compute - 1))
-  model_finished(:) = .false.
-  ! expected_message(:) = -1
+  allocate(latest_tags(0:num_local_compute - 1))
+  latest_tags(:) = 0
   call dcb_message_jar % reset()
 
+  filename_size = -1
   largest_tag_diff = 0
+  lowest_tag = 0
   finished = .false.
   do while (.not. finished) ! Loop until finished (when all model PEs have sent their STOP signal)
 
+    previous_lowest = lowest_tag
     lowest_tag = huge(lowest_tag)
     highest_tag = 0
     num_msg_in_pass = 0
 
     finished = .true.
     do i_compute = local_relay_id, num_local_compute - 1, num_local_relays
-      ! print *, 'num elements: ', cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_4), i_compute
 
-      if (model_finished(i_compute)) cycle  ! This model buffer is done, move on
-      finished = .false.                    ! This model buffer is not finished yet, keep the loop active
-      if (cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_4) == 0) cycle ! The buffer is empty, move on to the next
+      !---------------------------------------------------------------------------
+      ! Decide whether to process this model PE (if there is anything to process)
+
+      if (latest_tags(i_compute) == -1) cycle               ! This model buffer is done, move on
+      finished = .false.                                    ! This model buffer is not finished yet, so keep the loop active
+      lowest_tag = min(lowest_tag, latest_tags(i_compute))  ! Update lowest tag
+      if (cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_8) == 0) cycle ! The buffer is empty, move on to the next
 
       ! From this point on, we know there is something in the buffer
-      success = cb_list(i_compute) % peek(message_header_tag, 1_8, CB_KIND_INTEGER_4)
+      success = cb_list(i_compute) % peek(header, message_header_size_byte(), CB_KIND_CHAR)
 
-      if (message_header_tag .ne. MSG_HEADER_TAG) then
-        print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', message_header_tag, MSG_HEADER_TAG, &
+      if (.not. success .or. header % header_tag .ne. MSG_HEADER_TAG) then
+        print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', header % message_tag, MSG_HEADER_TAG, &
               ', relay id ', local_relay_id
         error stop 1
       end if
 
-      num_msg_in_pass = num_msg_in_pass + 1   ! Keep count of number of messages in every pass
+      ! Skip this model process if we still need to deal with much lower message tags
+      if (header % message_tag - previous_lowest > context % get_relay_pipeline_depth()) cycle
 
-      !---------------------------
-      ! Get the header and check
-      success = cb_list(i_compute) % get(header, message_header_size_byte(), CB_KIND_CHAR, .false.) ! Extract header
-      if (.not. success) then
-        print *, 'ERROR when getting message header from CIO_OUT', i_compute
-        error stop 1
-      end if
+      ! Keep count of number of messages in every pass
+      num_msg_in_pass = num_msg_in_pass + 1
 
-      lowest_tag  = min(lowest_tag, header % tag)
-      highest_tag = max(highest_tag, header % tag)
+      ! Extract header
+      success = cb_list(i_compute) % get(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
+
+      ! Update lowest/highest message tags
+      lowest_tag  = min(lowest_tag, header % message_tag)
+      highest_tag = max(highest_tag, header % message_tag)
+      latest_tags(i_compute) = header % message_tag
 
       content_size = header % content_length_int8
 
@@ -242,15 +248,15 @@ subroutine server_bound_relay_process(context)
           error stop 1
         end if
 
-        num_data_int8 = num_char_to_num_int8(record % data_size_byte)
+        num_data_int8 = num_char_to_num_int8(record % data_size_byte)                 ! Get data size in the proper units
         c_data = heap_list(i_compute) % get_address_from_offset(record % heap_offset) ! Get proper pointer to data in shared memory
         call c_f_pointer(c_data, f_data, [num_data_int8])                             ! Access it using a fortran pointer, for easy copy into the jar
 
-        header % content_length_int8 = header % content_length_int8 + num_data_int8        ! Update message header
+        header % content_length_int8 = header % content_length_int8 + num_data_int8   ! Update message header
         total_message_size_int8      = message_header_size_int8() + message_cap_size_int8() + header % content_length_int8
 
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
-        model_finished(i_compute) = .true.  ! Indicate this model won't be active anymore
+        latest_tags(i_compute) = -1  ! Indicate this model won't be active anymore
 
         print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
 
@@ -371,6 +377,7 @@ subroutine server_bound_relay_process(context)
   end if
 
   if (allocated(cb_message)) deallocate(cb_message)
+  if (allocated(latest_tags)) deallocate(latest_tags)
 
   print *, 'LARGEST DIFF b/w tags in one pass: ', largest_tag_diff
 

@@ -88,7 +88,7 @@ module ioserver_message_module
     integer(C_INT)     :: command             = -1  !< What this message contains
     integer(C_INT64_T) :: content_length_int8 = -1  !< Message length (excluding this header), in number of 64-bit elements
     integer(C_INT)     :: stream_id           = -1  !< To what stream this message is destined
-    integer(C_INT)     :: tag                 = -1  !< A collective tag associated with messages from model processes (incremented at every message)
+    integer(C_INT)     :: message_tag         = -1  !< A collective tag associated with messages from model processes (incremented at every message)
     integer(C_INT)     :: sender_global_rank  = -1  !< Who is sending that message
     integer(C_INT)     :: relay_global_rank   = -1  !< Who is transmitting the message
   end type message_header
@@ -240,7 +240,7 @@ contains
       ', len ', header % content_length_int8, &
       ', cmd ', header % command, get_message_command_string(header % command), &
       ', stream ', header % stream_id, &
-      ', tag ', header % tag, &
+      ', message tag ', header % message_tag, &
       ', rank ', header % sender_global_rank, &
       ', relay rank ', header % relay_global_rank
   end subroutine print_message_header
