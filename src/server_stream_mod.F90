@@ -150,17 +150,21 @@ contains
     logical,                     intent(in)    :: force_close   !< [in] Whether to close the stream even if some grids have been started but not completed
     logical :: success
 
-    integer :: num_flushed, num_incomplete
+    integer :: num_flushed, num_incomplete, old_num_incomplete
 
-    integer, parameter :: MAX_NUM_ATTEMPTS = 50
     integer, parameter :: WAIT_TIME_US     = 100000
-    integer :: i
+    real,    parameter :: TOTAL_WAIT_TIME_S = 10.0
+    integer(kind=8) :: i
 
     success = .false.
 
+    old_num_incomplete = 1
     num_incomplete = 1
     if (this % is_open()) then
-      do i = 1, MAX_NUM_ATTEMPTS
+      i = 1
+      do while (real(i * WAIT_TIME_US) / 1000000.0 < TOTAL_WAIT_TIME_S)
+        i = i + 1
+
         ! Process completed grids
         num_flushed = this % partial_grid_data % flush_completed_grids(this % unit, data_heap)
         ! if (num_flushed > 0) print *, 'Flushed ', num_flushed, ' completed grids upon closing ', this % name
@@ -168,8 +172,13 @@ contains
         ! Find out how many grids are started but incomplete, and decide whether to wait
         num_incomplete = this % partial_grid_data % get_num_partial_grids()
         if (num_incomplete > 0 .and. force_close) then
+          if (num_incomplete < old_num_incomplete) then
+            ! Reset wait time
+            old_num_incomplete = num_incomplete
+            i = 1
+          end if
           print '(I2, A, I4, A, A, A, F6.2, A)', this % get_owner_id(), ' DEBUG: There are still ', num_incomplete, ' incomplete grids in file "', this % name, '", will wait another ', &
-                (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, ' second(s)'
+                TOTAL_WAIT_TIME_S - real(i * WAIT_TIME_US) / 1000000.0, ' second(s)'
         else
           exit
         end if
