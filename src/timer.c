@@ -103,7 +103,7 @@ void IO_timer_start_f(io_timer_t* timer) { IO_timer_start(timer); }
 
 //C_StArT
 //! Increment total time with number of ticks since last start
-static void IO_timer_stop(io_timer_t* timer) {
+static inline void IO_timer_stop(io_timer_t* timer) {
   timer->total_time += get_current_time_us() - timer->start;
 }
 //C_EnD
