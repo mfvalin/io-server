@@ -315,7 +315,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
     if (.not. success) then
       stream_ptr => context % get_stream(header % stream_id)
       if (stream_ptr % is_owner()) then
-        print *, 'DEBUG: could not close file at this time', header % stream_id, consumer_id
+        if (context % debug_mode()) print *, 'DEBUG: could not close file at this time', header % stream_id, consumer_id
         ! error stop 1
       end if
     end if

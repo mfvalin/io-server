@@ -153,13 +153,13 @@ contains
     integer :: num_flushed, num_incomplete, old_num_incomplete
 
     integer, parameter :: WAIT_TIME_US     = 100000
-    real,    parameter :: TOTAL_WAIT_TIME_S = 10.0
+    real,    parameter :: TOTAL_WAIT_TIME_S = 20.0
     integer(kind=8) :: i
 
     success = .false.
 
-    old_num_incomplete = 1
-    num_incomplete = 1
+    num_incomplete = this % partial_grid_data % get_num_partial_grids()
+    old_num_incomplete = num_incomplete
     if (this % is_open()) then
       i = 1
       do while (real(i * WAIT_TIME_US) / 1000000.0 < TOTAL_WAIT_TIME_S)
@@ -177,8 +177,10 @@ contains
             old_num_incomplete = num_incomplete
             i = 1
           end if
-          print '(I2, A, I4, A, A, A, F6.2, A)', this % get_owner_id(), ' DEBUG: There are still ', num_incomplete, ' incomplete grids in file "', this % name, '", will wait another ', &
-                TOTAL_WAIT_TIME_S - real(i * WAIT_TIME_US) / 1000000.0, ' second(s)'
+          if (mod(i, 10_8) == 0) &
+            print '(I2, A, I4, A, A, A, F6.2, A)', this % get_owner_id(), ' DEBUG: There are still ', num_incomplete, &
+                  ' incomplete grids in file "', this % name, '", will wait another ', &
+                  TOTAL_WAIT_TIME_S - real(i * WAIT_TIME_US) / 1000000.0, ' second(s)'
         else
           exit
         end if

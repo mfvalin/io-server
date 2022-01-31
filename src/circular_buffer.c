@@ -957,18 +957,18 @@ void CB_print_stats(
 
   if (with_header) {
     printf("     "
-           "                       Write (ms)                        |"
-           "                       Read (ms)                         |\n"
+           "                       Write (ms)                          |"
+           "                       Read (ms)                           |\n"
            "rank "
-           "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) |"
-           "  #bytes  (B/call) : tot. time (B/sec) : wait ms (/call) | "
+           "  #bytes  (B/call) : tot. time (B/sec)  : wait ms (/call)  |"
+           "  #bytes  (B/call) : tot. time (B/sec)  : wait ms (/call)  | "
            "max fill %%    | frac. writes, reads (%%)\n");
   }
 
   printf(
       "%04d: "
-      "%s (%s) : %7.1f (%s) : %7.1f (%5.2f) | "
-      "%s (%s) : %7.1f (%s) : %7.1f (%5.1f) | "
+      "%s (%s) : %8.1f (%s) : %8.1f (%5.2f) | "
+      "%s (%s) : %8.1f (%s) : %8.1f (%5.1f) | "
       "%s (%3d) | %3d, %3d\n",
       buffer_id, total_in_s, avg_in_s, total_write_time, write_per_sec_s, stats->total_write_wait_time_ms, avg_wait_w,
       total_out_s, avg_out_s, total_read_time, read_per_sec_s, stats->total_read_wait_time_ms, avg_wait_r, max_fill_s,

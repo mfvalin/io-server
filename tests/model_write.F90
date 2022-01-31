@@ -156,7 +156,7 @@ contains
       error stop 1
     end if
 
-    print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
+    if (context % debug_mode()) print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
 
     ! Init area info
     if (mod(model_crs % size, 4) == 0) then
@@ -290,7 +290,7 @@ contains
           error stop 1
         end if
 
-        call sleep_us(500)
+        call sleep_us(5000)
       end do
     end block
 
@@ -346,7 +346,7 @@ contains
     tmp_ptr = c_loc(read2)
     call c_f_pointer(tmp_ptr, array2, dims2)
 
-    open(newunit = file_unit, file = trim(filename2)//'.out', status = 'old', form = 'unformatted', action = 'read')
+    open(newunit = file_unit, file = trim(filename2)//'.out', status = 'old', form = 'unformatted', access = 'stream', action = 'read')
 
     tag = 2
     do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT ! Loop through all pairs of records in this file
@@ -464,7 +464,7 @@ program pseudomodelandserver
     if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.
   end if
 
-  if (debug_mode_flag > 0) params % debug_mode = .true.
+  if (debug_mode_flag == 1) params % debug_mode = .true.
 
   params % num_server_noop = 0
   if (.not. single_node) params % num_server_noop = node_size - num_server_processes
@@ -473,11 +473,13 @@ program pseudomodelandserver
   params % num_server_bound_server = num_receiver_processes
   params % num_channels            = num_channels
 
+  params % dcb_server_bound_size_mb = 500.0
+
   if (params % is_on_server) then
     success = ioserver_run_server_node(params)
   else
     success = ioserver_run_model_node(params, model_function = model_fn_ptr)
-      end if
+  end if
 
   if (.not. success) then
     print *, 'ERROR while trying to run model_write'
@@ -486,7 +488,7 @@ program pseudomodelandserver
 
   call MPI_Finalize()
 
-  if (server_node .and. node_rank == 0) then
+  if (server_node .and. node_rank == 0 .and. debug_mode_flag .ne. 2) then
     block
       integer :: num_model_pes
       if (single_node) then
