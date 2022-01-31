@@ -403,98 +403,94 @@ program pseudomodelandserver
   use model_write_parameters
   implicit none
 
-  integer :: status, input
-  integer :: nio_node, num_channels
-
-  integer :: nserv !, noops
+  integer :: debug_mode_flag
   character(len=128) :: arg
 
   logical :: server_node, single_node
-  integer :: node_rank, node_size, global_size, num_nodes
+  integer :: node_rank, node_size, global_size, global_rank, num_nodes
 
+  integer :: num_server_processes     ! excluding no_op processes
+  integer :: num_receiver_processes
+  integer :: num_channels
   integer :: num_relay_per_node, num_noop
   integer :: num_model_per_node
 
-  logical :: debug_mode
-  logical :: CHECK_CB_MESSAGES
-  logical :: CHECK_DCB_MESSAGES
-
+  type(ioserver_input_parameters) :: params
   procedure(ioserver_function_template), pointer :: model_fn_ptr
+  logical :: success
 
-  call mpi_init(status)
+  success = .false.
+
+  call MPI_Init()
   call MPI_Comm_size(MPI_COMM_WORLD, global_size)
+  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
 
-  debug_mode = .false.
-  ! debug_mode = .true. ! activate debug mode
-
-  ! Arguments
-  ! 1. Check messages or not
-  ! 2. Number of active server processes
-  ! 3. Number of channel processes
-  ! 4. Number of relay processes per node
-
-  ! Arg 1
-  CHECK_CB_MESSAGES = .false.
-  CHECK_DCB_MESSAGES = .false.
-  arg = '0'
-  if(COMMAND_ARGUMENT_COUNT() >= 1) call GET_COMMAND_ARGUMENT(1, arg)
-  read(arg, *) input
-  if (input > 0) then
-    CHECK_CB_MESSAGES = .true.
-    CHECK_DCB_MESSAGES = .true.
+  if (command_argument_count() < 4) then
+    if (global_rank == 0) then
+      print *, 'ERROR: Need more arguments when launching this program:'
+      print *, '1. Whether to activate debug mode (0 or 1)'
+      print *, '2. How many "active" server processes you want'
+      print *, '3. How many channel processes you want'
+      print *, '4. How many relay processes there should be on each model node'
+    end if
+    error stop 1
   end if
 
-  ! Arg 2
-  arg = '3'
-  if(COMMAND_ARGUMENT_COUNT() >= 2) call GET_COMMAND_ARGUMENT(2, arg)
-  read(arg,*) nserv
-  nserv = nserv
+  ! Arg 1: debug mode
+  call GET_COMMAND_ARGUMENT(1, arg)
+  read(arg, *) debug_mode_flag
 
-  ! Arg 3
-  arg = '1'
-  if (COMMAND_ARGUMENT_COUNT() >= 3) call GET_COMMAND_ARGUMENT(3, arg)
+  ! Arg 2: active server processes
+  call GET_COMMAND_ARGUMENT(2, arg)
+  read(arg,*) num_receiver_processes
+
+  ! Arg 3: channel processes
+  call GET_COMMAND_ARGUMENT(3, arg)
   read(arg, *) num_channels
-  nserv = nserv + num_channels
 
-  ! Arg 4
-  arg = '2'
-  if(COMMAND_ARGUMENT_COUNT() >= 4) call GET_COMMAND_ARGUMENT(4, arg)
-  read(arg,*) nio_node                    ! number of relay processes per node
 
-  server_node = am_server_node(node_rank, node_size, single_node, num_nodes)
+  ! Arg 4: relay processes per model node
+  call GET_COMMAND_ARGUMENT(4, arg)
+  read(arg,*) num_relay_per_node
 
-  num_relay_per_node = nio_node
-  num_noop = 0
-  if (.not. single_node) then
-    num_noop = node_size - nserv
-  end if
+  server_node          = am_server_node(node_rank, node_size, single_node, num_nodes)
+  num_server_processes = num_receiver_processes + num_channels
+  num_noop             = 0
 
   model_fn_ptr => pseudo_model_process
   ! nullify(model_fn_ptr)
 
-  ! if(rank >= nserv) then
-  ! if(mod(rank, NUM_NODES) .ne. 0) then
-  if (.not. server_node) then
-    call ioserver_run_model_node(num_relay_per_node, use_debug_mode_in = CHECK_CB_MESSAGES)
+  if (server_node) then
+    if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.
+  end if
+
+  if (debug_mode_flag > 0) params % debug_mode = .true.
+
+  params % num_server_noop = 0
+  if (.not. single_node) params % num_server_noop = node_size - num_server_processes
+
+  params % num_relay_per_node      = num_relay_per_node
+  params % num_server_bound_server = num_receiver_processes
+  params % num_channels            = num_channels
+
+  if (params % is_on_server) then
+    success = ioserver_run_server_node(params)
   else
-    if (node_rank < nserv) then
-      call ioserver_run_server_node(nserv - num_channels, num_channels, num_noop, use_debug_mode_in = CHECK_DCB_MESSAGES)
-    else 
-      if (single_node) then
-        call ioserver_run_model_node(num_relay_per_node, use_debug_mode_in = CHECK_CB_MESSAGES, model_function = model_fn_ptr)
-      else
-        call ioserver_run_server_node(nserv - num_channels, num_channels, num_noop, use_debug_mode_in = CHECK_DCB_MESSAGES)
+    success = ioserver_run_model_node(params, model_function = model_fn_ptr)
       end if
+
+  if (.not. success) then
+    print *, 'ERROR while trying to run model_write'
+    error stop 1
     end if
 
-  endif
-  call mpi_finalize(status)
+  call MPI_Finalize()
 
   if (server_node .and. node_rank == 0) then
     block
       integer :: num_model_pes
       if (single_node) then
-        num_model_per_node = global_size - nserv - num_relay_per_node
+        num_model_per_node = global_size - num_server_processes - num_relay_per_node
       else
         num_model_per_node = node_size - num_relay_per_node
       end if
