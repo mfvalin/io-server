@@ -39,46 +39,47 @@ module run_server_node_module
 
 contains
 
-subroutine run_server_node(num_server_bound, num_channels, num_noop, use_debug_mode_in)
+function run_server_node(params) result(success)
   implicit none
-  integer, intent(in) :: num_server_bound, num_channels, num_noop
-  logical, optional, intent(in) :: use_debug_mode_in
+  type(ioserver_input_parameters), intent(in) :: params
+  logical :: success
   
   type(ioserver_context) :: context
-  logical :: success
-  logical :: use_debug_mode
 
-  use_debug_mode = .false.
-  if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
+  success = .false.
 
-  success = context % init(.true., 0, num_server_bound, num_channels, num_noop, in_debug_mode = use_debug_mode)
+  if (.not. params % is_on_server) then
+    print *, 'ERROR: Trying to launch the server node, but setting "is_on_server = .false."'
+    return
+  end if
+
+  success = context % init(params)
 
   if (.not. success) then
     print *, 'ERROR, could not initialize IO-server context for server process!'
-    error stop 1
+    return
   end if
 
+  success = .false.
   if (context % is_channel()) then
     call channel_process(context)
   else if (context % is_server_bound()) then
-    call server_bound_server_process(context, use_debug_mode)
+    call server_bound_server_process(context)
   else if (context % is_model_bound()) then
     call model_bound_server_process(context)
   else
     print *, 'ERROR, server process is neither server-bound nor model-bound.'
-    error stop 1
+    return
   end if
 
   call context % finalize()
 
-end subroutine run_server_node
+  success = .true.
+end function run_server_node
 
-subroutine server_bound_server_process(context, use_debug_mode_in)
+subroutine server_bound_server_process(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
-  logical, optional,      intent(in)    :: use_debug_mode_in
-
-  logical :: use_debug_mode
 
   type(comm_rank_size)                :: consumer_crs
   type(distributed_circular_buffer)   :: data_buffer
@@ -92,8 +93,6 @@ subroutine server_bound_server_process(context, use_debug_mode_in)
   integer :: num_errors
 
   num_errors = 0
-  use_debug_mode = .false.
-  if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
 
   ! Prepare reception of messages
   data_buffer = context % get_dcb()
@@ -148,7 +147,7 @@ subroutine server_bound_server_process(context, use_debug_mode_in)
   end do
 
   ! Final check on the buffers' content
-  if (use_debug_mode) then
+  if (context % debug_mode()) then
     do i_producer = server_id, num_producers - 1, num_consumers
       if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 0) then
         num_errors = num_errors + 1 
@@ -164,7 +163,7 @@ subroutine model_bound_server_process(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
 
-  if (context % has_debug_mode()) print *, 'Model-bound server process'
+  if (context % debug_mode()) print *, 'Model-bound server process'
 end subroutine model_bound_server_process
 
 subroutine channel_process(context)

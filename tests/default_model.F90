@@ -60,35 +60,39 @@ program default_model
   use ioserver_run_module
   implicit none
 
-  logical :: server_node, single_node
-  integer :: node_rank, node_size
+  logical :: server_node, single_node, success
+  integer :: node_rank, node_size, num_server_processes
 
-  integer :: num_relay_per_node, num_noop, num_server_processes, num_channels
+  type(ioserver_input_parameters) :: params
 
   call mpi_init()
 
   server_node = am_server_node(node_rank, node_size, single_node)
 
-  num_channels         = 2
-  num_server_processes = num_channels + 2
-  num_relay_per_node   = 2
+  params % num_channels = 2
+  params % num_server_bound_server = 2
+  params % num_relay_per_node = 2
 
-  num_noop = 0
-  if (.not. single_node) num_noop = node_size - num_server_processes
+  num_server_processes = params % num_channels + params % num_server_bound_server
 
-  if (.not. server_node) then
-    call ioserver_run_model_node(num_relay_per_node, use_debug_mode_in = .true.)
+  params % num_server_noop = 0
+  if (.not. single_node) params % num_server_noop = node_size - num_server_processes
+
+  if (server_node) then
+    if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.
+  end if
+
+  if (params % is_on_server) then
+      success = ioserver_run_server_node(params)
   else
-    if (node_rank < num_server_processes) then
-      call ioserver_run_server_node(num_server_processes - num_channels, num_channels, num_noop, use_debug_mode_in = .true.)
-    else 
-      if (single_node) then
-        call ioserver_run_model_node(num_relay_per_node, use_debug_mode_in = .true.)
-      else
-        call ioserver_run_server_node(num_server_processes - num_channels, num_channels, num_noop, use_debug_mode_in = .true.)
-      end if
-    end if
+    success = ioserver_run_model_node(params)
+  end if
 
-  endif
+  if (.not. success) then
+    print *, 'ERROR while trying to run the default IO server'
+    error stop 1
+  end if
+
   call mpi_finalize()
+
 end program default_model

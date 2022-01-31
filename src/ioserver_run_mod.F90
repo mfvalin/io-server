@@ -20,12 +20,13 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module ioserver_run_module
+  use ioserver_context_module, only: ioserver_input_parameters
   use run_server_node_module, only: ioserver_run_server_node => run_server_node
   use run_model_node_module, only: ioserver_run_model_node => run_model_node, ioserver_function_template
   implicit none
   private
 
-  public :: ioserver_run_server_node, ioserver_run_model_node, ioserver_function_template
+  public :: ioserver_run_server_node, ioserver_run_model_node, ioserver_function_template, ioserver_input_parameters
 
 contains
 

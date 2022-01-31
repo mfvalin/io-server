@@ -38,37 +38,41 @@ module run_model_node_module
 
 contains
 
-subroutine run_model_node(num_relay_per_node, use_debug_mode_in, custom_server_bound_relay_function, model_function)
+function run_model_node(params, custom_server_bound_relay_function, model_function) result(success)
   implicit none
-  integer, intent(in) :: num_relay_per_node
-  logical, optional, intent(in) :: use_debug_mode_in
+  type(ioserver_input_parameters), intent(in) :: params
   procedure(ioserver_function_template), pointer, intent(in), optional :: custom_server_bound_relay_function
   procedure(ioserver_function_template), pointer, intent(in), optional :: model_function
+  logical :: success
 
   type(ioserver_context) :: context
-  logical :: success
-  logical :: use_debug_mode
-
   procedure(ioserver_function_template), pointer :: server_bound_relay_fn, model_fn
 
-  use_debug_mode = .false.
-  if (present(use_debug_mode_in)) use_debug_mode = use_debug_mode_in
+  success = .false.
+
+  if (params % is_on_server) then 
+    print *, 'ERROR: Trying to initialize a model node, but setting "is_on_server = .true."'
+    return
+  end if
 
   server_bound_relay_fn => server_bound_relay_process
-  if (present(custom_server_bound_relay_function)) server_bound_relay_fn => custom_server_bound_relay_function
+  if (present(custom_server_bound_relay_function)) then
+    if (associated(custom_server_bound_relay_function)) server_bound_relay_fn => custom_server_bound_relay_function
+  end if
 
   model_fn => pseudo_model_process
   if (present(model_function)) then
     if (associated(model_function)) model_fn => model_function
   end if
   
-  success = context % init(.false., num_relay_per_node, 0, 0, 0, in_debug_mode = use_debug_mode)
+  success = context % init(params)
 
   if (.not. success) then
     print *, 'ERROR: could not initialize IO-server context for a model node!'
-    error stop 1
+    return
   end if
 
+  success = .false.
   if (context % is_model()) then
     call model_fn(context)
   else if (context % is_relay()) then
@@ -79,14 +83,18 @@ subroutine run_model_node(num_relay_per_node, use_debug_mode_in, custom_server_b
       call model_bound_relay_process(context)
     else
       print *, 'ERROR: Relay is neither server-bound nor model-bound'
+      return
     end if
   else
     print *, 'ERROR: Process on model node is neither a model nor a relay process'
+    return
   end if
 
   call context % finalize()
 
-end subroutine run_model_node
+  success = .true.
+
+end function run_model_node
 
 subroutine server_bound_relay_process(context)
   use ISO_C_BINDING
@@ -394,7 +402,7 @@ subroutine model_bound_relay_process(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
 
-  if (context % has_debug_mode()) print *, 'Model-bound relay process'
+  if (context % debug_mode()) print *, 'Model-bound relay process'
 end subroutine model_bound_relay_process
 
 subroutine pseudo_model_process(context)
