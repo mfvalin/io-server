@@ -88,7 +88,7 @@ target_compile_options(
    $<$<COMPILE_LANG_AND_ID:C,GNU>:-Wall -Wextra>
    $<$<COMPILE_LANG_AND_ID:C,GNU>:-Werror -Wno-error=pedantic -Wno-error=unused-function>
    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -fmax-errors=8>
-   $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Werror -Wno-error=unused-function -Wno-error=maybe-uninitialized -Wno-error=unused-variable>
+   $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Werror -Wno-error=unused-function -Wno-error=maybe-uninitialized -Wno-error=unused-variable -Wno-error=unused-dummy-argument>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-error-limit 8 -warn all -diag-disable 5268,7025,7416>
 )

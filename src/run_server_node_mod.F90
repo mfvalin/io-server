@@ -30,6 +30,13 @@ module run_server_node_module
 
   public :: run_server_node
 
+  type, private :: server_receiver_state
+    private
+    integer :: lowest_tag          = 0
+    integer :: previous_lowest_tag = 0
+    integer(C_INT64_T), dimension(:), pointer, contiguous :: model_data => NULL()
+  end type server_receiver_state
+
 contains
 
 subroutine run_server_node(num_server_bound, num_channels, num_noop, use_debug_mode_in)
@@ -73,9 +80,10 @@ subroutine server_bound_server_process(context, use_debug_mode_in)
 
   logical :: use_debug_mode
 
-  type(comm_rank_size)              :: consumer_crs
-  type(distributed_circular_buffer) :: data_buffer
-  type(local_server_stream), pointer :: file_ptr
+  type(comm_rank_size)                :: consumer_crs
+  type(distributed_circular_buffer)   :: data_buffer
+  type(local_server_stream), pointer  :: file_ptr
+  type(server_receiver_state)         :: current_state
 
   integer :: server_id, num_consumers, num_producers
   logical, dimension(:), allocatable :: active_producers
@@ -112,12 +120,14 @@ subroutine server_bound_server_process(context, use_debug_mode_in)
   do while (.not. server_finished)
     server_finished = .true.
     ! do i_producer = server_id + 1, num_producers, num_consumers
+    current_state % previous_lowest_tag = current_state % lowest_tag
+    current_state % lowest_tag = huge(current_state % lowest_tag)
     do i_producer = server_id, num_producers - 1, num_consumers
       ! producer_id = active_producers(i_producer)
       producer_id = i_producer
       if (.not. active_producers(i_producer)) cycle
 
-      producer_finished = receive_message(context, data_buffer, producer_id)
+      producer_finished = receive_message(context, data_buffer, producer_id, current_state)
       if (producer_finished) then
         active_producers(i_producer) = .false.
         print *, 'Producer has sent the STOP signal', producer_id
@@ -172,11 +182,12 @@ subroutine channel_process(context)
   end if
 end subroutine channel_process
 
-function receive_message(context, dcb, client_id) result(finished)
+function receive_message(context, dcb, client_id, state) result(finished)
   implicit none
-  type(ioserver_context),            intent(inout) :: context
-  type(distributed_circular_buffer), intent(inout) :: dcb
-  integer,                           intent(in) :: client_id
+  type(ioserver_context),            intent(inout) :: context   !< IO server context in which we are operating
+  type(distributed_circular_buffer), intent(inout) :: dcb       !< Handle to the DCB used for transmission
+  integer,                           intent(in)    :: client_id !< ID of the specific client we are receiving from
+  type(server_receiver_state),       intent(inout) :: state     !< Current state of the receiver process
   logical :: finished
 
   logical :: success
@@ -188,7 +199,6 @@ function receive_message(context, dcb, client_id) result(finished)
 
   ! Message reading
   integer(C_INT64_T)   :: capacity
-  integer              :: header_tag
   type(message_header) :: header
   type(message_cap)    :: end_cap
 
@@ -219,24 +229,31 @@ function receive_message(context, dcb, client_id) result(finished)
     ! end if
   end do
 
-  success = dcb % peek_elems(client_id, header_tag, 1_8, CB_KIND_INTEGER_4)
+  success = dcb % peek_elems(client_id, header, message_header_size_byte(), CB_KIND_CHAR)
 
   if (.not. success) then
     print *, 'Error after peeking into DCB'
     error stop 1
   end if
 
-  if (header_tag .ne. MSG_HEADER_TAG) then
-    print *, 'ERROR: Message header tag is wrong', header_tag, MSG_HEADER_TAG
+  if (header % header_tag .ne. MSG_HEADER_TAG) then
+    print *, 'ERROR: Message header tag is wrong', header % header_tag, MSG_HEADER_TAG
     error stop 1
   end if
 
+  ! Skip this one if we have lower tags to deal with
+  if (header % message_tag - state % previous_lowest_tag > context % get_server_pipeline_depth()) then
+    ! print '(A,I12,A,I12)', 'Previous lowest: ', state % previous_lowest_tag, ', current tag: ', header % message_tag
+    ! print *, 'SKIPPING'
+    ! error stop 1
+    return
+  end if
+
+  ! Update lowest tag
+  state % lowest_tag = min(state % lowest_tag, header % message_tag)
+
+  ! Actually extract the header
   success = dcb % get_elems(client_id, header, message_header_size_byte(), CB_KIND_CHAR, .true.)
-
-  if (.not. success) then
-    print *, 'ERROR getting message header from DCB', consumer_id
-    error stop 1
-  end if
 
   ! call print_message_header(header)
 

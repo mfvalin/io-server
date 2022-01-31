@@ -79,8 +79,13 @@ module ioserver_context_module
     !----------------------------------
     ! Other parameters
     !> Maximum difference of tags that a relay can transmit before starting to wait for the slower model PEs on the node.
-    !> Gotta be lower than MAX_ASSEMBLY_LINES
+    !> Ideally, should be lower than MAX_ASSEMBLY_LINES
     integer :: relay_pipeline_depth = 5
+
+    !> Maximum difference of tags that a server can process (between the various relays it receives from), before starting to
+    !> wait for the slower relays
+    !> Ideally, should be lower than MAX_ASSEMBLY_LINES. _Must be at least as large as #relay_pipeline_depth_
+    integer :: server_pipeline_depth = 10
     !> @}
 
     ! ----------------------------------------------------------------
@@ -232,6 +237,7 @@ module ioserver_context_module
     procedure, pass, public :: get_local_arena_ptr
     procedure, pass, public :: get_stream => IOserver_get_stream
     procedure, pass, public :: get_relay_pipeline_depth
+    procedure, pass, public :: get_server_pipeline_depth
 
     procedure, pass, public :: get_server_bound_cb_list
     procedure, pass, public :: get_heap_list
@@ -616,6 +622,14 @@ function get_relay_pipeline_depth(context) result(depth)
   integer :: depth
   depth = context % relay_pipeline_depth
 end function get_relay_pipeline_depth
+
+!> Get the value of server_pipeline_depth
+function get_server_pipeline_depth(context) result(depth)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  integer :: depth
+  depth = context % server_pipeline_depth
+end function get_server_pipeline_depth
 
 !> Get the list of local accessors to the server-bound CBs created on this node
 function get_server_bound_cb_list(context) result(cbs)
