@@ -33,11 +33,11 @@ module model_write_parameters
   integer, save :: num_compute_x
   integer, save :: num_compute_y
 
-  integer(C_INT64_T), parameter :: dim_x = 10
-  integer(C_INT64_T), parameter :: dim_y = 37
-  integer(C_INT64_T), parameter :: dim_z = 40
+  integer(C_INT64_T), parameter :: dim_x = 8
+  integer(C_INT64_T), parameter :: dim_y = 7
+  integer(C_INT64_T), parameter :: dim_z = 3
   integer(C_INT64_T), parameter :: num_vars = 3
-  integer(C_INT64_T), parameter :: num_time_steps = 5
+  integer(C_INT64_T), parameter :: num_time_steps = 2
 
   character(len=*), parameter :: filename1 = 'pseudo_model_1'
   character(len=*), parameter :: filename2 = 'pseudo_model_2'
@@ -485,7 +485,7 @@ program pseudomodelandserver
   if (.not. success) then
     print *, 'ERROR while trying to run model_write'
     error stop 1
-    end if
+  end if
 
   call MPI_Finalize()
 
@@ -498,7 +498,7 @@ program pseudomodelandserver
         num_model_per_node = node_size - num_relay_per_node
       end if
 
-      num_model_pes = num_model_per_node * num_nodes
+      num_model_pes = num_model_per_node * (num_nodes - 1)
 
       ! Init area info
       if (mod(num_model_pes, 4) == 0) then
