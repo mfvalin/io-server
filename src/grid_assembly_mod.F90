@@ -157,13 +157,13 @@ contains
   !> do it in its own function because it bypasses precautions for potentially aliased pointers.
   !> This means you should *not* call this function on array pointers if the full_grid might
   !> overlap with the subgrid.
-  subroutine set_full_grid_data(full_grid, subgrid, start)
+  subroutine set_full_grid_data(full_grid, subgrid, start, end)
     implicit none
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, intent(inout) :: full_grid !< [in,out] Destination of the copy
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, intent(inout) :: subgrid   !< [in,out] Source of the copy
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: start !< [in] Starting index in each dimension of the arrays
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: start, end !< [in] Starting and ending index in each dimension of the arrays
 
-    full_grid(start(1):, start(2):, start(3):, start(4):, start(5):) = subgrid(:,:,:,:,:)
+    full_grid(start(1):end(1), start(2):end(2), start(3):end(3), start(4):end(4), start(5):end(5)) = subgrid(:,:,:,:,:)
   end subroutine set_full_grid_data
 
   !> Insert data from a subgrid in its appropriate "full grid" being assembled by this object.
@@ -180,7 +180,7 @@ contains
     integer :: line_id ! Assembly line where the full grid is being assembled
     type(C_PTR) :: full_grid_ptr, subgrid_ptr                                                    ! C pointers to the full grid and subgrid data
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: full_grid_byte, subgrid_byte ! Fortran pointers to the full/subgrid data
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: index_start, full_size_byte, sub_size_byte  ! Sets of array indices
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: index_start, index_end, full_size_byte, sub_size_byte  ! Sets of array indices
 
     success = .false.
 
@@ -203,6 +203,7 @@ contains
     sub_size_byte(1)  = sub_size_byte(1) * record % elem_size
     index_start       = record % subgrid_area % offset
     index_start(1)    = (index_start(1) - 1) * record % elem_size + 1
+    index_end         = index_start + sub_size_byte - 1
     
     ! Retrieve data as 5-D Fortran pointers
     subgrid_ptr = c_loc(subgrid_data)
@@ -211,7 +212,7 @@ contains
 
     ! Insert data into full grid
     ! Using a function allows to avoid aliasing restrictions (i.e. having to copy on the stack first)
-    call set_full_grid_data(full_grid_byte, subgrid_byte, index_start)
+    call set_full_grid_data(full_grid_byte, subgrid_byte, index_start, index_end)
 
     ! Update missing data indicator
     call mutex % lock()
@@ -279,7 +280,7 @@ contains
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: grid_size
 
     logical :: success
-    integer :: num_bytes
+    integer :: num_bytes, elem_size
 
     ! Retrieve pointer to grid data
     data_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
@@ -289,8 +290,9 @@ contains
     end if
 
     ! Get a Fortran pointer to that data
+    elem_size = this % lines(line_id) % global_grid % elem_size
     grid_size = this % lines(line_id) % global_grid % size
-    grid_size(1) = grid_size(1) * this % lines(line_id) % global_grid % elem_size
+    grid_size(1) = grid_size(1) * elem_size
     call c_f_pointer(data_ptr, data_array_byte, grid_size)
 
     ! Write it to the file

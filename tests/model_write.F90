@@ -346,7 +346,7 @@ contains
     tmp_ptr = c_loc(read2)
     call c_f_pointer(tmp_ptr, array2, dims2)
 
-    open(newunit = file_unit, file = trim(filename2)//'.out', status = 'old', form = 'unformatted', access = 'stream', action = 'read')
+    open(newunit = file_unit, file = trim(filename2)//'.out', status = 'old', form = 'unformatted', action = 'read')
 
     tag = 2
     do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT ! Loop through all pairs of records in this file
@@ -378,6 +378,7 @@ contains
                       print *, 'Model ID ', model_id
                       print *, 'Index    ', i, j, k, l, m
                       print *, 'Block ID ', i_comp, j_comp
+                      print '(A, 5(I5))', 'Dims     ', dims2
                       error stop 1
                     end if
                   end do

@@ -266,7 +266,9 @@ subroutine server_bound_relay_process(context)
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
         latest_tags(i_compute) = -1  ! Indicate this model won't be active anymore
 
-        print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
+        if (context % debug_mode()) then
+          print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
+        end if
 
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
