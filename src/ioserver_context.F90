@@ -214,9 +214,9 @@ module ioserver_context_module
     private
 
     !> @{ \name Initialization
-    procedure, pass, public :: init => IOserver_init
-    procedure, pass         :: init_communicators => IOserver_init_communicators
-    procedure, pass         :: init_shared_mem => IOserver_init_shared_mem
+    procedure, pass, public :: init => ioserver_context_init
+    procedure, pass         :: init_communicators
+    procedure, pass         :: init_shared_mem
     procedure, pass         :: build_relay_model_index
     procedure, pass         :: build_print_model_index
     procedure, pass         :: fetch_node_shmem_structs
@@ -228,23 +228,23 @@ module ioserver_context_module
     !> @}
 
     !> @{ \name Process type query
-    procedure, pass, public :: is_relay  => IOserver_is_relay
-    procedure, pass, public :: is_server => IOserver_is_server
-    procedure, pass, public :: is_model  => IOserver_is_model
-    procedure, pass, public :: is_server_bound => IOserver_is_server_bound
-    procedure, pass, public :: is_model_bound  => IOserver_is_model_bound
-    procedure, pass, public :: is_channel => IOserver_is_channel
+    procedure, pass, public :: is_relay
+    procedure, pass, public :: is_server
+    procedure, pass, public :: is_model
+    procedure, pass, public :: is_server_bound
+    procedure, pass, public :: is_model_bound
+    procedure, pass, public :: is_channel
     procedure, pass, public :: is_grid_processor
     !> @}
 
     !> @{ \name Finalization
-    procedure, pass         :: set_time_to_quit => IOserver_set_time_to_quit
-    procedure, pass         :: is_time_to_quit  => IOserver_is_time_to_quit
+    procedure, pass         :: set_time_to_quit
+    procedure, pass         :: is_time_to_quit
     procedure, pass         :: finalize_model
     procedure, pass         :: finalize_relay
     procedure, pass         :: finalize_server
     procedure, pass, public :: finalize => ioserver_context_finalize_manually
-    final                   :: IOserver_finalize
+    final                   :: ioserver_context_finalize
     !> @}
 
     !> @{ \name Getters
@@ -257,9 +257,7 @@ module ioserver_context_module
     procedure, pass, public :: get_server_bound_cb => IOserver_get_server_bound_cb
     procedure, pass, public :: get_model_bound_cb => IOserver_get_model_bound_cb
     procedure, pass, public :: get_dcb => IOserver_get_dcb
-    procedure, pass, public :: get_relay_shmem => IOserver_get_relay_shmem
     procedure, pass, public :: get_messenger => IOserver_get_messenger
-    procedure, pass, public :: get_local_arena_ptr
     procedure, pass, public :: get_stream => IOserver_get_stream
     procedure, pass, public :: get_relay_pipeline_depth
     procedure, pass, public :: get_server_pipeline_depth
@@ -290,52 +288,52 @@ module ioserver_context_module
 contains
 
 !> Whether this context belongs to a relay process (server- or model-bound)
-function IOserver_is_relay(context) result(is_relay)
+function is_relay(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_relay
   is_relay = is_color_relay(context % color)
-end function IOserver_is_relay
+end function is_relay
 
 !> Whether this context belongs to a server process
-function IOserver_is_server(context) result(is_server)
+function is_server(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_server
   is_server = is_color_server(context % color)
-end function IOserver_is_server
+end function is_server
 
 !> Whether this context belongs to a model process
-function IOserver_is_model(context) result(is_model)
+function is_model(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_model
   is_model = is_color_model(context % color)
-end function IOserver_is_model
+end function is_model
 
 !> Whether this context belongs to a process that handles communications going towards the server
-function IOserver_is_server_bound(context) result(is_server_bound)
+function is_server_bound(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_server_bound
   is_server_bound = iand(context % color, SERVER_BOUND_COLOR) == SERVER_BOUND_COLOR
-end function IOserver_is_server_bound
+end function is_server_bound
 
 !> Whether this context belongs to a process that handles communications going towards the model
-function IOserver_is_model_bound(context) result(is_model_bound)
+function is_model_bound(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_model_bound
   is_model_bound = iand(context % color, MODEL_BOUND_COLOR) == MODEL_BOUND_COLOR
-end function IOserver_is_model_bound
+end function is_model_bound
 
 !> Whether this context belongs to a process that serves as a MPI communication channel (on server only)
-function IOserver_is_channel(context) result(is_channel)
+function is_channel(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_channel
   is_channel = iand(context % color, CHANNEL_COLOR) == CHANNEL_COLOR
-end function IOserver_is_channel
+end function is_channel
 
 !> Whether this context belongs to a process that processes completed grids on the server
 function is_grid_processor(context)
@@ -469,7 +467,7 @@ subroutine fetch_node_shmem_structs(context)
 end subroutine fetch_node_shmem_structs
 
 !> Set time to quit flag in control area
-subroutine IOserver_set_time_to_quit(context)
+subroutine set_time_to_quit(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
   context % shmem % time_to_quit = 1
@@ -484,23 +482,15 @@ subroutine IOserver_set_time_to_quit(context)
       print *, 'DEBUG: time to quit (other)'
     end if
   end if
-end subroutine IOserver_set_time_to_quit
+end subroutine set_time_to_quit
 
 !> Check whether the "time-to-quit" flag has been set on this node
-function IOserver_is_time_to_quit(context) result(is_time_to_quit)
+function is_time_to_quit(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_time_to_quit
   is_time_to_quit = (context % shmem % time_to_quit == 1)
-end function IOserver_is_time_to_quit
-
-!> Get a pointer to the shared memory region specific to model nodes (so model + relay PEs)
-function IOserver_get_relay_shmem(context) result(p_relay)
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-  type(C_PTR) :: p_relay       ! shared memory size for relay PEs (relay <-> model exchanges)
-  p_relay  = context % model_shmem
-end function IOserver_get_relay_shmem
+end function is_time_to_quit
 
 subroutine print_io_colors(context)
     implicit none
@@ -625,14 +615,6 @@ function IOserver_get_messenger(context) result(messenger)
   messenger => context % messenger
 end function IOserver_get_messenger
 
-!> Get a pointer to the shared memory arena on this node
-function get_local_arena_ptr(context) result(ptr)
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-  type(C_PTR) :: ptr
-  ptr = context % local_arena_ptr
-end function get_local_arena_ptr
-
 !> Get a local accessor to a specific stream
 function IOserver_get_stream(context, stream_id) result(stream)
   implicit none
@@ -701,7 +683,6 @@ subroutine IOserver_noop(context)
 
   if (context % debug_mode()) print *,'DEBUG: NO-OP process, global rank =', context % global_rank
   do while (.not. context % is_time_to_quit())    ! sleep loop until quit flag appears
-    if (context % debug_mode()) print *,'MSG: SLEEP LOOP'
     sleep_dummy = sleep(1)
   enddo
   if (context % debug_mode()) then
@@ -829,11 +810,11 @@ subroutine ioserver_context_finalize_manually(this)
   end if
 end subroutine ioserver_context_finalize_manually
 
-subroutine IOserver_finalize(context)
+subroutine ioserver_context_finalize(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
   call context % finalize()
-end subroutine IOserver_finalize
+end subroutine ioserver_context_finalize
 
 !> Build a list of model/relay indices and print them (for debugging purposes only)
 subroutine build_print_model_index(context)
@@ -991,7 +972,7 @@ end function check_cb_jar_elem
 
 !> Create all MPI communicators that will be used within this IO-server context, based on the given number of each kind of process.
 !> This must be called by every process that want to participate in the IO-server
-function IOserver_init_communicators(context) result(success)
+function init_communicators(context) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   logical :: success
@@ -1246,11 +1227,11 @@ function IOserver_init_communicators(context) result(success)
 
   success = .true.
 
-end function IOserver_init_communicators
+end function init_communicators
 
 !> Allocate shared memory on the node and create all the structs in it that will be used by the IO server.
 !> Must be called by all processes involved in the IO server
-function IOserver_init_shared_mem(context) result(success)
+function init_shared_mem(context) result(success)
   use shared_mem_alloc_module
   use simple_mutex_module
   implicit none
@@ -1283,16 +1264,6 @@ function IOserver_init_shared_mem(context) result(success)
     context % shmem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
   end if
 
-  ! Allocate local tables
-  allocate(context % node_relay_ranks(0:context % max_smp_pe))  ! size is overkill but it is easier
-  context % node_relay_ranks(:) = -1
-  allocate(context % node_model_ranks(0:context % max_smp_pe))  ! size is overkill but it is easier
-  context % node_model_ranks(:) = -1
-
-  allocate(context % model_bound_cbs (0:context % max_smp_pe))  ! size is overkill but it is easier
-  allocate(context % server_bound_cbs(0:context % max_smp_pe))  ! size is overkill but it is easier
-  allocate(context % local_heaps     (0:context % max_smp_pe))  ! size is overkill but it is easier
-
   ! Wait until control area initialization is done everywhere
   call MPI_barrier(context % global_comm)
 
@@ -1307,6 +1278,16 @@ function IOserver_init_shared_mem(context) result(success)
   ! at this point we only have "active" PEs (model, relay, server)
   ! allocate node local shared memory used for intra node communications
   ! ===================================================================================
+
+  ! Allocate local tables. Size is overkill, but makes it easier
+  allocate(context % node_relay_ranks(0:context % max_smp_pe))
+  allocate(context % node_model_ranks(0:context % max_smp_pe))
+  context % node_relay_ranks(:) = -1
+  context % node_model_ranks(:) = -1
+
+  allocate(context % model_bound_cbs (0:context % max_smp_pe))
+  allocate(context % server_bound_cbs(0:context % max_smp_pe))
+  allocate(context % local_heaps     (0:context % max_smp_pe))
 
   ! Determine how many server-bound server processes can actually open streams (it has to be <= the number of relays)
   block
@@ -1504,12 +1485,12 @@ function IOserver_init_shared_mem(context) result(success)
   call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
 
   success = .true.
-end function IOserver_init_shared_mem
+end function init_shared_mem
 
 !> Initialize the IO server context. *Must be called by every process that wants to participate in the IO server*
 !> \return .true. if the initialization was successful, .false. otherwise
 !> \sa ioserver_context::IOserver_init_communicators, ioserver_context::IOserver_init_shared_mem
-function IOserver_init(context, params) result(success)
+function ioserver_context_init(context, params) result(success)
   implicit none
   class(ioserver_context),         intent(inout) :: context !< The context we are initialising ("this")
   type(ioserver_input_parameters), intent(in)    :: params  !< All details about how it should be initialized
@@ -1538,6 +1519,6 @@ function IOserver_init(context, params) result(success)
     return
   end if
 
-end function IOserver_init
+end function ioserver_context_init
 
 end module ioserver_context_module
