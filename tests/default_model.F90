@@ -61,22 +61,26 @@ program default_model
   implicit none
 
   logical :: server_node, single_node, success
-  integer :: node_rank, node_size, num_server_processes
+  integer :: node_rank, node_size, num_server_processes, global_size
 
   type(ioserver_input_parameters) :: params
 
-  call mpi_init()
+  call MPI_Init()
+  call MPI_Comm_size(MPI_COMM_WORLD, global_size)
+
+  if (global_size < 9) then
+    print *, 'ERROR: Need at least 9 processes to run this test! Only have ', global_size
+    error stop 1
+  end if
 
   server_node = am_server_node(node_rank, node_size, single_node)
 
   params % num_channels = 2
   params % num_server_bound_server = 2
   params % num_relay_per_node = 2
+  params % num_grid_processors = 1
 
-  num_server_processes = params % num_channels + params % num_server_bound_server
-
-  params % num_server_noop = 0
-  if (.not. single_node) params % num_server_noop = node_size - num_server_processes
+  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_grid_processors
 
   if (server_node) then
     if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.

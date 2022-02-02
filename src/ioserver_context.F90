@@ -62,10 +62,11 @@ module ioserver_context_module
 
   type, public :: ioserver_input_parameters
     !> @{ \name Process counts and types
-    integer :: num_relay_per_node       = -1 !< How many relay processes there are on each model node (server- and model-bound)
-    integer :: num_server_bound_server  = -1 !< How many server-bound server processes there are
-    integer :: num_channels             = -1 !< How many communication channels (processes) there are on the server
-    integer :: num_server_noop          = -1 !< How many processes on the server will just do nothing
+    integer :: num_relay_per_node       = 0 !< How many relay processes there are on each model node (server- and model-bound)
+    integer :: num_grid_processors      = 0 !< How many server processes are used to process grids and write files
+    integer :: num_server_bound_server  = 0 !< How many server-bound server processes there are
+    integer :: num_model_bound_server   = 0 !< How many model-bound server processes there are
+    integer :: num_channels             = 0 !< How many communication channels (processes) there are on the server
 
     logical :: is_on_server = .false.   !< Whether the context will belong to a server process
     !> @}
@@ -126,24 +127,28 @@ module ioserver_context_module
     
     ! -----------------
     !> @{ \name Communicators
-    type(MPI_Comm) :: global_comm   = MPI_COMM_WORLD        !< MPI "WORLD" for this set of PEs
-    integer        :: global_rank   = -1                    !< rank in global_comm
-    integer        :: global_size   =  0                    !< population of global_comm
+    type(MPI_Comm) :: global_comm = MPI_COMM_WORLD  !< MPI "WORLD" for this set of PEs
+    integer        :: global_rank = -1              !< rank in global_comm
+    integer        :: global_size =  0              !< population of global_comm
 
-    type(MPI_Comm) :: smp_comm      = MPI_COMM_NULL         !< PEs on this SMP node        (any kind ) (subset of global_comm)
-    integer        :: smp_rank      = -1                    !< rank in smp_comm
-    integer        :: smp_size      =  0                    !< population of smp_comm
+    type(MPI_Comm) :: smp_comm    = MPI_COMM_NULL   !< PEs on this SMP node        (any kind ) (subset of global_comm)
+    integer        :: smp_rank    = -1              !< rank in smp_comm
+    integer        :: smp_size    =  0              !< population of smp_comm
 
-    type(MPI_Comm) :: all_comm                    = MPI_COMM_NULL  !< non NO-OP PEs       (all nodes) (subset of global_comm)
-    type(MPI_Comm) :: allio_comm                  = MPI_COMM_NULL  !< all IO PEs     (relay + server) (subset of all_comm)
-    type(MPI_Comm) :: model_relay_comm            = MPI_COMM_NULL  !< model and relay PEs (all nodes) (subset of all_comm)
+    type(MPI_Comm) :: active_comm = MPI_COMM_NULL   !< All "active" PEs (non NO-OP) (subset of global_comm)
+    integer        :: active_rank = -1              !< Rank on active_comm
+    integer        :: active_size =  0              !< Size of active_comm (number of active PEs)
+
+    type(MPI_Comm) :: io_comm                     = MPI_COMM_NULL  !< all IO PEs     (relay + server) (subset of active_comm)
+
+    type(MPI_Comm) :: model_relay_comm            = MPI_COMM_NULL  !< model and relay PEs (all nodes) (subset of active_comm)
     type(MPI_Comm) :: model_comm                  = MPI_COMM_NULL  !< model PEs           (all nodes) (subset of model_relay_comm)
     type(MPI_Comm) :: relay_comm                  = MPI_COMM_NULL  !< relay PEs           (all nodes) (subset of model_relay_comm)
 
-    type(MPI_Comm) :: server_comm                 = MPI_COMM_NULL  !< IO server PEs               (subset of all_comm)
-    type(MPI_Comm) :: server_active_comm          = MPI_COMM_NULL  !< Server PEs that process relay data (subset of server_comm)
-    type(MPI_Comm) :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_active_comm)
-    type(MPI_Comm) :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_active_comm)
+    type(MPI_Comm) :: server_comm                 = MPI_COMM_NULL  !< IO server PEs (subset of active_comm)
+    type(MPI_Comm) :: server_work_comm            = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm)
+    type(MPI_Comm) :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_work_comm)
+    type(MPI_Comm) :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_work_comm)
 
     type(MPI_Comm) :: model_relay_smp_comm        = MPI_COMM_NULL  !< model+relays on current node
     type(MPI_Comm) :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
@@ -172,9 +177,10 @@ module ioserver_context_module
     type(shared_server_stream), dimension(:), pointer :: common_server_streams => NULL() !< Stream files used to assemble grids and write them (in shared memory)
     !> @}
 
+    !-------------------
     !> @{ \name Stuff
     integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
-    integer :: model_relay_smp_size = 0     !< population of model_relay_smp_comm
+    integer :: model_relay_smp_size =  0    !< population of model_relay_smp_comm
     integer :: server_comm_rank     = -1    !< rank in server_comm
     integer :: num_local_model_proc = -1    !< Number of model processes on this SMP node
 
@@ -185,6 +191,17 @@ module ioserver_context_module
     integer, dimension(:), pointer :: node_model_ranks  => NULL() !< ranks of model PEs on this node
 
     integer :: num_server_stream_owners = -1 !< How many server processes can own a stream (can be lower than number of server-bound processes)
+    integer :: node_id = -1
+    !> @}
+
+    !----------------------
+    !> @{ \name Some stats
+    integer :: num_nodes                = 0
+    integer :: num_model_nodes          = 0
+    integer :: num_server_bound_relays  = 0
+    integer :: num_model_bound_relays   = 0
+    integer :: num_model_pes            = 0
+    integer :: num_server_noop          = 0
     !> @}
 
     ! ------------------
@@ -220,6 +237,7 @@ module ioserver_context_module
     procedure, pass, public :: is_server_bound => IOserver_is_server_bound
     procedure, pass, public :: is_model_bound  => IOserver_is_model_bound
     procedure, pass, public :: is_channel => IOserver_is_channel
+    procedure, pass, public :: is_grid_processor
     !> @}
 
     !> @{ \name Finalization
@@ -316,13 +334,21 @@ function IOserver_is_model_bound(context) result(is_model_bound)
   is_model_bound = iand(context % color, MODEL_BOUND_COLOR) == MODEL_BOUND_COLOR
 end function IOserver_is_model_bound
 
-!> Whether this context to a process that serves as a MPI communication channel (on server only)
+!> Whether this context belongs to a process that serves as a MPI communication channel (on server only)
 function IOserver_is_channel(context) result(is_channel)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_channel
   is_channel = iand(context % color, CHANNEL_COLOR) == CHANNEL_COLOR
 end function IOserver_is_channel
+
+!> Whether this context belongs to a process that processes completed grids on the server
+function is_grid_processor(context)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  logical :: is_grid_processor
+  is_grid_processor = iand(context % color, GRID_PROCESSOR_COLOR) == GRID_PROCESSOR_COLOR
+end function is_grid_processor
 
 !> Whether debug mode is enabled for this context
 function ioserver_context_debug_mode(context)
@@ -511,24 +537,24 @@ function IOserver_get_crs(context, color) result(crs)
   type(comm_rank_size) :: crs
 
   crs = comm_rank_size(MPI_COMM_NULL, -1, 0)
-
+  
   select case(color)
     case(NO_COLOR)                                ! all non NO-OP PEs               (subset of global_comm)
-      crs % comm = context % all_comm
+      crs % comm = context % active_comm
 
     case(NODE_COLOR)                              ! all PEs on this SMP node        (subset of global_comm)
       crs % comm = context % smp_comm
 
-    case(SERVER_COLOR)                            ! server PEs                      (subset of all_comm)
-      crs % comm = context % server_comm
+    case(SERVER_COLOR)                            ! server PEs that can do work     (subset of server_comm, itself a subset of active_comm)
+      crs % comm = context % server_work_comm
 
-    case(MODEL_COLOR + RELAY_COLOR)               ! compute and relay PEs           (subset of all_comm)
+    case(MODEL_COLOR + RELAY_COLOR)               ! compute and relay PEs           (subset of active_comm)
       crs % comm = context % model_relay_comm
 
-    case(MODEL_COLOR)                             ! all model compute PEs           (subset of all_comm, model_relay_comm)
+    case(MODEL_COLOR)                             ! all model compute PEs           (subset of active_comm, model_relay_comm)
       crs % comm = context % model_comm
 
-    case(RELAY_COLOR)                             ! all IO relay PEs                (subset of all_comm, model_relay_comm)
+    case(RELAY_COLOR)                             ! all IO relay PEs                (subset of active_comm, model_relay_comm)
       crs % comm = context % relay_comm
 
     case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of smp_comm, model_comm, iorelay_comm)
@@ -543,12 +569,8 @@ function IOserver_get_crs(context, color) result(crs)
     case(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR) ! server-bound relay PEs on SMP node (subset of relay_smp_comm)
       crs % comm = context % server_bound_relay_smp_comm
 
-    case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of all_comm)
-      crs % comm = context % allio_comm
-
-    case(SERVER_COLOR + NODE_COLOR)               ! server PEs on SMP node          (subset of smp_comm, server_comm)
-      ! crs % comm = context % servercom
-      crs % comm = context % server_active_comm
+    case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of active_comm)
+      crs % comm = context % io_comm
 
     case default
       crs % comm = MPI_COMM_NULL
@@ -999,7 +1021,6 @@ function IOserver_init_communicators(context) result(success)
   type(MPI_Comm) :: temp_comm
   integer :: temp_rank, temp_size
   logical :: is_mpi_initialized
-  integer :: split_color ! Temporary, used to define splits in MPI communicators
 
   success = .false.
 
@@ -1017,31 +1038,78 @@ function IOserver_init_communicators(context) result(success)
     call MPI_Comm_rank(temp_comm, temp_rank)
     call MPI_Comm_size(temp_comm, temp_size)
 
-    if (temp_rank >= temp_size - context % params % num_server_noop) then
-      context % color = NO_OP_COLOR
-    else if (temp_rank >= temp_size - context % params % num_server_noop - context % params % num_channels) then
-      context % color = SERVER_COLOR + CHANNEL_COLOR
-    else if (temp_rank < context % params % num_server_bound_server) then
-      context % color = SERVER_COLOR + SERVER_BOUND_COLOR
-    else
-      context % color = SERVER_COLOR + MODEL_BOUND_COLOR
-    end if
+    block
+      integer, dimension(4) :: bounds
+
+      bounds(1) = context % params % num_server_bound_server
+      bounds(2) = bounds(1) + context % params % num_model_bound_server
+      bounds(3) = bounds(2) + context % params % num_grid_processors
+      bounds(4) = bounds(3) + context % params % num_channels
+      context % num_server_noop = temp_size - bounds(4)
+
+      if (context % num_server_noop < 0) then
+        if (temp_rank == 0) &
+          print *, 'ERROR: There are not enough processes on the server to fill the requested roles: ', bounds(4)
+          print *, '       Server-bound:    ', context % params % num_server_bound_server
+          print *, '       Model-bound:     ', context % params % num_model_bound_server
+          print *, '       Grid processors: ', context % params % num_grid_processors
+          print *, '       Channels:        ', context % params % num_channels
+        return
+      end if
+
+
+      if (temp_rank < bounds(1)) then
+        context % color = SERVER_COLOR + SERVER_BOUND_COLOR
+      else if (temp_rank < bounds(2)) then
+        context % color = SERVER_COLOR + MODEL_BOUND_COLOR
+      else if (temp_rank < bounds(3)) then
+        context % color = SERVER_COLOR + GRID_PROCESSOR_COLOR
+      else if (temp_rank < bounds(4)) then
+        context % color = SERVER_COLOR + CHANNEL_COLOR
+      else
+        context % color = NO_OP_COLOR
+      end if
+    end block
+
   else
     call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm)
     context % color = MODEL_COLOR + RELAY_COLOR
   end if
-
-  if (context % debug_mode()) print *, 'DEBUG: Process global_rank, color: ', context % global_rank, context % color
 
   ! Split all PEs by node (mostly used for model nodes)
   call MPI_Comm_split_type(context % global_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % smp_comm)
   call MPI_Comm_rank(context % smp_comm, context % smp_rank)    ! rank on SMP node
   call MPI_Comm_size(context % smp_comm, context % smp_size)    ! population of SMP node
 
+  ! Assign a node ID to each SMP node (and 0 to the server node)
+  block
+    integer :: key
+    if (context % smp_rank == 0) then
+      if (context % params % is_on_server) then
+        key = 0
+      else
+        key = 1000000
+      end if
+      call MPI_Comm_split(context % global_comm, 0, context % global_rank + key, temp_comm)
+      call MPI_Comm_rank(temp_comm, context % node_id)
+      call MPI_Comm_size(temp_comm, context % num_nodes)
+    else
+      call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm)
+    end if
+
+    call MPI_Bcast(context % node_id, 1, MPI_INTEGER, 0, context % smp_comm)
+  end block
+
   ! Split global communicator into : (server+model+relay) and no-op
   ! there MUST be AT LEAST ONE non NO-OP process on each node (a deadlock will happen if this condition is not respected)
-  ! color/NO_OP_COLOR has value 1 if NO-OP, 0 otherwise (NO_OP_COLOR MUST BE THE LARGEST CODE VALUE)
-  call MPI_Comm_split(context % global_comm, context % color / NO_OP_COLOR, context % global_rank, context % all_comm)
+  ! Arrange it so that the overall ranks are grouped by node and that server processes have the lowest ranks
+  if (context % color .ne. NO_OP_COLOR) then
+    call MPI_Comm_split(context % global_comm, 0, context % node_id * 100000 + mod(context % global_rank, 100000), context % active_comm)
+    call MPI_Comm_rank(context % active_comm, context % active_rank)
+    call MPI_Comm_size(context % active_comm, context % active_size)
+  else
+    call MPI_Comm_split(context % global_comm, 1, 0, temp_comm)
+  end if
 
   ! no-op processes don't need to go any further
   if (context % color == NO_OP_COLOR) then
@@ -1049,23 +1117,22 @@ function IOserver_init_communicators(context) result(success)
     return
   end if
 
-  ! Split the all useful communicator (all_comm) into : server and (model+relay)
-  split_color = context % color
-  if (context % is_server()) split_color = SERVER_COLOR                                  ! treat INPUT and OUTPUT server PEs the same way for this split
-  call MPI_Comm_split(context % all_comm, split_color, context % global_rank, temp_comm) ! temp_comm is either server_comm or model_relay_comm
+  ! Split the all useful communicator (active_comm) into : server and (model+relay)
+  if (context % is_server()) then
+    call MPI_Comm_split(context % active_comm, 0, context % active_rank, context % server_comm)
+  else
+    call MPI_Comm_split(context % active_comm, 1, context % active_rank, context % model_relay_comm)
+  end if
 
   if (context % is_server()) then
     !-------------------
     ! Server processes
     !-------------------
-    context % server_comm = temp_comm             ! communicator for the "io server(s)"
-
-    block
+    block ! Verify that all server processes are indeed on the same node
       type(MPI_Comm) :: server_comm_tmp
       integer :: server_comm_size_tmp, server_comm_size
 
-      ! Verify that all server processes are indeed on the same node
-      call MPI_Comm_split_type(context % server_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, server_comm_tmp)
+      call MPI_Comm_split_type(context % server_comm, MPI_COMM_TYPE_SHARED, context % active_rank, MPI_INFO_NULL, server_comm_tmp)
       call MPI_Comm_rank(server_comm_tmp, context % server_comm_rank)     ! rank on SMP node
       call MPI_Comm_size(server_comm_tmp, server_comm_size_tmp)           ! population of SMP node
       call MPI_Comm_size(context % server_comm, server_comm_size)         ! population of SMP node
@@ -1082,25 +1149,28 @@ function IOserver_init_communicators(context) result(success)
     if (context % is_channel()) then
       call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm)
     else
-      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_active_comm)
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm)
 
       ! Split between server-bound and model-bound server processes
       if (context % is_server_bound()) then
-        call MPI_Comm_split(context % server_active_comm, SERVER_BOUND_COLOR, context % global_rank, context % server_bound_server_comm)
+        call MPI_Comm_split(context % server_work_comm, SERVER_BOUND_COLOR, context % active_rank, context % server_bound_server_comm)
+      else if (context % is_model_bound()) then
+        call MPI_Comm_split(context % server_work_comm, MODEL_BOUND_COLOR, context % active_rank, context % model_bound_server_comm)
+      else if (context % is_grid_processor()) then
+        call MPI_Comm_split(context % server_work_comm, GRID_PROCESSOR_COLOR, context % active_rank, temp_comm)
       else
-        call MPI_Comm_split(context % server_active_comm, MODEL_BOUND_COLOR, context % global_rank, context % model_bound_server_comm)
+        print *, 'ERROR: Unhandled server process type'
+        return
       end if
-
     end if
 
   else
     !----------------------------
     ! Model and relay processes
     !----------------------------
-    context % model_relay_comm = temp_comm              ! communicator for "model compute and io relay" PEs
 
     ! Split model_relay_comm by node, PEs on same SMP node (compute and IO processes)
-    call MPI_Comm_split_type(context % model_relay_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % model_relay_smp_comm)
+    call MPI_Comm_split_type(context % model_relay_comm, MPI_COMM_TYPE_SHARED, context % active_rank, MPI_INFO_NULL, context % model_relay_smp_comm)
     call MPI_Comm_rank(context % model_relay_smp_comm, context % model_relay_smp_rank)     ! rank on SMP node
     call MPI_Comm_size(context % model_relay_smp_comm, context % model_relay_smp_size) ! population of SMP node
 
@@ -1110,25 +1180,15 @@ function IOserver_init_communicators(context) result(success)
         context % model_relay_smp_rank < (context % model_relay_smp_size - ((context % params % num_relay_per_node)/2))) then   ! model compute process
       ! Model process
       context % color = MODEL_COLOR
-      if (context % debug_mode()) then
-        print *,'DEBUG: model compute process, node rank =', &
-            context % model_relay_smp_rank, context % model_relay_smp_size, context % params % num_relay_per_node/2, &
-            (context % model_relay_smp_size - ((context % params % num_relay_per_node+1)/2))
-      end if
 
       call MPI_Comm_split(context % model_relay_smp_comm, MODEL_COLOR, context % model_relay_smp_rank, context % model_smp_comm) ! Model processes on this node
-      call MPI_Comm_split(context % model_relay_comm, MODEL_COLOR, context % global_rank, context % model_comm)                  ! Model processes on all nodes
+      call MPI_Comm_split(context % model_relay_comm, MODEL_COLOR, context % active_rank, context % model_comm)                  ! Model processes on all nodes
     else
       ! Relay process
       context % color = RELAY_COLOR
-      if (context % debug_mode()) then
-        print *,'DEBUG: IO relay process, node rank =', &
-            context % model_relay_smp_rank, context % model_relay_smp_size, context % params % num_relay_per_node/2, &
-            (context % model_relay_smp_size - ((context % params % num_relay_per_node+1)/2))
-      end if
 
       call MPI_Comm_split(context % model_relay_smp_comm, RELAY_COLOR, context % model_relay_smp_rank, context % relay_smp_comm) ! Relay processes on this node
-      call MPI_Comm_split(context % model_relay_comm, RELAY_COLOR, context % global_rank, context % relay_comm)                  ! Relay processes on all nodes
+      call MPI_Comm_split(context % model_relay_comm, RELAY_COLOR, context % active_rank, context % relay_comm)                  ! Relay processes on all nodes
 
       ! Compute number of model processes on this node
       block
@@ -1136,6 +1196,10 @@ function IOserver_init_communicators(context) result(success)
         call MPI_Comm_size(context % model_relay_smp_comm, node_size)
         call MPI_Comm_size(context % relay_smp_comm, relay_size)
         context % num_local_model_proc = node_size - relay_size
+        if (context % num_local_model_proc < relay_size) then
+          print '(A, I2, A, I3, A)', 'WARNING: There are more relay processes (', relay_size,                     &
+              ') than model processes (', context % num_local_model_proc, '). Is this really what you want?'
+        end if
       end block
 
       ! Determine and split server-bound vs model-bound relays (only use a server-bound communicator for now)
@@ -1150,12 +1214,57 @@ function IOserver_init_communicators(context) result(success)
     endif
   end if
 
-  ! Split all_comm into model and IO (relay+server) processes
+  ! Split active_comm into model and IO (relay+server) processes
   if (context % is_relay() .or. context % is_server()) then  
-    call MPI_Comm_split(context % all_comm, RELAY_COLOR + SERVER_COLOR, context % global_rank, context % allio_comm) 
+    call MPI_Comm_split(context % active_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_comm) 
   else
-    call MPI_Comm_split(context % all_comm, MODEL_COLOR, context % global_rank, temp_comm)
+    call MPI_Comm_split(context % active_comm, MODEL_COLOR, context % active_rank, temp_comm)
   endif
+
+  if (context % debug_mode() .and. (context % is_relay() .or. context % is_server())) then
+    block
+      integer :: relay_smp_rank, io_rank
+      integer :: num_models, num_server_bound, num_model_bound
+
+      context % num_model_nodes = max(context % num_nodes - 1, 1)
+      context % num_model_pes = 0
+      num_models = 0
+      num_server_bound = 0
+      num_model_bound = 0
+
+      if (context % is_relay()) then
+        call MPI_Comm_rank(context % relay_smp_comm, relay_smp_rank)
+        if (relay_smp_rank == 0) then
+          num_models = context % num_local_model_proc
+        end if
+        if (context % is_server_bound()) then
+          num_server_bound = 1
+        else if (context % is_model_bound()) then
+          num_model_bound = 1
+        else
+          print *, 'ERROR: Relay is neither server- nor model-bound'
+          return
+        end if
+      end if
+
+      call MPI_Allreduce(num_models, context % num_model_pes, 1, MPI_INTEGER, MPI_SUM, context % io_comm)
+      call MPI_Allreduce(num_server_bound, context % num_server_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm)
+      call MPI_Allreduce(num_model_bound, context % num_model_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm)
+
+      call MPI_Comm_rank(context % io_comm, io_rank)
+      if (io_rank == 0) then
+        print '(A, I5, A, I5, A)', 'DEBUG: We have ', context % num_nodes, ' nodes (', context % num_model_nodes, ' model nodes)'
+        print '(A, I5, A)',        '               ', context % num_server_bound_relays, ' server-bound relays'
+        print '(A, I5, A)',        '               ', context % num_model_bound_relays, ' model-bound relays'
+        print '(A, I5, A)',        '               ', context % num_model_pes, ' model processes'
+        print '(A, I5, A)',        '               ', context % params % num_server_bound_server, ' server-bound server processes'
+        print '(A, I5, A)',        '               ', context % params % num_model_bound_server, ' model-bound server processes'
+        print '(A, I5, A)',        '               ', context % params % num_grid_processors, ' grid processors'
+        print '(A, I5, A)',        '               ', context % params % num_channels, ' channel processes'
+        print '(A, I5, A)',        '               ', context % num_server_noop, ' NO-OP server processes'
+      end if
+    end block
+  end if
 
   success = .true.
 
@@ -1228,7 +1337,7 @@ function IOserver_init_shared_mem(context) result(success)
     if (context % is_server() .or. context % is_relay()) then
       context % num_server_stream_owners = 0
       if (context % is_relay() .and. context % is_server_bound()) val = 1
-      call MPI_Allreduce(val, context % num_server_stream_owners, 1, MPI_INTEGER, MPI_SUM, context % allio_comm)
+      call MPI_Allreduce(val, context % num_server_stream_owners, 1, MPI_INTEGER, MPI_SUM, context % io_comm)
       context % num_server_stream_owners = min(context % num_server_stream_owners, context % params % num_server_bound_server)
     end if
   end block
@@ -1356,7 +1465,7 @@ function IOserver_init_shared_mem(context) result(success)
 3 continue     ! no error
 
   !  GLOBAL ERROR CHECK  (and synchronization point)
-  call MPI_Allreduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, context % all_comm)
+  call MPI_Allreduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, context % active_comm)
   if(total_errors > 0) then
     print *,'FATAL:',total_errors,' error(s) detected while allocating memory'
     call context % set_time_to_quit()      ! tell NO-OP PEs to quit
@@ -1373,9 +1482,9 @@ function IOserver_init_shared_mem(context) result(success)
   if (context % is_relay() .or. context % is_server()) then              ! IO relay or IO server
     block
       integer :: allio_comm_size
-      call MPI_Comm_size(context % allio_comm, allio_comm_size)
-      allocate(context % iocolors(0:allio_comm_size))             ! collect colors for IO PEs, index in array is rank in allio_comm
-      call MPI_Allgather(context % color, 1, MPI_INTEGER, context % iocolors, 1, MPI_INTEGER, context % allio_comm)
+      call MPI_Comm_size(context % io_comm, allio_comm_size)
+      allocate(context % iocolors(0:allio_comm_size))             ! collect colors for IO PEs, index in array is rank in io_comm
+      call MPI_Allgather(context % color, 1, MPI_INTEGER, context % iocolors, 1, MPI_INTEGER, context % io_comm)
       if (context % debug_mode()) write(6,'(A,10I8,(/19X,10I8))') ' DEBUG: IO colors =', context % iocolors(0:allio_comm_size-1)
     end block
 
@@ -1399,7 +1508,7 @@ function IOserver_init_shared_mem(context) result(success)
         server_comm = context % server_comm
       end if
 
-      success = context % local_dcb % create_bytes(context % allio_comm, server_comm, type, server_bound_size, model_bound_size)
+      success = context % local_dcb % create_bytes(context % io_comm, server_comm, type, server_bound_size, model_bound_size)
       if (.not. success) num_errors = num_errors + 1
     end block
   endif

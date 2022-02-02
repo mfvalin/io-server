@@ -28,21 +28,16 @@ module ioserver_constants
   integer(C_SIZE_T), parameter :: MBYTE = 1024 * 1024
   integer(C_SIZE_T), parameter :: GBYTE = 1024 * 1024 * 1024
 
-  integer, parameter :: NO_COLOR            = 0
-  integer, parameter :: MODEL_COLOR         = 1
-  integer, parameter :: RELAY_COLOR         = 2
-  integer, parameter :: SERVER_COLOR        = 4
-  integer, parameter :: SERVER_BOUND_COLOR  = 8
-  integer, parameter :: MODEL_BOUND_COLOR   = 16
-  ! integer, parameter :: INOUT_COLOR   = INPUT_COLOR + OUTPUT_COLOR
-  integer, parameter :: CHANNEL_COLOR       = 32
-  integer, parameter :: NODE_COLOR          = 4096
-  integer, parameter :: NO_OP_COLOR         = 8192   ! MUST BE THE HIGHEST VALUE
-
-  integer, parameter :: IO_CONTROL   = 1000
-  integer, parameter :: IO_BASE      = 1001
-  integer, parameter :: IO_RELAY     = 1002
-  integer, parameter :: IO_SERVER    = 1003
+  integer, parameter :: NO_COLOR              = 0
+  integer, parameter :: MODEL_COLOR           = 1
+  integer, parameter :: RELAY_COLOR           = 2
+  integer, parameter :: SERVER_COLOR          = 4
+  integer, parameter :: SERVER_BOUND_COLOR    = 8
+  integer, parameter :: MODEL_BOUND_COLOR     = 16
+  integer, parameter :: CHANNEL_COLOR         = 32
+  integer, parameter :: GRID_PROCESSOR_COLOR  = 64
+  integer, parameter :: NODE_COLOR            = 4096
+  integer, parameter :: NO_OP_COLOR           = 8192   ! MUST BE THE HIGHEST VALUE
 
   type :: comm_rank_size
     type(MPI_Comm) :: comm = MPI_COMM_NULL

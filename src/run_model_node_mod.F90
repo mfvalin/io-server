@@ -136,16 +136,14 @@ subroutine server_bound_relay_process(context)
   type(jar)            :: dcb_message_jar
   integer              :: jar_ok
   integer(JAR_ELEMENT) :: num_jar_elem
-  integer(JAR_ELEMENT), dimension(:), pointer :: dcb_message
-  ! logical, dimension(:), allocatable :: model_finished
   integer, dimension(:), allocatable :: latest_tags ! Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
 
-  print *, 'Server-bound relay process'
-
+  ! Retrieve useful data structures
   cb_list     => context % get_server_bound_cb_list()
   heap_list   => context % get_heap_list()
   data_buffer =  context % get_dcb()
 
+  ! Get process info
   node_crs        = context % get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
   local_relay_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
 
@@ -153,27 +151,31 @@ subroutine server_bound_relay_process(context)
   local_relay_id    = local_relay_crs % rank
   num_local_compute = context % get_num_local_model()
 
-  ! print '(A, I5)', 'DEBUG: RELAY, global ', context % get_global_rank()
-
   client_id               = data_buffer % get_server_bound_client_id()
   num_clients             = data_buffer % get_num_server_bound_clients()
   dcb_capacity            = data_buffer % get_capacity(CB_DATA_ELEMENT_KIND)
   dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure there will be a bit of loose space in the server-side buffer
 
-  print *, 'dcb_message_buffer_size ', dcb_message_buffer_size
-
+  ! Create buffer for outbound data
   jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
   if (jar_ok .ne. 0) then
     print *, 'Could not create jar to contain DCB message...'
     error stop 1
   end if
 
-  dcb_message => dcb_message_jar % raw_array()
-
   c_data = C_NULL_PTR
   nullify(f_data)
   total_message_size_int8 = 0
   content_size = 0
+
+  allocate(latest_tags(0:num_local_compute - 1))
+  latest_tags(:) = 0
+  call dcb_message_jar % reset()
+
+  filename_size = -1
+  largest_tag_diff = 0
+  lowest_tag = 0
+  finished = .false.
 
   ! Say hi to the consumer processes
   header % content_length_int8  = 0
@@ -190,17 +192,10 @@ subroutine server_bound_relay_process(context)
     error stop 1
   end if
 
-  ! The main loop
-  allocate(latest_tags(0:num_local_compute - 1))
-  latest_tags(:) = 0
-  call dcb_message_jar % reset()
+  ! Main loop (until all model PEs have sent their STOP signal)
+  do while (.not. finished)
 
-  filename_size = -1
-  largest_tag_diff = 0
-  lowest_tag = 0
-  finished = .false.
-  do while (.not. finished) ! Loop until finished (when all model PEs have sent their STOP signal)
-
+    ! Prepare pass over each model PE this relay is responsible for
     previous_lowest = lowest_tag
     lowest_tag = huge(lowest_tag)
     highest_tag = 0
@@ -308,7 +303,7 @@ subroutine server_bound_relay_process(context)
       !------------------------------------
       ! If the DCB message buffer is too full to contain that new package, flush it now
       if (dcb_message_jar % high() + total_message_size_int8 > dcb_message_buffer_size) then
-        success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
+        success = data_buffer % put_elems(dcb_message_jar % array(), dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
         call dcb_message_jar % reset()
 
         if (.not. success) then
@@ -363,7 +358,7 @@ subroutine server_bound_relay_process(context)
     else
       ! No one put anything to send. Send what's in the buffer, while we're just waiting for stuff...
       if (dcb_message_jar % high() > 0) then
-        success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
+        success = data_buffer % put_elems(dcb_message_jar % array(), dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
         call dcb_message_jar % reset()
 
         if (.not. success) then
@@ -378,7 +373,7 @@ subroutine server_bound_relay_process(context)
   ! Send the remaining data
   if (dcb_message_jar % high() > 0) then
     ! print *, 'Sending remaining data: ', dcb_message_jar % high()
-    success = data_buffer % put_elems(dcb_message, dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
+    success = data_buffer % put_elems(dcb_message_jar % array(), dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
 
     if (.not. success) then
       print *, 'ERROR sending remaining data!'
@@ -389,7 +384,7 @@ subroutine server_bound_relay_process(context)
   if (allocated(cb_message)) deallocate(cb_message)
   if (allocated(latest_tags)) deallocate(latest_tags)
 
-  print *, 'LARGEST DIFF b/w tags in one pass: ', largest_tag_diff
+  if (context % debug_mode()) print *, 'DEBUG: Largest diff b/w tags in one pass: ', largest_tag_diff
 
   if (local_relay_id == 0) then
     ! call heap_list(0) % dumpinfo()

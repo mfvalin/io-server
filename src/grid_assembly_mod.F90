@@ -132,7 +132,7 @@ contains
           ! print *, 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
         end associate
       else
-        print '(I2, A)', mutex % get_id(), ' ERROR (warning?). We have reached the maximum number of grids being assembled! Will not be able to insert data.'
+        ! print '(I2, A)', mutex % get_id(), ' ERROR (warning?). We have reached the maximum number of grids being assembled! Will not be able to insert data.'
       end if
     else
       print '(I2, A, I3, A)', mutex % get_id(), ' Looks like line ', line_id, ' was created by someone else '

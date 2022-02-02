@@ -56,7 +56,7 @@ function run_server_node(params) result(success)
   success = context % init(params)
 
   if (.not. success) then
-    print *, 'ERROR, could not initialize IO-server context for server process!'
+    print *, 'ERROR: Could not initialize IO-server context for server process!'
     return
   end if
 
@@ -67,8 +67,9 @@ function run_server_node(params) result(success)
     call server_bound_server_process(context)
   else if (context % is_model_bound()) then
     call model_bound_server_process(context)
+  else if (context % is_grid_processor()) then
   else
-    print *, 'ERROR, server process is neither server-bound nor model-bound.'
+    print *, 'ERROR: Server process is not of a known type.'
     return
   end if
 
@@ -129,13 +130,13 @@ subroutine server_bound_server_process(context)
       producer_finished = receive_message(context, data_buffer, producer_id, current_state)
       if (producer_finished) then
         active_producers(i_producer) = .false.
-        print *, 'Producer has sent the STOP signal', producer_id
+        if (context % debug_mode()) print '(A, I3, A)', 'DEBUG: Producer ', producer_id, ' has sent the STOP signal'
       else
         server_finished = .false.
       end if
     end do
   end do
-  print '(A, I3, A)', 'INFO: Server ', server_id, ' done receiving. Will now close owned files.'
+  if (context % debug_mode()) print '(A, I3, A)', 'DEBUG: Server ', server_id, ' done receiving. Will now close owned files.'
 
   do i_file = 1, MAX_NUM_SERVER_STREAMS
     file_ptr => context % get_stream(i_file)
@@ -163,7 +164,7 @@ subroutine model_bound_server_process(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
 
-  if (context % debug_mode()) print *, 'Model-bound server process'
+  if (context % debug_mode()) print *, 'DEBUG: Model-bound server process'
 end subroutine model_bound_server_process
 
 subroutine channel_process(context)
@@ -270,7 +271,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
     ! print *, 'Got DATA message', consumer_id
     success = dcb % get_elems(client_id, record, model_record_size_byte(), CB_KIND_CHAR, .true.)
     if (.not. success) then
-      print *, 'Error reading record'
+      print *, 'ERROR: reading record'
       error stop 1
     end if
 
@@ -323,12 +324,12 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !----------------
   ! Misc. message
   else if (header % command == MSG_COMMAND_DUMMY) then
-    print *, 'Got a DUMMY message!', consumer_id
+    if (context % debug_mode()) print *, 'DEBUG: Got a DUMMY message!', consumer_id
 
   !---------------------------------
   ! Stop receiving from this relay
   else if (header % command == MSG_COMMAND_RELAY_STOP) then
-    print *, 'Got a RELAY STOP message', consumer_id
+    if (context % debug_mode()) print *, 'DEBUG: Got a RELAY STOP message', consumer_id
     finished = .true.
 
     ! if (associated(model_data)) then

@@ -302,11 +302,10 @@ uint32_t shmem_arena_init(
   uint64_t size64 = size >> 3 ;  // round size down to 64 bit element size
   // uint32_t size32 = (size64 > 0xFFFFFFFFL) ? 0xFFFFFFFFU : size64 ;  // must fit in 32 bits
   if(ma->owner != 0) {
-    fprintf(stderr,"ma init %p, already owned by id = %d\n", (void*)ma, ma->owner & 0x3FFFFFFF);
+    // fprintf(stderr,"ma init %p, already owned by id = %d\n", (void*)ma, ma->owner & 0x3FFFFFFF);
     return (ma->owner & 0x3FFFFFFF);                           // area already initialized, return id of initializer
   }else{
-//     fprintf(stderr,"ma init %p, not owned, id = %d\n", ma, ma->owner);
-    fprintf(stderr," DEBUG: ma init %p, not owned, ", (void*)ma);
+    // fprintf(stderr," DEBUG: ma init %p, not owned, ", (void*)ma);
   }
 
   while(__sync_val_compare_and_swap(&(ma->lock), 0, me) != 0); // lock memory arena
@@ -331,8 +330,7 @@ uint32_t shmem_arena_init(
   ma->owner = me | 0x80000000u;  // flag area as initialized by me
 
   const uint32_t val = __sync_val_compare_and_swap(&(ma->lock), me, 0); // unlock memory arena and return my id
-  // fprintf(stderr,"DEBUG: memory arena %p UNlocked and owned by %d\n", ma, me);
-  fprintf(stderr," UNlocked and owned now by id = %d\n", me - 1);
+  // fprintf(stderr,"DEBUG: UNlocked and owned now by id = %d\n", me - 1);
   return val;
 }
 

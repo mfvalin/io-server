@@ -40,26 +40,26 @@ module distributed_circular_buffer_module
     private
     type(C_PTR) :: c_buffer = C_NULL_PTR !< Pointer to the C struct containing all distributed circular buffer info
   contains
-    procedure :: is_valid           !< distributed_circular_buffer_module::is_valid
-    procedure :: create_bytes       !< distributed_circular_buffer_module::create_bytes
-    procedure :: delete             !< distributed_circular_buffer_module::delete
-    procedure :: print              !< distributed_circular_buffer_module::print
-    procedure :: put_elems          !< distributed_circular_buffer_module::put_elems
-    procedure :: get_elems          !< distributed_circular_buffer_module::get_elems
-    procedure :: peek_elems         !< distributed_circular_buffer_module::peek_elems
-    procedure :: get_num_elements   !< distributed_circular_buffer_module::get_num_elements
-    procedure :: get_num_spaces     !< distributed_circular_buffer_module::get_num_spaces
-    procedure :: get_channel_id     !< distributed_circular_buffer_module::get_channel_id
+    procedure :: is_valid => dcb_is_valid !< distributed_circular_buffer_module::dcb_is_valid
+    procedure :: create_bytes             !< distributed_circular_buffer_module::create_bytes
+    procedure :: delete                   !< distributed_circular_buffer_module::delete
+    procedure :: print                    !< distributed_circular_buffer_module::print
+    procedure :: put_elems                !< distributed_circular_buffer_module::put_elems
+    procedure :: get_elems                !< distributed_circular_buffer_module::get_elems
+    procedure :: peek_elems               !< distributed_circular_buffer_module::peek_elems
+    procedure :: get_num_elements         !< distributed_circular_buffer_module::get_num_elements
+    procedure :: get_num_spaces           !< distributed_circular_buffer_module::get_num_spaces
+    procedure :: get_channel_id           !< distributed_circular_buffer_module::get_channel_id
     procedure :: get_server_bound_server_id    !< distributed_circular_buffer_module::get_server_bound_server_id
     procedure :: get_server_bound_client_id    !< distributed_circular_buffer_module::get_server_bound_client_id
     procedure :: get_num_server_bound_clients  !< distributed_circular_buffer_module::get_num_server_bound_clients
     procedure :: get_num_server_consumers      !< distributed_circular_buffer_module::get_num_server_consumers
     GENERIC :: get_capacity => get_capacity_local, get_capacity_server !< Get the capacity of this buffer
-    procedure :: get_capacity_local !< distributed_circular_buffer_module::get_capacity_local
-    procedure :: get_capacity_server !< distributed_circular_buffer_module::get_capacity_server
-    procedure :: start_listening    !< distributed_circular_buffer_module::start_listening
-    procedure :: server_barrier     !< distributed_circular_buffer_module::server_barrier
-    procedure :: full_barrier       !< distributed_circular_buffer_module::full_barrier
+    procedure :: get_capacity_local   !< distributed_circular_buffer_module::get_capacity_local
+    procedure :: get_capacity_server  !< distributed_circular_buffer_module::get_capacity_server
+    procedure :: start_listening      !< distributed_circular_buffer_module::start_listening
+    procedure :: server_barrier       !< distributed_circular_buffer_module::server_barrier
+    procedure :: full_barrier         !< distributed_circular_buffer_module::full_barrier
     ! final     :: dcb_finalize
   end type distributed_circular_buffer
 
@@ -67,7 +67,7 @@ contains
 
   !> Check if the buffer is valid: it has been successfully created, has not yet been destroyed and passes some integrity checks
   !> \sa DCB_check_integrity
-  function is_valid(this)
+  function dcb_is_valid(this) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(in) :: this
     logical :: is_valid !< Whether this buffer is usable
@@ -79,25 +79,34 @@ contains
         is_valid = .true.
       end if
     end if
-  end function is_valid
+  end function dcb_is_valid
 
   !> Create and initialize a distributed circular buffer. See DCB_create. This is a collective call
   !> If there already was an underlying DCB, it will be deleted
-  function create_bytes(this, communicator, server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound) result(is_valid)
+  function create_bytes(this, communicator, server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound, verbose) result(is_valid)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
-    type(MPI_Comm),    intent(in)                        :: communicator            !< MPI communicator common to all processes that share this buffer
-    type(MPI_Comm),    intent(in)                        :: server_communicator     !< MPI communicator between the server processes only
-    integer(C_INT),    intent(in)                        :: communication_type      !< Whether this process is for server- or client-bound CBs, or just a communication channel
-    integer(C_SIZE_T), intent(in)                        :: num_bytes_server_bound  !< How many bytes of data can be stored in server-bound buffers
-    integer(C_SIZE_T), intent(in)                        :: num_bytes_client_bound  !< How many bytes of data can be stored in client-bound buffers
+    class(distributed_circular_buffer), intent(inout) :: this !< [in,out] The DCB we're creating
+    type(MPI_Comm),    intent(in) :: communicator             !< MPI communicator common to all processes that share this buffer
+    type(MPI_Comm),    intent(in) :: server_communicator      !< MPI communicator between the server processes only
+    integer(C_INT),    intent(in) :: communication_type       !< Whether this process is for server- or client-bound CBs, or just a communication channel
+    integer(C_SIZE_T), intent(in) :: num_bytes_server_bound   !< How many bytes of data can be stored in server-bound buffers
+    integer(C_SIZE_T), intent(in) :: num_bytes_client_bound   !< How many bytes of data can be stored in client-bound buffers
+    logical, optional, intent(in) :: verbose                  !< [optional] Whether to print some info
     logical :: is_valid !< .true. if the creation was a success, .false. otherwise
+
+    integer(C_INT) :: verbose_flag
 
     if (this % is_valid()) then
       call this % delete()
     end if
 
-    this % c_buffer = DCB_create(communicator % mpi_val, server_communicator % mpi_val, communication_type, num_bytes_server_bound, num_bytes_client_bound)
+    verbose_flag = 0
+    if (present(verbose)) then
+      if (verbose) verbose_flag = 1
+    end if
+
+    this % c_buffer = DCB_create(communicator % mpi_val, server_communicator % mpi_val, communication_type,       &
+                                 num_bytes_server_bound, num_bytes_client_bound, verbose_flag)
     is_valid = this % is_valid()
   end function create_bytes
 

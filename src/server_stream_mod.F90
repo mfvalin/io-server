@@ -129,7 +129,7 @@ contains
       this % name = this % make_full_filename(file_name)
 
       open(newunit = this % unit, file = this % name, status = 'replace', form = 'unformatted')
-      print '(A, A, A, I4, A, I6, A, I4)', 'Opened file, name = ', this % name, ', stream = ', this % stream_id, ', unit = ', this % unit, ', owner ID = ', this % owner_id
+      ! print '(A, A, A, I4, A, I6, A, I4)', 'Opened file, name = ', this % name, ', stream = ', this % stream_id, ', unit = ', this % unit, ', owner ID = ', this % owner_id
       this % status = STREAM_STATUS_OPEN
       success = .true.
     else if (this % name .ne. this % make_full_filename(file_name)) then
@@ -420,9 +420,9 @@ contains
     ! Try again a few times, after waiting a bit, instead of just crashing right away
     do i = 1, MAX_NUM_ATTEMPTS
       if (.not. success) then
-        print '(I2, A, I2, A, I4, A, I3, A)', this % server_id, ' DEBUG: Could not put the data into the grid for owner ', &
-            this % shared_instance % get_owner_id(), '. Trying again in ', &
-            WAIT_TIME_US / 1000, ' ms (', MAX_NUM_ATTEMPTS - i, ' attempts left)'
+        print '(I2, A, I2, A, F5.2, A)', this % server_id, ' WARNING: Could not put the data into the grid for owner ', &
+            this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
+            (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, 's'
 
         num_flushed = this % flush_data() ! Try to flush any completed grid
 

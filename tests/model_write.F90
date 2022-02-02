@@ -412,6 +412,7 @@ program pseudomodelandserver
 
   integer :: num_server_processes     ! excluding no_op processes
   integer :: num_receiver_processes
+  integer :: num_grid_processors
   integer :: num_channels
   integer :: num_relay_per_node, num_noop
   integer :: num_model_per_node
@@ -426,36 +427,35 @@ program pseudomodelandserver
   call MPI_Comm_size(MPI_COMM_WORLD, global_size)
   call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
 
-  if (command_argument_count() < 4) then
+  if (command_argument_count() < 5) then
     if (global_rank == 0) then
       print *, 'ERROR: Need more arguments when launching this program:'
       print *, '1. Whether to activate debug mode (0 or 1)'
-      print *, '2. How many "active" server processes you want'
-      print *, '3. How many channel processes you want'
-      print *, '4. How many relay processes there should be on each model node'
+      print *, '2. How many "grid processor" server processes you want'
+      print *, '3. How many receiver server processes you want'
+      print *, '4. How many channel processes you want'
+      print *, '5. How many relay processes there should be on each model node'
     end if
     error stop 1
   end if
 
-  ! Arg 1: debug mode
   call GET_COMMAND_ARGUMENT(1, arg)
   read(arg, *) debug_mode_flag
 
-  ! Arg 2: active server processes
   call GET_COMMAND_ARGUMENT(2, arg)
+  read(arg, *) num_grid_processors
+
+  call GET_COMMAND_ARGUMENT(3, arg)
   read(arg,*) num_receiver_processes
 
-  ! Arg 3: channel processes
-  call GET_COMMAND_ARGUMENT(3, arg)
+  call GET_COMMAND_ARGUMENT(4, arg)
   read(arg, *) num_channels
 
-
-  ! Arg 4: relay processes per model node
-  call GET_COMMAND_ARGUMENT(4, arg)
+  call GET_COMMAND_ARGUMENT(5, arg)
   read(arg,*) num_relay_per_node
 
   server_node          = am_server_node(node_rank, node_size, single_node, num_nodes)
-  num_server_processes = num_receiver_processes + num_channels
+  num_server_processes = num_receiver_processes + num_channels + num_grid_processors
   num_noop             = 0
 
   model_fn_ptr => pseudo_model_process
@@ -467,11 +467,9 @@ program pseudomodelandserver
 
   if (debug_mode_flag == 1) params % debug_mode = .true.
 
-  params % num_server_noop = 0
-  if (.not. single_node) params % num_server_noop = node_size - num_server_processes
-
   params % num_relay_per_node      = num_relay_per_node
   params % num_server_bound_server = num_receiver_processes
+  params % num_grid_processors     = num_grid_processors
   params % num_channels            = num_channels
 
   params % dcb_server_bound_size_mb = 500.0
@@ -489,7 +487,7 @@ program pseudomodelandserver
 
   call MPI_Finalize()
 
-  if (server_node .and. node_rank == 0 .and. debug_mode_flag .ne. 2) then
+  if (server_node .and. node_rank == 0) then
     block
       integer :: num_model_pes
       if (single_node) then

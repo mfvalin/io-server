@@ -216,7 +216,8 @@ distributed_circular_buffer_p DCB_create(
     MPI_Comm      server_communicator,    //!< [in] Communicator that groups server processes (should be MPI_COMM_NULL on client processes)
     const int32_t communication_type,     //!< [in] Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
     const size_t  num_bytes_server_bound, //!< [in] Number of bytes in a single server-bound circular buffer (only needed on the root process)
-    const size_t  num_bytes_client_bound  //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
+    const size_t  num_bytes_client_bound, //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
+    const int     verbose                 //!< [in] Whether to print some DCB info (if == 1)
 );
 int64_t DCB_get_available_data(
     distributed_circular_buffer_p buffer,   //!< [in] DCB we are querying

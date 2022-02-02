@@ -1090,7 +1090,8 @@ distributed_circular_buffer_p DCB_create(
     MPI_Comm      server_communicator,    //!< [in] Communicator that groups server processes (should be MPI_COMM_NULL on client processes)
     const int32_t communication_type,     //!< [in] Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
     const size_t  num_bytes_server_bound, //!< [in] Number of bytes in a single server-bound circular buffer (only needed on the root process)
-    const size_t  num_bytes_client_bound  //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
+    const size_t  num_bytes_client_bound, //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
+    const int     verbose                 //!< [in] Whether to print some DCB info (if == 1)
     )
 //C_EnD
 {
@@ -1126,11 +1127,11 @@ distributed_circular_buffer_p DCB_create(
   // Wait until everyone (especially the clients, at this point) is properly initialized before allowing the use of the buffer
   MPI_Barrier(buffer->communicator);
 
-  if (is_root(buffer))
+  if (is_root(buffer) && verbose == 1)
     print_control_metadata(&buffer->control_metadata, buffer->control_data);
 
   if (DCB_check_integrity(buffer, 1) < 0) {
-    printf("AAAHHHh just-created DCB is not consistent!!!!\n");
+    printf("ERROR: just-created DCB is not consistent!!!!\n");
     return NULL;
   }
 
@@ -1140,7 +1141,7 @@ distributed_circular_buffer_p DCB_create(
 }
 
 //F_StArT
-//  function DCB_create(f_communicator, f_server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound) result(p) BIND(C, name = 'DCB_create_f')
+//  function DCB_create(f_communicator, f_server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound, verbose) result(p) BIND(C, name = 'DCB_create_f')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
 //    integer(C_INT),    intent(IN), value :: f_communicator         !< Communicator on which the distributed buffer is shared
@@ -1148,6 +1149,7 @@ distributed_circular_buffer_p DCB_create(
 //    integer(C_INT),    intent(IN), value :: communication_type     !< Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
 //    integer(C_SIZE_T), intent(IN), value :: num_bytes_server_bound !< Number of bytes in a single server-bound circular buffer (only needed on the root process)
 //    integer(C_SIZE_T), intent(IN), value :: num_bytes_client_bound !< Number of bytes in a single client-bound circular buffer (only needed on the root process)
+//    integer(C_INT),    intent(IN), value :: verbose                !< Print some info when == 1
 //    type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer
 //   end function DCB_create
 //F_EnD
@@ -1157,10 +1159,11 @@ distributed_circular_buffer_p DCB_create_f(
     int32_t f_server_communicator,  //!< [in] Communicator that groups server processes (in Fortran)
     int32_t communication_type,     //!< [in] Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
     size_t  num_bytes_server_bound, //!< [in] Number of bytes in a single server-bound circular buffer (only needed on the root process)
-    size_t  num_bytes_client_bound  //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
+    size_t  num_bytes_client_bound, //!< [in] Number of bytes in a single client-bound circular buffer (only needed on the root process)
+    int     verbose                 //!< [in] Print some info when == 1
 ) {
   return DCB_create(
-      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), communication_type, num_bytes_server_bound, num_bytes_client_bound);
+      MPI_Comm_f2c(f_communicator), MPI_Comm_f2c(f_server_communicator), communication_type, num_bytes_server_bound, num_bytes_client_bound, verbose);
 }
 
 //F_StArT

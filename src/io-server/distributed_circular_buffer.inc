@@ -42,7 +42,7 @@ import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_sync_window
-function DCB_create(f_communicator, f_server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound) result(p) BIND(C, name = 'DCB_create_f')
+function DCB_create(f_communicator, f_server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound, verbose) result(p) BIND(C, name = 'DCB_create_f')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
 integer(C_INT),    intent(IN), value :: f_communicator         !< Communicator on which the distributed buffer is shared
@@ -50,6 +50,7 @@ integer(C_INT),    intent(IN), value :: f_server_communicator  !< Communicator t
 integer(C_INT),    intent(IN), value :: communication_type     !< Communication type of the calling process (server-bound, client-bound or channel, DCB_*_TYPE)
 integer(C_SIZE_T), intent(IN), value :: num_bytes_server_bound !< Number of bytes in a single server-bound circular buffer (only needed on the root process)
 integer(C_SIZE_T), intent(IN), value :: num_bytes_client_bound !< Number of bytes in a single client-bound circular buffer (only needed on the root process)
+integer(C_INT),    intent(IN), value :: verbose                !< Print some info when == 1
 type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer
 end function DCB_create
 subroutine DCB_print(buffer, dump_data) BIND(C, name = 'DCB_print')

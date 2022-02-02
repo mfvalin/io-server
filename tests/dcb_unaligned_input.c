@@ -126,14 +126,14 @@ int main(int argc, char** argv)
         MPI_Comm server_comm;
         MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, &server_comm);
         if (global_rank == 0)
-            dcb = DCB_create(MPI_COMM_WORLD, server_comm, DCB_SERVER_BOUND_TYPE, NUM_BUFFER_BYTES, 0);
+            dcb = DCB_create(MPI_COMM_WORLD, server_comm, DCB_SERVER_BOUND_TYPE, NUM_BUFFER_BYTES, 0, 1);
         else
-            dcb = DCB_create(MPI_COMM_WORLD, server_comm, DCB_CHANNEL_TYPE, NUM_BUFFER_BYTES, 0);
+            dcb = DCB_create(MPI_COMM_WORLD, server_comm, DCB_CHANNEL_TYPE, NUM_BUFFER_BYTES, 0, 1);
     }
     else {
         MPI_Comm producer_comm;
         MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, &producer_comm);
-        dcb = DCB_create(MPI_COMM_WORLD, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0, 0);
+        dcb = DCB_create(MPI_COMM_WORLD, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0, 0, 1);
     }
 
     if (dcb == NULL) {
