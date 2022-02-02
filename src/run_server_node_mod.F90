@@ -28,7 +28,7 @@ module run_server_node_module
   implicit none
   private
 
-  public :: run_server_node
+  public :: run_server_node, server_function_template
 
   type, private :: server_receiver_state
     private
@@ -37,16 +37,52 @@ module run_server_node_module
     integer(C_INT64_T), dimension(:), pointer, contiguous :: model_data => NULL()
   end type server_receiver_state
 
+  abstract interface
+    function server_function_template(context) result(server_success)
+      import ioserver_context
+      implicit none
+      type(ioserver_context), intent(inout) :: context !< IO server context with which the server process will operate
+      logical :: server_success !< Whether the function terminated successfully
+    end function server_function_template
+  end interface
+
 contains
 
-function run_server_node(params) result(success)
+function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn, custom_grid_processor_fn) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
+  procedure(server_function_template),  intent(in), pointer, optional :: custom_channel_fn
+  procedure(server_function_template),  intent(in), pointer, optional :: custom_server_bound_fn
+  procedure(server_function_template),  intent(in), pointer, optional :: custom_model_bound_fn
+  procedure(server_function_template),  intent(in), pointer, optional :: custom_grid_processor_fn
   logical :: success
   
   type(ioserver_context) :: context
+  procedure(server_function_template), pointer :: channel_fn
+  procedure(server_function_template), pointer :: receiver_fn
+  procedure(server_function_template), pointer :: producer_fn
+  procedure(server_function_template), pointer :: grid_processor_fn
 
   success = .false.
+
+  ! Set up functions to call
+  channel_fn        => default_channel
+  receiver_fn       => default_server_bound
+  producer_fn       => default_model_bound
+  grid_processor_fn => default_grid_processor
+
+  if (present(custom_channel_fn)) then
+    if (associated(custom_channel_fn)) channel_fn => custom_channel_fn
+  end if
+  if (present(custom_server_bound_fn)) then
+    if (associated(custom_server_bound_fn)) receiver_fn => custom_server_bound_fn
+  end if
+  if (present(custom_model_bound_fn)) then
+    if (associated(custom_model_bound_fn)) producer_fn => custom_model_bound_fn
+  end if
+  if (present(custom_grid_processor_fn)) then
+    if (associated(custom_grid_processor_fn)) grid_processor_fn => custom_grid_processor_fn
+  end if
 
   if (.not. params % is_on_server) then
     print *, 'ERROR: Trying to launch the server node, but setting "is_on_server = .false."'
@@ -62,25 +98,30 @@ function run_server_node(params) result(success)
 
   success = .false.
   if (context % is_channel()) then
-    call channel_process(context)
+    success = channel_fn(context)
   else if (context % is_server_bound()) then
-    call server_bound_server_process(context)
+    success = receiver_fn(context)
   else if (context % is_model_bound()) then
-    call model_bound_server_process(context)
+    success = producer_fn(context)
   else if (context % is_grid_processor()) then
+    success = grid_processor_fn(context)
   else
     print *, 'ERROR: Server process is not of a known type.'
     return
   end if
 
-  call context % finalize()
+  if (.not. success) then
+    print *, 'ERROR: Running server process'
+    return
+  end if
 
-  success = .true.
+  call context % finalize()
 end function run_server_node
 
-subroutine server_bound_server_process(context)
+function default_server_bound(context) result(server_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
+  logical :: server_success
 
   type(comm_rank_size)                :: consumer_crs
   type(distributed_circular_buffer)   :: data_buffer
@@ -94,6 +135,7 @@ subroutine server_bound_server_process(context)
   integer :: num_errors
 
   num_errors = 0
+  server_success = .false.
 
   ! Prepare reception of messages
   data_buffer = context % get_dcb()
@@ -158,29 +200,47 @@ subroutine server_bound_server_process(context)
     end do
     if (num_errors > 0) error stop 1
   end if
-end subroutine server_bound_server_process
 
-subroutine model_bound_server_process(context)
+  server_success = .true.
+end function default_server_bound
+
+function  default_model_bound(context) result(server_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
+  logical :: server_success
 
+  server_success = .false.
   if (context % debug_mode()) print *, 'DEBUG: Model-bound server process'
-end subroutine model_bound_server_process
+  server_success = .true.
+end function default_model_bound
 
-subroutine channel_process(context)
+function default_channel(context) result(channel_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
+  logical :: channel_success
 
   type(distributed_circular_buffer) :: dcb
-  logical :: success
+
+  channel_success = .false.
 
   dcb = context % get_dcb()
   if (dcb % get_channel_id() >= 0) then
-    success = dcb % start_listening()
+    channel_success = dcb % start_listening()
   else
     print *, 'ERROR: Channel process does not seem to be a channel within the DCB'
   end if
-end subroutine channel_process
+end function default_channel
+
+function default_grid_processor(context) result(server_success)
+  implicit none
+  type(ioserver_context), intent(inout) :: context
+  logical :: server_success
+  server_success = .false.
+
+  if (context % debug_mode()) print *, 'DEBUG: Grid processor process'
+  
+  server_success = .true.
+end function default_grid_processor
 
 function receive_message(context, dcb, client_id, state) result(finished)
   implicit none

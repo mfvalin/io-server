@@ -105,7 +105,7 @@ contains
     end if
   end function am_server_node
 
-  subroutine pseudo_model_process(context)
+  function pseudo_model_process(context) result(model_success)
     use heap_module
     use ioserver_context_module
     use ioserver_message_module
@@ -113,6 +113,7 @@ contains
     implicit none
 
     type(ioserver_context), intent(inout) :: context
+    logical :: model_success
 
     type(heap)            :: node_heap
     type(model_stream)    :: output_stream_1, output_stream_2
@@ -136,13 +137,13 @@ contains
     output_stream_1 = context % open_stream_model(filename1)
     if (.not. output_stream_1 % is_open()) then
       print *, 'Unable to open model file 1 !!!!'
-      error stop 1
+      return
     end if
 
     output_stream_2 = context % open_stream_model(filename2)
     if (.not. output_stream_2 % is_open()) then
       print *, 'Unable to open model file 2 !!!!'
-      error stop 1
+      return
     end if
 
     model_crs = context % get_crs(MODEL_COLOR)
@@ -153,7 +154,7 @@ contains
     data_buffer = context % get_server_bound_cb()
     if (.not. data_buffer % is_valid()) then
       print *, 'ERROR: CB received from context is not valid!'
-      error stop 1
+      return
     end if
 
     if (context % debug_mode()) print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
@@ -247,7 +248,7 @@ contains
 
         if (.not. success) then
           print *, 'ERROR: Write into model stream failed'
-          error stop 1
+          return
         end if
 
         !------------------------
@@ -287,7 +288,7 @@ contains
         success = output_stream_2 % write(big_array_info, big_local_grid, big_grid, output_grid) .and. success
         if (.not. success) then
           print *, 'ERROR while trying to do a WRITE'
-          error stop 1
+          return
         end if
 
         call sleep_us(5000)
@@ -298,9 +299,11 @@ contains
     success = output_stream_2 % close() .and. success
     if (.not. success) then
       print *, 'Unable to close model file!!!!'
-      error stop 1
+      return
     end if
-  end subroutine pseudo_model_process
+
+    model_success = .true.
+  end function pseudo_model_process
 
   !> Verify that one of the files written during the test contains the proper values, with
   !> the correct structure
@@ -418,7 +421,7 @@ program pseudomodelandserver
   integer :: num_model_per_node
 
   type(ioserver_input_parameters) :: params
-  procedure(ioserver_function_template), pointer :: model_fn_ptr
+  procedure(model_function_template), pointer :: model_fn_ptr
   logical :: success
 
   success = .false.

@@ -206,9 +206,6 @@ module ioserver_context_module
 
     ! ------------------
     !> @{ \name Miscellaneous
-    type(C_FUNPTR) :: io_relay_fn  = C_NULL_FUNPTR !< Procedure to call on relay processes (if not NULL)
-    type(C_FUNPTR) :: io_server_fn = C_NULL_FUNPTR !< Procedure to call on server processes (if not NULL)
-
     integer, dimension(:), pointer :: iocolors => NULL()     !< Color table for io server and relay processes
     type(ioserver_messenger), pointer :: messenger => NULL() !< Will be shared among open model files
     !> @}
@@ -273,8 +270,6 @@ module ioserver_context_module
 
     !> @{ \name Process function management
     procedure, pass         :: no_op => IOserver_noop
-    procedure, pass, public :: set_relay_fn  => IOserver_set_relay
-    procedure, pass, public :: set_server_fn => IOserver_set_server
     procedure, pass, public :: set_debug => IOserver_set_debug
     !> @}
 
@@ -688,23 +683,6 @@ subroutine IOserver_set_debug(context, mode)
   if (present(mode)) context % params % debug_mode = mode
   print *, 'INFO: debug mode =', context % debug_mode()
 end subroutine IOserver_set_debug
-
-!> Set the function that will be called by relay PEs to do their work
-subroutine IOserver_set_relay(context, fn) 
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-  external :: fn
-  context % io_relay_fn = C_FUNLOC(fn)
-end subroutine IOserver_set_relay
-
-!> [unused] Set the function that will be called by server PEs to do their work
-subroutine IOserver_set_server(context, fn)  ! set server function to call to fn
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-  external :: fn
-  context % io_server_fn = C_FUNLOC(fn)
-  return
-end subroutine IOserver_set_server
 
 !> NO OP loop to park processes with minimal CPU consumption
 subroutine IOserver_noop(context) 
@@ -1537,8 +1515,6 @@ function IOserver_init(context, params) result(success)
   type(ioserver_input_parameters), intent(in)    :: params  !< All details about how it should be initialized
   logical :: success
 
-  procedure(), pointer :: p
-
   success = .false.
 
   if (.not. check_cb_jar_elem()) then
@@ -1551,46 +1527,17 @@ function IOserver_init(context, params) result(success)
   success = context % init_communicators()
 
   if (.not. success) then
-    print *, 'ERROR were not able to properly initialize all communicators!'
+    print *, 'ERROR: Could not properly initialize all communicators!'
     return
   end if
 
   success = context % init_shared_mem()
 
   if (.not. success) then
-    print *, 'There were errors during shared memory initialization'
+    print *, 'ERROR: There were errors during shared memory initialization'
     return
   end if
 
-  ! ====================================================================================
-  !            RELAY processes (no return to caller if io_relay_fn is defined)
-  ! ====================================================================================
-  if (context % is_relay()) then                    ! IO relay process, check if caller supplied relay routine
-
-    if (C_ASSOCIATED(context % io_relay_fn)) then             ! caller supplied subroutine to be called on relay PEs
-      if (context % debug_mode()) print *, 'INFO: io_relay_fn is associated'
-      call C_F_PROCPOINTER(context % io_relay_fn, p)          ! associate procedure pointer with caller supplied address
-
-      ! call user supplied relay code that may or may not return
-      if (context % debug_mode()) write(6,*) 'INFO: no return from io_relay_fn'
-      call p()    ! PLACEHOLDER CODE TO BE ADJUSTED when API is finalized
-
-      call context % local_dcb % delete()
-      call context % set_time_to_quit()         ! activate quit signal for NO-OP PEs
-      if (context % debug_mode()) write(6,*) 'FINAL: model+io node PE', context % model_relay_smp_rank + 1, '  of', context % model_relay_smp_size
-      call MPI_Finalize()                       ! DO NOT return to caller, call finalize, then stop
-      stop
-
-    else                                        ! IO relay process on model node
-      if (context % debug_mode()) print *,'INFO: io_relay_fn is not associated'
-      ! IO relay, back to caller, with relay status code, caller will call relay subroutine
-    endif
-  endif
-
-  return
 end function IOserver_init
 
 end module ioserver_context_module
-!  ==========================================================================================
-!                                           END OF MODULE
-!  ==========================================================================================

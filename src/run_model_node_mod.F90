@@ -26,27 +26,36 @@ module run_model_node_module
   implicit none
   private
 
-  public :: run_model_node, ioserver_function_template
+  public :: run_model_node, model_function_template, relay_function_template
 
   abstract interface
-    subroutine ioserver_function_template(context)
+    function model_function_template(context) result(model_success)
       import ioserver_context
       implicit none
-      type(ioserver_context), intent(inout) :: context
-    end subroutine ioserver_function_template
+      type(ioserver_context), intent(inout) :: context !< IO server context with which the model will operate
+      logical :: model_success !< Whether the function terminated successfully
+    end function model_function_template
+
+    function relay_function_template(context) result(relay_success)
+      import ioserver_context
+      implicit none
+      type(ioserver_context), intent(inout) :: context !< IO server context with which the relay will operate
+      logical :: relay_success !< Whether the function terminated successfully
+    end function relay_function_template
   end interface
 
 contains
 
-function run_model_node(params, custom_server_bound_relay_function, model_function) result(success)
+function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound_relay_fn, model_function) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
-  procedure(ioserver_function_template), pointer, intent(in), optional :: custom_server_bound_relay_function
-  procedure(ioserver_function_template), pointer, intent(in), optional :: model_function
+  procedure(relay_function_template), pointer, intent(in), optional :: custom_server_bound_relay_fn
+  procedure(relay_function_template), pointer, intent(in), optional :: custom_model_bound_relay_fn
+  procedure(model_function_template), pointer, intent(in), optional :: model_function
   logical :: success
 
   type(ioserver_context) :: context
-  procedure(ioserver_function_template), pointer :: server_bound_relay_fn, model_fn
+  procedure(model_function_template), pointer :: server_bound_relay_fn, model_bound_relay_fn, model_fn
 
   success = .false.
 
@@ -55,12 +64,17 @@ function run_model_node(params, custom_server_bound_relay_function, model_functi
     return
   end if
 
-  server_bound_relay_fn => server_bound_relay_process
-  if (present(custom_server_bound_relay_function)) then
-    if (associated(custom_server_bound_relay_function)) server_bound_relay_fn => custom_server_bound_relay_function
+  server_bound_relay_fn => default_server_bound_relay
+  if (present(custom_server_bound_relay_fn)) then
+    if (associated(custom_server_bound_relay_fn)) server_bound_relay_fn => custom_server_bound_relay_fn
   end if
 
-  model_fn => pseudo_model_process
+  model_bound_relay_fn => default_model_bound_relay
+  if (present(custom_model_bound_relay_fn)) then
+    if (associated(custom_model_bound_relay_fn)) model_bound_relay_fn => custom_model_bound_relay_fn
+  end if
+
+  model_fn => default_model
   if (present(model_function)) then
     if (associated(model_function)) model_fn => model_function
   end if
@@ -74,13 +88,12 @@ function run_model_node(params, custom_server_bound_relay_function, model_functi
 
   success = .false.
   if (context % is_model()) then
-    call model_fn(context)
+    success = model_fn(context)
   else if (context % is_relay()) then
     if (context % is_server_bound()) then
-      ! call server_bound_relay_process(context)
-      call server_bound_relay_fn(context)
+      success = server_bound_relay_fn(context)
     else if (context % is_model_bound()) then
-      call model_bound_relay_process(context)
+      success = model_bound_relay_fn(context)
     else
       print *, 'ERROR: Relay is neither server-bound nor model-bound'
       return
@@ -90,13 +103,16 @@ function run_model_node(params, custom_server_bound_relay_function, model_functi
     return
   end if
 
-  call context % finalize()
+  if (.not. success) then
+    print *, 'ERROR: Running process on model node'
+    return
+  end if
 
-  success = .true.
+  call context % finalize()
 
 end function run_model_node
 
-subroutine server_bound_relay_process(context)
+function default_server_bound_relay(context) result(relay_success)
   use ISO_C_BINDING
 
   use circular_buffer_module
@@ -106,6 +122,7 @@ subroutine server_bound_relay_process(context)
   implicit none
 
   type(ioserver_context), intent(inout) :: context
+  logical :: relay_success
 
   integer, parameter :: MAX_DCB_MESSAGE_SIZE_INT = 10000000
 
@@ -137,6 +154,8 @@ subroutine server_bound_relay_process(context)
   integer              :: jar_ok
   integer(JAR_ELEMENT) :: num_jar_elem
   integer, dimension(:), allocatable :: latest_tags ! Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
+
+  relay_success = .false.
 
   ! Retrieve useful data structures
   cb_list     => context % get_server_bound_cb_list()
@@ -189,7 +208,7 @@ subroutine server_bound_relay_process(context)
 
   if (.not. success) then
     print *, 'ERROR: Failed saying HI to the consumer...'
-    error stop 1
+    return
   end if
 
   ! Main loop (until all model PEs have sent their STOP signal)
@@ -218,7 +237,7 @@ subroutine server_bound_relay_process(context)
       if (.not. success .or. header % header_tag .ne. MSG_HEADER_TAG) then
         print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', header % message_tag, MSG_HEADER_TAG, &
               ', relay id ', local_relay_id
-        error stop 1
+        return
       end if
 
       ! Skip this model process if we still need to deal with much lower message tags
@@ -248,7 +267,7 @@ subroutine server_bound_relay_process(context)
 
         if (.not. success) then
           print *, 'ERROR Could not get record from data message'
-          error stop 1
+          return
         end if
 
         num_data_int8 = num_char_to_num_int8(record % data_size_byte)                 ! Get data size in the proper units
@@ -287,7 +306,7 @@ subroutine server_bound_relay_process(context)
       else
         print *, 'ERROR: Unknown message type'
         call print_message_header(header)
-        error stop 1
+        return
       end if
 
       !----------------------------------
@@ -297,7 +316,8 @@ subroutine server_bound_relay_process(context)
         print *, 'ERROR We have a problem with message size (end cap does not match)'
         call print_message_header(header)
         print *, end_cap % cap_tag, end_cap % msg_length, success, content_size
-        error stop 1
+        success = .false.
+        return
       end if
 
       !------------------------------------
@@ -308,12 +328,12 @@ subroutine server_bound_relay_process(context)
 
         if (.not. success) then
           print *, 'ERROR sending message from relay to server!'
-          error stop 1
+          return
         end if
 
         if (total_message_size_int8 > dcb_message_jar % usable()) then
           print *, 'ERROR: Too much data to fit in jar...', total_message_size_int8, dcb_message_jar % usable()
-          error stop 1
+          return
         end if
       end if
 
@@ -336,7 +356,7 @@ subroutine server_bound_relay_process(context)
         success = heap_list(i_compute) % free(c_data)            ! Free the shared memory
         if (.not. success) then
           print*, 'ERROR: Unable to free heap data (from RELAY)'
-          error stop 1
+          return
         end if
 
       else if (header % command == MSG_COMMAND_OPEN_FILE) then
@@ -363,7 +383,7 @@ subroutine server_bound_relay_process(context)
 
         if (.not. success) then
           print *, 'ERROR sending message from relay to server!'
-          error stop 1
+          return
         end if
       end if
     end if
@@ -377,7 +397,7 @@ subroutine server_bound_relay_process(context)
 
     if (.not. success) then
       print *, 'ERROR sending remaining data!'
-      error stop 1
+      return
     end if
   end if
 
@@ -393,16 +413,23 @@ subroutine server_bound_relay_process(context)
     ! end do
   end if
 
-end subroutine server_bound_relay_process
+  relay_success = .true.
 
-subroutine model_bound_relay_process(context)
+end function default_server_bound_relay
+
+function default_model_bound_relay(context) result(relay_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
+  logical :: relay_success
+
+  relay_success = .false.
 
   if (context % debug_mode()) print *, 'Model-bound relay process'
-end subroutine model_bound_relay_process
 
-subroutine pseudo_model_process(context)
+  relay_success = .true.
+end function default_model_bound_relay
+
+function default_model(context) result(model_success)
   use mpi_f08
 
   use heap_module
@@ -411,30 +438,35 @@ subroutine pseudo_model_process(context)
   implicit none
 
   type(ioserver_context), intent(inout) :: context
+  logical :: model_success
 
   type(model_stream)    :: output_stream_1
   type(circular_buffer) :: data_buffer
   logical :: success
 
-  print *, 'Using default pseudo-model function. This does not do much.'
+  model_success = .false.
+
+  if (context % debug_mode()) print *, 'Using default pseudo-model function. This does not do much.'
 
   output_stream_1 = context % open_stream_model('pseudo_model_results_1')
   if (.not. output_stream_1 % is_open()) then
     print *, 'Unable to open model file 1 !!!!'
-    error stop 1
+    return
   end if
 
   data_buffer = context % get_server_bound_cb()
   if (.not. data_buffer % is_valid()) then
     print *, 'ERROR: CB received from context is not valid!'
-    error stop 1
+    return
   end if
 
   success = output_stream_1 % close()
   if (.not. success) then
     print *, 'Unable to close model file!!!!'
-    error stop 1
+    return
   end if
-end subroutine pseudo_model_process
+
+  model_success = .true.
+end function default_model
 
 end module run_model_node_module
