@@ -149,6 +149,7 @@ module ioserver_context_module
     type(MPI_Comm) :: server_work_comm            = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm)
     type(MPI_Comm) :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_work_comm)
     type(MPI_Comm) :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_work_comm)
+    type(MPI_Comm) :: grid_processor_server_comm  = MPI_COMM_NULL  !< Server PEs that process assembled grid data
 
     type(MPI_Comm) :: model_relay_smp_comm        = MPI_COMM_NULL  !< model+relays on current node
     type(MPI_Comm) :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
@@ -394,10 +395,10 @@ function open_stream_server(context, filename, stream_id) result(new_stream)
   nullify(new_stream)
   tmp_stream => context % local_server_streams(stream_id)
 
-  success = tmp_stream % open(filename)
+  success = tmp_stream % request_open(filename)
   
   if (.not. success) then
-    print *, 'ERROR: Unable to properly open stream file ', filename, stream_id
+    print *, 'ERROR: Unable to properly open stream file (request) ', filename, stream_id
     error stop 1
   end if
 
@@ -872,7 +873,7 @@ subroutine print_shared_mem_sizes(context)
     print '(A,F8.1,A)', '(Model node)  Server-bound CB:    ', context % params % server_bound_cb_size_mb, ' MB'
     print '(A,F8.1,A)', '(Model node)  Model-bound CB:     ', context % params % model_bound_cb_size_mb, ' MB'
     if (context % is_relay()) then
-      print '(A,F8.1,A)', '(Relay)  Server-bound DCB:        ', &
+      print '(A,F8.1,A)', '(Relay)       Server-bound DCB:   ', &
         real(context % local_dcb % get_capacity_local(CB_KIND_CHAR), kind=4) / MBYTE, ' MB'
     end if
   end if
@@ -902,8 +903,6 @@ function allocate_from_arena(context, num_bytes, name, id) result(ptr)
   ! Prepend prefix, append ID to the name
   write(full_block_name, '(A1, A4, I3.3)') prefix, name, id
   ptr = context % arena % newblock(num_bytes, full_block_name)
-
-  if (C_ASSOCIATED(ptr) .and. context % debug_mode()) print *, 'DEBUG: Allocated block from arena: ', full_block_name
 end function allocate_from_arena
 
 !> Allocate a block from the shared memory arena and create a heap in it
@@ -1116,7 +1115,7 @@ function init_communicators(context) result(success)
       else if (context % is_model_bound()) then
         call MPI_Comm_split(context % server_work_comm, MODEL_BOUND_COLOR, context % active_rank, context % model_bound_server_comm)
       else if (context % is_grid_processor()) then
-        call MPI_Comm_split(context % server_work_comm, GRID_PROCESSOR_COLOR, context % active_rank, temp_comm)
+        call MPI_Comm_split(context % server_work_comm, GRID_PROCESSOR_COLOR, context % active_rank, context % grid_processor_server_comm)
       else
         print *, 'ERROR: Unhandled server process type'
         return
@@ -1303,7 +1302,7 @@ function init_shared_mem(context) result(success)
 
   if (context % is_server()) then
     ! =========================================================================
-    ! ============================ IO server process ==========================
+    ! ============================ Server process =============================
     ! =========================================================================
 
     ! Allocate shared memory used for intra node communication between PEs on a server node
@@ -1334,22 +1333,26 @@ function init_shared_mem(context) result(success)
     end if
 
     ! Create local stream instances on server-bound PEs
-    if (context % is_server_bound()) then
+    if (context % is_server_bound() .or. context % is_grid_processor()) then
       block
         integer :: rank
         type(shared_server_stream), pointer :: tmp_ptr
-        call MPI_Comm_rank(context % server_bound_server_comm, rank)
+        if (context % is_server_bound()) then
+          call MPI_Comm_rank(context % server_bound_server_comm, rank)
+        else
+          call MPI_Comm_rank(context % grid_processor_server_comm, rank)
+        end if
         allocate(context % local_server_streams(MAX_NUM_SERVER_STREAMS))
         do i_stream = 1, MAX_NUM_SERVER_STREAMS
           tmp_ptr => context % common_server_streams(i_stream)
-          call context % local_server_streams(i_stream) % init(rank, tmp_ptr, context % node_heap)
+          call context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), tmp_ptr, context % node_heap)
         end do
       end block
     end if
 
   else
     ! =========================================================================
-    ! ======================= model compute or IO relay process ===============
+    ! ======================= model or relay process ==========================
     ! =========================================================================
 
     ! Allocate shared memory used for intra node communication between model and relay PEs
