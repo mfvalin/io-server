@@ -139,7 +139,7 @@ function default_server_bound(context) result(server_success)
 
   ! Prepare reception of messages
   data_buffer = context % get_dcb()
-  consumer_crs = context % get_crs(SERVER_COLOR + NODE_COLOR)
+  consumer_crs = context % get_crs(SERVER_COLOR + SERVER_BOUND_COLOR)
 
   if (data_buffer % get_server_bound_server_id() < 0) then
     print *, 'ERROR, server process does not seem to be a server within the DCB...'
@@ -182,10 +182,12 @@ function default_server_bound(context) result(server_success)
 
   do i_file = 1, MAX_NUM_SERVER_STREAMS
     file_ptr => context % get_stream(i_file)
-    success = context % close_stream_server(i_file, .true.)
-    if (.not. success) then
-      print *, 'ERROR: Unable to close server stream ', i_file, server_id
-      error stop 1
+    if (file_ptr % is_open()) then
+      success = context % close_stream_server(i_file)
+      if (.not. success) then
+        print *, 'ERROR: Unable to try closing server stream ', i_file, server_id
+        error stop 1
+      end if
     end if
   end do
 
@@ -200,6 +202,9 @@ function default_server_bound(context) result(server_success)
     end do
     if (num_errors > 0) error stop 1
   end if
+
+  ! Wait for all server-bound server processes to finish
+  call MPI_Barrier(consumer_crs % comm)
 
   server_success = .true.
 end function default_server_bound
@@ -235,10 +240,35 @@ function default_grid_processor(context) result(server_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
   logical :: server_success
+
+  type(local_server_stream), pointer  :: stream_ptr
+  integer :: i_stream
+  logical :: finished
+
+  type(comm_rank_size) :: grid_proc_crs
+
   server_success = .false.
 
-  if (context % debug_mode()) print *, 'DEBUG: Grid processor process'
+  grid_proc_crs = context % get_crs(GRID_PROCESSOR_COLOR)
+
+  if (context % debug_mode()) then
+    print '(A, I2, A, I2)', 'DEBUG: Grid processor process rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
+  end if
   
+  finished = .false.
+  do while (.not. finished)
+    if (context % is_time_to_quit()) finished = .true.
+    do i_stream = 1, MAX_NUM_SERVER_STREAMS
+      ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
+      stream_ptr => context % get_stream(i_stream)
+      if (.not. stream_ptr % process_file()) finished = .false.
+    end do
+  end do
+
+  if (context % debug_mode()) then
+    print '(A, I2, A, I2)', 'DEBUG: Grid processor process DONE. Rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
+  end if
+
   server_success = .true.
 end function default_grid_processor
 
@@ -279,15 +309,6 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   ! print *, 'Receiving a message'
   finished = .false.
-
-  ! Flush any completed grid for owned files
-  do i_file = 1, MAX_NUM_SERVER_STREAMS
-    stream_ptr => context % get_stream(i_file)
-    num_flushed = stream_ptr % flush_data()
-    ! if (num_flushed > 0) then
-    !   print '(A, I4, A)', 'Flushed ', num_flushed, ' completed grids'
-    ! end if
-  end do
 
   success = dcb % peek_elems(client_id, header, message_header_size_byte(), CB_KIND_CHAR)
 
@@ -372,13 +393,10 @@ function receive_message(context, dcb, client_id, state) result(finished)
   ! Close a file
   else if (header % command == MSG_COMMAND_CLOSE_FILE) then
     ! print *, 'Got CLOSE FILE message', consumer_id
-    success = context % close_stream_server(header % stream_id, .false.)
+    success = context % close_stream_server(header % stream_id)
     if (.not. success) then
-      stream_ptr => context % get_stream(header % stream_id)
-      if (stream_ptr % is_owner()) then
-        if (context % debug_mode()) print *, 'DEBUG: could not close file at this time', header % stream_id, consumer_id
-        ! error stop 1
-      end if
+      print *, 'ERROR: File does not seem closable', header % stream_id, consumer_id
+      error stop 1
     end if
 
   !----------------
@@ -389,7 +407,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !---------------------------------
   ! Stop receiving from this relay
   else if (header % command == MSG_COMMAND_RELAY_STOP) then
-    if (context % debug_mode()) print *, 'DEBUG: Got a RELAY STOP message', consumer_id
+    if (context % debug_mode()) print '(A, I3)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id
     finished = .true.
 
     ! if (associated(model_data)) then

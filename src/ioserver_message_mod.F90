@@ -28,6 +28,8 @@ module ioserver_message_module
   implicit none
   private
 
+  integer, parameter :: MAX_FILE_NAME_SIZE = 2048
+
   type, public :: ioserver_messenger
     private
     integer :: msg_tag_seq   = 0
@@ -109,6 +111,8 @@ module ioserver_message_module
   public :: message_header_size_int8, message_cap_size_int8, model_record_size_int8, cmeta_size_int8
   public :: message_header_size_byte, message_cap_size_byte, model_record_size_byte, cmeta_size_byte
   public :: print_message_header, print_model_record
+  public :: MAX_FILE_NAME_SIZE
+
 contains
 
   function message_header_size_byte()

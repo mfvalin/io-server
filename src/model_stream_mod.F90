@@ -134,6 +134,12 @@ contains
     this % stream_id = this % messenger % get_file_tag()
 
     filename_num_char = len(trim(name)) + 1
+
+    if (filename_num_char > MAX_FILE_NAME_SIZE) then
+      print *, 'ERROR: Requested file name (for opening) is longer than the limit of ', MAX_FILE_NAME_SIZE - 1, ' characters'
+      return
+    end if
+
     allocate(this % name(filename_num_char))
     this % name(1:filename_num_char) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
 

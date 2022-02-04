@@ -1,4 +1,3 @@
-!  functions for C and FORTRAN programming
 !  Copyright (C) 2022  Recherche en Prevision Numerique
 ! 
 !  This software is free software; you can redistribute it and/or
@@ -131,9 +130,9 @@ module ioserver_context_module
     integer        :: global_rank = -1              !< rank in global_comm
     integer        :: global_size =  0              !< population of global_comm
 
-    type(MPI_Comm) :: smp_comm    = MPI_COMM_NULL   !< PEs on this SMP node        (any kind ) (subset of global_comm)
-    integer        :: smp_rank    = -1              !< rank in smp_comm
-    integer        :: smp_size    =  0              !< population of smp_comm
+    type(MPI_Comm) :: node_comm   = MPI_COMM_NULL   !< PEs on this node. If server and model are on the same physical node, they will be split into two virtual nodes
+    integer        :: node_rank   = -1              !< rank in node_comm
+    integer        :: node_size   =  0              !< population of node_comm
 
     type(MPI_Comm) :: active_comm = MPI_COMM_NULL   !< All "active" PEs (non NO-OP) (subset of global_comm)
     integer        :: active_rank = -1              !< Rank on active_comm
@@ -240,7 +239,7 @@ module ioserver_context_module
 
     !> @{ \name Finalization
     procedure, pass         :: set_time_to_quit
-    procedure, pass         :: is_time_to_quit
+    procedure, pass, public :: is_time_to_quit
     procedure, pass         :: finalize_model
     procedure, pass         :: finalize_relay
     procedure, pass         :: finalize_server
@@ -407,13 +406,12 @@ end function open_stream_server
 
 !> Close the specified server stream
 !> \return Whether the operation was successful
-function close_stream_server(context, stream_id, force_close) result(success)
+function close_stream_server(context, stream_id) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_id   !< ID of the stream to close
-  logical,                 intent(in)    :: force_close !< Whether to close the stream even if some grids within it are incomplete
   logical :: success
-  success = context % local_server_streams(stream_id) % close(force_close)
+  success = context % local_server_streams(stream_id) % request_close()
 end function close_stream_server
 
 !> Fetch the shared memory structs created by other model PEs on this node and initialize the
@@ -429,7 +427,7 @@ subroutine fetch_node_shmem_structs(context)
   logical             :: success
   integer :: target_rank
 
-  my_base = context % shmem % pe(context % smp_rank) % arena_ptr
+  my_base = context % shmem % pe(context % node_rank) % arena_ptr
 
   do i = 0, context % max_smp_pe ! Loop on every PE on this node
     if (is_color_model(context % shmem % pe(i) % color)) then ! Only work on model PEs
@@ -474,13 +472,13 @@ subroutine set_time_to_quit(context)
   context % shmem % time_to_quit = 1
   if (context % debug_mode()) then 
     if (context % is_relay()) then
-      print *, 'DEBUG: time to quit (relay)'
+      print '(A)', 'DEBUG: time to quit (relay)'
     else if (context % is_model()) then
-      print *, 'DEBUG: time to quit (model)'
+      print '(A)', 'DEBUG: time to quit (model)'
     else if (context % is_server()) then
-      print *, 'DEBUG: time to quit (server)'
+      print '(A)', 'DEBUG: time to quit (server)'
     else
-      print *, 'DEBUG: time to quit (other)'
+      print '(A)', 'DEBUG: time to quit (other)'
     end if
   end if
 end subroutine set_time_to_quit
@@ -529,7 +527,7 @@ function IOserver_get_crs(context, color) result(crs)
       crs % comm = context % active_comm
 
     case(NODE_COLOR)                              ! all PEs on this SMP node        (subset of global_comm)
-      crs % comm = context % smp_comm
+      crs % comm = context % node_comm
 
     case(SERVER_COLOR)                            ! server PEs that can do work     (subset of server_comm, itself a subset of active_comm)
       crs % comm = context % server_work_comm
@@ -543,13 +541,13 @@ function IOserver_get_crs(context, color) result(crs)
     case(RELAY_COLOR)                             ! all IO relay PEs                (subset of active_comm, model_relay_comm)
       crs % comm = context % relay_comm
 
-    case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of smp_comm, model_comm, iorelay_comm)
+    case(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)  ! compute and relay PEs on SMP node (subset of node_comm, model_comm, iorelay_comm)
       crs % comm = context % model_relay_smp_comm
 
-    case(MODEL_COLOR + NODE_COLOR)                ! compute PEs on SMP node         (subset of  smp_comm, model_comm)
+    case(MODEL_COLOR + NODE_COLOR)                ! compute PEs on SMP node         (subset of  node_comm, model_comm)
       crs % comm = context % model_smp_comm
 
-    case(RELAY_COLOR + NODE_COLOR)                ! relay PEs on SMP node           (subset of  smp_comm, iorelay_comm)
+    case(RELAY_COLOR + NODE_COLOR)                ! relay PEs on SMP node           (subset of  node_comm, iorelay_comm)
       crs % comm = context % relay_smp_comm
     
     case(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR) ! server-bound relay PEs on SMP node (subset of relay_smp_comm)
@@ -557,6 +555,12 @@ function IOserver_get_crs(context, color) result(crs)
 
     case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of active_comm)
       crs % comm = context % io_comm
+
+    case(GRID_PROCESSOR_COLOR)
+      crs % comm = context % grid_processor_server_comm
+
+    case(SERVER_COLOR + SERVER_BOUND_COLOR)
+      crs % comm = context % server_bound_server_comm
 
     case default
       crs % comm = MPI_COMM_NULL
@@ -737,7 +741,7 @@ subroutine finalize_relay(this)
 
   if (this % is_relay() .and. this % is_server_bound()) then
     ! Send a stop signal to the server
-    if (this % debug_mode()) print *, 'Relay sending STOP signal', this % local_dcb % get_server_bound_client_id()
+    if (this % debug_mode()) print '(A, I3, A)', 'Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
     header % content_length_int8  = 0
     header % command              = MSG_COMMAND_RELAY_STOP
     header % sender_global_rank   = this % global_rank
@@ -770,7 +774,8 @@ subroutine finalize_server(this)
       if (file % is_open()) then
         if (file % is_owner()) then
           print *, 'DEBUG: Heeeeeyyyy forgot to close file #, owned by myself'
-          success = file % close(.true.)
+          success = file % request_close()
+          success = .not. (file % process_file()) .and. success
         end if
       end if
     end do
@@ -916,12 +921,12 @@ function create_local_heap(context, num_bytes) result(success)
 
   success = .false.
 
-  heap_ptr = context % allocate_from_arena(num_bytes, 'HEAP', context % shmem % pe(context % smp_rank) % rank)
+  heap_ptr = context % allocate_from_arena(num_bytes, 'HEAP', context % shmem % pe(context % node_rank) % rank)
 
   if (.not. C_ASSOCIATED(heap_ptr)) return
 
   success  = context % local_heap % create(heap_ptr, num_bytes)    ! allocate local heap
-  context % shmem % pe(context % smp_rank) % heap_offset = Pointer_offset(context % arena % addr(), heap_ptr, 1)    ! offset of my heap in memory arena
+  context % shmem % pe(context % node_rank) % heap_offset = Pointer_offset(context % arena % addr(), heap_ptr, 1)    ! offset of my heap in memory arena
 
   if (C_ASSOCIATED(heap_ptr)) success = .true.
 end function create_local_heap
@@ -945,17 +950,17 @@ function create_local_cb(context, num_bytes, is_output) result(success)
     name = 'INPB'
   end if
 
-  cb_ptr = context % allocate_from_arena(num_bytes, name, context % shmem % pe(context % smp_rank) % rank)
+  cb_ptr = context % allocate_from_arena(num_bytes, name, context % shmem % pe(context % node_rank) % rank)
 
   if (.not. C_ASSOCIATED(cb_ptr)) return
 
   ! Create and compute offset in memory arena
   if (is_output) then
     success = context % local_server_bound_cb % create_bytes(cb_ptr, num_bytes)
-    context % shmem % pe(context % smp_rank) % server_bound_cb_offset = Pointer_offset(context % arena % addr(), cb_ptr, 1)
+    context % shmem % pe(context % node_rank) % server_bound_cb_offset = Pointer_offset(context % arena % addr(), cb_ptr, 1)
   else
     success = context % local_cio_in % create_bytes(cb_ptr, num_bytes)
-    context % shmem % pe(context % smp_rank) % model_bound_cb_offset = Pointer_offset(context % arena % addr(), cb_ptr, 1)
+    context % shmem % pe(context % node_rank) % model_bound_cb_offset = Pointer_offset(context % arena % addr(), cb_ptr, 1)
   end if
 
 end function create_local_cb
@@ -996,6 +1001,16 @@ function init_communicators(context) result(success)
     call MPI_Comm_rank(temp_comm, temp_rank)
     call MPI_Comm_size(temp_comm, temp_size)
 
+    ! Server processes should all be on the same node. Let's check that
+    call MPI_Comm_split_type(temp_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % node_comm)
+    call MPI_Comm_rank(context % node_comm, context % node_rank)    ! rank on SMP node
+    call MPI_Comm_size(context % node_comm, context % node_size)    ! population of SMP node
+
+    if (context % node_size .ne. temp_size) then
+      print *, 'ERROR: Server processes appear to be spread on more than one node!'
+      return
+    end if
+
     block
       integer, dimension(4) :: bounds
 
@@ -1032,30 +1047,31 @@ function init_communicators(context) result(success)
   else
     call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm)
     context % color = MODEL_COLOR + RELAY_COLOR
+
+    ! Split all non-server PEs by node
+    call MPI_Comm_split_type(temp_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % node_comm)
   end if
 
-  ! Split all PEs by node (mostly used for model nodes)
-  call MPI_Comm_split_type(context % global_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % smp_comm)
-  call MPI_Comm_rank(context % smp_comm, context % smp_rank)    ! rank on SMP node
-  call MPI_Comm_size(context % smp_comm, context % smp_size)    ! population of SMP node
+  call MPI_Comm_rank(context % node_comm, context % node_rank)    ! rank on SMP node
+  call MPI_Comm_size(context % node_comm, context % node_size)    ! population of SMP node
 
   ! Assign a node ID to each SMP node (and 0 to the server node)
   block
-    integer :: key
-    if (context % smp_rank == 0) then
-      if (context % params % is_on_server) then
-        key = 0
-      else
-        key = 1000000
-      end if
-      call MPI_Comm_split(context % global_comm, 0, context % global_rank + key, temp_comm)
+    integer :: key ! To help split between server and non-server nodes
+    if (context % node_rank == 0) then
+      key = 0
+      if (.not. context % params % is_on_server) key = 1000000
+
+      ! Create a communicator that contains all processes with rank 0 on their respective node
+      call MPI_Comm_split(context % global_comm, 0, mod(context % global_rank, 1000000) + key, temp_comm)
       call MPI_Comm_rank(temp_comm, context % node_id)
       call MPI_Comm_size(temp_comm, context % num_nodes)
     else
       call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm)
     end if
 
-    call MPI_Bcast(context % node_id, 1, MPI_INTEGER, 0, context % smp_comm)
+    call MPI_Bcast(context % node_id, 1, MPI_INTEGER, 0, context % node_comm)
+    call MPI_Bcast(context % num_nodes, 1, MPI_INTEGER, 0, context % node_comm)
   end block
 
   ! Split global communicator into : (server+model+relay) and no-op
@@ -1179,12 +1195,12 @@ function init_communicators(context) result(success)
     call MPI_Comm_split(context % active_comm, MODEL_COLOR, context % active_rank, temp_comm)
   endif
 
-  if (context % debug_mode() .and. (context % is_relay() .or. context % is_server())) then
+  if (context % is_relay() .or. context % is_server()) then
     block
       integer :: relay_smp_rank, io_rank
       integer :: num_models, num_server_bound, num_model_bound
 
-      context % num_model_nodes = max(context % num_nodes - 1, 1)
+      context % num_model_nodes = context % num_nodes - 1
       context % num_model_pes = 0
       num_models = 0
       num_server_bound = 0
@@ -1210,7 +1226,7 @@ function init_communicators(context) result(success)
       call MPI_Allreduce(num_model_bound, context % num_model_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm)
 
       call MPI_Comm_rank(context % io_comm, io_rank)
-      if (io_rank == 0) then
+      if (context % debug_mode() .and. io_rank == 0) then
         print '(A, I5, A, I5, A)', 'DEBUG: We have ', context % num_nodes, ' nodes (', context % num_model_nodes, ' model nodes)'
         print '(A, I5, A)',        '               ', context % num_server_bound_relays, ' server-bound relays'
         print '(A, I5, A)',        '               ', context % num_model_bound_relays, ' model-bound relays'
@@ -1250,15 +1266,15 @@ function init_shared_mem(context) result(success)
   success = .false.
   num_errors = 0              ! none so far
 
-  ! Allocate shared memory segment used for control, communicator = smp_comm
+  ! Allocate shared memory segment used for control, communicator = node_comm
   context % ctrl_shmem_size = storage_size(context % shmem) / 8
-  context % ctrl_shmem_c    = RPN_allocate_shared(context % ctrl_shmem_size, context % smp_comm)
+  context % ctrl_shmem_c    = RPN_allocate_shared(context % ctrl_shmem_size, context % node_comm)
 
   call C_F_POINTER(context % ctrl_shmem_c, context % shmem)             ! main control structure points to shared memory at ctrl_shmem_c
-  context % max_smp_pe = context % smp_size - 1
+  context % max_smp_pe = context % node_size - 1
 
   ! First PE on each node initializes control segment to 0
-  if (context % smp_rank == 0) then
+  if (context % node_rank == 0) then
     context % shmem % pe(0:context % max_smp_pe) = pe_info(C_NULL_PTR, 0, 0, 0, 0, 0, [0, 0, 0, 0])
     context % shmem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
   end if
@@ -1267,7 +1283,7 @@ function init_shared_mem(context) result(success)
   call MPI_barrier(context % global_comm)
 
   if (context % color == NO_OP_COLOR) then       ! this is a NO-OP process, enter wait loop for finalize
-    context % shmem % pe(context % smp_rank) % color = NO_OP_COLOR
+    context % shmem % pe(context % node_rank) % color = NO_OP_COLOR
     call context % no_op()              ! this subroutine will never return and call finalize
     call MPI_Finalize()                 ! no_op should never return, but ... in case it does
     stop
@@ -1288,17 +1304,8 @@ function init_shared_mem(context) result(success)
   allocate(context % server_bound_cbs(0:context % max_smp_pe))
   allocate(context % local_heaps     (0:context % max_smp_pe))
 
-  ! Determine how many server-bound server processes can actually open streams (it has to be <= the number of relays)
-  block
-    integer :: val
-    val = 0
-    if (context % is_server() .or. context % is_relay()) then
-      context % num_server_stream_owners = 0
-      if (context % is_relay() .and. context % is_server_bound()) val = 1
-      call MPI_Allreduce(val, context % num_server_stream_owners, 1, MPI_INTEGER, MPI_SUM, context % io_comm)
-      context % num_server_stream_owners = min(context % num_server_stream_owners, context % params % num_server_bound_server)
-    end if
-  end block
+  ! Determine how many server-bound server processes can actually open streams
+  context % num_server_stream_owners = context % params % num_grid_processors
 
   if (context % is_server()) then
     ! =========================================================================
@@ -1345,7 +1352,7 @@ function init_shared_mem(context) result(success)
         allocate(context % local_server_streams(MAX_NUM_SERVER_STREAMS))
         do i_stream = 1, MAX_NUM_SERVER_STREAMS
           tmp_ptr => context % common_server_streams(i_stream)
-          call context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), tmp_ptr, context % node_heap)
+          call context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % debug_mode(), tmp_ptr, context % node_heap)
         end do
       end block
     end if
@@ -1390,17 +1397,17 @@ function init_shared_mem(context) result(success)
 
     ! Set value in this process' section of the control area
     context % local_arena_ptr = context % arena % addr()
-    context % shmem % pe(context % smp_rank) % arena_ptr = context % local_arena_ptr  ! local address of arena segment
-    context % shmem % pe(context % smp_rank) % color = context % color                ! store color of this PE in shared memory table
+    context % shmem % pe(context % node_rank) % arena_ptr = context % local_arena_ptr  ! local address of arena segment
+    context % shmem % pe(context % node_rank) % color = context % color                ! store color of this PE in shared memory table
 
     ! Get rank on node in my color (model or relay)
     if (context % is_relay()) then
-      call MPI_Comm_rank(context % relay_smp_comm, context % shmem % pe(context % smp_rank) % rank)
+      call MPI_Comm_rank(context % relay_smp_comm, context % shmem % pe(context % node_rank) % rank)
     else
-      call MPI_Comm_rank(context % model_smp_comm, context % shmem % pe(context % smp_rank) % rank)
+      call MPI_Comm_rank(context % model_smp_comm, context % shmem % pe(context % node_rank) % rank)
     end if
 
-    if (context % debug_mode()) print *, 'DEBUG: rank', context % shmem % pe(context % smp_rank) % rank, ' in color', context % color
+    if (context % debug_mode()) print *, 'DEBUG: rank', context % shmem % pe(context % node_rank) % rank, ' in color', context % color
 
     ! Wait for memory arena to be initialized by rank 0 before allocating heap and circular buffer(s)
     call MPI_Barrier(context % model_relay_smp_comm)
@@ -1414,9 +1421,9 @@ function init_shared_mem(context) result(success)
 
     if (context % debug_mode()) then
       write(6,'(A,3Z18.16)') ' DEBUG: displacements =', &
-        context % shmem % pe(context % smp_rank) % heap_offset, &
-        context % shmem % pe(context % smp_rank) % model_bound_cb_offset, &
-        context % shmem % pe(context % smp_rank) % server_bound_cb_offset
+        context % shmem % pe(context % node_rank) % heap_offset, &
+        context % shmem % pe(context % node_rank) % model_bound_cb_offset, &
+        context % shmem % pe(context % node_rank) % server_bound_cb_offset
     end if
     call flush(6)
   endif   ! (server process)

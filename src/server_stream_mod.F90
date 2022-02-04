@@ -52,7 +52,8 @@ module server_stream_module
     integer :: owner_id     = -1     !< Who owns (will read/write/process) this stream and its physical file
     integer :: mutex_value  = 0      !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
     integer :: status       = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
-    character(len=:), allocatable :: name
+    character(len=MAX_FILE_NAME_SIZE) :: name
+    integer :: name_length  = 0
 
     !> Object where grids sent to this stream are assembled
     type(grid_assembly) :: partial_grid_data = grid_assembly(grid_assembly_line())
@@ -86,9 +87,10 @@ module server_stream_module
   !> interface to the underlying shared object, with extra data, that ensures proper synchronization.
   type, public :: local_server_stream
     private
-    integer             :: server_id = -2       !< On which process this local instance is located (might have duplicates, depending on server process types)
-    logical             :: is_writer = .false.  !< Whether this local instance is allowed to write to the underlying file
-    integer             :: unit      = -1       !< Fortran file unit, when/if open
+    integer             :: server_id  = -2      !< On which process this local instance is located (might have duplicates, depending on server process types)
+    logical             :: is_writer  = .false. !< Whether this local instance is allowed to write to the underlying file
+    integer             :: unit       = -1      !< Fortran file unit, when/if open
+    logical             :: debug_mode = .false. !< Whether to print some debug messages
     type(simple_mutex)  :: mutex                !< Used to protect access to the underlying 
     type(heap)          :: data_heap            !< Heap where we can get space in shared memory
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
@@ -118,6 +120,7 @@ contains
     integer, intent(in) :: stream_id   !< ID of the stream. Will be used to associate it with a "model stream"
     integer, intent(in) :: owner_id    !< Which server process will own this stream
     type(shared_server_stream) :: new_shared_server_stream
+    ! print '(A, I3, A, I2)', 'Creating stream ', stream_id, ' with owner ', owner_id
     new_shared_server_stream % stream_id = stream_id
     new_shared_server_stream % owner_id  = owner_id
     new_shared_server_stream % status    = STREAM_STATUS_INITIALIZED
@@ -134,20 +137,24 @@ contains
 
     success = .false.
 
-    if (.not. this % is_valid()) return
+    if (.not. this % is_valid()) then
+      print *, 'ERROR: Requesting opening of an invalid file'
+      return
+    end if
 
     ! Try setting the filename
     if (this % status < STREAM_STATUS_OPEN_NEEDED) then
       call mutex % lock()
       if (this % status < STREAM_STATUS_OPEN_NEEDED) then
-        this % name = this % make_full_filename(file_name)
+        this % name = this % make_full_filename(file_name, this % name_length)
         this % status = STREAM_STATUS_OPEN_NEEDED
       end if
       call mutex % unlock()
     end if
 
-    ! Verify that the stream filename is the same as the one requested (in case it was requested multiple time with different ones)
-    if (this % name == this % make_full_filename(file_name)) success = .true.
+    ! Verify that the stream filename is the same as the one requested (in case it was requested multiple times with different ones)
+    success = this % is_same_name(file_name)
+    if (.not. success) print *, 'ERROR: Requesting opening of a same file with a different name'
   end function shared_server_stream_request_open
 
   !> Request that this stream be closed by its owner
@@ -205,7 +212,7 @@ contains
           ! Occasionally print what's holding up the closing process
           if (mod(i, 10_8) == 0) &
             print '(I2, A, I4, A, A, A, F6.2, A)', this % get_owner_id(), ' DEBUG: There are still ', num_incomplete, &
-                  ' incomplete grids in file "', this % name, '", will wait another ', &
+                  ' incomplete grids in file "', this % name(:this % name_length), '", will wait another ', &
                   TOTAL_WAIT_TIME_S - real(i * WAIT_TIME_US) / 1000000.0, ' second(s)'
 
           call sleep_us(WAIT_TIME_US)
@@ -276,19 +283,21 @@ contains
   end function shared_server_stream_is_closed
 
   !> Create a complete filename from the given base name. This adds a suffix to the base name after removing trailing nulls from it.
-  function make_full_filename(filename) result(full_filename)
+  function make_full_filename(filename, name_length) result(full_filename)
     implicit none
-    character(len=*), intent(in) :: filename          !< [in] The base name to give to the file
+    character(len=*), intent(in)  :: filename          !< [in] The base name to give to the file
+    integer,          intent(out) :: name_length
     character(len=:), allocatable :: trimmed_filename
     character(len=:), allocatable :: full_filename
     integer :: last_char
 
     trimmed_filename = trim(filename)
-    do last_char = 1, len(trimmed_filename)
-      if (trimmed_filename(last_char:last_char) == achar(0)) exit
+    do name_length = 1, len(trimmed_filename)
+      if (trimmed_filename(name_length:name_length) == achar(0)) exit
     end do
     
-    full_filename =  trimmed_filename(:last_char-1)// '.out'
+    full_filename =  trimmed_filename(:name_length-1)// '.out'
+    name_length = min(name_length + 3, MAX_FILE_NAME_SIZE)
   end function make_full_filename
 
   !> Check whether this stream has been opened with the given base name
@@ -296,9 +305,10 @@ contains
     implicit none
     class(shared_server_stream), intent(in) :: this
     character(len=*),     intent(in) :: filename !< [in] Base name to check against
+    integer :: name_length
     logical :: is_same_name
 
-    is_same_name = (this % name == this % make_full_filename(filename))
+    is_same_name = (this % name(:this % name_length) == this % make_full_filename(filename, name_length))
   end function shared_server_stream_is_same_name
 
   !> Retrieve the owner ID of this stream
@@ -327,26 +337,24 @@ contains
   subroutine shared_server_stream_print(this)
     implicit none
     class(shared_server_stream), intent(in) :: this
-    if (allocated(this % name)) then
-      print '(A, I4, I4, I4)', this % name, this % stream_id, this % status, this % owner_id, this % mutex_value
-    else
-      print '(I4, I4, I4)', this % stream_id, this % status, this % owner_id, this % mutex_value
-    end if
+    print '(A, I4, I4, I4)', this % name, this % stream_id, this % status, this % owner_id, this % mutex_value
   end subroutine shared_server_stream_print
 
   !> Initialize this local instance (but *not* the underlying shared memory stream), associate this local instance with its underlying shared stream,
   !> initialize the mutex to point to the shared instance mutex value, associate this local instance with a shared memory heap where the grids will
   !> actually be assembled
-  subroutine local_server_stream_init(this, server_id, is_writer, shared_instance, data_heap)
+  subroutine local_server_stream_init(this, server_id, is_writer, debug_mode, shared_instance, data_heap)
     implicit none
     class(local_server_stream),          intent(inout) :: this
     integer,                             intent(in)    :: server_id         !< [in] ID of the stream this local instance will access
     logical,                             intent(in)    :: is_writer         !< [in] Whether the caller is allowed to write to the underlying file
+    logical,                             intent(in)    :: debug_mode        !< [in] Whether to print debug messages
     type(shared_server_stream), pointer, intent(inout) :: shared_instance   !< [in,out] Pointer to the underlying shared instance
     type(heap),                          intent(inout) :: data_heap         !< [in,out] Heap from which to allocate/access shared memory
 
     this % server_id        =  server_id
     this % is_writer        =  is_writer
+    this % debug_mode       =  debug_mode
     this % shared_instance  => shared_instance
     this % data_heap        =  data_heap
     call this % mutex % init_from_int(this % shared_instance % mutex_value, this % server_id)
@@ -388,9 +396,15 @@ contains
     end if
 
     if (.not. this % is_owner()) return
+    if (this % shared_instance % status == 0) return
 
     if (this % shared_instance % needs_open()) then
-      open(newunit = this % unit, file = this % shared_instance % name, status = 'replace', form = 'unformatted')
+      if (this % debug_mode) then
+        print '(I2, A, A, A, I2)', this % server_id, ' Opening file ',                              &
+            this % shared_instance % name(:this % shared_instance % name_length), ', owner ID ',    &
+            this % shared_instance % owner_id
+      end if
+      open(newunit = this % unit, file = this % shared_instance % name(:this % shared_instance % name_length), status = 'replace', form = 'unformatted')
       this % shared_instance % status = STREAM_STATUS_OPEN
     end if
 
@@ -398,6 +412,11 @@ contains
     finished = .false.
 
     if (this % shared_instance % needs_close()) then
+      if (this % debug_mode) then
+        print '(I2, A, A, A, I2)', this % server_id, ' Closing file ',                              &
+            this % shared_instance % name(:this % shared_instance % name_length), ', owner ID ',    &
+            this % shared_instance % owner_id
+      end if
       ! Start closing, waiting (not indefinitely) for any incomplete grids
       success = this % close()
       if (.not. success) then
@@ -458,9 +477,11 @@ contains
     ! Try again a few times, after waiting a bit, instead of just crashing right away
     do i = 1, MAX_NUM_ATTEMPTS
       if (.not. success) then
-        print '(I2, A, I2, A, F5.2, A)', this % server_id, ' WARNING: Could not put the data into the grid for owner ', &
-            this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
-            (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, 's'
+        if (mod(i, 10) == 0) then
+          print '(I2, A, I2, A, F5.2, A)', this % server_id, ' WARNING: Could not put the data into the grid for owner ', &
+              this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
+              (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, 's'
+        end if
 
         call sleep_us(WAIT_TIME_US)
         success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex)

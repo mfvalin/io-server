@@ -132,6 +132,8 @@ contains
 
     logical :: success
 
+    model_success = .false.
+
     node_heap = context % get_local_heap()
 
     output_stream_1 = context % open_stream_model(filename1)
