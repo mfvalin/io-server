@@ -290,7 +290,6 @@ contains
     integer,          intent(out) :: name_length
     character(len=:), allocatable :: trimmed_filename
     character(len=:), allocatable :: full_filename
-    integer :: last_char
 
     trimmed_filename = trim(filename)
     do name_length = 1, len(trimmed_filename)
