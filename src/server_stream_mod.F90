@@ -40,7 +40,6 @@ module server_stream_module
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open
   integer, parameter :: STREAM_STATUS_OPEN_NEEDED   =  1 !< Opening has been requested, but not completed yet
   integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
-  integer, parameter :: STREAM_STATUS_CLOSE_NEEDED  =  3 !< Closing has been requested
   integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
 
   !> Derived type that handles a server stream in shared memory. This is used to reassemble grids that
@@ -52,6 +51,7 @@ module server_stream_module
     integer :: owner_id     = -1     !< Who owns (will read/write/process) this stream and its physical file
     integer :: mutex_value  = 0      !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
     integer :: status       = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
+    logical :: needs_closing = .false. !< Whether we want it to be closed
     character(len=MAX_FILE_NAME_SIZE) :: name
     integer :: name_length  = 0
 
@@ -163,8 +163,9 @@ contains
     class(shared_server_stream), intent(inout) :: this
     logical :: success
     success = .false.
-    if (this % is_open() .or. this % is_closed()) then
-      if (this % status == STREAM_STATUS_OPEN) this % status = STREAM_STATUS_CLOSE_NEEDED
+
+    if (this % is_valid()) then
+      this % needs_closing = .true.
       success = .true.
     end if
   end function shared_server_stream_request_close
@@ -263,7 +264,7 @@ contains
     implicit none
     class(shared_server_stream), intent(in) :: this
     logical :: needs_close
-    needs_close = (this % status == STREAM_STATUS_CLOSE_NEEDED)
+    needs_close = this % needs_closing
   end function shared_server_stream_needs_close
 
   !> Whether this stream has been successfully opened
@@ -271,7 +272,7 @@ contains
     implicit none
     class(shared_server_stream), intent(in) :: this
     logical :: is_open
-    is_open = (this % status == STREAM_STATUS_OPEN) .or. (this % status == STREAM_STATUS_CLOSE_NEEDED)
+    is_open = (this % status == STREAM_STATUS_OPEN)
   end function shared_server_stream_is_open
 
   !> Whether this stream has been closed
@@ -411,7 +412,7 @@ contains
     num_flushed = this % shared_instance % flush_data(this % unit, this % data_heap)
     finished = .false.
 
-    if (this % shared_instance % needs_close()) then
+    if (this % shared_instance % is_open() .and. this % shared_instance % needs_close()) then
       if (this % debug_mode) then
         print '(I2, A, A, A, I2)', this % server_id, ' Closing file ',                              &
             this % shared_instance % name(:this % shared_instance % name_length), ', owner ID ',    &

@@ -73,6 +73,8 @@ program default_model
     error stop 1
   end if
 
+  params % debug_mode = .true.
+
   server_node = am_server_node(node_rank, node_size, single_node)
 
   params % num_channels = 2

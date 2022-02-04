@@ -285,7 +285,6 @@ function receive_message(context, dcb, client_id, state) result(finished)
   ! File management
   character(len=:), allocatable      :: filename
   type(local_server_stream), pointer :: stream_ptr
-  integer                            :: i_file, num_flushed
 
   ! Message reading
   integer(C_INT64_T)   :: capacity
