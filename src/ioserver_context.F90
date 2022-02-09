@@ -139,16 +139,18 @@ module ioserver_context_module
     integer        :: active_size =  0              !< Size of active_comm (number of active PEs)
 
     type(MPI_Comm) :: io_comm                     = MPI_COMM_NULL  !< all IO PEs     (relay + server) (subset of active_comm)
+    type(MPI_Comm) :: io_dcb_comm                 = MPI_COMM_NULL  !< all IO PEs that participate in the DCB (relay + server, without grid processors) (subset of active_comm)
 
     type(MPI_Comm) :: model_relay_comm            = MPI_COMM_NULL  !< model and relay PEs (all nodes) (subset of active_comm)
     type(MPI_Comm) :: model_comm                  = MPI_COMM_NULL  !< model PEs           (all nodes) (subset of model_relay_comm)
     type(MPI_Comm) :: relay_comm                  = MPI_COMM_NULL  !< relay PEs           (all nodes) (subset of model_relay_comm)
 
     type(MPI_Comm) :: server_comm                 = MPI_COMM_NULL  !< IO server PEs (subset of active_comm)
-    type(MPI_Comm) :: server_work_comm            = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm)
-    type(MPI_Comm) :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_work_comm)
-    type(MPI_Comm) :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_work_comm)
-    type(MPI_Comm) :: grid_processor_server_comm  = MPI_COMM_NULL  !< Server PEs that process assembled grid data
+    type(MPI_Comm) :: server_work_comm            = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm, excludes channel PEs)
+    type(MPI_Comm) :: server_dcb_comm             = MPI_COMM_NULL  !< Server PEs that participate in the DCB (subset of server_comm, excludes grid processors)
+    type(MPI_Comm) :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_dcb_comm)
+    type(MPI_Comm) :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_dcb_comm)
+    type(MPI_Comm) :: grid_processor_server_comm  = MPI_COMM_NULL  !< Server PEs that process assembled grid data (subset of server_work_comm)
 
     type(MPI_Comm) :: model_relay_smp_comm        = MPI_COMM_NULL  !< model+relays on current node
     type(MPI_Comm) :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
@@ -871,8 +873,10 @@ subroutine print_shared_mem_sizes(context)
   class(ioserver_context), intent(in) :: context
   if (context % is_server()) then
     print '(A,F8.1,A)', '(Server node) Shared memory heap: ', context % params % server_heap_size_mb, ' MB'
-    print '(A,F8.1,A)', '(Server node) Server-bound DCB:   ', context % params % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(), ' MB (total)'
-    print '(A,F8.1,A)', '(Server node) Model-bound DCB:    ', context % params % dcb_model_bound_size_mb, ' MB (per client)'
+    if (.not. context % is_grid_processor()) then
+      print '(A,F8.1,A)', '(Server node) Server-bound DCB:   ', context % params % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(), ' MB (total)'
+      print '(A,F8.1,A)', '(Server node) Model-bound DCB:    ', context % params % dcb_model_bound_size_mb, ' MB (per client)'
+    end if
   else
     print '(A,F8.1,A)', '(Model node)  Shared memory heap: ', context % params % model_heap_size_mb, ' MB'
     print '(A,F8.1,A)', '(Model node)  Server-bound CB:    ', context % params % server_bound_cb_size_mb, ' MB'
@@ -1076,9 +1080,10 @@ function init_communicators(context) result(success)
 
   ! Split global communicator into : (server+model+relay) and no-op
   ! there MUST be AT LEAST ONE non NO-OP process on each node (a deadlock will happen if this condition is not respected)
-  ! Arrange it so that the overall ranks are grouped by node and that server processes have the lowest ranks
+  ! [temporarily removed] Arrange it so that the overall ranks are grouped by node and that server processes have the lowest ranks
   if (context % color .ne. NO_OP_COLOR) then
-    call MPI_Comm_split(context % global_comm, 0, context % node_id * 100000 + mod(context % global_rank, 100000), context % active_comm)
+    ! call MPI_Comm_split(context % global_comm, 0, context % node_id * 100000 + mod(context % global_rank, 100000), context % active_comm)
+    call MPI_Comm_split(context % global_comm, 0, context % global_rank, context % active_comm)
     call MPI_Comm_rank(context % active_comm, context % active_rank)
     call MPI_Comm_size(context % active_comm, context % active_size)
   else
@@ -1091,9 +1096,10 @@ function init_communicators(context) result(success)
     return
   end if
 
-  ! Split the all useful communicator (active_comm) into : server and (model+relay)
+  ! Split the all active communicator (active_comm) into : server and (model+relay)
   if (context % is_server()) then
     call MPI_Comm_split(context % active_comm, 0, context % active_rank, context % server_comm)
+    call MPI_Comm_rank(context % server_comm, context % server_comm_rank)
   else
     call MPI_Comm_split(context % active_comm, 1, context % active_rank, context % model_relay_comm)
   end if
@@ -1107,7 +1113,6 @@ function init_communicators(context) result(success)
       integer :: server_comm_size_tmp, server_comm_size
 
       call MPI_Comm_split_type(context % server_comm, MPI_COMM_TYPE_SHARED, context % active_rank, MPI_INFO_NULL, server_comm_tmp)
-      call MPI_Comm_rank(server_comm_tmp, context % server_comm_rank)     ! rank on SMP node
       call MPI_Comm_size(server_comm_tmp, server_comm_size_tmp)           ! population of SMP node
       call MPI_Comm_size(context % server_comm, server_comm_size)         ! population of SMP node
 
@@ -1121,21 +1126,30 @@ function init_communicators(context) result(success)
 
     ! Split between active (server- and model-bound) and channel processes (communication channels, or 'ghost' processes)
     if (context % is_channel()) then
-      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm)
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm)                                         ! 1. Create server work comm (not part of it)
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR,  &           ! 2. Create server DCB comm
+          context % server_comm_rank, context % server_dcb_comm)
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm)                                         ! 3. Create server specific comm (not necessary for channel)
+    else if (context % is_server_bound()) then
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm)! 1. Create server work comm
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR,  &           ! 2. Create server DCB comm
+          context % server_comm_rank, context % server_dcb_comm)
+      call MPI_Comm_split(context % server_comm, SERVER_BOUND_COLOR, context % server_comm_rank,          &           ! 3. Create server specific comm
+          context % server_bound_server_comm)
+    else if (context % is_model_bound()) then
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm)! 1. Create server work comm
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR,  &           ! 2. Create server DCB comm
+          context % server_comm_rank, context % server_dcb_comm)
+      call MPI_Comm_split(context % server_comm, MODEL_BOUND_COLOR, context % server_comm_rank,           &           ! 3. Create server specific comm
+          context % model_bound_server_comm)
+    else if (context % is_grid_processor()) then
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm)! 1. Create server work comm
+      call MPI_Comm_split(context % server_comm, GRID_PROCESSOR_COLOR, context % server_comm_rank, temp_comm)         ! 2. Create server DCB comm (not part)
+      call MPI_Comm_split(context % server_comm, GRID_PROCESSOR_COLOR, context % server_comm_rank,        &           ! 3. Create server specific comm
+          context % grid_processor_server_comm)
     else
-      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm)
-
-      ! Split between server-bound and model-bound server processes
-      if (context % is_server_bound()) then
-        call MPI_Comm_split(context % server_work_comm, SERVER_BOUND_COLOR, context % active_rank, context % server_bound_server_comm)
-      else if (context % is_model_bound()) then
-        call MPI_Comm_split(context % server_work_comm, MODEL_BOUND_COLOR, context % active_rank, context % model_bound_server_comm)
-      else if (context % is_grid_processor()) then
-        call MPI_Comm_split(context % server_work_comm, GRID_PROCESSOR_COLOR, context % active_rank, context % grid_processor_server_comm)
-      else
-        print *, 'ERROR: Unhandled server process type'
-        return
-      end if
+      print *, 'ERROR: Unhandled server process type'
+      return
     end if
 
   else
@@ -1191,6 +1205,11 @@ function init_communicators(context) result(success)
   ! Split active_comm into model and IO (relay+server) processes
   if (context % is_relay() .or. context % is_server()) then  
     call MPI_Comm_split(context % active_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_comm) 
+    if (.not. context % is_grid_processor()) then
+      call MPI_Comm_split(context % io_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_dcb_comm) 
+    else
+      call MPI_Comm_split(context % io_comm, GRID_PROCESSOR_COLOR, context % active_rank, temp_comm) 
+    end if
   else
     call MPI_Comm_split(context % active_comm, MODEL_COLOR, context % active_rank, temp_comm)
   endif
@@ -1448,13 +1467,13 @@ function init_shared_mem(context) result(success)
   endif
 
   ! IO Relay or Server
-  if (context % is_relay() .or. context % is_server()) then              ! IO relay or IO server
+  if (context % is_relay() .or. (context % is_server() .and. .not. context % is_grid_processor())) then              ! IO relay or IO server
     block
-      integer :: allio_comm_size
-      call MPI_Comm_size(context % io_comm, allio_comm_size)
-      allocate(context % iocolors(0:allio_comm_size))             ! collect colors for IO PEs, index in array is rank in io_comm
-      call MPI_Allgather(context % color, 1, MPI_INTEGER, context % iocolors, 1, MPI_INTEGER, context % io_comm)
-      if (context % debug_mode()) write(6,'(A,10I8,(/19X,10I8))') ' DEBUG: IO colors =', context % iocolors(0:allio_comm_size-1)
+      integer :: io_dcb_comm_size
+      call MPI_Comm_size(context % io_dcb_comm, io_dcb_comm_size)
+      allocate(context % iocolors(0:io_dcb_comm_size))             ! collect colors for IO PEs, index in array is rank in io_dcb_comm
+      call MPI_Allgather(context % color, 1, MPI_INTEGER, context % iocolors, 1, MPI_INTEGER, context % io_dcb_comm)
+      if (context % debug_mode()) write(6,'(A,10I8,(/19X,10I8))') ' DEBUG: IO colors =', context % iocolors(0:io_dcb_comm_size-1)
     end block
 
     ! Create DCB
@@ -1474,11 +1493,14 @@ function init_shared_mem(context) result(success)
       if (context % is_server()) then
         server_bound_size = int(context % params % dcb_server_bound_size_mb * MBYTE, kind=8)
         model_bound_size  = int(context % params % dcb_model_bound_size_mb * MBYTE, kind=8)
-        server_comm = context % server_comm
+        server_comm = context % server_dcb_comm
       end if
 
-      success = context % local_dcb % create_bytes(context % io_comm, server_comm, type, server_bound_size, model_bound_size)
-      if (.not. success) num_errors = num_errors + 1
+      success = context % local_dcb % create_bytes(context % io_dcb_comm, server_comm, type, server_bound_size, model_bound_size)
+      if (.not. success) then
+        print *, 'ERROR: Unable to create DCB'
+        num_errors = num_errors + 1
+      end if
     end block
   endif
 
