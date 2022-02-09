@@ -9,6 +9,7 @@ set(TEST_SOURCES
    dcb_unaligned_input.c
    default_model.F90
    distributed_circular_buffer.F90
+   launch_pseudo_model.F90
    launch_server.F90
    model_write.F90
    put_error.F90

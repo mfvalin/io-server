@@ -18,29 +18,53 @@
 ! Authors:
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
+module launch_pseudo_model_module
+  implicit none
+contains
+function model_work(context) result(success)
+  use ioserver_context_module
+  implicit none
 
-program launch_server
+  type(ioserver_context), intent(inout) :: context
+  logical :: success
+  
+  type(comm_rank_size) :: model_crs
+
+  model_crs = context % get_crs(MODEL_COLOR)
+  print *, 'I am a pseudo model who does nothing', model_crs % rank
+
+  success = .true.
+
+end function model_work
+end module launch_pseudo_model_module
+
+program launch_model
   use mpi_f08
   use ioserver_run_module
+  use launch_pseudo_model_module
+  implicit none
 
   type(ioserver_input_parameters) :: params
   logical :: success
 
+  procedure(model_function_template), pointer :: model_fn_ptr
+
   call MPI_Init()
 
-  params % is_on_server             = .true.
+  model_fn_ptr => model_work
+
+  params % is_on_server             = .false.
   params % num_relay_per_node       = 2 ! Should not be important for the server
-  params % num_server_bound_server  = 2
-  params % num_grid_processors      = 1
-  params % num_channels             = 2
+  ! params % num_server_bound_server  = -1
+  ! params % num_grid_processors      = -1
+  ! params % num_channels             = -1
   params % debug_mode = .true.
 
-  success = ioserver_run_server_node(params)
+  success = ioserver_run_model_node(params, model_function = model_fn_ptr)
 
   if (.not. success) then
-    print *, 'ERROR while running the IO server'
+    print *, 'ERROR while running the pseudo-model'
     ! error stop 1 
   end if
-
   call MPI_Finalize()
-end program launch_server
+end program launch_model
