@@ -474,11 +474,27 @@ subroutine set_time_to_quit(context)
   context % shmem % time_to_quit = 1
   if (context % debug_mode()) then 
     if (context % is_relay()) then
-      print '(A)', 'DEBUG: time to quit (relay)'
+      if (context % is_server_bound()) then
+        print '(A)', 'DEBUG: time to quit (relay/server-bound)'
+      else if (context % is_model_bound()) then
+        print '(A)', 'DEBUG: time to quit (relay/model-bound)'
+      else
+        print '(A)', 'DEBUG: time to quit (relay/???)'
+      end if
     else if (context % is_model()) then
       print '(A)', 'DEBUG: time to quit (model)'
     else if (context % is_server()) then
-      print '(A)', 'DEBUG: time to quit (server)'
+      if (context % is_grid_processor()) then
+        print '(A)', 'DEBUG: time to quit (server/grid processor)'
+      else if (context % is_channel()) then
+        print '(A)', 'DEBUG: time to quit (server/channel)'
+      else if (context % is_server_bound()) then
+        print '(A)', 'DEBUG: time to quit (server/server-bound)'
+      else if (context % is_model_bound()) then
+        print '(A)', 'DEBUG: time to quit (server/model-bound)'
+      else
+        print '(A)', 'DEBUG: time to quit (server/???)'
+      end if
     else
       print '(A)', 'DEBUG: time to quit (other)'
     end if
