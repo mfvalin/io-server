@@ -4,15 +4,23 @@ variables:
    # Used to force HOST, remove once sici00 runners are restarted
    ECCI_BACKEND: banting
    ECCI_FRONTEND: ppp3
+   BUILD_BASE_BASE_DIR: /home/sici000/special_builds/${CI_PROJECT_PATH}
+   BUILD_BASE_DIR: ${BUILD_BASE_BASE_DIR}/just_to_be_safe
 
 before_script:
    - export CLICOLOR_FORCE=1
 
 stages:
+   - cleanup
    - build
    - test
    - package
 #  - deploy
+
+cleanup:all:
+   stage: cleanup
+   script:
+      - rm -rf ${BUILD_BASE_BASE_DIR}/just_to_be_safe
 
 build:gnu-7.4.0:
    stage: build
@@ -83,7 +91,7 @@ build:XC50_intel-19.0.5:
    tags:
       - XC50-login
    variables:
-      build_dir: /home/sici000/special_builds/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
+      build_dir: ${BUILD_BASE_DIR}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
 #   only:
 #      - master
 #      - dev
@@ -109,7 +117,7 @@ test:XC50_intel-19.0.5_job_single_node:
    # tags:
    #    - XC50-login
    variables:
-      build_dir: /home/sici000/special_builds/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
+      build_dir: ${BUILD_BASE_DIR}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
       NUM_CPUS: "40"
       ORD_SOUMET_MACH: ${ECCI_BACKEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
@@ -131,7 +139,7 @@ test:XC50_intel-19.0.5_job_multi_node:
    # tags:
    #    - XC50-login
    variables:
-      build_dir: /home/sici000/special_builds/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
+      build_dir: ${BUILD_BASE_DIR}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
       NUM_CPUS: "160"
       NUM_SERVER_CPUS: "40"
       NUM_MODEL_CPUS: "120"
@@ -151,7 +159,7 @@ test:XC50_intel-19.0.5_job_multi_node:
 package:XC50_intel-19.0.5:
    stage: package
    variables:
-      build_dir: /home/sici000/special_builds/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
+      build_dir: ${BUILD_BASE_DIR}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
    only:
       - tags
    dependencies:
