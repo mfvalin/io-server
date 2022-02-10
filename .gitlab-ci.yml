@@ -20,7 +20,7 @@ stages:
 cleanup:all:
    stage: cleanup
    script:
-      - rm -rf ${BUILD_BASE_BASE_DIR}/just_to_be_safe
+      - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
 
 build:gnu-7.4.0:
    stage: build
