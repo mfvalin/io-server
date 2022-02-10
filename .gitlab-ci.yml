@@ -5,7 +5,7 @@ variables:
    ECCI_BACKEND: banting
    ECCI_FRONTEND: ppp3
    BUILD_BASE_BASE_DIR: /home/sici000/special_builds/${CI_PROJECT_PATH}
-   BUILD_BASE_DIR: ${BUILD_BASE_BASE_DIR}/just_to_be_safe
+   BUILD_BASE_DIR: /home/sici000/special_builds/${CI_PROJECT_PATH}/just_to_be_safe
 
 before_script:
    - export CLICOLOR_FORCE=1
