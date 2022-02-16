@@ -5,11 +5,11 @@ set(TEST_SOURCES
    circular_buffer.F90
    circular_buffer_fill.c
    circular_buffer_single_thread.F90
-   custom_functions.F90
    dcb_edge_case_1.F90
    dcb_unaligned_input.c
    default_model.F90
    distributed_circular_buffer.F90
+   init_comms.F90
    launch_pseudo_model.F90
    launch_server.F90
    model_write.F90
@@ -70,6 +70,7 @@ function(gen_test_target)
       ${TEST_TARGET}
       PRIVATE
       $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wno-integer-division>
+      -g -O0
       )
 
    # Modules
@@ -159,7 +160,7 @@ add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG}
 get_test_name(model_write.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 10 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 2 2)
 
-get_test_name(custom_functions.F90 TEST_TARGET)
+get_test_name(init_comms.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 10 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(dcb_edge_case_1.F90 TEST_TARGET)

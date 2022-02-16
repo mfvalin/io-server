@@ -46,24 +46,30 @@ module run_model_node_module
 
 contains
 
-function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound_relay_fn, model_function) result(success)
+function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound_relay_fn, custom_no_op_fn, model_function) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
   procedure(relay_function_template), pointer, intent(in), optional :: custom_server_bound_relay_fn
   procedure(relay_function_template), pointer, intent(in), optional :: custom_model_bound_relay_fn
+  procedure(no_op_function_template), pointer, intent(in), optional :: custom_no_op_fn
   procedure(model_function_template), pointer, intent(in), optional :: model_function
   logical :: success
 
   type(ioserver_context) :: context
-  procedure(model_function_template), pointer :: server_bound_relay_fn, model_bound_relay_fn, model_fn
+  procedure(model_function_template), pointer :: model_fn
+  procedure(relay_function_template), pointer :: server_bound_relay_fn, model_bound_relay_fn
+  procedure(no_op_function_template), pointer :: no_op_fn
 
   success = .false.
 
+  ! Basic input check
   if (params % is_on_server) then 
     print *, 'ERROR: Trying to initialize a model node, but setting "is_on_server = .true."'
     return
   end if
 
+  !-----------------------------------
+  ! Set up functions to call
   server_bound_relay_fn => default_server_bound_relay
   if (present(custom_server_bound_relay_fn)) then
     if (associated(custom_server_bound_relay_fn)) server_bound_relay_fn => custom_server_bound_relay_fn
@@ -74,11 +80,18 @@ function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound
     if (associated(custom_model_bound_relay_fn)) model_bound_relay_fn => custom_model_bound_relay_fn
   end if
 
+  no_op_fn => default_no_op
+  if (present(custom_no_op_fn)) then
+    if (associated(custom_no_op_fn)) no_op_fn => custom_no_op_fn
+  end if
+
   model_fn => default_model
   if (present(model_function)) then
     if (associated(model_function)) model_fn => model_function
   end if
+  !-----------------------------------
   
+  ! Init IO server context
   success = context % init(params)
 
   if (.not. success) then
@@ -86,8 +99,11 @@ function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound
     return
   end if
 
+  ! Do the work the model node is supposed to do, depending on this PE's role
   success = .false.
-  if (context % is_model()) then
+  if (context % is_no_op()) then
+    success = no_op_fn(context)
+  else if (context % is_model()) then
     success = model_fn(context)
   else if (context % is_relay()) then
     if (context % is_server_bound()) then

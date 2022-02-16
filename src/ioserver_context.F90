@@ -34,7 +34,8 @@ module ioserver_context_module
 
   ! Publish some types and constants that are useful
   public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
-  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, NO_COLOR
+  public :: no_op_function_template, default_no_op
+  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR
 
   integer, parameter, public :: MAX_NUM_SERVER_STREAMS = 128 !< How many streams we can open within a single context
   integer, parameter         :: MAX_PES_PER_NODE       = 128 !< How many PEs per node we can manage
@@ -237,6 +238,7 @@ module ioserver_context_module
     procedure, pass, public :: is_model_bound
     procedure, pass, public :: is_channel
     procedure, pass, public :: is_grid_processor
+    procedure, pass, public :: is_no_op
     !> @}
 
     !> @{ \name Finalization
@@ -269,7 +271,7 @@ module ioserver_context_module
     !> @}
 
     !> @{ \name Process function management
-    procedure, pass         :: no_op => IOserver_noop
+    procedure, pass, public :: no_op => IOserver_noop
     procedure, pass, public :: set_debug => IOserver_set_debug
     !> @}
 
@@ -281,13 +283,33 @@ module ioserver_context_module
     
     !> @{ \name Debugging
     procedure, pass, public :: debug_mode => ioserver_context_debug_mode
+    procedure, pass, public :: get_detailed_pe_name
 
     procedure, pass :: print_io_colors
     procedure, pass :: print_shared_mem_sizes
     !> @}
   end type ioserver_context
 
+  abstract interface
+    function no_op_function_template(context) result(no_op_success)
+      import ioserver_context
+      implicit none
+      type(ioserver_context), intent(inout) :: context !< IO server context with which the model will operate
+      logical :: no_op_success !< Whether the function terminated successfully
+    end function no_op_function_template
+
+  end interface
+
 contains
+
+function default_no_op(context) result(no_op_success)
+  implicit none
+  type(ioserver_context), intent(inout) :: context
+  logical :: no_op_success
+  no_op_success = .false.
+  call context % no_op()
+  no_op_success = .true.
+end function default_no_op
 
 !> Whether this context belongs to a relay process (server- or model-bound)
 function is_relay(context)
@@ -345,6 +367,14 @@ function is_grid_processor(context)
   is_grid_processor = iand(context % color, GRID_PROCESSOR_COLOR) == GRID_PROCESSOR_COLOR
 end function is_grid_processor
 
+!> Whether this context belongs to a NO-OP process
+function is_no_op(context)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  logical :: is_no_op
+  is_no_op = iand(context % color, NO_OP_COLOR) == NO_OP_COLOR
+end function is_no_op
+
 !> Whether debug mode is enabled for this context
 function ioserver_context_debug_mode(context)
   implicit none
@@ -352,6 +382,47 @@ function ioserver_context_debug_mode(context)
   logical :: ioserver_context_debug_mode
   ioserver_context_debug_mode = context % params % debug_mode
 end function ioserver_context_debug_mode
+
+function get_detailed_pe_name(context) result(detailed_name)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  character(len=:), allocatable :: detailed_name
+  character(len=:), allocatable :: short_name
+  character(len=256) :: temp_name
+
+  if (context % is_server()) then
+    if (context % is_server_bound()) then
+      short_name = 'Server/server-bound'
+    else if (context % is_model_bound()) then
+      short_name = 'Server/model-bound '
+    else if (context % is_channel()) then
+      short_name = 'Server/channel     '
+    else if (context % is_grid_processor()) then
+      short_name = 'Server/grid worker '
+    else
+      short_name = 'Server/[unknown]   '
+    end if
+  else if (context % is_relay()) then
+    if (context % is_server_bound()) then
+      short_name = 'Relay/server-bound '
+    else if (context % is_model_bound()) then
+      short_name = 'Relay/model-bound  '
+    else
+      short_name = 'Relay/[unknown]    '
+    end if
+  else if (context % is_model()) then
+    short_name = 'Model              '
+  else if (context % is_no_op()) then
+    short_name = 'No-op              '
+  else
+    short_name = '[unknown] '
+  end if
+
+  write(temp_name, '(A, A, I6, A, I6, A, I5, A, I5)')         &
+      short_name, ' | active rank ', context % active_rank, '/', context % active_size, ' | node ', context % node_id, '/', context % num_nodes
+
+  detailed_name = trim(temp_name)
+end function get_detailed_pe_name
 
 !> Open a stream where the model can write data
 !> \return A stream object that is already open and can be written to
@@ -472,33 +543,7 @@ subroutine set_time_to_quit(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
   context % shmem % time_to_quit = 1
-  if (context % debug_mode()) then 
-    if (context % is_relay()) then
-      if (context % is_server_bound()) then
-        print '(A)', 'DEBUG: time to quit (relay/server-bound)'
-      else if (context % is_model_bound()) then
-        print '(A)', 'DEBUG: time to quit (relay/model-bound)'
-      else
-        print '(A)', 'DEBUG: time to quit (relay/???)'
-      end if
-    else if (context % is_model()) then
-      print '(A)', 'DEBUG: time to quit (model)'
-    else if (context % is_server()) then
-      if (context % is_grid_processor()) then
-        print '(A)', 'DEBUG: time to quit (server/grid processor)'
-      else if (context % is_channel()) then
-        print '(A)', 'DEBUG: time to quit (server/channel)'
-      else if (context % is_server_bound()) then
-        print '(A)', 'DEBUG: time to quit (server/server-bound)'
-      else if (context % is_model_bound()) then
-        print '(A)', 'DEBUG: time to quit (server/model-bound)'
-      else
-        print '(A)', 'DEBUG: time to quit (server/???)'
-      end if
-    else
-      print '(A)', 'DEBUG: time to quit (other)'
-    end if
-  end if
+  if (context % debug_mode()) print '(A, A)', 'DEBUG: time to quit ', context % get_detailed_pe_name()
 end subroutine set_time_to_quit
 
 !> Check whether the "time-to-quit" flag has been set on this node
@@ -575,6 +620,9 @@ function IOserver_get_crs(context, color) result(crs)
       crs % comm = context % io_comm
 
     case(GRID_PROCESSOR_COLOR)
+      crs % comm = context % grid_processor_server_comm
+
+    case(GRID_PROCESSOR_COLOR + SERVER_COLOR)    ! Same as just "GRID_PROCESSOR_COLOR"
       crs % comm = context % grid_processor_server_comm
 
     case(SERVER_COLOR + SERVER_BOUND_COLOR)
@@ -704,16 +752,12 @@ subroutine IOserver_noop(context)
     end function sleep
   end interface
 
-  if (context % debug_mode()) print *,'DEBUG: NO-OP process, global rank =', context % global_rank
   do while (.not. context % is_time_to_quit())    ! sleep loop until quit flag appears
     sleep_dummy = sleep(1)
   enddo
   if (context % debug_mode()) then
-    write(6,'(A,(15I5))')' DEBUG: colors =', context % shmem % pe(0:context % max_smp_pe) % color
-    write(6,*)'FINAL:, NO-OP', context % global_rank
+    print '(A, A)', 'DEBUG: time to quit ', context % get_detailed_pe_name()
   end if
-  call MPI_Finalize()
-  stop
 end subroutine IOserver_noop
 
 !> Check whether this context has been successfully initialized
@@ -1107,7 +1151,7 @@ function init_communicators(context) result(success)
   end if
 
   ! no-op processes don't need to go any further
-  if (context % color == NO_OP_COLOR) then
+  if (context % is_no_op()) then
     success = .true.
     return
   end if
@@ -1317,11 +1361,10 @@ function init_shared_mem(context) result(success)
   ! Wait until control area initialization is done everywhere
   call MPI_barrier(context % global_comm)
 
-  if (context % color == NO_OP_COLOR) then       ! this is a NO-OP process, enter wait loop for finalize
+  if (context % is_no_op()) then       ! this is a NO-OP process, enter wait loop for finalize
     context % shmem % pe(context % node_rank) % color = NO_OP_COLOR
-    call context % no_op()              ! this subroutine will never return and call finalize
-    call MPI_Finalize()                 ! no_op should never return, but ... in case it does
-    stop
+    success = .true.
+    return
   endif
 
   ! ===================================================================================

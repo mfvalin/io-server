@@ -48,13 +48,14 @@ module run_server_node_module
 
 contains
 
-function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn, custom_grid_processor_fn) result(success)
+function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn, custom_grid_processor_fn, custom_no_op_fn) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
   procedure(server_function_template),  intent(in), pointer, optional :: custom_channel_fn
   procedure(server_function_template),  intent(in), pointer, optional :: custom_server_bound_fn
   procedure(server_function_template),  intent(in), pointer, optional :: custom_model_bound_fn
   procedure(server_function_template),  intent(in), pointer, optional :: custom_grid_processor_fn
+  procedure(no_op_function_template),   intent(in), pointer, optional :: custom_no_op_fn
   logical :: success
   
   type(ioserver_context) :: context
@@ -62,14 +63,17 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   procedure(server_function_template), pointer :: receiver_fn
   procedure(server_function_template), pointer :: producer_fn
   procedure(server_function_template), pointer :: grid_processor_fn
+  procedure(no_op_function_template),  pointer :: no_op_fn
 
   success = .false.
 
+  !-------------------------------------
   ! Set up functions to call
   channel_fn        => default_channel
   receiver_fn       => default_server_bound
   producer_fn       => default_model_bound
   grid_processor_fn => default_grid_processor
+  no_op_fn          => default_no_op
 
   if (present(custom_channel_fn)) then
     if (associated(custom_channel_fn)) channel_fn => custom_channel_fn
@@ -83,12 +87,18 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   if (present(custom_grid_processor_fn)) then
     if (associated(custom_grid_processor_fn)) grid_processor_fn => custom_grid_processor_fn
   end if
+  if (present(custom_no_op_fn)) then
+    if (associated(custom_no_op_fn)) no_op_fn => custom_no_op_fn
+  end if
+  !-------------------------------------
 
+  ! Basic check on input params
   if (.not. params % is_on_server) then
     print *, 'ERROR: Trying to launch the server node, but setting "is_on_server = .false."'
     return
   end if
 
+  ! Context initialization
   success = context % init(params)
 
   if (.not. success) then
@@ -96,8 +106,11 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
     return
   end if
 
+  ! Do whatever server PEs are supposed to do, depending on their role
   success = .false.
-  if (context % is_channel()) then
+  if (context % is_no_op()) then
+    success = no_op_fn(context)
+  else if (context % is_channel()) then
     success = channel_fn(context)
   else if (context % is_server_bound()) then
     success = receiver_fn(context)

@@ -8,7 +8,7 @@ ${MPI_COMMAND} -n 12          ${BUILD_PATH}/tests/io_server_simple_mutex        
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_test_memory_arena                   || exit -1
 ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_default_model                       || exit -1
 ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_model_write           1 2 2 2 4     || exit -1
-${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_custom_functions                    || exit -1
+${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_init_comms                          || exit -1
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_edge_case_1                     || exit -1
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_unaligned_input                 || exit -1
 #${MPI_COMMAND} -n 20         ${BUILD_PATH}/tests/io_server_put_error
