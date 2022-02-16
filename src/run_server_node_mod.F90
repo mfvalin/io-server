@@ -48,7 +48,8 @@ module run_server_node_module
 
 contains
 
-function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn, custom_grid_processor_fn, custom_no_op_fn) result(success)
+function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn,    &
+  custom_grid_processor_fn, custom_no_op_fn, context_out) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
   procedure(server_function_template),  intent(in), pointer, optional :: custom_channel_fn
@@ -56,6 +57,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   procedure(server_function_template),  intent(in), pointer, optional :: custom_model_bound_fn
   procedure(server_function_template),  intent(in), pointer, optional :: custom_grid_processor_fn
   procedure(no_op_function_template),   intent(in), pointer, optional :: custom_no_op_fn
+  type(ioserver_context),               intent(out),         optional :: context_out
   logical :: success
   
   type(ioserver_context) :: context
@@ -129,6 +131,8 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   end if
 
   call context % finalize()
+
+  if (present(context_out)) context_out = context
 end function run_server_node
 
 function default_server_bound(context) result(server_success)

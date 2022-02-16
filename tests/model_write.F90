@@ -405,6 +405,7 @@ program pseudomodelandserver
   use ISO_C_BINDING
   use mpi_f08
 
+  use ioserver_context_module
   use ioserver_run_module
   use model_write_parameters
   implicit none
@@ -420,9 +421,9 @@ program pseudomodelandserver
   integer :: num_grid_processors
   integer :: num_channels
   integer :: num_relay_per_node, num_noop
-  integer :: num_model_per_node
 
   type(ioserver_input_parameters) :: params
+  type(ioserver_context) :: context
   procedure(model_function_template), pointer :: model_fn_ptr
   logical :: success
 
@@ -480,7 +481,7 @@ program pseudomodelandserver
   params % dcb_server_bound_size_mb = 500.0
 
   if (params % is_on_server) then
-    success = ioserver_run_server_node(params)
+    success = ioserver_run_server_node(params, context_out = context)
   else
     success = ioserver_run_model_node(params, model_function = model_fn_ptr)
   end if
@@ -495,13 +496,8 @@ program pseudomodelandserver
   if (server_node .and. node_rank == 0) then
     block
       integer :: num_model_pes
-      if (single_node) then
-        num_model_per_node = global_size - num_server_processes - num_relay_per_node
-      else
-        num_model_per_node = node_size - num_relay_per_node
-      end if
 
-      num_model_pes = num_model_per_node * (num_nodes - 1)
+      num_model_pes = context % get_num_total_model()
 
       ! Init area info
       if (mod(num_model_pes, 4) == 0) then

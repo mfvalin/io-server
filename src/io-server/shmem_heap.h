@@ -122,13 +122,6 @@ static inline void ShmemHeap_unlock(
 ) {
   release_idlock(&heap->meta->lock, 0);
 }
-//! get offset between 2 pointers in specified units (1/2/4/8/16 bytes)
-//! @return offset between 2 pointers in specified units (1/2/4/8/16 bytes)
-intptr_t Pointer_offset(
-  void *ref,                //!< [in]  reference address
-  void *to,                 //!< [in]  pointer for which a difference with ref is sought
-  uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
-  );
 //! add offset to pointer in specified units (1/2/4/8/16 bytes)
 //! @return pointer after adding offset in specified units (1/2/4/8/16 bytes)
 void *Pointer_add_offset(

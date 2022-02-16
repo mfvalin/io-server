@@ -208,31 +208,6 @@ void ShmemHeap_lock_f(shmem_heap* heap) { if (ShmemHeap_check_init(heap) != NULL
 void ShmemHeap_unlock_f(shmem_heap* heap) { if (ShmemHeap_check_init(heap) != NULL) ShmemHeap_unlock(heap); }
 
 // F_StArT
-// function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset')
-//   import :: C_INTPTR_T, C_PTR, C_INT
-//   implicit none
-//   type(C_PTR), intent(IN), value    :: ref
-//   type(C_PTR), intent(IN), value    :: to
-//   integer(C_INT), intent(IN), value :: szeof
-//   integer(C_INTPTR_T)               :: offset
-// end function Pointer_offset
-// F_EnD
-//  C_StArT
-//! get offset between 2 pointers in specified units (1/2/4/8/16 bytes)
-//! @return offset between 2 pointers in specified units (1/2/4/8/16 bytes)
-intptr_t Pointer_offset(
-  void *ref,                //!< [in]  reference address
-  void *to,                 //!< [in]  pointer for which a difference with ref is sought
-  uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
-  ){
-//  C_EnD
-  intptr_t offset = (char *)to - (char *)ref;
-  while(szeof > 1) { offset >>= 1 ; szeof >>= 1 ; }
-  return offset;
-}
-
-
-// F_StArT
 // function Pointer_add_offset(ref, offset, szeof) result(to) bind(C,name='Pointer_add_offset')
 //   import :: C_INTPTR_T, C_PTR, C_INT
 //   implicit none

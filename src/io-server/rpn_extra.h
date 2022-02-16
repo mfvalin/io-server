@@ -182,5 +182,15 @@ static inline void rpn_usleep(const int num_us)
 {
   sleep_us(num_us);
 }
+//! Compute offset between 2 pointers in specified units (1/2/4/8/16 bytes)
+static inline intptr_t Pointer_offset(
+    void *ref,                //!< [in]  reference address
+    void *to,                 //!< [in]  pointer for which a difference with ref is sought
+    uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
+) {
+  intptr_t offset = (char *)to - (char *)ref;
+  while(szeof > 1) { offset >>= 1 ; szeof >>= 1 ; }
+  return offset;
+}
 
 #endif // IO_SERVER_rpn_extra_GEN_H

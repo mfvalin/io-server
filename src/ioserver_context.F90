@@ -25,6 +25,7 @@ module ioserver_context_module
   use ioserver_constants
   use ioserver_message_module
   use model_stream_module
+  use rpn_extra_module
   use server_stream_module
   use shmem_arena_mod
   implicit none
@@ -209,7 +210,6 @@ module ioserver_context_module
 
     ! ------------------
     !> @{ \name Miscellaneous
-    integer, dimension(:), pointer :: iocolors => NULL()     !< Color table for io server and relay processes
     type(ioserver_messenger), pointer :: messenger => NULL() !< Will be shared among open model files
     !> @}
 
@@ -221,7 +221,6 @@ module ioserver_context_module
     procedure, pass         :: init_communicators
     procedure, pass         :: init_shared_mem
     procedure, pass         :: build_relay_model_index
-    procedure, pass         :: build_print_model_index
     procedure, pass         :: fetch_node_shmem_structs
     procedure, pass         :: is_initialized
     procedure, pass         :: allocate_from_arena
@@ -253,6 +252,7 @@ module ioserver_context_module
 
     !> @{ \name Getters
     procedure, pass, public :: get_num_local_model
+    procedure, pass, public :: get_num_total_model
 
     procedure, pass, public :: get_global_rank
     procedure, pass, public :: get_crs => IOserver_get_crs
@@ -568,6 +568,14 @@ function get_num_local_model(context) result(num_model)
   num_model = context % num_local_model_proc
 end function get_num_local_model
 
+!> Get total number of model PEs that connect to the IO server
+function get_num_total_model(context) result(num_model)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  integer :: num_model
+  num_model = context % num_model_pes
+end function get_num_total_model
+
 !> Get rank of this process on the global communicator
 function get_global_rank(context) result(global_rank)
   implicit none
@@ -871,7 +879,6 @@ subroutine ioserver_context_finalize_manually(this)
       call this % finalize_relay()
     end if
 
-    if (associated(this % iocolors)) deallocate(this % iocolors)
     if (associated(this % messenger)) deallocate(this % messenger)
 
     if (associated(this % node_relay_ranks)) deallocate(this % node_relay_ranks)
@@ -892,32 +899,6 @@ subroutine ioserver_context_finalize(context)
   type(ioserver_context), intent(inout) :: context
   call context % finalize()
 end subroutine ioserver_context_finalize
-
-!> Build a list of model/relay indices and print them (for debugging purposes only)
-subroutine build_print_model_index(context)
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-
-  type(C_PTR)         :: listr(0:context % max_relay_rank)
-  integer(C_INTPTR_T) :: listr2(0:context % max_relay_rank)
-  type(C_PTR)         :: listc(0:context % max_model_rank)
-  integer(C_INTPTR_T) :: listc2(0:context % max_model_rank)
-  integer :: i
-
-  do i = 0, context % max_relay_rank
-    listr(i) = context % shmem % pe(context % node_relay_ranks(i)) % arena_ptr
-    listr2(i) = transfer(listr(i), listr2(i))
-  enddo
-  do i = 0, context % max_model_rank
-    listc(i) = context % shmem % pe(context % node_model_ranks(i)) % arena_ptr
-    listc2(i) = transfer(listc(i), listc2(i))
-  enddo
-  print *,'DEBUG: relay   =', context % node_relay_ranks(0:context % max_relay_rank)
-  print 1, listr2(0:context % max_relay_rank)
-  print *,'DEBUG: compute =', context % node_model_ranks(0:context % max_model_rank)
-  print 1, listc2(0:context % max_model_rank)
-1   format(10X, 8Z18.16)
-end subroutine build_print_model_index
 
 !> Translate node color table into relay and model rank tables
 subroutine build_relay_model_index(context)
@@ -1412,6 +1393,17 @@ function init_shared_mem(context) result(success)
       goto 2
     end if
 
+    if (context % debug_mode()) then
+      block
+        integer :: server_rank
+        call MPI_Comm_rank(context % server_comm, server_rank)
+        if (server_rank == 0) then
+          print '(A, I12, I8, 1X, A)', 'DEBUG: Successfully allocated server shared memory for heap and stream files',      &
+              context % server_heap_shmem_size, context % server_file_shmem_size, context % get_detailed_pe_name()
+        end if
+      end block
+    end if
+
     call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_SERVER_STREAMS])
 
     ! Create shared data structures
@@ -1462,14 +1454,14 @@ function init_shared_mem(context) result(success)
       ! Allocate
       context % model_shmem = RPN_allocate_shared(context % model_shmem_size, context % model_relay_smp_comm)
 
-      if (context % debug_mode()) then
-        write(6,'(A, I10, A, I4)') 'DEBUG: after MPI_Win_allocate_shared, size = ', context % model_shmem_size, ', rank = ', context % model_relay_smp_rank
-        call flush(6)
-      end if
-
       if (.not. c_associated(context % model_shmem)) then
         print '(A, I9, A)', 'ERROR: Unable to allocated shared memory on model node (', context % model_shmem_size , ' MB)'
         goto 2
+      end if
+
+      if (context % debug_mode() .and. context % model_relay_smp_rank == 0) then
+        write(6,'(A, I10, 1X, A)') 'DEBUG: Successfully allocated shared mem for relay+model, size = ', context % model_shmem_size, context % get_detailed_pe_name()
+        call flush(6)
       end if
     end block
 
@@ -1494,8 +1486,6 @@ function init_shared_mem(context) result(success)
       call MPI_Comm_rank(context % model_smp_comm, context % shmem % pe(context % node_rank) % rank)
     end if
 
-    if (context % debug_mode()) print *, 'DEBUG: rank', context % shmem % pe(context % node_rank) % rank, ' in color', context % color
-
     ! Wait for memory arena to be initialized by rank 0 before allocating heap and circular buffer(s)
     call MPI_Barrier(context % model_relay_smp_comm)
 
@@ -1505,14 +1495,6 @@ function init_shared_mem(context) result(success)
     alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.04_8, kind=C_SIZE_T), .false.) .and. alloc_success
     alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.1_8, kind=C_SIZE_T), .true.) .and. alloc_success
     if (.not. alloc_success) goto 2
-
-    if (context % debug_mode()) then
-      write(6,'(A,3Z18.16)') ' DEBUG: displacements =', &
-        context % shmem % pe(context % node_rank) % heap_offset, &
-        context % shmem % pe(context % node_rank) % model_bound_cb_offset, &
-        context % shmem % pe(context % node_rank) % server_bound_cb_offset
-    end if
-    call flush(6)
   endif   ! (server process)
 
   goto 3       ! no error, bypass
@@ -1536,13 +1518,6 @@ function init_shared_mem(context) result(success)
 
   ! IO Relay or Server
   if (context % is_relay() .or. (context % is_server() .and. .not. context % is_grid_processor())) then              ! IO relay or IO server
-    block
-      integer :: io_dcb_comm_size
-      call MPI_Comm_size(context % io_dcb_comm, io_dcb_comm_size)
-      allocate(context % iocolors(0:io_dcb_comm_size))             ! collect colors for IO PEs, index in array is rank in io_dcb_comm
-      call MPI_Allgather(context % color, 1, MPI_INTEGER, context % iocolors, 1, MPI_INTEGER, context % io_dcb_comm)
-      if (context % debug_mode()) write(6,'(A,10I8,(/19X,10I8))') ' DEBUG: IO colors =', context % iocolors(0:io_dcb_comm_size-1)
-    end block
 
     ! Create DCB
     block 
@@ -1576,10 +1551,6 @@ function init_shared_mem(context) result(success)
     call context % print_shared_mem_sizes()
   end if
 
-  if (context % debug_mode() .and. (context % is_relay() .or. context % is_model())) then
-    call context % build_print_model_index()
-  end if
-
   allocate(context % messenger)
   call context % messenger % set_debug(context % debug_mode())
   call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
@@ -1610,6 +1581,11 @@ function ioserver_context_init(context, params) result(success)
   if (.not. success) then
     print *, 'ERROR: Could not properly initialize all communicators!'
     return
+  end if
+
+  if (context % debug_mode()) then
+    call MPI_Barrier(context % global_comm)
+    print '(A, 1X, A)', 'DEBUG: ', context % get_detailed_pe_name()
   end if
 
   success = context % init_shared_mem()

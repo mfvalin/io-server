@@ -33,7 +33,7 @@ module heap_module
   integer, parameter         :: TKR_REAL    = 2           !< tkr code for real arrays
 
 
-  public :: Pointer_offset, bm_to_ptr, ptr_to_bm
+  public :: bm_to_ptr, ptr_to_bm
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, bind(C) :: block_meta_c

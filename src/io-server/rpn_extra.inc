@@ -84,4 +84,12 @@ import :: C_PTR
 implicit none
 type(C_PTR), intent(INOUT) :: ptr
 end subroutine free_c_ptr
+function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset_f')
+import :: C_INTPTR_T, C_PTR, C_INT
+implicit none
+type(C_PTR), intent(IN), value    :: ref
+type(C_PTR), intent(IN), value    :: to
+integer(C_INT), intent(IN), value :: szeof
+integer(C_INTPTR_T)               :: offset
+end function Pointer_offset
 end interface

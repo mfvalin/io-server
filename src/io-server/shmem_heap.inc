@@ -47,14 +47,6 @@ import :: C_PTR
 implicit none
 type(C_PTR), intent(in), value :: heap
 end subroutine ShmemHeap_unlock
-function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset')
-import :: C_INTPTR_T, C_PTR, C_INT
-implicit none
-type(C_PTR), intent(IN), value    :: ref
-type(C_PTR), intent(IN), value    :: to
-integer(C_INT), intent(IN), value :: szeof
-integer(C_INTPTR_T)               :: offset
-end function Pointer_offset
 function Pointer_add_offset(ref, offset, szeof) result(to) bind(C,name='Pointer_add_offset')
 import :: C_INTPTR_T, C_PTR, C_INT
 implicit none

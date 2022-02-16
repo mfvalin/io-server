@@ -212,6 +212,31 @@ void free_c_ptr(void** ptr) {
   *ptr = NULL;
 }
 
+//  C_StArT
+//! Compute offset between 2 pointers in specified units (1/2/4/8/16 bytes)
+static inline intptr_t Pointer_offset(
+    void *ref,                //!< [in]  reference address
+    void *to,                 //!< [in]  pointer for which a difference with ref is sought
+    uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
+) {
+  intptr_t offset = (char *)to - (char *)ref;
+  while(szeof > 1) { offset >>= 1 ; szeof >>= 1 ; }
+  return offset;
+}
+//  C_EnD
+
+// F_StArT
+// function Pointer_offset(ref, to, szeof) result(offset) bind(C,name='Pointer_offset_f')
+//   import :: C_INTPTR_T, C_PTR, C_INT
+//   implicit none
+//   type(C_PTR), intent(IN), value    :: ref
+//   type(C_PTR), intent(IN), value    :: to
+//   integer(C_INT), intent(IN), value :: szeof
+//   integer(C_INTPTR_T)               :: offset
+// end function Pointer_offset
+// F_EnD
+intptr_t Pointer_offset_f(void *ref, void *to, uint32_t szeof) { return Pointer_offset(ref, to, szeof); }
+
 //F_StArT
 //  end interface
 //F_EnD
