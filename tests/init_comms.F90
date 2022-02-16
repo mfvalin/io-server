@@ -5,7 +5,7 @@ module init_comms_module
   implicit none
 
   type, private :: all_crs
-    type(comm_rank_size) :: active_crs, node_crs, io_crs
+    type(comm_rank_size) :: global_crs, active_crs, node_crs, io_crs
     type(comm_rank_size) :: model_relay_crs, model_crs, relay_crs, model_relay_node_crs, model_node_crs, relay_node_crs, sb_relay_node_crs
     type(comm_rank_size) :: server_crs, server_work_crs, server_dcb_crs, sb_server_crs, mb_server_crs, grid_processor_crs
   contains
@@ -53,7 +53,8 @@ contains
     class(all_crs),         intent(inout) :: this
     type(ioserver_context), intent(in)    :: context
 
-    this % active_crs            = context % get_crs(NO_COLOR)
+    this % global_crs            = context % get_crs(NO_COLOR)
+    this % active_crs            = context % get_crs(SERVER_COLOR + MODEL_COLOR + RELAY_COLOR)
     this % node_crs              = context % get_crs(NODE_COLOR)
     this % io_crs                = context % get_crs(RELAY_COLOR + SERVER_COLOR)
     this % model_relay_crs       = context % get_crs(MODEL_COLOR + RELAY_COLOR)
@@ -64,11 +65,11 @@ contains
     this % relay_node_crs        = context % get_crs(RELAY_COLOR + NODE_COLOR)
     this % sb_relay_node_crs     = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
 
-    this % server_crs            = context % get_crs(-1)
-    this % server_work_crs       = context % get_crs(SERVER_COLOR)
-    this % server_dcb_crs        = context % get_crs(-1)
+    this % server_crs            = context % get_crs(SERVER_COLOR)
+    this % server_work_crs       = context % get_crs(SERVER_COLOR - CHANNEL_COLOR)
+    this % server_dcb_crs        = context % get_crs(CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR)
     this % sb_server_crs         = context % get_crs(SERVER_COLOR + SERVER_BOUND_COLOR)
-    this % mb_server_crs         = context % get_crs(-1)
+    this % mb_server_crs         = context % get_crs(SERVER_COLOR + MODEL_BOUND_COLOR)
     this % grid_processor_crs    = context % get_crs(SERVER_COLOR + GRID_PROCESSOR_COLOR)
   end subroutine get_all
 
@@ -91,6 +92,7 @@ contains
     call this % get_all(context)
 
     success =                                                                 &
+        check_single_non_null(context, this % global_crs, .true., 'global') .and.       &
         check_single_non_null(context, this % active_crs, active, 'active') .and.       &
         check_single_non_null(context, this % node_crs, node, 'node') .and.       &
         check_single_non_null(context, this % io_crs, io, 'io') .and.       &
@@ -110,6 +112,7 @@ contains
 
     if (.not. success) return
 
+    call check_single_barrier(context, this % global_crs, .true., 'global')
     call check_single_barrier(context, this % active_crs, active, 'active')
     call check_single_barrier(context, this % node_crs, node, 'node')
     call check_single_barrier(context, this % io_crs, io, 'io')
@@ -172,14 +175,9 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
 
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom model doing nothing ', active_crs % rank
-  
+    print *, 'Custom model doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -205,25 +203,20 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom server-bound relay doing nothing ', active_crs % rank
 
-    call crs % get_all(context)
-
+    print *, 'Custom server-bound relay doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
-        model             = .false.,           &
+        model             = .false.,          &
         model_relay       = .true.,           &
         model_relay_node  = .true.,           &
-        model_node        = .false.,           &
-        io                = .true.,          &
-        relay             = .true.,          &
-        relay_node        = .true.,          &
-        sb_relay_node     = .true.,          &
+        model_node        = .false.,          &
+        io                = .true.,           &
+        relay             = .true.,           &
+        relay_node        = .true.,           &
+        sb_relay_node     = .true.,           &
         server            = .false.,          &
         server_work       = .false.,          &
         server_dcb        = .false.,          &
@@ -239,24 +232,19 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom model-bound relay doing nothing ', active_crs % rank
 
-    call crs % get_all(context)
-
+    print *, 'Custom model-bound relay doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
-        model             = .false.,           &
+        model             = .false.,          &
         model_relay       = .true.,           &
         model_relay_node  = .true.,           &
-        model_node        = .false.,           &
-        io                = .true.,          &
-        relay             = .true.,          &
-        relay_node        = .true.,          &
+        model_node        = .false.,          &
+        io                = .true.,           &
+        relay             = .true.,           &
+        relay_node        = .true.,           &
         sb_relay_node     = .false.,          &
         server            = .false.,          &
         server_work       = .false.,          &
@@ -273,25 +261,22 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom grid processor doing nothing ', active_crs % rank
 
+    print *, 'Custom grid processor doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
-        model             = .false.,           &
-        model_relay       = .false.,           &
-        model_relay_node  = .false.,           &
-        model_node        = .false.,           &
-        io                = .true.,          &
+        model             = .false.,          &
+        model_relay       = .false.,          &
+        model_relay_node  = .false.,          &
+        model_node        = .false.,          &
+        io                = .true.,           &
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
-        server            = .false.,          &
-        server_work       = .true.,          &
+        server            = .true.,           &
+        server_work       = .true.,           &
         server_dcb        = .false.,          &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
@@ -306,28 +291,24 @@ contains
     type(ioserver_context), intent(inout) :: context
     logical :: success
 
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
     type(distributed_circular_buffer) :: dcb
 
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom channel doing almost nothing ', active_crs % rank
-
+    print *, 'Custom channel doing almost nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
-        model             = .false.,           &
-        model_relay       = .false.,           &
-        model_relay_node  = .false.,           &
-        model_node        = .false.,           &
-        io                = .true.,          &
+        model             = .false.,          &
+        model_relay       = .false.,          &
+        model_relay_node  = .false.,          &
+        model_node        = .false.,          &
+        io                = .true.,           &
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
-        server            = .false.,          &
+        server            = .true.,           &
         server_work       = .false.,          &
-        server_dcb        = .false.,          &
+        server_dcb        = .true.,           &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
         grid_processor    = .false.)
@@ -342,12 +323,9 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom server-bound server doing nothing ', active_crs % rank
 
+    print *, 'Custom server-bound server doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -359,9 +337,9 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
-        server            = .false.,          &
+        server            = .true.,           &
         server_work       = .true.,           &
-        server_dcb        = .false.,          &
+        server_dcb        = .true.,           &
         sb_server         = .true.,           &
         mb_server         = .false.,          &
         grid_processor    = .false.)
@@ -374,12 +352,9 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
-    active_crs = context % get_crs(NO_COLOR)
-    call MPI_Barrier(active_crs % comm)
-    print *, 'Custom model-bound server doing nothing ', active_crs % rank
 
+    print *, 'Custom model-bound server doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -391,11 +366,11 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
-        server            = .false.,          &
+        server            = .true.,           &
         server_work       = .true.,           &
-        server_dcb        = .false.,          &
+        server_dcb        = .true.,           &
         sb_server         = .false.,          &
-        mb_server         = .false.,          &
+        mb_server         = .true.,           &
         grid_processor    = .false.)
 
     if (.not. success) print *, 'Model-bound server PE has failed!'
@@ -406,14 +381,9 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-
-    type(comm_rank_size) :: active_crs
     type(all_crs) :: crs
-    active_crs = context % get_crs(NO_COLOR)
+
     print *, 'Custom no-op server doing nothing '
-
-    call crs % get_all(context)
-
     success = crs % check_all(context,        &
         active            = .false.,          &
         node              = .true.,           &
@@ -456,8 +426,8 @@ program init_comms
   call MPI_Init()
   call MPI_Comm_size(MPI_COMM_WORLD, global_size)
 
-  if (global_size < 9) then
-    print *, 'ERROR: Need at least 10 processes to run this test! Only have ', global_size
+  if (global_size < 11) then
+    print *, 'ERROR: Need at least 11 processes to run this test! Only have ', global_size
     error stop 1
   end if
 
@@ -467,10 +437,11 @@ program init_comms
 
   params % num_channels = 2
   params % num_server_bound_server = 2
+  params % num_model_bound_server = 1
   params % num_relay_per_node = 2
   params % num_grid_processors = 1
 
-  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_grid_processors
+  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_grid_processors + params % num_model_bound_server
 
   if (server_node) then
     ! Add 1 NO-OP process on the server

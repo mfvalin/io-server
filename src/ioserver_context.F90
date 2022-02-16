@@ -35,7 +35,7 @@ module ioserver_context_module
   ! Publish some types and constants that are useful
   public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
   public :: no_op_function_template, default_no_op
-  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR
+  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
 
   integer, parameter, public :: MAX_NUM_SERVER_STREAMS = 128 !< How many streams we can open within a single context
   integer, parameter         :: MAX_PES_PER_NODE       = 128 !< How many PEs per node we can manage
@@ -586,13 +586,16 @@ function IOserver_get_crs(context, color) result(crs)
   crs = comm_rank_size(MPI_COMM_NULL, -1, 0)
   
   select case(color)
-    case(NO_COLOR)                                ! all non NO-OP PEs               (subset of global_comm)
+    case(NO_COLOR)                                ! Everyone that did context init (i.e. global_comm)
+      crs % comm = context % global_comm
+
+    case(SERVER_COLOR + MODEL_COLOR + RELAY_COLOR)! all non NO-OP PEs               (subset of global_comm)
       crs % comm = context % active_comm
 
     case(NODE_COLOR)                              ! all PEs on this SMP node        (subset of global_comm)
       crs % comm = context % node_comm
 
-    case(SERVER_COLOR)                            ! server PEs that can do work     (subset of server_comm, itself a subset of active_comm)
+    case(SERVER_COLOR - CHANNEL_COLOR)            ! server PEs that can do work     (subset of server_comm, itself a subset of active_comm. excludes channel)
       crs % comm = context % server_work_comm
 
     case(MODEL_COLOR + RELAY_COLOR)               ! compute and relay PEs           (subset of active_comm)
@@ -619,6 +622,9 @@ function IOserver_get_crs(context, color) result(crs)
     case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of active_comm)
       crs % comm = context % io_comm
 
+    case(SERVER_COLOR)                            ! Active server PEs
+      crs % comm = context % server_comm
+
     case(GRID_PROCESSOR_COLOR)
       crs % comm = context % grid_processor_server_comm
 
@@ -627,6 +633,12 @@ function IOserver_get_crs(context, color) result(crs)
 
     case(SERVER_COLOR + SERVER_BOUND_COLOR)
       crs % comm = context % server_bound_server_comm
+
+    case(SERVER_COLOR + MODEL_BOUND_COLOR)
+      crs % comm = context % model_bound_server_comm
+
+    case(CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR)
+      crs % comm = context % server_dcb_comm
 
     case default
       crs % comm = MPI_COMM_NULL
@@ -755,9 +767,6 @@ subroutine IOserver_noop(context)
   do while (.not. context % is_time_to_quit())    ! sleep loop until quit flag appears
     sleep_dummy = sleep(1)
   enddo
-  if (context % debug_mode()) then
-    print '(A, A)', 'DEBUG: time to quit ', context % get_detailed_pe_name()
-  end if
 end subroutine IOserver_noop
 
 !> Check whether this context has been successfully initialized
