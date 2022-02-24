@@ -21,7 +21,7 @@
 
 program test_simple_mutex
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   use shared_mem_alloc_module
   use simple_mutex_module
   implicit none
@@ -46,8 +46,8 @@ program test_simple_mutex
   call MPI_Comm_rank(MPI_COMM_WORLD, rank)
   call MPI_Comm_size(MPI_COMM_WORLD, num_pes)
 
-  shared_mem      = RPN_allocate_shared(int(num_pes * 4, kind=8), MPI_COMM_WORLD)
-  shmem_variables = RPN_allocate_shared(int(num_pes * 4 * 3, kind=8), MPI_COMM_WORLD)
+  shared_mem      = RPN_allocate_shared(int(num_pes * 4, kind=8), MPI_Comm(MPI_COMM_WORLD))
+  shmem_variables = RPN_allocate_shared(int(num_pes * 4 * 3, kind=8), MPI_Comm(MPI_COMM_WORLD))
 
   if (.not. C_ASSOCIATED(shared_mem) .or. .not. C_ASSOCIATED(shmem_variables)) then
     print *, 'ERROR: Could not allocated shared memory for the mutexes'

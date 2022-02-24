@@ -518,7 +518,7 @@ end function test_dcb_consumer_producer
 
 program test_distributed_circular_buffer
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   use distributed_circular_buffer_module
   use parameters
   implicit none

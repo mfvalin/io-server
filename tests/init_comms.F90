@@ -1,6 +1,6 @@
 
 module init_comms_module
-  use mpi_f08
+  use ioserver_mpi_f08
   use ioserver_context_module
   implicit none
 

@@ -17,7 +17,7 @@
 module ioserver_context_module
   !> Module description
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
 
   use circular_buffer_module
   use distributed_circular_buffer_module
@@ -128,36 +128,36 @@ module ioserver_context_module
     
     ! -----------------
     !> @{ \name Communicators
-    type(MPI_Comm) :: global_comm = MPI_COMM_WORLD  !< MPI "WORLD" for this set of PEs
-    integer        :: global_rank = -1              !< rank in global_comm
-    integer        :: global_size =  0              !< population of global_comm
+    type(MPI_Comm) :: global_comm = MPI_Comm(MPI_COMM_WORLD)  !< MPI "WORLD" for this set of PEs
+    integer        :: global_rank = -1                        !< rank in global_comm
+    integer        :: global_size =  0                        !< population of global_comm
 
-    type(MPI_Comm) :: node_comm   = MPI_COMM_NULL   !< PEs on this node. If server and model are on the same physical node, they will be split into two virtual nodes
-    integer        :: node_rank   = -1              !< rank in node_comm
-    integer        :: node_size   =  0              !< population of node_comm
+    type(MPI_Comm) :: node_comm   = MPI_Comm(MPI_COMM_NULL) !< PEs on this node. If server and model are on the same physical node, they will be split into two virtual nodes
+    integer        :: node_rank   = -1                      !< rank in node_comm
+    integer        :: node_size   =  0                      !< population of node_comm
 
-    type(MPI_Comm) :: active_comm = MPI_COMM_NULL   !< All "active" PEs (non NO-OP) (subset of global_comm)
-    integer        :: active_rank = -1              !< Rank on active_comm
-    integer        :: active_size =  0              !< Size of active_comm (number of active PEs)
+    type(MPI_Comm) :: active_comm = MPI_Comm(MPI_COMM_NULL) !< All "active" PEs (non NO-OP) (subset of global_comm)
+    integer        :: active_rank = -1                      !< Rank on active_comm
+    integer        :: active_size =  0                      !< Size of active_comm (number of active PEs)
 
-    type(MPI_Comm) :: io_comm                     = MPI_COMM_NULL  !< all IO PEs     (relay + server) (subset of active_comm)
-    type(MPI_Comm) :: io_dcb_comm                 = MPI_COMM_NULL  !< all IO PEs that participate in the DCB (relay + server, without grid processors) (subset of active_comm)
+    type(MPI_Comm) :: io_comm                     = MPI_Comm(MPI_COMM_NULL)  !< all IO PEs     (relay + server) (subset of active_comm)
+    type(MPI_Comm) :: io_dcb_comm                 = MPI_Comm(MPI_COMM_NULL)  !< all IO PEs that participate in the DCB (relay + server, without grid processors) (subset of active_comm)
 
-    type(MPI_Comm) :: model_relay_comm            = MPI_COMM_NULL  !< model and relay PEs (all nodes) (subset of active_comm)
-    type(MPI_Comm) :: model_comm                  = MPI_COMM_NULL  !< model PEs           (all nodes) (subset of model_relay_comm)
-    type(MPI_Comm) :: relay_comm                  = MPI_COMM_NULL  !< relay PEs           (all nodes) (subset of model_relay_comm)
+    type(MPI_Comm) :: model_relay_comm            = MPI_Comm(MPI_COMM_NULL)  !< model and relay PEs (all nodes) (subset of active_comm)
+    type(MPI_Comm) :: model_comm                  = MPI_Comm(MPI_COMM_NULL)  !< model PEs           (all nodes) (subset of model_relay_comm)
+    type(MPI_Comm) :: relay_comm                  = MPI_Comm(MPI_COMM_NULL)  !< relay PEs           (all nodes) (subset of model_relay_comm)
 
-    type(MPI_Comm) :: server_comm                 = MPI_COMM_NULL  !< IO server PEs (subset of active_comm)
-    type(MPI_Comm) :: server_work_comm            = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm, excludes channel PEs)
-    type(MPI_Comm) :: server_dcb_comm             = MPI_COMM_NULL  !< Server PEs that participate in the DCB (subset of server_comm, excludes grid processors)
-    type(MPI_Comm) :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_dcb_comm)
-    type(MPI_Comm) :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_dcb_comm)
-    type(MPI_Comm) :: grid_processor_server_comm  = MPI_COMM_NULL  !< Server PEs that process assembled grid data (subset of server_work_comm)
+    type(MPI_Comm) :: server_comm                 = MPI_Comm(MPI_COMM_NULL)  !< IO server PEs (subset of active_comm)
+    type(MPI_Comm) :: server_work_comm            = MPI_Comm(MPI_COMM_NULL)  !< Server PEs that process data (subset of server_comm, excludes channel PEs)
+    type(MPI_Comm) :: server_dcb_comm             = MPI_Comm(MPI_COMM_NULL)  !< Server PEs that participate in the DCB (subset of server_comm, excludes grid processors)
+    type(MPI_Comm) :: server_bound_server_comm    = MPI_Comm(MPI_COMM_NULL)  !< Server PEs that process server-bound relay data (subset of server_dcb_comm)
+    type(MPI_Comm) :: model_bound_server_comm     = MPI_Comm(MPI_COMM_NULL)  !< Server PEs that process model-bound relay data (subset of server_dcb_comm)
+    type(MPI_Comm) :: grid_processor_server_comm  = MPI_Comm(MPI_COMM_NULL)  !< Server PEs that process assembled grid data (subset of server_work_comm)
 
-    type(MPI_Comm) :: model_relay_smp_comm        = MPI_COMM_NULL  !< model+relays on current node
-    type(MPI_Comm) :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
-    type(MPI_Comm) :: relay_smp_comm              = MPI_COMM_NULL  !< relay PEs on current SMP node
-    type(MPI_Comm) :: server_bound_relay_smp_comm = MPI_COMM_NULL  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
+    type(MPI_Comm) :: model_relay_smp_comm        = MPI_Comm(MPI_COMM_NULL)  !< model+relays on current node
+    type(MPI_Comm) :: model_smp_comm              = MPI_Comm(MPI_COMM_NULL)  !< model PEs on current SMP node
+    type(MPI_Comm) :: relay_smp_comm              = MPI_Comm(MPI_COMM_NULL)  !< relay PEs on current SMP node
+    type(MPI_Comm) :: server_bound_relay_smp_comm = MPI_Comm(MPI_COMM_NULL)  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
     !> @}
 
     !----------------------------------------------------

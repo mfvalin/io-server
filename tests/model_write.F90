@@ -21,7 +21,7 @@
 
 module model_write_parameters
   use iso_c_binding
-  use mpi_f08
+  use ioserver_mpi_f08
   implicit none
 
   integer, parameter :: CB_MESSAGE_SIZE_INT       = 16384                     !< Size of each data batch put in a CB. Must be divisible by 16 for the tests
@@ -403,7 +403,7 @@ end module model_write_parameters
 
 program pseudomodelandserver
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
 
   use ioserver_context_module
   use ioserver_run_module

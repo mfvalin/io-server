@@ -39,7 +39,7 @@ end function model_work
 end module launch_pseudo_model_module
 
 program launch_model
-  use mpi_f08
+  use ioserver_mpi_f08
   use ioserver_run_module
   use launch_pseudo_model_module
   implicit none

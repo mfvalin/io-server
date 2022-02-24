@@ -30,7 +30,7 @@ contains
   function RPN_allocate_shared(wsize, comm) result(shmem_ptr)
     use ISO_C_BINDING
     use shmem_arena_mod
-    use mpi_f08
+    use ioserver_mpi_f08
     implicit none
     INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize ! Memory size (in bytes)
     type(MPI_Comm),                 INTENT(IN) :: comm  ! Communicator whose process will access the shared memory

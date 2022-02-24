@@ -21,7 +21,7 @@
 
 module shmem_heap_basic_module
   use iso_c_binding
-  use mpi_f08
+  use ioserver_mpi_f08
   use heap_module
   use rpn_extra_module
   implicit none
@@ -522,7 +522,7 @@ program shmem_heap_basic
     error stop 1
   end if
 
-  shared_mem = RPN_allocate_shared(SHMEM_HEAP_SIZE_BYTE, MPI_COMM_WORLD);
+  shared_mem = RPN_allocate_shared(SHMEM_HEAP_SIZE_BYTE, MPI_Comm(MPI_COMM_WORLD));
 
   if (.not. c_associated(shared_mem)) then
     print *, 'ERROR: Could not allocate shared memory'

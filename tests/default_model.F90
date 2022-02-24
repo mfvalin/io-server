@@ -20,7 +20,7 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module default_model_module
-  use mpi_f08
+  use ioserver_mpi_f08
   implicit none
   contains
 

@@ -446,7 +446,7 @@ function default_model_bound_relay(context) result(relay_success)
 end function default_model_bound_relay
 
 function default_model(context) result(model_success)
-  use mpi_f08
+  use ioserver_mpi_f08
 
   use heap_module
   use ioserver_message_module

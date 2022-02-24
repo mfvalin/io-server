@@ -21,7 +21,7 @@
 
 module mpi_bw_mod
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   implicit none
 
   integer, parameter :: MAX_MESSAGE_SIZE = 500000

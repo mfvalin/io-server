@@ -23,7 +23,7 @@
 !> \brief distributed circular buffer object Fortran module
 module distributed_circular_buffer_module
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   use cb_common_module
   use circular_buffer_module
   implicit none

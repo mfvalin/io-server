@@ -21,7 +21,7 @@
 
 module ioserver_constants
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   implicit none
 
   integer(C_SIZE_T), parameter :: KBYTE = 1024
@@ -40,13 +40,13 @@ module ioserver_constants
   integer, parameter :: NO_OP_COLOR           = 8192   ! MUST BE THE HIGHEST VALUE
 
   type :: comm_rank_size
-    type(MPI_Comm) :: comm = MPI_COMM_NULL
+    type(MPI_Comm) :: comm = MPI_Comm(MPI_COMM_NULL)
     integer :: rank = -1
     integer :: size = 0
   contains
     procedure, pass :: is_null => IOserver_is_CRS_null
   end type
-  type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(MPI_COMM_NULL, -1, 0)
+  ! type(comm_rank_size), parameter :: COMM_RANK_SIZE_NULL = comm_rank_size(MPI_COMM_NULL, -1, 0)
 
   type, bind(C) :: qualified_address
     type(C_PTR)    :: p                   ! address (C pointer)
@@ -54,7 +54,20 @@ module ioserver_constants
     integer(C_INT) :: rank                ! pe rank in above color
   end type
 
+  interface comm_rank_size
+    procedure :: new_comm_rank_size
+  end interface comm_rank_size
 contains
+
+!> Custom constructor for comm_rank_size (needed for compatibility with ioserver_mpi_f08 module)
+function new_comm_rank_size(comm, rank, size)
+  implicit none
+  integer, intent(in)  :: comm, rank, size
+  type(comm_rank_size) :: new_comm_rank_size
+  new_comm_rank_size % comm = comm
+  new_comm_rank_size % rank = rank
+  new_comm_rank_size % size = size
+end function new_comm_rank_size
 
 function IOserver_is_CRS_null(crs) result(status)   !  is this a NULL communicator combo ?
   implicit none

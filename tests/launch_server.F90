@@ -20,7 +20,7 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 program launch_server
-  use mpi_f08
+  use ioserver_mpi_f08
   use ioserver_run_module
 
   type(ioserver_input_parameters) :: params

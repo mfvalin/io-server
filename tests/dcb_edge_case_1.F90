@@ -22,7 +22,7 @@
 
 module dcb_edge_case_1_mod
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   use distributed_circular_buffer_module
 
   public
@@ -124,7 +124,7 @@ end module dcb_edge_case_1_mod
 program dcb_edge_case_1
   use dcb_edge_case_1_mod
   use distributed_circular_buffer_module
-  use mpi_f08
+  use ioserver_mpi_f08
   implicit none
 
   type(distributed_circular_buffer) :: dcb
@@ -145,13 +145,13 @@ program dcb_edge_case_1
   ! Create the communicators (needed for the server only)
   if (global_rank == 0) then
     call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, DCB_SERVER_BOUND_TYPE, NUM_CB_BYTES, 0_8)
+    success = dcb % create_bytes(MPI_Comm(MPI_COMM_WORLD), server_comm, DCB_SERVER_BOUND_TYPE, NUM_CB_BYTES, 0_8)
   else if (global_rank == 1) then
     call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
+    success = dcb % create_bytes(MPI_Comm(MPI_COMM_WORLD), server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
   else if (global_rank == 2) then
     call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm)
-    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
+    success = dcb % create_bytes(MPI_Comm(MPI_COMM_WORLD), MPI_Comm(MPI_COMM_NULL), DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
   else
     print *, 'Error'
     error stop 1

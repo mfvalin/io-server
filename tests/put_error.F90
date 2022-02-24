@@ -5,7 +5,7 @@
 !
 program put_error
     use iso_c_binding
-    use mpi_f08
+    use ioserver_mpi_f08
     implicit none
  
     integer :: gsize, grank ! number of processors and rank on comm world

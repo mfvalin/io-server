@@ -34,7 +34,7 @@ end program test_circular_buffer
 subroutine shared_mem_test()
 
   use ISO_C_BINDING
-  use mpi_f08
+  use ioserver_mpi_f08
   use circular_buffer_module
   implicit none
 

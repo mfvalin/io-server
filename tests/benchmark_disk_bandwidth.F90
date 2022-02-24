@@ -27,7 +27,7 @@ module disk_bandwidth_module
 end module disk_bandwidth_module
 
 program disk_bandwidth
-  use mpi_f08
+  use ioserver_mpi_f08
   use disk_bandwidth_module
   implicit none
   integer(C_INT64_T) :: time0, time1
