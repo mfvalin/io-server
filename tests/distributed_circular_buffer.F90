@@ -19,7 +19,7 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-module parameters
+module test_dcb_parameters
   use ISO_C_BINDING
   implicit none
   public
@@ -34,7 +34,7 @@ module parameters
 
   integer, parameter :: MAX_NUM_PROCS = 20
 
-end module parameters
+end module test_dcb_parameters
 
 
 function test_dcb_channel(buffer) result(num_errors)
@@ -59,7 +59,7 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
   use iso_c_binding
   use distributed_circular_buffer_module
   use circular_buffer_module
-  use parameters
+  use test_dcb_parameters
   use rpn_extra_module
   implicit none
 
@@ -520,7 +520,7 @@ program test_distributed_circular_buffer
   use ISO_C_BINDING
   use ioserver_mpi
   use distributed_circular_buffer_module
-  use parameters
+  use test_dcb_parameters
   implicit none
 
   interface
