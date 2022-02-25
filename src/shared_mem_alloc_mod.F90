@@ -30,13 +30,14 @@ contains
   function RPN_allocate_shared(wsize, comm) result(shmem_ptr)
     use ISO_C_BINDING
     use shmem_arena_mod
-    use ioserver_mpi_f08
+    use ioserver_mpi
     implicit none
     INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize ! Memory size (in bytes)
-    type(MPI_Comm),                 INTENT(IN) :: comm  ! Communicator whose process will access the shared memory
+    integer,                        INTENT(IN) :: comm  ! Communicator whose process will access the shared memory
     type(C_PTR) :: shmem_ptr                            ! Process-local pointer to the allocated shared memory
 
     integer :: myrank, shmid, thesize, i, hostid
+    integer :: ierr
     integer(C_INT64_T) :: siz
     type(C_PTR) :: p
     integer, dimension(:), allocatable :: hostids
@@ -53,11 +54,11 @@ contains
     p = C_NULL_PTR
     shmem_ptr = transfer(p, shmem_ptr) ! ??
 
-    call MPI_Comm_rank(comm, myrank)
-    call MPI_Comm_size(comm, thesize)
+    call MPI_Comm_rank(comm, myrank, ierr)
+    call MPI_Comm_size(comm, thesize, ierr)
     allocate(hostids(thesize))
     hostid = INT(c_get_hostid(), 4)
-    call MPI_Allgather(hostid, 1, MPI_INTEGER, hostids, 1, MPI_INTEGER, comm)
+    call MPI_Allgather(hostid, 1, MPI_INTEGER, hostids, 1, MPI_INTEGER, comm, ierr)
     do i = 1, thesize
         if(hostids(i) .ne. hostid) return   ! ERROR, hostid MUST be the same everywhere
     enddo
@@ -66,7 +67,7 @@ contains
         siz = wsize
         p = shmem_allocate_shared(shmid, siz)
     endif
-    call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, comm)
+    call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, comm, ierr)
     if(myrank .ne. 0) then
         p = shmem_address_from_id(shmid)
     endif

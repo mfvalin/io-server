@@ -22,7 +22,7 @@
 program test_memory_arena
   use ISO_C_BINDING
   use shmem_arena_mod
-  use ioserver_mpi_f08
+  use ioserver_mpi
   implicit none
 
 #define DBLK (20*4)
@@ -193,7 +193,7 @@ program test_memory_arena
 777 continue
   write(6,*)"################################################################################"
 #if defined(MPI_SHARED)
-  call MPI_win_free(win)
+  call MPI_win_free(win, ierr)
 #endif
   call MPI_Finalize(ierr)
   if (jerr > 0) error stop 1

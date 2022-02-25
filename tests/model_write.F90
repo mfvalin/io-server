@@ -21,7 +21,7 @@
 
 module model_write_parameters
   use iso_c_binding
-  use ioserver_mpi_f08
+  use ioserver_mpi
   implicit none
 
   integer, parameter :: CB_MESSAGE_SIZE_INT       = 16384                     !< Size of each data batch put in a CB. Must be divisible by 16 for the tests
@@ -77,30 +77,31 @@ contains
     integer, intent(out) :: num_nodes
     logical :: am_server_node
 
-    type(MPI_Comm) :: node_comm, first_rank_comm
+    integer :: node_comm, first_rank_comm
     integer :: global_rank, node_root_global_rank
     integer :: global_size
+    integer :: ierr
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
-    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
-    call MPI_Comm_rank(node_comm, node_rank)
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
+    call MPI_Comm_rank(node_comm, node_rank, ierr)
 
     node_root_global_rank = -1
     if (node_rank == 0) node_root_global_rank = global_rank
 
-    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
 
-    call MPI_Comm_size(MPI_COMM_WORLD, global_size)
-    call MPI_Comm_size(node_comm, node_size)
+    call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
+    call MPI_Comm_size(node_comm, node_size, ierr)
 
     am_server_node = (node_root_global_rank == 0)
     single_node = (global_size == node_size)
 
     if (node_rank == 0) then
-      call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, first_rank_comm)
-      call MPI_Comm_size(first_rank_comm, num_nodes)
+      call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, first_rank_comm, ierr)
+      call MPI_Comm_size(first_rank_comm, num_nodes, ierr)
     else
-      call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, first_rank_comm)
+      call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, first_rank_comm, ierr)
       num_nodes = -1
     end if
   end function am_server_node
@@ -403,7 +404,7 @@ end module model_write_parameters
 
 program pseudomodelandserver
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
 
   use ioserver_context_module
   use ioserver_run_module
@@ -427,11 +428,13 @@ program pseudomodelandserver
   procedure(model_function_template), pointer :: model_fn_ptr
   logical :: success
 
+  integer :: ierr
+
   success = .false.
 
-  call MPI_Init()
-  call MPI_Comm_size(MPI_COMM_WORLD, global_size)
-  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
+  call MPI_Init(ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
 
   if (command_argument_count() < 5) then
     if (global_rank == 0) then
@@ -491,7 +494,7 @@ program pseudomodelandserver
     error stop 1
   end if
 
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
 
   if (server_node .and. node_rank == 0) then
     block

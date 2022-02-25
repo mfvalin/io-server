@@ -34,7 +34,7 @@ end program test_circular_buffer
 subroutine shared_mem_test()
 
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use circular_buffer_module
   implicit none
 
@@ -65,17 +65,19 @@ subroutine shared_mem_test()
 
   integer :: my_rank, num_procs
   integer :: i, errors, tmp_errors
-  type(MPI_Win) :: window
+  integer :: window
   integer :: target_disp_unit
   integer :: target_proc, source_proc
   integer(C_INT64_T) :: capacity
 
+  integer :: ierr
+
   errors = 0
 
   ! Initialize MPI
-  call MPI_Init()
-  call MPI_Comm_size(MPI_COMM_WORLD, num_procs)
-  call MPI_Comm_rank(MPI_COMM_WORLD, my_rank)
+  call MPI_Init(ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, num_procs, ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, my_rank, ierr)
 
   if (num_procs < 2) then
     print *, 'This test needs at least 2 processes'
@@ -89,8 +91,8 @@ subroutine shared_mem_test()
 !  print *, 'This is PE', my_rank + 1, ' of', num_procs
 
   ! Allocate MPI window in shared memory
-  call MPI_Win_allocate_shared(WINDOW_SIZE, 4, MPI_INFO_NULL, MPI_COMM_WORLD, base_mem_ptr, window)
-  call MPI_Win_shared_query(window, target_proc, target_size, target_disp_unit, target_mem_ptr)  ! get my victim's base address
+  call MPI_Win_allocate_shared(WINDOW_SIZE, 4, MPI_INFO_NULL, MPI_COMM_WORLD, base_mem_ptr, window, ierr)
+  call MPI_Win_shared_query(window, target_proc, target_size, target_disp_unit, target_mem_ptr, ierr)  ! get my victim's base address
 
   ! Initialize local data
   call init_array(local_data, my_rank)
@@ -104,7 +106,7 @@ subroutine shared_mem_test()
 
   capacity = buffer_a % get_capacity(CB_KIND_INTEGER_4)
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   if (.not. success .or. .not. buffer_a % is_valid() .or. .not. buffer_b % is_valid()) then
@@ -127,13 +129,13 @@ subroutine shared_mem_test()
 
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   success = buffer_b % put(local_data, STEP_SIZE, CB_KIND_INTEGER_4, .false.) ! inject data into target's circular buffer
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) then
@@ -143,13 +145,13 @@ subroutine shared_mem_test()
   end if
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   success = buffer_b % put(local_data, 0_8, CB_KIND_INTEGER_4, .true.)
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   if (buffer_a % get_num_elements(CB_KIND_INTEGER_4) < STEP_SIZE) then
@@ -189,13 +191,13 @@ subroutine shared_mem_test()
   print *, my_rank, 'Got to this point'
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   success = buffer_b % put(local_data, STEP_SIZE, CB_KIND_INTEGER_4, .true.) ! inject data into target's circular buffer
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   success = buffer_a % get(received_data, STEP_SIZE - 1, CB_KIND_INTEGER_4, .true.) ! get from my own buffer (put there by source_proc)
@@ -213,7 +215,7 @@ subroutine shared_mem_test()
   end if
 
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD) ! we want no interference from further down
+  call MPI_Barrier(MPI_COMM_WORLD, ierr) ! we want no interference from further down
   !--------------------------------------
 
   do i = 1, NPTEST, STEP_SIZE  ! ring test with wraparound , make sure NPTEST > size of circular buffer
@@ -233,7 +235,7 @@ subroutine shared_mem_test()
 
   enddo
   !--------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
   if ((buffer_a % get_num_elements(CB_KIND_INTEGER_4) .ne. 0) .or. (buffer_b % get_num_elements(CB_KIND_INTEGER_4) .ne. 0)) then
@@ -242,7 +244,7 @@ subroutine shared_mem_test()
   end if
 
   tmp_errors = errors
-  call MPI_Reduce(tmp_errors, errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
+  call MPI_Reduce(tmp_errors, errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
 
   if(my_rank == 0) then  ! check that we got back what we sent
     if(errors > 0) then
@@ -259,8 +261,8 @@ subroutine shared_mem_test()
   success = buffer_a % delete()
   success = buffer_b % delete()
 
-  call MPI_Win_free(window)
-  call MPI_Finalize()
+  call MPI_Win_free(window, ierr)
+  call MPI_Finalize(ierr)
 
   if (errors > 0) error stop 1
 

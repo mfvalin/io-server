@@ -149,7 +149,7 @@ function default_server_bound(context) result(server_success)
   logical, dimension(:), allocatable :: active_producers
   logical :: server_finished, producer_finished, success
   integer :: i_producer, producer_id, i_file
-  integer :: num_errors
+  integer :: num_errors, ierr
 
   num_errors = 0
   server_success = .false.
@@ -221,7 +221,7 @@ function default_server_bound(context) result(server_success)
   end if
 
   ! Wait for all server-bound server processes to finish
-  call MPI_Barrier(consumer_crs % comm)
+  call MPI_Barrier(consumer_crs % comm, ierr)
 
   server_success = .true.
 end function default_server_bound

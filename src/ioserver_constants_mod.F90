@@ -21,7 +21,7 @@
 
 module ioserver_constants
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   implicit none
 
   integer(C_SIZE_T), parameter :: KBYTE = 1024
@@ -40,7 +40,7 @@ module ioserver_constants
   integer, parameter :: NO_OP_COLOR           = 8192   ! MUST BE THE HIGHEST VALUE
 
   type :: comm_rank_size
-    type(MPI_Comm) :: comm = MPI_Comm(MPI_COMM_NULL)
+    integer :: comm = MPI_COMM_NULL
     integer :: rank = -1
     integer :: size = 0
   contains
@@ -69,12 +69,11 @@ function new_comm_rank_size(comm, rank, size)
   new_comm_rank_size % size = size
 end function new_comm_rank_size
 
-function IOserver_is_CRS_null(crs) result(status)   !  is this a NULL communicator combo ?
+pure function IOserver_is_CRS_null(crs) result(status)   !  is this a NULL communicator combo ?
   implicit none
-  class(comm_rank_size), intent(inout) :: crs
+  class(comm_rank_size), intent(in) :: crs
   logical :: status
   status = (crs % rank < 0 .or. crs % size <= 0)
-  if (status) crs % comm = MPI_COMM_NULL
 end function IOserver_is_CRS_null
 
 function is_color_relay(color)

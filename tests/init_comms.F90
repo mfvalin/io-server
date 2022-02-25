@@ -1,6 +1,6 @@
 
 module init_comms_module
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use ioserver_context_module
   implicit none
 
@@ -25,24 +25,25 @@ contains
     logical, intent(out) :: single_node
     logical :: am_server_node
 
-    type(MPI_Comm) :: node_comm
+    integer :: node_comm
     integer :: global_rank, node_root_global_rank
     integer :: global_size
+    integer :: ierr
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
-    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
-    call MPI_Comm_rank(node_comm, node_rank)
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
+    call MPI_Comm_rank(node_comm, node_rank, ierr)
 
     node_root_global_rank = -1
     if (node_rank == 0) node_root_global_rank = global_rank
 
-    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
 
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
 
-    call MPI_Comm_size(MPI_COMM_WORLD, global_size)
-    call MPI_Comm_size(node_comm, node_size)
+    call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
+    call MPI_Comm_size(node_comm, node_size, ierr)
 
     single_node = .false.
     if (global_size == node_size) single_node = .true.
@@ -91,24 +92,23 @@ contains
 
     call this % get_all(context)
 
-    success =                                                                 &
-        check_single_non_null(context, this % global_crs, .true., 'global') .and.       &
-        check_single_non_null(context, this % active_crs, active, 'active') .and.       &
-        check_single_non_null(context, this % node_crs, node, 'node') .and.       &
-        check_single_non_null(context, this % io_crs, io, 'io') .and.       &
-        check_single_non_null(context, this % model_relay_crs, model_relay, 'model+relay') .and.       &
-        check_single_non_null(context, this % model_crs, model, 'model') .and.       &
-        check_single_non_null(context, this % relay_crs, relay, 'relay') .and.       &
-        check_single_non_null(context, this % model_relay_node_crs, model_relay_node, 'model+relay on node') .and.       &
-        check_single_non_null(context, this % model_node_crs, model_node, 'model on node') .and.       &
-        check_single_non_null(context, this % relay_node_crs, relay_node, 'relay on node') .and.       &
-        check_single_non_null(context, this % sb_relay_node_crs, sb_relay_node, 'server-bound relay on node') .and.       &
-        check_single_non_null(context, this % server_crs, server, 'server') .and.       &
-        check_single_non_null(context, this % server_work_crs, server_work, 'server workers') .and.       &
-        check_single_non_null(context, this % server_dcb_crs, server_dcb, 'server DCB') .and.       &
-        check_single_non_null(context, this % sb_server_crs, sb_server, 'server-bound server') .and.       &
-        check_single_non_null(context, this % mb_server_crs, mb_server, 'model-bound server') .and.       &
-        check_single_non_null(context, this % grid_processor_crs, grid_processor, 'grid processor') 
+    success = check_single_non_null(context, this % global_crs, .true., 'global')
+    success = check_single_non_null(context, this % active_crs, active, 'active') .and. success
+    success = check_single_non_null(context, this % node_crs, node, 'node') .and. success
+    success = check_single_non_null(context, this % io_crs, io, 'io') .and. success
+    success = check_single_non_null(context, this % model_relay_crs, model_relay, 'model+relay') .and. success
+    success = check_single_non_null(context, this % model_crs, model, 'model') .and. success
+    success = check_single_non_null(context, this % relay_crs, relay, 'relay') .and. success
+    success = check_single_non_null(context, this % model_relay_node_crs, model_relay_node, 'model+relay on node') .and. success
+    success = check_single_non_null(context, this % model_node_crs, model_node, 'model on node') .and. success
+    success = check_single_non_null(context, this % relay_node_crs, relay_node, 'relay on node') .and. success
+    success = check_single_non_null(context, this % sb_relay_node_crs, sb_relay_node, 'server-bound relay on node') .and. success
+    success = check_single_non_null(context, this % server_crs, server, 'server') .and. success
+    success = check_single_non_null(context, this % server_work_crs, server_work, 'server workers') .and. success
+    success = check_single_non_null(context, this % server_dcb_crs, server_dcb, 'server DCB') .and. success
+    success = check_single_non_null(context, this % sb_server_crs, sb_server, 'server-bound server') .and. success
+    success = check_single_non_null(context, this % mb_server_crs, mb_server, 'model-bound server') .and. success
+    success = check_single_non_null(context, this % grid_processor_crs, grid_processor, 'grid processor')  .and. success
 
     if (.not. success) return
 
@@ -136,10 +136,10 @@ contains
 
   function check_single_non_null(context, crs, do_check, name) result(success)
     implicit none
-    type(ioserver_context), intent(in)    :: context
-    type(comm_rank_size),   intent(inout) :: crs
-    logical,                intent(in)    :: do_check
-    character(len=*),       intent(in)    :: name
+    type(ioserver_context), intent(in) :: context
+    type(comm_rank_size),   intent(in) :: crs
+    logical,                intent(in) :: do_check
+    character(len=*),       intent(in) :: name
     logical :: success
 
     success = crs % is_null()
@@ -161,10 +161,12 @@ contains
     logical,                intent(in) :: do_check
     character(len=*),       intent(in) :: name
 
+    integer :: ierr
+
     ! print *, 'Check ', name, do_check
 
     if (do_check) then
-      call MPI_Barrier(crs % comm)
+      call MPI_Barrier(crs % comm, ierr)
       if (crs % rank == 0) then
         print '(A, A, A, A)', 'Barrier by ', context % get_detailed_pe_name(), ' for ', name
       end if
@@ -423,8 +425,10 @@ program init_comms
   procedure(server_function_template), pointer :: grid_processor_fn, channel_fn, sb_server_fn, mb_server_fn
   procedure(no_op_function_template),  pointer :: server_no_op_fn
 
-  call MPI_Init()
-  call MPI_Comm_size(MPI_COMM_WORLD, global_size)
+  integer :: ierr
+
+  call MPI_Init(ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
 
   if (global_size < 11) then
     print *, 'ERROR: Need at least 11 processes to run this test! Only have ', global_size
@@ -479,6 +483,6 @@ program init_comms
     error stop 1
   end if
 
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
 
 end program init_comms

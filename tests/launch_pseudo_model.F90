@@ -39,17 +39,18 @@ end function model_work
 end module launch_pseudo_model_module
 
 program launch_model
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use ioserver_run_module
   use launch_pseudo_model_module
   implicit none
 
   type(ioserver_input_parameters) :: params
   logical :: success
+  integer :: ierr
 
   procedure(model_function_template), pointer :: model_fn_ptr
 
-  call MPI_Init()
+  call MPI_Init(ierr)
 
   model_fn_ptr => model_work
 
@@ -66,5 +67,5 @@ program launch_model
     print *, 'ERROR while running the pseudo-model'
     ! error stop 1 
   end if
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
 end program launch_model

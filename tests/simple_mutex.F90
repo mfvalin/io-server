@@ -21,7 +21,7 @@
 
 program test_simple_mutex
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use shared_mem_alloc_module
   use simple_mutex_module
   implicit none
@@ -37,17 +37,18 @@ program test_simple_mutex
   integer, dimension(:,:), pointer :: test_array
 
   integer :: num_errors
+  integer :: ierr
 
   num_errors = 0
 
   ! ---------------------
   ! Initialize everything
-  call MPI_Init()
-  call MPI_Comm_rank(MPI_COMM_WORLD, rank)
-  call MPI_Comm_size(MPI_COMM_WORLD, num_pes)
+  call MPI_Init(ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, num_pes, ierr)
 
-  shared_mem      = RPN_allocate_shared(int(num_pes * 4, kind=8), MPI_Comm(MPI_COMM_WORLD))
-  shmem_variables = RPN_allocate_shared(int(num_pes * 4 * 3, kind=8), MPI_Comm(MPI_COMM_WORLD))
+  shared_mem      = RPN_allocate_shared(int(num_pes * 4, kind=8), MPI_COMM_WORLD)
+  shmem_variables = RPN_allocate_shared(int(num_pes * 4 * 3, kind=8), MPI_COMM_WORLD)
 
   if (.not. C_ASSOCIATED(shared_mem) .or. .not. C_ASSOCIATED(shmem_variables)) then
     print *, 'ERROR: Could not allocated shared memory for the mutexes'
@@ -64,7 +65,7 @@ program test_simple_mutex
 
   if (rank == 0) test_array(:,:) = 0
 
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
   ! -------------------------
   ! Now we can start the test
@@ -80,7 +81,7 @@ program test_simple_mutex
     end do
   end do
 
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
   ! Test try_lock function
   do i = 1, NUM_IT
@@ -97,7 +98,7 @@ program test_simple_mutex
     end do
   end do
 
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
 
   if (test_array(rank + 1, 1) .ne. NUM_IT * num_pes) then
     print *, 'ERROR: Wrong final value for incremented value. Correct vs actual: ', NUM_IT * num_pes, test_array(rank + 1, 1)
@@ -114,7 +115,7 @@ program test_simple_mutex
     error stop 1
   end if
 
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
 
   if (rank == 0) then
     print *, 'Simple mutex test successful'

@@ -5,24 +5,24 @@
 !
 program put_error
     use iso_c_binding
-    use ioserver_mpi_f08
+    use ioserver_mpi
     implicit none
  
     integer :: gsize, grank ! number of processors and rank on comm world
     integer :: lsize, lrank ! size and rank on local (split) communicator
     ! integer :: colour ! used to split world into two
     integer :: ierr ! mpi error var
-    type(MPI_Comm) :: lcomm
+    integer :: lcomm
  
     integer, parameter :: numel = 1000000 ! number of elements to send to each other process
  
-    type(MPI_Win) :: mpi_window ! handle for MPI RMA window
+    integer :: mpi_window ! handle for MPI RMA window
     integer, pointer, dimension(:) :: rma_buffer ! to be allocated by mpi_win_allocate
     integer, allocatable, dimension(:) :: local_buffer ! local send buffer
     integer(kind=mpi_address_kind) :: winsize
     integer :: disp_unit
     !type(mpi_info) :: info_obj
-    type(MPI_Info) :: info_obj
+    integer :: info_obj
     type(c_ptr) :: winptr ! C-pointer to allocated window
  
     call mpi_init(ierr)

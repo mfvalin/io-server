@@ -20,7 +20,7 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module default_model_module
-  use ioserver_mpi_f08
+  use ioserver_mpi
   implicit none
   contains
 
@@ -31,24 +31,25 @@ module default_model_module
     logical, intent(out) :: single_node
     logical :: am_server_node
 
-    type(MPI_Comm) :: node_comm
+    integer :: node_comm
     integer :: global_rank, node_root_global_rank
     integer :: global_size
+    integer :: ierr
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
-    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
-    call MPI_Comm_rank(node_comm, node_rank)
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
+    call MPI_Comm_rank(node_comm, node_rank, ierr)
 
     node_root_global_rank = -1
     if (node_rank == 0) node_root_global_rank = global_rank
 
-    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
 
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
 
-    call MPI_Comm_size(MPI_COMM_WORLD, global_size)
-    call MPI_Comm_size(node_comm, node_size)
+    call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
+    call MPI_Comm_size(node_comm, node_size, ierr)
 
     single_node = .false.
     if (global_size == node_size) single_node = .true.
@@ -62,11 +63,12 @@ program default_model
 
   logical :: server_node, single_node, success
   integer :: node_rank, node_size, num_server_processes, global_size
+  integer :: ierr
 
   type(ioserver_input_parameters) :: params
 
-  call MPI_Init()
-  call MPI_Comm_size(MPI_COMM_WORLD, global_size)
+  call MPI_Init(ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
 
   if (global_size < 9) then
     print *, 'ERROR: Need at least 9 processes to run this test! Only have ', global_size
@@ -99,6 +101,6 @@ program default_model
     error stop 1
   end if
 
-  call mpi_finalize()
+  call MPI_Finalize(ierr)
 
 end program default_model

@@ -19,29 +19,8 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-program launch_server
-  use ioserver_mpi
-  use ioserver_run_module
-
-  type(ioserver_input_parameters) :: params
-  logical :: success
-  integer :: ierr
-
-  call MPI_Init(ierr)
-
-  params % is_on_server             = .true.
-  params % num_relay_per_node       = 2 ! Should not be important for the server
-  params % num_server_bound_server  = 2
-  params % num_grid_processors      = 1
-  params % num_channels             = 2
-  params % debug_mode = .true.
-
-  success = ioserver_run_server_node(params)
-
-  if (.not. success) then
-    print *, 'ERROR while running the IO server'
-    ! error stop 1 
-  end if
-
-  call MPI_Finalize(ierr)
-end program launch_server
+module ioserver_mpi
+  implicit none
+  include 'mpif.h'
+contains
+end module ioserver_mpi

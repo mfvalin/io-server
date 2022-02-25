@@ -518,7 +518,7 @@ end function test_dcb_consumer_producer
 
 program test_distributed_circular_buffer
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use distributed_circular_buffer_module
   use parameters
   implicit none
@@ -547,22 +547,24 @@ program test_distributed_circular_buffer
   integer :: rank, comm_size
   logical :: success
   integer :: num_errors, tmp_errors
-  type(MPI_Comm)  :: server_comm, dcb_comm
-  type(MPI_Group) :: server_group, dcb_group
+  integer :: server_comm, dcb_comm
+  integer :: server_group, dcb_group
   integer, dimension(3, 1) :: incl_range
   integer(C_INT) :: communication_type
 
   type(distributed_circular_buffer) :: circ_buffer
   integer :: server_bound_server_id, channel_id, server_bound_client_id
 
+  integer :: ierr
+
   ! Initialization
 
   num_errors = 0
   server_bound_server_id = -1
 
-  call MPI_init()
-  call MPI_comm_rank(MPI_COMM_WORLD, rank)
-  call MPI_comm_size(MPI_COMM_WORLD, comm_size)
+  call MPI_init(ierr)
+  call MPI_comm_rank(MPI_COMM_WORLD, rank, ierr)
+  call MPI_comm_size(MPI_COMM_WORLD, comm_size, ierr)
 
   if (comm_size < 3) then
     print *, 'Need at least 3 processes for this test!'
@@ -571,24 +573,24 @@ program test_distributed_circular_buffer
   end if
 
   if (rank < MAX_NUM_PROCS) then
-    call MPI_Comm_split(MPI_COMM_WORLD, 0, rank, dcb_comm)
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, rank, dcb_comm, ierr)
   else
-    call MPI_Comm_split(MPI_COMM_WORLD, 1, rank, dcb_comm)
+    call MPI_Comm_split(MPI_COMM_WORLD, 1, rank, dcb_comm, ierr)
     goto 777 ! Goto end of program
   end if
 
-  call MPI_comm_rank(dcb_comm, rank)
-  call MPI_comm_size(dcb_comm, comm_size)
+  call MPI_comm_rank(dcb_comm, rank, ierr)
+  call MPI_comm_size(dcb_comm, comm_size, ierr)
 
   server_comm = MPI_COMM_NULL
-  call MPI_Comm_group(dcb_comm, dcb_group)
+  call MPI_Comm_group(dcb_comm, dcb_group, ierr)
 
   if (rank < NUM_CONSUMERS * 2) then
     incl_range(1, 1) = 0
     incl_range(2, 1) = 2 * NUM_CONSUMERS - 1;
     incl_range(3, 1) = 1
-    call MPI_Group_range_incl(dcb_group, 1, incl_range, server_group)
-    call MPI_Comm_create_group(dcb_comm, server_group, 0, server_comm)
+    call MPI_Group_range_incl(dcb_group, 1, incl_range, server_group, ierr)
+    call MPI_Comm_create_group(dcb_comm, server_group, 0, server_comm, ierr)
 
     if (rank < NUM_CONSUMERS) then
       communication_type = DCB_SERVER_BOUND_TYPE
@@ -625,7 +627,7 @@ program test_distributed_circular_buffer
   end if
 
   !---------------------------------------
-  call MPI_Barrier(dcb_comm)
+  call MPI_Barrier(dcb_comm, ierr)
   !---------------------------------------
 
   if (server_bound_server_id >= 0) then
@@ -641,14 +643,14 @@ program test_distributed_circular_buffer
 !  call circ_buffer % print()
   call circ_buffer % delete()
   if (server_bound_server_id == 0) then
-    call MPI_Group_free(server_group)
-    call MPI_Comm_free(server_comm)
+    call MPI_Group_free(server_group, ierr)
+    call MPI_Comm_free(server_comm, ierr)
   end if
 
 777 CONTINUE
 
   tmp_errors = num_errors
-  call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
+  call MPI_Reduce(tmp_errors, num_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
 
   if (server_bound_server_id == 0) then  ! check that we got back what we sent
     if(num_errors > 0) then
@@ -658,7 +660,7 @@ program test_distributed_circular_buffer
     end if
   endif
 
-  call MPI_finalize()
+  call MPI_finalize(ierr)
 
   if (num_errors > 0) error stop 1
 

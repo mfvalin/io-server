@@ -23,7 +23,7 @@
 !> \brief distributed circular buffer object Fortran module
 module distributed_circular_buffer_module
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use cb_common_module
   use circular_buffer_module
   implicit none
@@ -86,8 +86,8 @@ contains
   function create_bytes(this, communicator, server_communicator, communication_type, num_bytes_server_bound, num_bytes_client_bound, verbose) result(is_valid)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this !< [in,out] The DCB we're creating
-    type(MPI_Comm),    intent(in) :: communicator             !< MPI communicator common to all processes that share this buffer
-    type(MPI_Comm),    intent(in) :: server_communicator      !< MPI communicator between the server processes only
+    integer,           intent(in) :: communicator             !< MPI communicator common to all processes that share this buffer
+    integer,           intent(in) :: server_communicator      !< MPI communicator between the server processes only
     integer(C_INT),    intent(in) :: communication_type       !< Whether this process is for server- or client-bound CBs, or just a communication channel
     integer(C_SIZE_T), intent(in) :: num_bytes_server_bound   !< How many bytes of data can be stored in server-bound buffers
     integer(C_SIZE_T), intent(in) :: num_bytes_client_bound   !< How many bytes of data can be stored in client-bound buffers
@@ -105,7 +105,7 @@ contains
       if (verbose) verbose_flag = 1
     end if
 
-    this % c_buffer = DCB_create(communicator % mpi_val, server_communicator % mpi_val, communication_type,       &
+    this % c_buffer = DCB_create(communicator, server_communicator, communication_type,           &
                                  num_bytes_server_bound, num_bytes_client_bound, verbose_flag)
     is_valid = this % is_valid()
   end function create_bytes

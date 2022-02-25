@@ -22,7 +22,7 @@
 
 module dcb_edge_case_1_mod
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use distributed_circular_buffer_module
 
   public
@@ -124,18 +124,19 @@ end module dcb_edge_case_1_mod
 program dcb_edge_case_1
   use dcb_edge_case_1_mod
   use distributed_circular_buffer_module
-  use ioserver_mpi_f08
+  use ioserver_mpi
   implicit none
 
   type(distributed_circular_buffer) :: dcb
   integer :: global_rank, global_size
-  type(MPI_Comm) :: server_comm, producer_comm
+  integer :: server_comm, producer_comm
   logical :: success
   integer :: channel_id, server_consumer_id, server_bound_client_id
+  integer :: ierr
 
-  call MPI_Init()
-  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
-  call MPI_Comm_size(MPI_COMM_WORLD, global_size)
+  call MPI_Init(ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, global_size, ierr)
 
   if (global_size .ne. 3) then
     print *, 'Need exactly 3 processes for this test'
@@ -144,14 +145,14 @@ program dcb_edge_case_1
 
   ! Create the communicators (needed for the server only)
   if (global_rank == 0) then
-    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_Comm(MPI_COMM_WORLD), server_comm, DCB_SERVER_BOUND_TYPE, NUM_CB_BYTES, 0_8)
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm, ierr)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, DCB_SERVER_BOUND_TYPE, NUM_CB_BYTES, 0_8)
   else if (global_rank == 1) then
-    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm)
-    success = dcb % create_bytes(MPI_Comm(MPI_COMM_WORLD), server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, server_comm, ierr)
+    success = dcb % create_bytes(MPI_COMM_WORLD, server_comm, DCB_CHANNEL_TYPE, 0_8, 0_8)
   else if (global_rank == 2) then
-    call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm)
-    success = dcb % create_bytes(MPI_Comm(MPI_COMM_WORLD), MPI_Comm(MPI_COMM_NULL), DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
+    call MPI_Comm_split(MPI_COMM_WORLD, 1, global_rank, producer_comm, ierr)
+    success = dcb % create_bytes(MPI_COMM_WORLD, MPI_COMM_NULL, DCB_SERVER_BOUND_TYPE, 0_8, 0_8)
   else
     print *, 'Error'
     error stop 1
@@ -181,6 +182,6 @@ program dcb_edge_case_1
   call dcb % delete()
   ! print *, 'Got here! (after deleting the DCB)', server_consumer_id, server_bound_client_id, channel_id
 
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
 
 end program dcb_edge_case_1

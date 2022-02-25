@@ -27,7 +27,7 @@ module disk_bandwidth_module
 end module disk_bandwidth_module
 
 program disk_bandwidth
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use disk_bandwidth_module
   implicit none
   integer(C_INT64_T) :: time0, time1
@@ -42,8 +42,9 @@ program disk_bandwidth
   integer :: size, rank
   integer :: i, i_proc, i_node
   integer :: max_proc, num_nodes
-  type(MPI_Comm) :: node_comm, controller_comm
+  integer :: node_comm, controller_comm
   integer :: node_rank, node_size, node_id
+  integer :: ierr
 
   integer, parameter :: NUM_BUF_ELEM_COUNTS = 7
   integer, dimension(NUM_BUF_ELEM_COUNTS) :: buf_elem_counts
@@ -55,30 +56,30 @@ program disk_bandwidth
 
   allocate(buffer(NUM_BUFFER_ELEMENTS))
 
-  call MPI_Init()
-  call MPI_Comm_rank(MPI_COMM_WORLD, rank)
-  call MPI_Comm_size(MPI_COMM_WORLD, size)
+  call MPI_Init(ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, size, ierr)
 
-  call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, node_comm)
-  call MPI_Comm_rank(node_comm, node_rank)
-  call MPI_Comm_size(node_comm, node_size)
+  call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, node_comm, ierr)
+  call MPI_Comm_rank(node_comm, node_rank, ierr)
+  call MPI_Comm_size(node_comm, node_size, ierr)
 
   ! Find out how many MPI nodes there are
   block
     integer :: count
-    type(MPI_Comm) :: tmp_comm
+    integer :: tmp_comm
     count = 0
     if (node_rank == 0) count = 1
-    call MPI_Allreduce(count, num_nodes, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD)
+    call MPI_Allreduce(count, num_nodes, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr)
 
     if (node_rank == 0) then
-      call MPI_Comm_split(MPI_COMM_WORLD, 0, rank, controller_comm)
-      call MPI_Comm_rank(controller_comm, node_id)
+      call MPI_Comm_split(MPI_COMM_WORLD, 0, rank, controller_comm, ierr)
+      call MPI_Comm_rank(controller_comm, node_id, ierr)
     else
-      call MPI_Comm_split(MPI_COMM_WORLD, 1, rank, tmp_comm)
+      call MPI_Comm_split(MPI_COMM_WORLD, 1, rank, tmp_comm, ierr)
     end if
 
-    call MPI_Bcast(node_id, 1, MPI_INTEGER, 0, node_comm)
+    call MPI_Bcast(node_id, 1, MPI_INTEGER, 0, node_comm, ierr)
   end block
 
   write(file_name,'(A6, I4.4, A4)') 'SERVER', rank, '.out'
@@ -102,7 +103,7 @@ program disk_bandwidth
   buf_elem_counts(7) = 1000000
 
   !---------------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !---------------------------------------
   if (rank == 0) then
     print *, 'Total data: ', TOTAL_DATA_GB, ' GB'
@@ -131,11 +132,11 @@ program disk_bandwidth
         !   print *, 'num_elem, process data Kb, num writes: ', num_elem, process_data_kb, num_writes
         ! end if
         !---------------------------------------
-        call MPI_Barrier(MPI_COMM_WORLD)
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
         !---------------------------------------
         time0 = get_current_time_us()
         !---------------------------------------
-        call MPI_Barrier(MPI_COMM_WORLD)
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
         !---------------------------------------
         if (node_rank < i_proc .and. node_id < i_node) then
           open(newunit = file_unit, file = file_name, status = 'replace', form = 'unformatted')
@@ -145,7 +146,7 @@ program disk_bandwidth
           close(file_unit)
         end if
         !---------------------------------------
-        call MPI_Barrier(MPI_COMM_WORLD)
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
         !---------------------------------------
         time1 = get_current_time_us()
         total_time =  real(time1 - time0, 4) / 1000000.0
@@ -163,6 +164,6 @@ program disk_bandwidth
     end do
   end do
 
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
   deallocate(buffer)
 end program disk_bandwidth

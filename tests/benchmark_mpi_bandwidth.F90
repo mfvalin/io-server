@@ -21,7 +21,7 @@
 
 module mpi_bw_mod
   use ISO_C_BINDING
-  use ioserver_mpi_f08
+  use ioserver_mpi
   implicit none
 
   integer, parameter :: MAX_MESSAGE_SIZE = 500000
@@ -38,21 +38,21 @@ contains
   function am_server_node(node_comm, node_rank)
     implicit none
 
-    type(MPI_Comm), intent(out) :: node_comm
-    integer,        intent(out) :: node_rank
+    integer, intent(out) :: node_comm
+    integer, intent(out) :: node_rank
     logical :: am_server_node
 
     integer :: global_rank,  node_root_global_rank
-    ! integer :: ierr
+    integer :: ierr
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
-    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm)
-    call MPI_Comm_rank(node_comm, node_rank)
+    call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
+    call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, global_rank, MPI_INFO_NULL, node_comm, ierr)
+    call MPI_Comm_rank(node_comm, node_rank, ierr)
 
     node_root_global_rank = -1
     if (node_rank == 0) node_root_global_rank = global_rank
 
-    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm)
+    call MPI_Bcast(node_root_global_rank, 1, MPI_INTEGER, 0, node_comm, ierr)
 
     am_server_node = .false.
     if (node_root_global_rank == 0) am_server_node = .true.
@@ -69,25 +69,26 @@ contains
   subroutine allocate_shared_mem_array(comm, num_relays, array_size, array)
     use test_helper_module
     implicit none
-    type(MPI_Comm), intent(in) :: comm
+    integer, intent(in) :: comm
     integer, intent(in) :: num_relays, array_size
     integer, pointer, dimension(:,:), intent(out) :: array
 
     integer :: rank, size
+    integer :: ierr
 
     type(C_PTR)        :: mem
     integer(C_INT)     :: shmid
     integer(C_INT64_T) :: total_size
 
-    call MPI_Comm_rank(comm, rank)
-    call MPI_Comm_size(comm, size)
+    call MPI_Comm_rank(comm, rank, ierr)
+    call MPI_Comm_size(comm, size, ierr)
 
     if (rank == 0) then
       total_size = num_relays * array_size
       mem = memory_allocate_shared(shmid, total_size)
     end if
 
-    call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, comm)
+    call MPI_Bcast(shmid, 1, MPI_INTEGER, 0, comm, ierr)
     if (rank .ne. 0) then
       mem = memory_address_from_id(shmid)
     end if
@@ -152,9 +153,9 @@ contains
     use io_timer_module
     implicit none
 
-    type(MPI_Comm), intent(in) :: msg_comm
+    integer, intent(in) :: msg_comm
     integer, intent(in) :: msg_size, msg_count
-    type(MPI_Win), intent(in) :: window
+    integer, intent(in) :: window
     integer, intent(in) :: target_channel, num_channels
     integer(MPI_ADDRESS_KIND), intent(in) :: offset
     integer, dimension(MAX_MESSAGE_SIZE), intent(inout) :: msg_buffer
@@ -163,14 +164,14 @@ contains
 
     real :: gb_per_s
 
-    integer :: i, j
+    integer :: i, j, ierr
     type(io_timer) :: timer
     real(C_DOUBLE) :: total_time
     integer :: rank, size
     integer :: num_relays
 
-    call MPI_Comm_rank(msg_comm, rank)
-    call MPI_Comm_size(msg_comm, size)
+    call MPI_Comm_rank(msg_comm, rank, ierr)
+    call MPI_Comm_size(msg_comm, size, ierr)
 
     num_relays = size - MAX_NUM_CHANNELS
 
@@ -183,7 +184,7 @@ contains
       call relay_process(msg_comm, msg_size, 1, window, target_channel, offset, msg_buffer)
     end if
 
-    call MPI_Barrier(msg_comm)
+    call MPI_Barrier(msg_comm, ierr)
 
     ! Verify that everyone on the server can read the correct sent data
     if (on_server) then
@@ -198,7 +199,7 @@ contains
       end do
     end if
 
-    call MPI_Barrier(msg_comm)
+    call MPI_Barrier(msg_comm, ierr)
 
     if (rank == 0) call timer % start()
 
@@ -206,7 +207,7 @@ contains
       call relay_process(msg_comm, msg_size, msg_count, window, target_channel, offset, msg_buffer)
     end if
 
-    call MPI_Barrier(msg_comm)
+    call MPI_Barrier(msg_comm, ierr)
 
     if (rank == 0) then
       call timer % stop()
@@ -220,9 +221,9 @@ contains
                         global_rank, num_relays, on_server, channel_buffer, message_sizes, num_msg_sizes,  &
                         channel_counts, num_channel_counts)
     implicit none
-    type(MPI_Comm), intent(in) :: msg_comm
+    integer, intent(in) :: msg_comm
     integer, intent(in) :: msg_count
-    type(MPI_Win), intent(in) :: window
+    integer, intent(in) :: window
     integer(MPI_ADDRESS_KIND), intent(in) :: offset
     integer, dimension(MAX_MESSAGE_SIZE), intent(inout) :: msg_buffer
     integer, intent(in) :: global_rank, num_relays
@@ -236,14 +237,14 @@ contains
     integer, parameter :: MAX_TOTAL_DATA = 50000000
 
     integer :: rank
-    integer :: i, i_num_channel
+    integer :: i, i_num_channel, ierr
     integer :: num_channels, num_messages, target_channel
 
     real, dimension(num_msg_sizes) :: rates
 
     if (global_rank < 0) print *, num_relays, msg_count
 
-    call MPI_Comm_rank(msg_comm, rank)
+    call MPI_Comm_rank(msg_comm, rank, ierr)
 
     if (rank == 0) then
       print '(A22, I8, I8, I8, I8, I8, I8)', '# channel \ msg sizes', message_sizes(:)
@@ -268,16 +269,16 @@ contains
   subroutine relay_process(msg_comm, msg_size, msg_count, window, target_channel, offset, msg_buffer)
     implicit none
 
-    type(MPI_Comm), intent(in) :: msg_comm
+    integer, intent(in) :: msg_comm
     integer,        intent(in) :: msg_size, msg_count
-    type(MPI_Win),  intent(in) :: window
+    integer,  intent(in) :: window
     integer,        intent(in) :: target_channel
     integer(MPI_ADDRESS_KIND), intent(in) :: offset
     integer, dimension(MAX_MESSAGE_SIZE), intent(inout) :: msg_buffer
-    integer :: i, rank
+    integer :: i, rank, ierr
 
     if (msg_count == 1) then
-      call MPI_Comm_rank(msg_comm, rank)
+      call MPI_Comm_rank(msg_comm, rank, ierr)
       ! print *, 'Sending message from rank ', rank
       do i = 1, msg_size
         msg_buffer(i) = compute_data_element(rank, i)
@@ -285,9 +286,9 @@ contains
     end if
 
     do i = 1, msg_count
-      call MPI_Win_lock(LOCK_TYPE, target_channel, LOCK_ASSERT, window)
-      call MPI_Put(msg_buffer, msg_size, MPI_INTEGER, target_channel, offset, MAX_MESSAGE_SIZE, MPI_INTEGER, window)
-      call MPI_Win_unlock(target_channel, window)
+      call MPI_Win_lock(LOCK_TYPE, target_channel, LOCK_ASSERT, window, ierr)
+      call MPI_Put(msg_buffer, msg_size, MPI_INTEGER, target_channel, offset, MAX_MESSAGE_SIZE, MPI_INTEGER, window, ierr)
+      call MPI_Win_unlock(target_channel, window, ierr)
     end do
 
   end subroutine relay_process
@@ -301,11 +302,11 @@ program mpi_bandwidth
   implicit none
 
   integer :: global_rank, node_rank
-  type(MPI_Comm) :: node_comm, msg_comm
+  integer :: node_comm, msg_comm
   logical :: on_server
 
   integer :: msg_comm_size, msg_rank
-  type(MPI_Win) :: window
+  integer :: window
   integer :: total_num_relays, target_channel
   ! integer, allocatable, dimension(:, :) :: channel_buffer
   integer, pointer, dimension(:, :) :: shared_buffer
@@ -321,6 +322,7 @@ program mpi_bandwidth
   ! real, dimension(NUM_MESSAGE_SIZES)    :: rates
   integer :: num_messages !, num_channels
   ! integer :: i, i_num_channel
+  integer :: ierr
 
   integer, parameter :: NUM_CHANNEL_COUNTS = 8
   integer, dimension(NUM_CHANNEL_COUNTS) :: channel_counts
@@ -343,22 +345,22 @@ program mpi_bandwidth
   channel_counts(7) = 10
   channel_counts(8) = 12
 
-  call MPI_Init()
-  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank)
+  call MPI_Init(ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, global_rank, ierr)
 
   on_server = am_server_node(node_comm, node_rank)
 
   if (on_server .and. node_rank < MAX_NUM_CHANNELS) then
-    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, msg_comm)
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank, msg_comm, ierr)
   else if (.not. on_server .and. node_rank == 0) then
-    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank + 1000000, msg_comm)
+    call MPI_Comm_split(MPI_COMM_WORLD, 0, global_rank + 1000000, msg_comm, ierr)
   else
-    call  MPI_Comm_split(MPI_COMM_WORLD, 1, 0, msg_comm)
+    call  MPI_Comm_split(MPI_COMM_WORLD, 1, 0, msg_comm, ierr)
     goto 777
   end if
 
-  call MPI_Comm_size(msg_comm, msg_comm_size)
-  call MPI_Comm_rank(msg_comm, msg_rank)
+  call MPI_Comm_size(msg_comm, msg_comm_size, ierr)
+  call MPI_Comm_rank(msg_comm, msg_rank, ierr)
   total_num_relays = msg_comm_size - MAX_NUM_CHANNELS
 
   ! Allocate shared memory on the server
@@ -374,7 +376,7 @@ program mpi_bandwidth
 
     ! print *, 'Allocating (channel) window: ', MESSAGE_WINDOW_SIZE * num_target_relays, msg_rank
     ! call MPI_Win_create(channel_buffer, MESSAGE_WINDOW_SIZE * total_num_relays, 4, MPI_INFO_NULL, msg_comm, window, ierror)
-    call MPI_Win_create(shared_buffer, MESSAGE_WINDOW_SIZE * total_num_relays, 4, MPI_INFO_NULL, msg_comm, window)
+    call MPI_Win_create(shared_buffer, MESSAGE_WINDOW_SIZE * total_num_relays, 4, MPI_INFO_NULL, msg_comm, window, ierr)
     ! print *, 'Channel window created', msg_rank
 
   else
@@ -383,12 +385,12 @@ program mpi_bandwidth
     window_size = 0
     offset = (msg_rank - MAX_NUM_CHANNELS) * MAX_MESSAGE_SIZE
     print *, 'msg rank, offset', msg_rank, offset
-    call MPI_Win_create(relay_buffer, window_size, 4, MPI_INFO_NULL, msg_comm, window)
+    call MPI_Win_create(relay_buffer, window_size, 4, MPI_INFO_NULL, msg_comm, window, ierr)
     ! print *, 'Relay window created'
 
   end if
 
-  call MPI_Barrier(msg_comm)
+  call MPI_Barrier(msg_comm, ierr)
 
   if (global_rank == 0) then
     print *, total_num_relays, 'relays'
@@ -441,7 +443,7 @@ program mpi_bandwidth
   ! end do
 
 777 continue
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
   deallocate(relay_buffer)
 
 end program mpi_bandwidth

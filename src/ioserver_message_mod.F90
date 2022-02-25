@@ -175,8 +175,9 @@ contains
     implicit none
     class(ioserver_messenger), intent(inout) :: this
     logical, intent(in), optional :: new_file
+    integer :: ierr
 
-    if (this % debug_mode) call MPI_Barrier(this % model_crs % comm)    ! in debug mode, enforce collective mode
+    if (this % debug_mode) call MPI_Barrier(this % model_crs % comm, ierr)    ! in debug mode, enforce collective mode
     this % msg_tag_seq = this % msg_tag_seq + 1
 
     if (present(new_file)) then

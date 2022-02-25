@@ -21,7 +21,7 @@
 
 module shmem_heap_basic_module
   use iso_c_binding
-  use ioserver_mpi_f08
+  use ioserver_mpi
   use heap_module
   use rpn_extra_module
   implicit none
@@ -49,32 +49,33 @@ contains
     type(heap), intent(inout) :: the_heap
 
     integer :: rank, num_procs
+    integer :: ierr
 
-    call MPI_Comm_rank(MPI_COMM_WORLD, rank)
-    call MPI_Comm_size(MPI_COMM_WORLD, num_procs)
+    call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
+    call MPI_Comm_size(MPI_COMM_WORLD, num_procs, ierr)
 
     call concurrent_alloc_basic()
 
     !------------------------
-    call MPI_Barrier(MPI_COMM_WORLD)
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
     call one_producer_one_consumer()
 
     !------------------------
-    call MPI_Barrier(MPI_COMM_WORLD)
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
     call array_tkr_and_values()
 
     !------------------------
-    call MPI_Barrier(MPI_COMM_WORLD)
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
     call big_alloc()
 
     !------------------------
-    call MPI_Barrier(MPI_COMM_WORLD)
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
     !!!!!!!!!!!!!!!!!!!!!!!
@@ -82,7 +83,7 @@ contains
     call concurrent_alloc_many()
 
     !------------------------
-    call MPI_Barrier(MPI_COMM_WORLD)
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
   contains
@@ -137,7 +138,7 @@ contains
       end do
 
       !------------------------
-      call MPI_Barrier(MPI_COMM_WORLD)
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
       !------------------------
 
       num_errors = 0
@@ -148,7 +149,7 @@ contains
         if (.not. success) num_errors = num_errors + 1 ! Concurrency errors are usually seen when freeing the block
       end do
 
-      call MPI_Reduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
+      call MPI_Reduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
       if (rank == 0) then
         if (.not. the_heap % check() .or. total_errors == 0) then
           print *, 'There are 0 errors. This is suspect. Are you sure you are using many concurrent processes for this test?'
@@ -170,8 +171,8 @@ contains
 
       integer(HEAP_ELEMENT), dimension(NUM_ALLOC) :: offsets
       real(kind=8), dimension(:), pointer :: array, array2
-      type(MPI_Status) :: status
-      integer :: i, j
+      integer :: status
+      integer :: i, j, ierr
       logical :: success
 
       type(block_meta_f08) :: array_info, array_info_2
@@ -189,8 +190,8 @@ contains
 
         array_info_2 = the_heap % allocate(array2, [ALLOC_BASE_SIZE], .false.)
 
-        call MPI_Send(offsets(1), 1, MPI_INTEGER8, FREEER_RANK, 0, MPI_COMM_WORLD)
-        call MPI_Recv(offsets(1), 1, MPI_INTEGER8, FREEER_RANK, 1, MPI_COMM_WORLD, status) ! Wait for reply to make sure the freeing is done
+        call MPI_Send(offsets(1), 1, MPI_INTEGER8, FREEER_RANK, 0, MPI_COMM_WORLD, ierr)
+        call MPI_Recv(offsets(1), 1, MPI_INTEGER8, FREEER_RANK, 1, MPI_COMM_WORLD, status, ierr) ! Wait for reply to make sure the freeing is done
         
         success = the_heap % free(array_info)
         if (success) then
@@ -220,21 +221,21 @@ contains
             end if
             offsets(j) = array_info % get_offset()
           end do
-          call MPI_Send(offsets, NUM_ALLOC, MPI_INTEGER8, FREEER_RANK, 0, MPI_COMM_WORLD)
+          call MPI_Send(offsets, NUM_ALLOC, MPI_INTEGER8, FREEER_RANK, 0, MPI_COMM_WORLD, ierr)
         end do
 
       else if (rank == FREEER_RANK) then
         ! Free the block allocated by another process
-        call MPI_Recv(offsets(1), 1, MPI_INTEGER8, ALLOCATOR_RANK, 0, MPI_COMM_WORLD, status)
+        call MPI_Recv(offsets(1), 1, MPI_INTEGER8, ALLOCATOR_RANK, 0, MPI_COMM_WORLD, status, ierr)
         success = the_heap % free(offsets(1))
         if (.not. success) then
           print *, 'ERROR: Unable to free... Offset ', offsets(1)
           error stop 1
         end if
-        call MPI_Send(offsets(1), 1, MPI_INTEGER8, ALLOCATOR_RANK, 1, MPI_COMM_WORLD)
+        call MPI_Send(offsets(1), 1, MPI_INTEGER8, ALLOCATOR_RANK, 1, MPI_COMM_WORLD, ierr)
 
         do i = 1, NUM_LOOPS
-          call MPI_Recv(offsets, NUM_ALLOC, MPI_INTEGER8, ALLOCATOR_RANK, 0, MPI_COMM_WORLD, status)
+          call MPI_Recv(offsets, NUM_ALLOC, MPI_INTEGER8, ALLOCATOR_RANK, 0, MPI_COMM_WORLD, status, ierr)
           do j = 1, NUM_ALLOC
             success = the_heap % free(offsets(j))
           end do
@@ -258,7 +259,7 @@ contains
       real(kind=4),    dimension(:, :),          pointer :: array_r4_2
       real(kind=8),    dimension(:, :, :),       pointer :: array_r8_3
 
-      type(MPI_Status) :: status
+      integer :: status, ierr
       integer :: i, j, k, l, m
       integer :: index
       logical :: success
@@ -333,10 +334,10 @@ contains
           end do
         end do
 
-        call MPI_Send(offsets, 6, MPI_INTEGER8, CONSUMER_RANK, 0, MPI_COMM_WORLD)
+        call MPI_Send(offsets, 6, MPI_INTEGER8, CONSUMER_RANK, 0, MPI_COMM_WORLD, ierr)
       else if (rank == CONSUMER_RANK) then
 
-        call MPI_Recv(offsets, 6, MPI_INTEGER8, PRODUCER_RANK, 0, MPI_COMM_WORLD, status)
+        call MPI_Recv(offsets, 6, MPI_INTEGER8, PRODUCER_RANK, 0, MPI_COMM_WORLD, status, ierr)
 
         call c_f_pointer(the_heap % get_address_from_offset(offsets(1)), array_i1_5, [2_8, 2_8, 2_8, 2_8, 2_8])
         call c_f_pointer(the_heap % get_address_from_offset(offsets(2)), array_i2_4, [3_8, 3_8, 3_8, 3_8])
@@ -444,9 +445,9 @@ contains
       if (.not. associated(kinda_big_array1)) num_errors = num_errors + 1
       if (.not. associated(kinda_big_array2)) num_errors = num_errors + 1
 
-      call MPI_Reduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD)
+      call MPI_Reduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
       !------------------------
-      call MPI_Barrier(MPI_COMM_WORLD)
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
       !------------------------
       if (rank == 0) then
         if (total_errors .ne. 1) then
@@ -459,7 +460,7 @@ contains
       success = the_heap % free(array_info2) .and. success
 
       !------------------------
-      call MPI_Barrier(MPI_COMM_WORLD)
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
       !------------------------
 
       if (rank == 0) then
@@ -500,8 +501,9 @@ program shmem_heap_basic
   implicit none
 
   integer :: rank, num_procs
-  type(MPI_Comm) :: node_comm
+  integer :: node_comm
   integer :: node_size
+  integer :: ierr
 
   type(C_PTR) :: shared_mem
 
@@ -510,19 +512,19 @@ program shmem_heap_basic
 
   !!!!!!!!!!!!!!!!!!!!!!
   ! Initialization
-  call MPI_Init()
-  call MPI_Comm_size(MPI_COMM_WORLD, num_procs)
-  call MPI_Comm_rank(MPI_COMM_WORLD, rank)
+  call MPI_Init(ierr)
+  call MPI_Comm_size(MPI_COMM_WORLD, num_procs, ierr)
+  call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
 
-  call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, node_comm)
-  call MPI_Comm_size(node_comm, node_size)
+  call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, rank, MPI_INFO_NULL, node_comm, ierr)
+  call MPI_Comm_size(node_comm, node_size, ierr)
 
   if (num_procs .lt. 4 .and. num_procs .ne. node_size) then
     print *, 'ERROR: Need at least 4 processes for this test, and can only run it on a single node'
     error stop 1
   end if
 
-  shared_mem = RPN_allocate_shared(SHMEM_HEAP_SIZE_BYTE, MPI_Comm(MPI_COMM_WORLD));
+  shared_mem = RPN_allocate_shared(SHMEM_HEAP_SIZE_BYTE, MPI_COMM_WORLD);
 
   if (.not. c_associated(shared_mem)) then
     print *, 'ERROR: Could not allocate shared memory'
@@ -544,7 +546,7 @@ program shmem_heap_basic
   ! call the_heap % set_base(shared_mem)
 
   !-------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !-------------------------------
   ! if (rank .ne. 0) then
   !   status  = the_heap % register(shared_mem)
@@ -559,7 +561,7 @@ program shmem_heap_basic
     error stop 1
   end if
   !-------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !-------------------------------
 
   !!!!!!!!!!!!!!!!
@@ -569,9 +571,9 @@ program shmem_heap_basic
   !!!!!!!!!!!!!!
   ! We're done
   !-------------------------------
-  call MPI_Barrier(MPI_COMM_WORLD)
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !-------------------------------
-  call MPI_Finalize()
+  call MPI_Finalize(ierr)
 
   if (rank == 0) print *, 'All good'
 
