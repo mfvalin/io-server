@@ -46,8 +46,8 @@ static const int DCB_DATA_CHECK_DELAY_US = 20;
 //! How long to wait between each window sync from a channel process
 static const int DCB_WINDOW_SYNC_DELAY_US = 10;
 
-//! ID of the server process that is considered the root of a DCB. You might run into trouble if it's anything other than 0
-static const int DCB_ROOT_ID = 0;
+//! Rank on the server of the server process that will be the "root" of the DCB. _On the server communicator!!!_
+static const int DCB_SERVER_ROOT_RANK = 0;
 
 //C_StArT
 /**
@@ -77,6 +77,8 @@ enum channel_signal
 typedef enum channel_signal channel_signal_t;
 
 typedef struct {
+  int32_t root_rank; //!< Rank of the "root" process of the DCB. Has to be on the server, and is not necessarily 0. _On the entire DCB communicator!_
+
   int32_t num_server_consumers;     //!< How many server processes will _read_ from individual buffers (server-bound)
   int32_t num_server_producers;     //!< How many server processes will _write_ to individual buffers (client-bound)
   int32_t num_channels;             //!< How many channels (server processes) can be used for MPI 1-sided communication (1 process = 1 channel)
@@ -535,7 +537,7 @@ static inline int is_client(const distributed_circular_buffer_p buffer) {
 
 //! Check whether the given distributed buffer is located on the DCB root process
 static inline int is_root(const distributed_circular_buffer_p buffer) {
-  return (buffer->server_rank == DCB_ROOT_ID);
+  return (buffer->server_rank == DCB_SERVER_ROOT_RANK);
 }
 
 //! Check whether the given distributed buffer is located on a channel process
@@ -586,13 +588,13 @@ static void retrieve_window_offset_from_remote(
     distributed_circular_buffer_p buffer //!< Buffer for which we want the window offset
 ) {
   // We communicate through the root process, because we don't yet know the rank of our target
-  MPI_Win_lock(MPI_LOCK_SHARED, DCB_ROOT_ID, MPI_MODE_NOCHECK, buffer->window);
+  MPI_Win_lock(MPI_LOCK_SHARED, buffer->control_metadata.root_rank, MPI_MODE_NOCHECK, buffer->window);
   const MPI_Aint displacement =
     is_server_bound_client(buffer) ? server_bound_window_offset_displacement(buffer, buffer->server_bound_client_id) :
     is_client_bound_client(buffer) ? client_bound_window_offset_displacement(buffer, buffer->client_bound_client_id) :
     -1;
-  MPI_Get(&buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, DCB_ROOT_ID, displacement, 1, CB_MPI_ELEMENT_TYPE, buffer->window);
-  MPI_Win_unlock(DCB_ROOT_ID, buffer->window);
+  MPI_Get(&buffer->window_offset, 1, CB_MPI_ELEMENT_TYPE, buffer->control_metadata.root_rank, displacement, 1, CB_MPI_ELEMENT_TYPE, buffer->window);
+  MPI_Win_unlock(buffer->control_metadata.root_rank, buffer->window);
 }
 
 //! @brief Copy from the consumer process the header associated with this circular buffer instance.
@@ -602,7 +604,7 @@ static inline void update_local_header_from_remote(
     const int                     full    //!< [in] Whether to perform a full update (if =1) or only a partial one
 ) {
   // Gotta load the target rank first, because it's going to be overwritten by the MPI_Get
-  const int      target_rank  = buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : DCB_ROOT_ID;
+  const int      target_rank  = buffer->local_header.target_rank >= 0 ? buffer->local_header.target_rank : buffer->control_metadata.root_rank;
   const int      num_elem     = instance_header_size();
   const MPI_Aint displacement = remote_header_displacement(buffer);
 
@@ -631,7 +633,7 @@ static inline void update_local_header_from_remote(
 static void set_client_rank_on_remote(
     distributed_circular_buffer_p buffer //!< [in,out] Buffer we want to update
 ) {
-  const int          target_rank         = 0; // Target the root of the DCB, which we know to be on the server
+  const int          target_rank         = buffer->control_metadata.root_rank; // Target the root of the DCB, which we know to be on the server
   const int          num_elem            = 1; // Rank takes exactly 1 element
   const data_element value               = buffer->dcb_rank;
 
@@ -792,6 +794,7 @@ static inline void send_channel_signal(distributed_circular_buffer_p buffer, con
 
 //! Put default values into DCB struct members
 static inline void reset_dcb_struct(distributed_circular_buffer_p buffer) {
+  buffer->control_metadata.root_rank                  = -1;
   buffer->control_metadata.num_server_producers       = -1;
   buffer->control_metadata.num_server_consumers       = -1;
   buffer->control_metadata.num_server_bound_instances = -1;
@@ -833,46 +836,53 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
   const int32_t zero = 0;
   const int32_t one  = 1;
 
-  // Determine which process will be the root of the DCB
   if (buffer->server_communicator != MPI_COMM_NULL) // Server processes
   {
     MPI_Comm_rank(buffer->server_communicator, &buffer->server_rank);
 
-    if (buffer->server_rank == DCB_ROOT_ID && buffer->dcb_rank != DCB_ROOT_ID) {
-      printf("ERROR during DCB_create. DCB rank %d is not on the server communicator...\n", DCB_ROOT_ID);
-      return NULL;
-    }
+    // Determine rank of the root of the DCB (it's the process with server rank #DCB_SERVER_ROOT_RANK)
+    const int root_rank = (buffer->server_rank == DCB_SERVER_ROOT_RANK) ? buffer->dcb_rank : 0;
+    MPI_Allreduce(&root_rank, &buffer->control_metadata.root_rank, 1, MPI_INT, MPI_SUM, buffer->communicator);
+    printf("root rank = %d (from %d)\n", buffer->control_metadata.root_rank, buffer->dcb_rank);
 
     if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
       // printf("I am a server-bound server (%d)\n", buffer->dcb_rank);
-      MPI_Reduce(&one,  &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
     }
     else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE) {
       // printf("I am a client-bound server (%d)\n", buffer->dcb_rank);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
-      MPI_Reduce(&one,  &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
     }
     else if (buffer->communication_type == DCB_CHANNEL_TYPE) {
       // printf("I am a channel (%d)\n", buffer->dcb_rank);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
-      MPI_Reduce(&one,  &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_consumers, 1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_producers, 1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_channels,         1, MPI_INT, MPI_SUM, DCB_SERVER_ROOT_RANK, buffer->server_communicator);
     }
     else {
       printf("ERROR during DCB_create. Server process given an invalid communication type\n");
       return NULL;
     }
 
-    MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
-    MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+    MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
+    MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
+
+    printf("%d cons, %d prod, %d channels, %d sb, %d cb (rank %d)\n", 
+      buffer->control_metadata.num_server_consumers, buffer->control_metadata.num_server_producers, buffer->control_metadata.num_channels,
+      buffer->control_metadata.num_server_bound_instances, buffer->control_metadata.num_client_bound_instances,
+      buffer->dcb_rank
+    );
 
     // Do some sanity checks
-    if (buffer->server_rank == DCB_ROOT_ID) {
+    if (buffer->server_rank == DCB_SERVER_ROOT_RANK) {
 
-      if (buffer->control_metadata.num_channels < 1 || (buffer->control_metadata.num_server_consumers + buffer->control_metadata.num_server_consumers < 1)) {
+      printf("From DCB root, rank %d\n", buffer->dcb_rank);
+
+      if (buffer->control_metadata.num_channels < 1 || (buffer->control_metadata.num_server_consumers + buffer->control_metadata.num_server_producers < 1)) {
         printf(
           "ERROR during DCB_create. We are missing some processes on the server. "
           "There are currently %d consumer(s), %d producer(s) and %d channel(s). "
@@ -911,15 +921,18 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
   }
   else // Client processes
   {
+    // Retrieve rank of root process
+    MPI_Allreduce(&zero, &buffer->control_metadata.root_rank, 1, MPI_INT, MPI_SUM, buffer->communicator);
+
     if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
       // printf("I am a server-bound client (%d)\n", buffer->dcb_rank);
-      MPI_Reduce(&one,  &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
     }
     else if (buffer->communication_type == DCB_CLIENT_BOUND_TYPE) {
       // printf("I am a client-bound client (%d)\n", buffer->dcb_rank);
-      MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
-      MPI_Reduce(&one,  &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, DCB_ROOT_ID, buffer->communicator);
+      MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
+      MPI_Reduce(&one,  &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
     }
     else {
       printf("ERROR during DCB_create. Invalid communication type given by a client process (%d)\n.", buffer->communication_type);
@@ -978,7 +991,7 @@ static inline void init_metadata(distributed_circular_buffer_p buffer, const siz
   }
 
   // Every process that participate in the DCB has an identical copy of the control metadata
-  MPI_Bcast(&buffer->control_metadata, sizeof(control_header), MPI_BYTE, DCB_ROOT_ID, buffer->communicator);
+  MPI_Bcast(&buffer->control_metadata, sizeof(control_header), MPI_BYTE, buffer->control_metadata.root_rank, buffer->communicator);
 }
 
 //! Allocate shared memory for the given DCB, initialize (most of) it and create the MPI one-sided window into
@@ -1003,12 +1016,12 @@ static inline distributed_circular_buffer_p init_shmem_area_and_window(distribut
 
     init_control_pointers(buffer); // Need the control pointers to initialize the data
     init_control_data(buffer); // Initialize control data before syncing with other server processes (this removes 1 barrier)
-    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Send shared mem info to other server procs
+    MPI_Bcast(&id, 1, MPI_INT, DCB_SERVER_ROOT_RANK, buffer->server_communicator); // Send shared mem info to other server procs
   }
   else if (is_on_server(buffer))
   {
     int id;
-    MPI_Bcast(&id, 1, MPI_INT, DCB_ROOT_ID, buffer->server_communicator); // Receive shared mem info from root process
+    MPI_Bcast(&id, 1, MPI_INT, DCB_SERVER_ROOT_RANK, buffer->server_communicator); // Receive shared mem info from root process
     buffer->raw_data = shmem_address_from_id(id);
   }
 
@@ -1078,8 +1091,7 @@ void DCB_sync_window(distributed_circular_buffer_p buffer) {
 //! physical node, which we call the "server node"._
 //! The other processes are clients and only get a copy of the header of their circular buffer, as well as an offset
 //! that points to the location of their data within the shared window.
-//! _The buffer with rank #DCB_ROOT_ID on the given DCB communicator will be considered the root of the DCB and must be
-//! located on the server node._
+//! _The buffer with rank #DCB_SERVER_ROOT_ID on the given server DCB communicator will be considered the root of the DCB._
 //! \sa distributed_circular_buffer
 //!
 //! @return If all went well, a pointer to a newly-allocated distributed circular buffer struct that contains all the
@@ -1237,7 +1249,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
   // Producers must send their collected stats to the root
   if (is_client(buffer)) {
     const int id = is_server_bound_client(buffer) ? buffer->server_bound_client_id : buffer->client_bound_client_id;
-    MPI_Send(&buffer->local_header.circ_buffer.stats, sizeof(cb_stats), MPI_BYTE, DCB_ROOT_ID, id, buffer->communicator);
+    MPI_Send(&buffer->local_header.circ_buffer.stats, sizeof(cb_stats), MPI_BYTE, buffer->control_metadata.root_rank, id, buffer->communicator);
   }
 
   // The root will print all stats, and compute some global stat values

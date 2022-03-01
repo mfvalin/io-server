@@ -106,6 +106,8 @@ enum channel_signal
 typedef enum channel_signal channel_signal_t;
 
 typedef struct {
+  int32_t root_rank; //!< Rank of the "root" process of the DCB. Has to be on the server, and is not necessarily 0. _On the entire DCB communicator!_
+
   int32_t num_server_consumers;     //!< How many server processes will _read_ from individual buffers (server-bound)
   int32_t num_server_producers;     //!< How many server processes will _write_ to individual buffers (client-bound)
   int32_t num_channels;             //!< How many channels (server processes) can be used for MPI 1-sided communication (1 process = 1 channel)

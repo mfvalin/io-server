@@ -926,8 +926,10 @@ subroutine print_shared_mem_sizes(context)
   if (context % is_server()) then
     print '(A,F8.1,A)', '(Server node) Shared memory heap: ', context % params % server_heap_size_mb, ' MB'
     if (.not. context % is_grid_processor()) then
-      print '(A,F8.1,A)', '(Server node) Server-bound DCB:   ', context % params % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(), ' MB (total)'
-      print '(A,F8.1,A)', '(Server node) Model-bound DCB:    ', context % params % dcb_model_bound_size_mb, ' MB (per client)'
+      if (context % local_dcb % is_valid()) then
+        print '(A,F8.1,A)', '(Server node) Server-bound DCB:   ', context % params % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(), ' MB (total)'
+        print '(A,F8.1,A)', '(Server node) Model-bound DCB:    ', context % params % dcb_model_bound_size_mb, ' MB (per client)'
+      end if
     end if
   else
     print '(A,F8.1,A)', '(Model node)  Shared memory heap: ', context % params % model_heap_size_mb, ' MB'
@@ -1298,7 +1300,7 @@ function init_communicators(context) result(success)
       call MPI_Allreduce(num_model_bound, context % num_model_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm, ierr)
 
       call MPI_Comm_rank(context % io_comm, io_rank, ierr)
-      if (context % debug_mode() .and. io_rank == 0) then
+      if (context % debug_mode() .and. context % server_comm_rank == 0) then
         print '(A, I5, A, I5, A)', 'DEBUG: We have ', context % num_nodes, ' nodes (', context % num_model_nodes, ' model nodes)'
         print '(A, I5, A)',        '               ', context % num_server_bound_relays, ' server-bound relays'
         print '(A, I5, A)',        '               ', context % num_model_bound_relays, ' model-bound relays'
@@ -1555,6 +1557,9 @@ function init_shared_mem(context) result(success)
     call context % print_shared_mem_sizes()
   end if
 
+  ! Make sure processes are synchronized on the server
+  if (context % is_server()) call MPI_Barrier(context % server_comm, ierr)
+
   allocate(context % messenger)
   call context % messenger % set_debug(context % debug_mode())
   call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
@@ -1599,6 +1604,11 @@ function ioserver_context_init(context, params) result(success)
   if (.not. success) then
     print *, 'ERROR: There were errors during shared memory initialization'
     return
+  end if
+
+  if (context % debug_mode()) then
+    call MPI_Barrier(context % global_comm, ierr)
+    print '(A, 1X, A)', 'DEBUG: Sucessfully initialized ', context % get_detailed_pe_name()
   end if
 
 end function ioserver_context_init
