@@ -19,17 +19,9 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-program test_circular_buffer
+module test_circular_buffer_module
   implicit none
-  interface
-    subroutine shared_mem_test()
-    end subroutine shared_mem_test
-  end interface
-
-  call shared_mem_test()
-
-end program test_circular_buffer
-
+contains
 
 subroutine shared_mem_test()
 
@@ -37,14 +29,6 @@ subroutine shared_mem_test()
   use ioserver_mpi
   use circular_buffer_module
   implicit none
-
-  interface
-  subroutine init_array(array, rank)
-    implicit none
-    integer, dimension(:), intent(out) :: array
-    integer, intent(in) :: rank
-  end subroutine init_array
-  end interface
 
   integer(C_SIZE_T), parameter :: BUFFER_SIZE_BYTE = 128 * 4
   ! integer, parameter :: NUM_BUFFER_ELEMENTS = 128
@@ -82,7 +66,7 @@ subroutine shared_mem_test()
   if (num_procs < 2) then
     print *, 'This test needs at least 2 processes'
     errors = 1
-    goto 999
+    error stop 1
   end if
 
   target_proc = mod(my_rank + 1, num_procs)             ! next in the "ring"
@@ -256,8 +240,6 @@ subroutine shared_mem_test()
 3   format(25I6)
   endif
 
-999 continue
-
   success = buffer_a % delete()
   success = buffer_b % delete()
 
@@ -279,3 +261,13 @@ subroutine init_array(array, rank)
     array(i) = (rank + 1) * 10000 + i
   end do
 end subroutine init_array
+
+end module test_circular_buffer_module
+
+program test_circular_buffer
+  use test_circular_buffer_module
+  implicit none
+
+  call shared_mem_test()
+
+end program test_circular_buffer
