@@ -171,7 +171,7 @@ contains
 
       integer(HEAP_ELEMENT), dimension(NUM_ALLOC) :: offsets
       real(kind=8), dimension(:), pointer :: array, array2
-      integer :: status
+      integer, dimension(MPI_STATUS_SIZE) :: status
       integer :: i, j, ierr
       logical :: success
 
@@ -259,7 +259,8 @@ contains
       real(kind=4),    dimension(:, :),          pointer :: array_r4_2
       real(kind=8),    dimension(:, :, :),       pointer :: array_r8_3
 
-      integer :: status, ierr
+      integer, dimension(MPI_STATUS_SIZE) :: status
+      integer :: ierr
       integer :: i, j, k, l, m
       integer :: index
       logical :: success
