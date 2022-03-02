@@ -418,8 +418,9 @@ function get_detailed_pe_name(context) result(detailed_name)
     short_name = '[unknown] '
   end if
 
-  write(temp_name, '(A, A, I6, A, I6, A, I5, A, I5)')         &
-      short_name, ' | active rank ', context % active_rank, '/', context % active_size, ' | node ', context % node_id, '/', context % num_nodes
+  write(temp_name, '(A, A, I6, A, I6, A, I5, A, I5, A, I6)')         &
+      short_name, ' | active rank ', context % active_rank, '/', context % active_size, ' | node ', context % node_id, '/', context % num_nodes, &
+      ' | global rank ', context % get_global_rank()
 
   detailed_name = trim(temp_name)
 end function get_detailed_pe_name
@@ -1548,7 +1549,7 @@ function init_shared_mem(context) result(success)
       success = context % local_dcb % create_bytes(context % io_dcb_comm, server_comm, type, server_bound_size, model_bound_size)
       if (.not. success) then
         print *, 'ERROR: Unable to create DCB'
-        num_errors = num_errors + 1
+        return
       end if
     end block
   endif
