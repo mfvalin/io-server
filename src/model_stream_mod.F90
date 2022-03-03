@@ -54,6 +54,9 @@ module model_stream_module
     procedure   :: is_version_valid
     procedure   :: set_debug
 
+    procedure :: set_name
+    procedure :: has_name
+
   end type
 
   interface model_stream
@@ -109,6 +112,44 @@ contains
 
   end function is_open
 
+  function set_name(this, name) result(num_chars)
+    implicit none
+    class(model_stream), intent(inout) :: this
+    character(len=*),    intent(in)    :: name
+    integer(kind=8) :: num_chars
+
+    num_chars = len(trim(name)) + 1
+    if (num_chars > MAX_FILE_NAME_SIZE) then
+      print *, 'ERROR: Requested file name (for opening) is longer than the limit of ', MAX_FILE_NAME_SIZE - 1, ' characters'
+      num_chars = -1
+      return
+    end if
+
+    allocate(this % name(num_chars))
+    this % name(1:num_chars) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
+  end function set_name
+
+  function has_name(this, name)
+    implicit none
+    class(model_stream), intent(in) :: this
+    character(len=*),    intent(in) :: name
+    logical :: has_name
+
+    character(len=1), dimension(:), allocatable :: full_name 
+    integer :: num_chars
+
+    has_name = .false.
+    if (.not. associated(this % name)) return
+
+    num_chars = len(trim(name)) + 1
+    if (num_chars .ne. size(this % name)) return
+
+    allocate(full_name(num_chars))
+    full_name = transfer(trim(name) // char(0), full_name)
+
+    has_name = all(full_name == this % name)
+  end function has_name
+
   function open(this, name) result(success)
     implicit none
     class(model_stream),    intent(INOUT) :: this
@@ -133,15 +174,12 @@ contains
 
     this % stream_id = this % messenger % get_file_tag()
 
-    filename_num_char = len(trim(name)) + 1
+    filename_num_char = this % set_name(name)
 
-    if (filename_num_char > MAX_FILE_NAME_SIZE) then
-      print *, 'ERROR: Requested file name (for opening) is longer than the limit of ', MAX_FILE_NAME_SIZE - 1, ' characters'
+    if (filename_num_char <= 0) then
+      print *, 'ERROR: unable to set the name of the model_stream to ', name
       return
     end if
-
-    allocate(this % name(filename_num_char))
-    this % name(1:filename_num_char) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
 
     header % content_length_int8 = num_char_to_num_int8(filename_num_char)
     header % command             = MSG_COMMAND_OPEN_FILE

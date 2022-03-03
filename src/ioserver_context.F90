@@ -196,6 +196,8 @@ module ioserver_context_module
 
     integer :: num_server_stream_owners = -1 !< How many server processes can own a stream (can be lower than number of server-bound processes)
     integer :: node_id = -1
+
+    type(model_stream), dimension(:), pointer :: local_model_streams !< List of opened streams, for easy access
     !> @}
 
     !----------------------
@@ -427,32 +429,53 @@ end function get_detailed_pe_name
 
 !> Open a stream where the model can write data
 !> \return A stream object that is already open and can be written to
-function open_stream_model(context, filename) result(new_file)
+function open_stream_model(context, filename) result(new_stream)
   implicit none
   class(ioserver_context), intent(inout) :: context
   character(len=*),        intent(in)    :: filename !< Base name of the file to open
-  type(model_stream) :: new_file
+  type(model_stream), pointer :: new_stream
 
   logical :: success
+  integer :: i_stream
+  type(model_stream), pointer :: tmp_stream
+
+  nullify(new_stream)
 
   if (.not. context % is_initialized()) then
     print *, 'ERROR: Cannot open file, context is *not* initialized.'
-    error stop 1
+    return
+  end if
+
+  nullify(tmp_stream)
+  do i_stream = 1, MAX_NUM_SERVER_STREAMS
+    if (context % local_model_streams(i_stream) % has_name(filename)) then
+      new_stream => context % local_model_streams(i_stream)
+      return
+    else if (.not. context % local_model_streams(i_stream) % is_open()) then
+      if (.not. associated(tmp_stream)) tmp_stream => context % local_model_streams(i_stream)
+    end if
+  end do
+
+  if (.not. associated(tmp_stream)) then
+    print *, 'ERROR: No space left in the list of (model) streams to open a new one ', filename
+    return
   end if
 
   if (context % debug_mode()) print *, 'DEBUG: (Model) Opening file with name ', filename
 
-  new_file = model_stream(context % global_rank, &
-                          context % local_heap, &
-                          context % local_server_bound_cb, &
-                          context % debug_mode(), &
-                          context % messenger)
-  success = new_file % open(filename)
+  new_stream => tmp_stream
+  new_stream = model_stream(context % global_rank, &
+                            context % local_heap, &
+                            context % local_server_bound_cb, &
+                            context % debug_mode(), &
+                            context % messenger)
+  success = new_stream % open(filename)
 
   if (.not. success) print *, 'ERROR: Unable to open file, for some reason'
 end function open_stream_model
 
-!> Open a stream on the server (if this process is the owner, will actually open the shared instance)
+!> Request the opening of a stream on the server. The underlying shared stream will eventually be opened, following
+!> this request.
 !> \return A pointer to the local stream instance able to access the underlying shared memory stream
 !> \sa server_stream_module::local_server_stream, server_stream_module::shared_server_stream
 function open_stream_server(context, filename, stream_id) result(new_stream)
@@ -890,6 +913,8 @@ subroutine ioserver_context_finalize_manually(this)
     if (associated(this % model_bound_cbs)) deallocate(this % model_bound_cbs)
     if (associated(this % server_bound_cbs)) deallocate(this % server_bound_cbs)
     if (associated(this % local_heaps)) deallocate(this % local_heaps)
+
+    if (associated(this % local_model_streams)) deallocate(this % local_model_streams)
 
     call this % local_dcb % delete() ! This will block if not everyone calls it
 
@@ -1502,6 +1527,12 @@ function init_shared_mem(context) result(success)
     alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.04_8, kind=C_SIZE_T), .false.) .and. alloc_success
     alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.1_8, kind=C_SIZE_T), .true.) .and. alloc_success
     if (.not. alloc_success) goto 2
+
+    ! Initialize array of model streams
+    if (context % is_model()) then
+      allocate(context % local_model_streams(MAX_NUM_SERVER_STREAMS))
+    end if
+
   endif   ! (server process)
 
   goto 3       ! no error, bypass
