@@ -1627,8 +1627,7 @@ function ioserver_context_init(context, params) result(success)
   end if
 
   if (context % debug_mode()) then
-    call MPI_Barrier(context % global_comm, ierr)
-    print '(A, 1X, A)', 'DEBUG: ', context % get_detailed_pe_name()
+    print '(A, 1X, A)', 'DEBUG: Comm initialized ', context % get_detailed_pe_name()
   end if
 
   success = context % init_shared_mem()
@@ -1638,9 +1637,10 @@ function ioserver_context_init(context, params) result(success)
     return
   end if
 
-  if (context % debug_mode()) then
     call MPI_Barrier(context % global_comm, ierr)
-    print '(A, 1X, A)', 'DEBUG: Sucessfully initialized ', context % get_detailed_pe_name()
+
+  if (context % debug_mode()) then
+    print '(A, 1X, A)', 'DEBUG: IO-server sucessfully initialized ', context % get_detailed_pe_name()
   end if
 
 end function ioserver_context_init
