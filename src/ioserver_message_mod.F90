@@ -100,13 +100,13 @@ module ioserver_message_module
     integer(C_INT64_T) :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
   end type message_cap
 
-  integer, parameter, public :: MSG_COMMAND_DATA        = 0 !< Indicate a message that contains grid data
-  integer, parameter, public :: MSG_COMMAND_DUMMY       = 1 !< Indicate a message without content or purpose
-  integer, parameter, public :: MSG_COMMAND_OPEN_FILE   = 2 !< Indicate a message that wants to open a file
-  integer, parameter, public :: MSG_COMMAND_CLOSE_FILE  = 3 !< Indicate a message that wants to close a file
-  integer, parameter, public :: MSG_COMMAND_MODEL_STOP  = 4 !< Indicate that the model that sends this message will no longer send anything
-  integer, parameter, public :: MSG_COMMAND_RELAY_STOP  = 5 !< Indicate that the relay that sends this message will no longer send anything
-  integer, parameter, public :: MSG_COMMAND_ACKNOWLEDGE = 6 !< Indicate a message without content, but with the purpose to acknowledge something?
+  integer, parameter, public :: MSG_COMMAND_DATA          = 0 !< Indicate a message that contains grid data
+  integer, parameter, public :: MSG_COMMAND_DUMMY         = 1 !< Indicate a message without content or purpose
+  integer, parameter, public :: MSG_COMMAND_OPEN_STREAM   = 2 !< Indicate a message that wants to open a file
+  integer, parameter, public :: MSG_COMMAND_CLOSE_STREAM  = 3 !< Indicate a message that wants to close a file
+  integer, parameter, public :: MSG_COMMAND_MODEL_STOP    = 4 !< Indicate that the model that sends this message will no longer send anything
+  integer, parameter, public :: MSG_COMMAND_RELAY_STOP    = 5 !< Indicate that the relay that sends this message will no longer send anything
+  integer, parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
 
   public :: message_header_size_int8, message_cap_size_int8, model_record_size_int8, cmeta_size_int8
   public :: message_header_size_byte, message_cap_size_byte, model_record_size_byte, cmeta_size_byte
@@ -185,6 +185,7 @@ contains
     end if
   end subroutine bump_tag
 
+  !> Retrieve the current tag number in the sequence of messages
   function get_msg_tag(this) result(tag)
     implicit none
     class(ioserver_messenger), intent(in) :: this
@@ -192,6 +193,7 @@ contains
     tag = this % msg_tag_seq
   end function get_msg_tag
 
+  !> Retrieve the current tag number in the sequence of streams
   function get_file_tag(this) result(tag)
     implicit none
     class(ioserver_messenger), intent(in) :: this
@@ -203,7 +205,9 @@ contains
     implicit none
     class(ioserver_messenger), intent(inout) :: this
     logical, intent(in) :: debug_mode
+    integer :: ierr
     this % debug_mode = debug_mode
+    if (.not. this % model_crs % is_null()) call MPI_Allreduce(debug_mode, this % debug_mode, 1, MPI_LOGICAL, MPI_LOR, this % model_crs % comm, ierr)
   end subroutine set_debug
 
   subroutine set_model_crs(this, model_crs)
@@ -220,18 +224,18 @@ contains
     select case (command)
     case (MSG_COMMAND_DATA)
       command_string = 'MSG_COMMAND_DATA'
-    case (MSG_COMMAND_ACKNOWLEDGE)
-      command_string = 'MSG_COMMAND_ACKNOWLEDGE'
-    case (MSG_COMMAND_CLOSE_FILE)
-      command_string = 'MSG_COMMAND_CLOSE_FILE'
+    case (MSG_COMMAND_CLOSE_STREAM)
+      command_string = 'MSG_COMMAND_CLOSE_STREAM'
     case (MSG_COMMAND_DUMMY)
       command_string = 'MSG_COMMAND_DUMMY'
     case (MSG_COMMAND_MODEL_STOP)
       command_string = 'MSG_COMMAND_MODEL_STOP'
-    case (MSG_COMMAND_OPEN_FILE)
-      command_string = 'MSG_COMMAND_OPEN_FILE'
+    case (MSG_COMMAND_OPEN_STREAM)
+      command_string = 'MSG_COMMAND_OPEN_STREAM'
     case (MSG_COMMAND_RELAY_STOP)
       command_string = 'MSG_COMMAND_RELAY_STOP'
+    case (MSG_COMMAND_SERVER_CMD)
+      command_string = 'MSG_COMMAND_SERVER_CMD'
     case default
       command_string = '[ERROR] unknown number'
     end select

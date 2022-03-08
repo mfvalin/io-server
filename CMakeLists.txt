@@ -29,7 +29,9 @@ if (MPI_FOUND)
    set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
 endif()
 
+add_subdirectory(pseudo-rmn)
 add_subdirectory(src)
+add_subdirectory(pseudo-model)
 add_subdirectory(tests)
 
 #----- Generate the config file for the project to be usable via cmake's find_package command

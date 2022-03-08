@@ -24,6 +24,7 @@ module run_server_node_module
   use ioserver_constants
   use ioserver_context_module
   use ioserver_message_module
+  use process_command_module
   use server_stream_module
   implicit none
   private
@@ -390,7 +391,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   !---------------
   ! Open a file
-  else if (header % command == MSG_COMMAND_OPEN_FILE) then
+  else if (header % command == MSG_COMMAND_OPEN_STREAM) then
     allocate(character(len=(header % content_length_int8 * 8)) :: filename)
     ! print *, 'Got OPEN message', consumer_id
     success = dcb % get_elems(client_id, filename, header % content_length_int8, CB_KIND_INTEGER_8, .true.)
@@ -407,13 +408,23 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   !----------------
   ! Close a file
-  else if (header % command == MSG_COMMAND_CLOSE_FILE) then
+  else if (header % command == MSG_COMMAND_CLOSE_STREAM) then
     ! print *, 'Got CLOSE FILE message', consumer_id
     success = context % close_stream_server(header % stream_id)
     if (.not. success) then
       print *, 'ERROR: File does not seem closable', header % stream_id, consumer_id
       error stop 1
     end if
+
+  !--------------------
+  ! Execute a command
+  else if (header % command == MSG_COMMAND_SERVER_CMD) then
+
+    ! TODO Implement it for real
+    block
+      type(jar) :: cmd
+      call process_command(cmd)
+    end block
 
   !----------------
   ! Misc. message

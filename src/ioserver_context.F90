@@ -464,11 +464,12 @@ function open_stream_model(context, filename) result(new_stream)
   if (context % debug_mode()) print *, 'DEBUG: (Model) Opening file with name ', filename
 
   new_stream => tmp_stream
-  new_stream = model_stream(context % global_rank, &
-                            context % local_heap, &
-                            context % local_server_bound_cb, &
-                            context % debug_mode(), &
-                            context % messenger)
+  new_stream = model_stream(context % global_rank,            &
+                            context % local_heap,             &
+                            context % local_server_bound_cb,  &
+                            context % debug_mode(),           &
+                            context % messenger,              &
+                            filename)
   success = new_stream % open(filename)
 
   if (.not. success) print *, 'ERROR: Unable to open file, for some reason'
@@ -1593,8 +1594,8 @@ function init_shared_mem(context) result(success)
   if (context % is_server()) call MPI_Barrier(context % server_comm, ierr)
 
   allocate(context % messenger)
-  call context % messenger % set_debug(context % debug_mode())
   call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
+  call context % messenger % set_debug(context % debug_mode())
 
   success = .true.
 end function init_shared_mem

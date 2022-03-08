@@ -46,15 +46,15 @@ module model_stream_module
     contains
 
     ! initial, pass :: server_file_construct
-    procedure   :: open
-    procedure   :: read
-    procedure   :: write
-    procedure   :: close
+    procedure   :: open  => model_stream_open
+    procedure   :: read  => model_stream_read
+    procedure   :: write => model_stream_write
+    procedure   :: close => model_stream_close
     procedure   :: is_open
     procedure   :: is_version_valid
     procedure   :: set_debug
 
-    procedure :: set_name
+    procedure, private :: set_name
     procedure :: has_name
 
   end type
@@ -65,20 +65,25 @@ module model_stream_module
 
 contains
 
-  function new_model_stream(global_rank, local_heap, server_bound_cb, debug_mode, messenger)
+  function new_model_stream(global_rank, local_heap, server_bound_cb, debug_mode, messenger, name)
     implicit none
     integer,                intent(in)  :: global_rank
     type(heap),             intent(in)  :: local_heap
     type(circular_buffer),  intent(in)  :: server_bound_cb
     logical,                intent(in)  :: debug_mode
     type(ioserver_messenger), pointer, intent(in) :: messenger
+    character(len=*),       intent(in)  :: name
     type(model_stream) :: new_model_stream
+
+    integer(kind = 8) :: num_chars
 
     new_model_stream % global_rank = global_rank
     new_model_stream % local_heap  = local_heap
     new_model_stream % server_bound_cb = server_bound_cb
     new_model_stream % debug = debug_mode
     new_model_stream % messenger => messenger
+
+    num_chars = new_model_stream % set_name(name)
   end function new_model_stream
 
   function set_debug(this, dbg) result(status)
@@ -150,7 +155,7 @@ contains
     has_name = all(full_name == this % name)
   end function has_name
 
-  function open(this, name) result(success)
+  function model_stream_open(this, name) result(success)
     implicit none
     class(model_stream),    intent(INOUT) :: this
     character(len=*),      intent(IN)    :: name
@@ -182,7 +187,7 @@ contains
     end if
 
     header % content_length_int8 = num_char_to_num_int8(filename_num_char)
-    header % command             = MSG_COMMAND_OPEN_FILE
+    header % command             = MSG_COMMAND_OPEN_STREAM
     header % stream_id           = this % stream_id
     header % message_tag         = this % messenger % get_msg_tag()
     header % sender_global_rank  = this % global_rank
@@ -193,9 +198,9 @@ contains
     success = this % server_bound_cb % put(this % name, filename_num_char, CB_KIND_CHAR, .false.) .and. success
     success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success       ! Append length and commit message
 
-  end function open
+  end function model_stream_open
 
-  function close(this) result(success)
+  function model_stream_close(this) result(success)
     implicit none
     class(model_stream), intent(INOUT) :: this
     logical :: success
@@ -211,7 +216,7 @@ contains
     header % content_length_int8  = 0
     header % stream_id            = this % stream_id
     header % message_tag          = this  % messenger % get_msg_tag()
-    header % command              = MSG_COMMAND_CLOSE_FILE
+    header % command              = MSG_COMMAND_CLOSE_STREAM
     header % sender_global_rank   = this % global_rank
 
     end_cap % msg_length = header % content_length_int8
@@ -225,10 +230,10 @@ contains
 
     ! call print_message_header(header)
 
-  end function close
+  end function model_stream_close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
-  function write(this, my_data, subgrid_area, global_grid, grid_out, cprs, meta) result(success)
+  function model_stream_write(this, my_data, subgrid_area, global_grid, grid_out, cprs, meta) result(success)
     use iso_c_binding
     use jar_module
     implicit none
@@ -323,9 +328,9 @@ contains
 
     ! Add the end cap and commit the message
     success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success
-  end function write
+  end function model_stream_write
 
-  function read(this) result(status)
+  function model_stream_read(this) result(status)
     implicit none
     class(model_stream), intent(INOUT) :: this
     integer :: status
@@ -335,5 +340,5 @@ contains
     call this % messenger % bump_tag()
 
     status = 0
-  end function read
+  end function model_stream_read
 end module model_stream_module

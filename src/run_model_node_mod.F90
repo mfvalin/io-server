@@ -302,11 +302,11 @@ function default_server_bound_relay(context) result(relay_success)
 
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
-      else if (header % command == MSG_COMMAND_CLOSE_FILE) then
+      else if (header % command == MSG_COMMAND_CLOSE_STREAM) then
         ! Do nothing, just send the header along
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
-      else if (header % command == MSG_COMMAND_OPEN_FILE) then
+      else if (header % command == MSG_COMMAND_OPEN_STREAM) then
         filename_size = header % content_length_int8
 
         if (.not. allocated(cb_message)) then
@@ -375,7 +375,7 @@ function default_server_bound_relay(context) result(relay_success)
           return
         end if
 
-      else if (header % command == MSG_COMMAND_OPEN_FILE) then
+      else if (header % command == MSG_COMMAND_OPEN_STREAM) then
 
         num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:filename_size))
 

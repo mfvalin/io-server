@@ -7,12 +7,8 @@ set(TEST_SOURCES
    circular_buffer_single_thread.F90
    dcb_edge_case_1.F90
    dcb_unaligned_input.c
-   default_model.F90
    distributed_circular_buffer.F90
-   init_comms.F90
    launch_pseudo_model.F90
-   launch_server.F90
-   model_write.F90
    put_error.F90
    shmem_heap_basic.F90
    simple_mutex.F90
@@ -104,6 +100,10 @@ endforeach(TEST_SOURCE)
 
 gen_test_target(SOURCES benchmark_mpi_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
 gen_test_target(SOURCES benchmark_disk_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
+gen_test_target(SOURCES default_model.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES init_comms.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES launch_server.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES model_write.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
 
 # Check MPI implementation to be able to give the proper flags when running tests
 find_program(RPN_MPIRUN mpirun)
@@ -158,7 +158,8 @@ get_test_name(default_model.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 12 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(model_write.F90 TEST_TARGET)
-add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 12 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 2 2)
+add_test(NAME ${TEST_TARGET}_debug COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 12 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 1 2 2 2 2)
+add_test(NAME ${TEST_TARGET}_nodebug COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 12 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS} 0 2 2 2 2)
 
 get_test_name(init_comms.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 12 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
