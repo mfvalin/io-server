@@ -144,6 +144,8 @@ typedef struct {
   uint64_t out[2];  //!< Start reading data at data[out]
   uint64_t limit;   //!< Size of data buffer (last available index + 1)
   uint64_t capacity_byte; //!< Size of data buffer in bytes
+  int32_t  lock;    //!< To be able to perform thread-safe operations (not necessarily used)
+  int32_t  dummy; //!< So that the struct has size multiple of 64 bits
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -369,6 +371,7 @@ circular_buffer_p CB_init_bytes(
   p->m.in[CB_PARTIAL]  = 0;
   p->m.out[CB_FULL]    = 0;
   p->m.out[CB_PARTIAL] = 0;
+  p->m.lock            = 0; // Unlocked
 
   // Memory is already allocated so to get the number of full elements we round down
   const int num_elements = num_bytes / sizeof(data_element);
@@ -605,7 +608,12 @@ int64_t CB_wait_space_available_bytes(
   if (num_bytes_wanted > p->m.capacity_byte)
     return -1;
 
+  const size_t num_removable_data = CB_get_available_data_bytes(p);
   size_t num_available = CB_get_available_space_bytes(p);
+
+  if (num_available + num_removable_data < num_bytes_wanted)
+    return -1; // We will never have the necessary space in these conditions
+
   int    num_waits     = 0;
   while (num_available < num_bytes_wanted) {
     sleep_us(CB_SPACE_CHECK_DELAY_US);
@@ -744,13 +752,14 @@ int CB_get(
 //F_StArT
 //   !> wait until num_bytes are available then insert from src array<br>
 //   !> n = CB_put(p, src, num_bytes, commit_transaction)
-//   function CB_put(p, src, num_bytes, commit_transaction) result(status) BIND(C,name='CB_put')
+//   function CB_put(p, src, num_bytes, commit_transaction, thread_safe) result(status) BIND(C,name='CB_put')
 //     import :: C_PTR, C_INT, C_SIZE_T
 //     implicit none
 //     type(C_PTR),       intent(IN), value :: p                  !< pointer to a circular buffer
 //     integer(C_SIZE_T), intent(IN), value :: num_bytes          !< number of bytes to insert from src
 //     type(C_PTR),       intent(IN), value :: src                !< source array for data insertion
 //     integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+//     integer(C_INT),    intent(IN), value :: thread_safe        !< Whether to perform the operation in a thread-safe manner (when == 1)
 //     integer(C_INT) :: status                                   !< 0 if success, -1 if failure
 //   end function CB_put
 //F_EnD
@@ -762,15 +771,25 @@ int CB_put(
     circular_buffer_p buffer,    //!< [in] Pointer to a circular buffer
     void*             src,       //!< [in] Source array for data insertion
     size_t            num_bytes, //!< [in] Number of bytes to insert
-    int operation //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
+    int operation,    //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
+    int thread_safe   //!< [in] If 1, perform operation in a thread-safe way
     )
 //C_EnD
 {
   io_timer_t timer = {0, 0};
   IO_timer_start(&timer);
 
-  if (CB_wait_space_available_bytes(buffer, num_bytes) < 0)
+  if (thread_safe == 1 && operation != CB_COMMIT) {
+    printf("WARNING: Trying to put data in a CB in a thread safe way, but not committing the message. We don't allow that for now.\n");
     return -1;
+  }
+
+  if (thread_safe == 1) acquire_lock(&buffer->m.lock);
+
+  if (CB_wait_space_available_bytes(buffer, num_bytes) < 0) {
+    if (thread_safe == 1) release_lock(&buffer->m.lock);
+    return -1;
+  }
 
   data_element*  data       = buffer->data;
   uint64_t       current_in = buffer->m.in[CB_PARTIAL];
@@ -808,6 +827,8 @@ int CB_put(
   buffer->stats.total_write_time_ms += IO_time_ms(&timer);
 
   if (num_bytes != num_elements * sizeof(data_element)) buffer->stats.num_fractional_writes++;
+
+  if (thread_safe == 1) release_lock(&buffer->m.lock);
 
   return 0;
 }

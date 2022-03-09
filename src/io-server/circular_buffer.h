@@ -177,6 +177,8 @@ typedef struct {
   uint64_t out[2];  //!< Start reading data at data[out]
   uint64_t limit;   //!< Size of data buffer (last available index + 1)
   uint64_t capacity_byte; //!< Size of data buffer in bytes
+  int32_t  lock;    //!< To be able to perform thread-safe operations (not necessarily used)
+  int32_t  dummy; //!< So that the struct has size multiple of 64 bits
 } fiol_management;
 
 //! pointer to circular buffer management part
@@ -351,7 +353,8 @@ int CB_put(
     circular_buffer_p buffer,    //!< [in] Pointer to a circular buffer
     void*             src,       //!< [in] Source array for data insertion
     size_t            num_bytes, //!< [in] Number of bytes to insert
-    int operation //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
+    int operation,    //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
+    int thread_safe   //!< [in] If 1, perform operation in a thread-safe way
 );
 int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
 );

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 set(TEST_SOURCES
    cb_unaligned_input.c
    circular_buffer.F90
+   circular_buffer_concurrent.F90
    circular_buffer_fill.c
    circular_buffer_single_thread.F90
    dcb_edge_case_1.F90
@@ -138,6 +139,9 @@ add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
 
 get_test_name(circular_buffer.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(circular_buffer_concurrent.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 8 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(circular_buffer_fill.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 4 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})

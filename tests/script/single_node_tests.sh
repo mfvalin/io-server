@@ -2,6 +2,7 @@ ${BUILD_PATH}/tests/io_server_circular_buffer_single_thread                     
 ${BUILD_PATH}/tests/io_server_cb_unaligned_input                                                || exit -1
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_circular_buffer                     || exit -1
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_circular_buffer_fill                || exit -1
+${MPI_COMMAND} -n 8           ${BUILD_PATH}/tests/io_server_circular_buffer_concurrent          || exit -1
 ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_distributed_circular_buffer         || exit -1
 ${MPI_COMMAND} -n 8           ${BUILD_PATH}/tests/io_server_shmem_heap_basic                    || exit -1
 ${MPI_COMMAND} -n 12          ${BUILD_PATH}/tests/io_server_simple_mutex                        || exit -1

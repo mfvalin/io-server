@@ -52,7 +52,7 @@ int main()
 
     {
         int i = 1;
-        CB_put(cb, &i, sizeof(i), CB_COMMIT);
+        CB_put(cb, &i, sizeof(i), CB_COMMIT, 0);
 
         int result;
         CB_get(cb, &result, sizeof(result), CB_COMMIT);
@@ -78,7 +78,7 @@ int main()
 
         int result;
 
-        result = CB_put(cb, message, NUM_CHARS, CB_COMMIT);
+        result = CB_put(cb, message, NUM_CHARS, CB_COMMIT, 0);
         if (result < 0) return -1;
         result = CB_get(cb, &received_message, NUM_CHARS, CB_COMMIT);
         if (result < 0) return -1;
@@ -86,7 +86,7 @@ int main()
         check_message_length(received_message, NUM_CHARS - 1);
 
         // Message minus 1 character
-        result = CB_put(cb, message + 1, NUM_CHARS - 1, CB_COMMIT);
+        result = CB_put(cb, message + 1, NUM_CHARS - 1, CB_COMMIT, 0);
         if (result < 0) return -1;
         // Just peek, the exact number of characters
         result = CB_get(cb, &received_message, NUM_CHARS - 1, CB_PEEK);
@@ -102,7 +102,7 @@ int main()
         {
             // Message minus [i] characters
             const size_t count = NUM_CHARS - i;
-            result = CB_put(cb, message + i, count, CB_COMMIT);
+            result = CB_put(cb, message + i, count, CB_COMMIT, 0);
             if (result < 0) return -1;
 
             const size_t avail_space = CB_get_available_space_bytes(cb);

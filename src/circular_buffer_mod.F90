@@ -256,19 +256,21 @@ contains
   !> \sa CB_put()
 #define IgnoreTypeKindRank src
 #define ExtraAttributes , target
-  function put(this, src, num_elements, type_id, commit_transaction) result(success)
+  function put(this, src, num_elements, type_id, commit_transaction, thread_safe) result(success)
     implicit none
     class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer
 #include <IgnoreTypeKindRankPlus.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements       !< number of tokens to insert from src
     integer,                intent(IN), value :: type_id            !< ID of the type of elements we're looking for
     logical,                intent(IN), value :: commit_transaction !< Whether to make the inserted data immediately available
+    logical, optional,      intent(IN)        :: thread_safe        !< Whether to perform the operation in a thread-safe way (must *not* be passed by value!)
     logical :: success                                              !< Whether the operation was successful
 
     integer        :: type_size
     integer(C_INT) :: operation
     integer(C_INT) :: status
     type(C_PTR)    :: temp
+    integer(C_INT) :: thread_safe_val
 
     success   = .false.
     temp      = C_LOC(src)
@@ -276,7 +278,12 @@ contains
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
-    status = CB_put(this % p, temp, num_elements * type_size, operation)
+    thread_safe_val = 0
+    if (present(thread_safe)) then
+      if (thread_safe) thread_safe_val = 1
+    end if
+
+    status = CB_put(this % p, temp, num_elements * type_size, operation, thread_safe_val)
     if (status == 0) success = .true.
   end function put
 

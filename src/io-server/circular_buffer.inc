@@ -215,13 +215,14 @@ integer(C_INT) :: status                              !< 0 if success, -1 if err
 end function CB_get
 !> wait until num_bytes are available then insert from src array<br>
 !> n = CB_put(p, src, num_bytes, commit_transaction)
-function CB_put(p, src, num_bytes, commit_transaction) result(status) BIND(C,name='CB_put')
+function CB_put(p, src, num_bytes, commit_transaction, thread_safe) result(status) BIND(C,name='CB_put')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
 type(C_PTR),       intent(IN), value :: p                  !< pointer to a circular buffer
 integer(C_SIZE_T), intent(IN), value :: num_bytes          !< number of bytes to insert from src
 type(C_PTR),       intent(IN), value :: src                !< source array for data insertion
 integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+integer(C_INT),    intent(IN), value :: thread_safe        !< Whether to perform the operation in a thread-safe manner (when == 1)
 integer(C_INT) :: status                                   !< 0 if success, -1 if failure
 end function CB_put
 pure function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')

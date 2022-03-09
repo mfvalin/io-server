@@ -95,14 +95,14 @@ int fill_test(int argc, char** argv) {
       return num_errors;
     }
 
-    const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT);
+    const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT, 0);
     if (expected_error != -1) {
       printf("Wrong return value after trying to put more than max into the buffer! %d\n", expected_error);
       num_errors++;
       return num_errors;
     }
 
-    const int status = CB_put(local_buffer, local_data, capacity, CB_COMMIT);
+    const int status = CB_put(local_buffer, local_data, capacity, CB_COMMIT, 0);
     if (status != 0)
     {
       printf("ERROR put failed (capacity)\n");
@@ -133,7 +133,7 @@ int fill_test(int argc, char** argv) {
     }
     else {
       // At first, buffer is full, so we can't put anything in it (hence the delay)
-      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*8, CB_COMMIT);
+      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*8, CB_COMMIT, 0);
       IO_timer_stop(&put_time);
 
       const double t = IO_time_ms(&put_time);
@@ -185,7 +185,7 @@ int fill_test(int argc, char** argv) {
     }
     else {
       sleep_us(WRITE_DELAY_US * my_rank);
-      CB_put(local_buffer, local_data, 1*8, CB_COMMIT);
+      CB_put(local_buffer, local_data, 1*8, CB_COMMIT, 0);
     }
   }
 
