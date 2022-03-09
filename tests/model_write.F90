@@ -110,14 +110,17 @@ contains
     use heap_module
     use ioserver_context_module
     use ioserver_message_module
+    use jar_module
     use rpn_extra_module, only: sleep_us
     implicit none
+
+#include <serializer.hf>
 
     type(ioserver_context), intent(inout) :: context
     logical :: model_success
 
     type(heap)            :: node_heap
-    type(model_stream)    :: output_stream_1, output_stream_2
+    type(model_stream), pointer :: output_stream_1, output_stream_2
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs
 
@@ -131,20 +134,39 @@ contains
     integer :: global_model_id
     integer :: compute_width, compute_height
 
+    type(jar) :: command_jar
+    integer :: jar_ok
+    integer(C_INT64_T) :: num_jar_elem
+    character(len=1), dimension(:), allocatable :: command_filename
+
     logical :: success
 
     model_success = .false.
 
     node_heap = context % get_local_heap()
 
-    output_stream_1 = context % open_stream_model(filename1)
-    if (.not. output_stream_1 % is_open()) then
+    jar_ok = command_jar % new(100)
+    allocate(command_filename(len_trim(filename1)))
+    command_filename = filename1
+    num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
+    deallocate(command_filename)
+
+    call context % open_stream_model(filename1, output_stream_1)
+    success = output_stream_1 % send_command(command_jar)
+    if (.not. success .or. .not. output_stream_1 % is_open()) then
       print *, 'Unable to open model file 1 !!!!'
       return
     end if
 
-    output_stream_2 = context % open_stream_model(filename2)
-    if (.not. output_stream_2 % is_open()) then
+    allocate(command_filename(len_trim(filename2)))
+    command_filename = filename1
+    call command_jar % reset()
+    num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
+    deallocate(command_filename)
+
+    call context % open_stream_model(filename2, output_stream_2)
+    success = output_stream_2 % send_command(command_jar)
+    if (.not. success .or. .not. output_stream_2 % is_open()) then
       print *, 'Unable to open model file 2 !!!!'
       return
     end if

@@ -27,6 +27,7 @@ module run_model_node_module
   private
 
   public :: run_model_node, model_function_template, relay_function_template
+  public :: default_model_bound_relay, default_server_bound_relay
 
   abstract interface
     function model_function_template(context) result(model_success)
@@ -153,7 +154,7 @@ function default_server_bound_relay(context) result(relay_success)
   integer(C_INT64_T) :: dcb_capacity
 
   integer(C_INT64_T) :: total_message_size_int8, content_size
-  integer(C_INT64_T) :: filename_size
+  integer(C_INT64_T) :: param_size_int8
   logical :: finished, success
   integer(C_INT64_T), dimension(:), allocatable :: cb_message
   integer(C_INT) :: lowest_tag, highest_tag, largest_tag_diff, previous_lowest
@@ -207,7 +208,7 @@ function default_server_bound_relay(context) result(relay_success)
   latest_tags(:) = 0
   call dcb_message_jar % reset()
 
-  filename_size = -1
+  param_size_int8 = -1
   largest_tag_diff = 0
   lowest_tag = 0
   finished = .false.
@@ -302,25 +303,27 @@ function default_server_bound_relay(context) result(relay_success)
 
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
-      else if (header % command == MSG_COMMAND_CLOSE_STREAM) then
+      else if (header % command == MSG_COMMAND_CLOSE_FILE) then
         ! Do nothing, just send the header along
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
-      else if (header % command == MSG_COMMAND_OPEN_STREAM) then
-        filename_size = header % content_length_int8
+      else if (header % command == MSG_COMMAND_OPEN_FILE .or.             &
+               header % command == MSG_COMMAND_SERVER_CMD .or.            &
+               header % command == MSG_COMMAND_CREATE_STREAM) then
+        param_size_int8 = header % content_length_int8
 
         if (.not. allocated(cb_message)) then
-          allocate(cb_message(filename_size))
-        else if (size(cb_message) < filename_size) then
+          allocate(cb_message(param_size_int8))
+        else if (size(cb_message) < param_size_int8) then
           deallocate(cb_message)
-          allocate(cb_message(filename_size))
+          allocate(cb_message(param_size_int8))
         end if
 
-        success = cb_list(i_compute) % get(cb_message, filename_size, CB_KIND_INTEGER_8, .true.) ! Extract file name
-        total_message_size_int8 = message_header_size_int8() + message_cap_size_int8() + filename_size
+        success = cb_list(i_compute) % get(cb_message, param_size_int8, CB_KIND_INTEGER_8, .true.) ! Extract file name
+        total_message_size_int8 = message_header_size_int8() + message_cap_size_int8() + param_size_int8
 
       else
-        print *, 'ERROR: Unknown message type'
+        print *, 'ERROR: [relay] Unknown message type'
         call print_message_header(header)
         return
       end if
@@ -375,9 +378,9 @@ function default_server_bound_relay(context) result(relay_success)
           return
         end if
 
-      else if (header % command == MSG_COMMAND_OPEN_STREAM) then
+      else if (header % command == MSG_COMMAND_OPEN_FILE .or. header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_CREATE_STREAM) then
 
-        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:filename_size))
+        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8))
 
       end if
 
@@ -450,13 +453,19 @@ function default_model(context) result(model_success)
 
   use heap_module
   use ioserver_message_module
+  use jar_module
   use rpn_extra_module, only: sleep_us
   implicit none
 
   type(ioserver_context), intent(inout) :: context
   logical :: model_success
 
-  type(model_stream)    :: output_stream_1
+  type(model_stream), pointer :: output_stream_1
+  character(len=1), dimension(22) :: stream_name
+  character(len=:), allocatable :: tmp_name
+  type(jar) :: command_jar
+  integer :: jar_ok
+  integer(JAR_ELEMENT) :: num_elem
   type(circular_buffer) :: data_buffer
   logical :: success
 
@@ -464,9 +473,16 @@ function default_model(context) result(model_success)
 
   if (context % debug_mode()) print *, 'Using default pseudo-model function. This does not do much.'
 
-  output_stream_1 = context % open_stream_model('pseudo_model_results_1')
-  if (.not. output_stream_1 % is_open()) then
-    print *, 'Unable to open model file 1 !!!!'
+  tmp_name = 'pseudo_model_results_1'
+  call context % open_stream_model(tmp_name, output_stream_1)
+  stream_name(1:22) = transfer(tmp_name, stream_name)
+  ! print *, 'tmp_name: ', tmp_name
+  ! print *, 'stream_name: ', stream_name
+  jar_ok = command_jar % new(100)
+  num_elem = JAR_PUT_ITEMS(command_jar, stream_name)
+  success = output_stream_1 % send_command(command_jar)
+  if (.not. success .or. .not. output_stream_1 % is_open()) then
+    print *, 'Unable to open model file 1 !!!!', success, output_stream_1 % is_open()
     return
   end if
 

@@ -429,13 +429,12 @@ end function get_detailed_pe_name
 
 !> Open a stream where the model can write data
 !> \return A stream object that is already open and can be written to
-function open_stream_model(context, filename) result(new_stream)
+subroutine open_stream_model(context, filename, new_stream)
   implicit none
-  class(ioserver_context), intent(inout) :: context
-  character(len=*),        intent(in)    :: filename !< Base name of the file to open
-  type(model_stream), pointer :: new_stream
+  class(ioserver_context),     intent(inout) :: context
+  character(len=*),            intent(in)    :: filename !< Base name of the file to open
+  type(model_stream), pointer, intent(out)   :: new_stream
 
-  logical :: success
   integer :: i_stream
   type(model_stream), pointer :: tmp_stream
 
@@ -470,10 +469,7 @@ function open_stream_model(context, filename) result(new_stream)
                             context % debug_mode(),           &
                             context % messenger,              &
                             filename)
-  success = new_stream % open(filename)
-
-  if (.not. success) print *, 'ERROR: Unable to open file, for some reason'
-end function open_stream_model
+end subroutine open_stream_model
 
 !> Request the opening of a stream on the server. The underlying shared stream will eventually be opened, following
 !> this request.
@@ -881,7 +877,7 @@ subroutine finalize_server(this)
         if (file % is_owner()) then
           print *, 'DEBUG: Heeeeeyyyy forgot to close file #, owned by myself'
           success = file % request_close()
-          success = .not. (file % process_file()) .and. success
+          success = .not. (file % process_stream()) .and. success
         end if
       end if
     end do

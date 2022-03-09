@@ -102,11 +102,12 @@ module ioserver_message_module
 
   integer, parameter, public :: MSG_COMMAND_DATA          = 0 !< Indicate a message that contains grid data
   integer, parameter, public :: MSG_COMMAND_DUMMY         = 1 !< Indicate a message without content or purpose
-  integer, parameter, public :: MSG_COMMAND_OPEN_STREAM   = 2 !< Indicate a message that wants to open a file
-  integer, parameter, public :: MSG_COMMAND_CLOSE_STREAM  = 3 !< Indicate a message that wants to close a file
+  integer, parameter, public :: MSG_COMMAND_OPEN_FILE     = 2 !< Indicate a message that wants to open a file
+  integer, parameter, public :: MSG_COMMAND_CLOSE_FILE    = 3 !< Indicate a message that wants to close a file
   integer, parameter, public :: MSG_COMMAND_MODEL_STOP    = 4 !< Indicate that the model that sends this message will no longer send anything
   integer, parameter, public :: MSG_COMMAND_RELAY_STOP    = 5 !< Indicate that the relay that sends this message will no longer send anything
   integer, parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
+  integer, parameter, public :: MSG_COMMAND_CREATE_STREAM = 7 !< Indicate a message that want to create a stream on the server
 
   public :: message_header_size_int8, message_cap_size_int8, model_record_size_int8, cmeta_size_int8
   public :: message_header_size_byte, message_cap_size_byte, model_record_size_byte, cmeta_size_byte
@@ -224,18 +225,20 @@ contains
     select case (command)
     case (MSG_COMMAND_DATA)
       command_string = 'MSG_COMMAND_DATA'
-    case (MSG_COMMAND_CLOSE_STREAM)
-      command_string = 'MSG_COMMAND_CLOSE_STREAM'
+    case (MSG_COMMAND_CLOSE_FILE)
+      command_string = 'MSG_COMMAND_CLOSE_FILE'
     case (MSG_COMMAND_DUMMY)
       command_string = 'MSG_COMMAND_DUMMY'
     case (MSG_COMMAND_MODEL_STOP)
       command_string = 'MSG_COMMAND_MODEL_STOP'
-    case (MSG_COMMAND_OPEN_STREAM)
-      command_string = 'MSG_COMMAND_OPEN_STREAM'
+    case (MSG_COMMAND_OPEN_FILE)
+      command_string = 'MSG_COMMAND_OPEN_FILE'
     case (MSG_COMMAND_RELAY_STOP)
       command_string = 'MSG_COMMAND_RELAY_STOP'
     case (MSG_COMMAND_SERVER_CMD)
       command_string = 'MSG_COMMAND_SERVER_CMD'
+    case (MSG_COMMAND_CREATE_STREAM)
+      command_string = 'MSG_COMMAND_CREATE_STREAM'
     case default
       command_string = '[ERROR] unknown number'
     end select

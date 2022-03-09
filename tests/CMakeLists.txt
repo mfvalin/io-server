@@ -9,7 +9,6 @@ set(TEST_SOURCES
    dcb_edge_case_1.F90
    dcb_unaligned_input.c
    distributed_circular_buffer.F90
-   launch_pseudo_model.F90
    put_error.F90
    shmem_heap_basic.F90
    simple_mutex.F90
@@ -99,12 +98,14 @@ foreach(TEST_SOURCE ${TEST_SOURCES})
    gen_test_target(SOURCES ${TEST_SOURCE} LIBRARIES ${PROJECT_NAME})
 endforeach(TEST_SOURCE)
 
-gen_test_target(SOURCES benchmark_mpi_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
-gen_test_target(SOURCES benchmark_disk_bandwidth.F90 LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
-gen_test_target(SOURCES default_model.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
-gen_test_target(SOURCES init_comms.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
-gen_test_target(SOURCES launch_server.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
-gen_test_target(SOURCES model_write.F90 LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES benchmark_mpi_bandwidth.F90   LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
+gen_test_target(SOURCES benchmark_disk_bandwidth.F90  LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
+gen_test_target(SOURCES default_model.F90             LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES init_comms.F90                LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES launch_server.F90             LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES model_integration.F90         LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES model_write.F90               LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES launch_pseudo_model.F90       LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
 
 # Check MPI implementation to be able to give the proper flags when running tests
 find_program(RPN_MPIRUN mpirun)

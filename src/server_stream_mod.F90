@@ -20,11 +20,13 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module server_stream_module
-  ! use circular_buffer_module
+  use iso_c_binding
+
+  use circular_buffer_module
   use grid_assembly_module
-  ! use ioserver_constants
   use ioserver_message_module
   use heap_module
+  use process_command_module
   use rpn_extra_module, only: sleep_us
   use simple_mutex_module
   implicit none
@@ -42,6 +44,8 @@ module server_stream_module
   integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
   integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
 
+  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 50000 !< Size of the buffer used to send commands to the stream owner
+
   !> Derived type that handles a server stream in shared memory. This is used to reassemble grids that
   !> are transmitted through that stream. Any server process can contribute to the grids, but only the
   !> owner can trigger the processing of a completed grid (interpolation, writing to file, etc.)
@@ -54,6 +58,9 @@ module server_stream_module
     logical :: needs_closing = .false. !< Whether we want it to be closed
     character(len=MAX_FILE_NAME_SIZE) :: name
     integer :: name_length  = 0
+
+    type(circular_buffer) :: command_buffer
+    integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
 
     !> Object where grids sent to this stream are assembled
     type(grid_assembly) :: partial_grid_data = grid_assembly(grid_assembly_line())
@@ -94,6 +101,7 @@ module server_stream_module
     type(simple_mutex)  :: mutex                !< Used to protect access to the underlying 
     type(heap)          :: data_heap            !< Heap where we can get space in shared memory
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
+    type(circular_buffer) :: command_buffer
 
     contains
 
@@ -103,7 +111,8 @@ module server_stream_module
     procedure, pass :: is_owner => local_server_stream_is_owner
     procedure, pass :: is_open  => local_server_stream_is_open
 
-    procedure, pass :: process_file   => local_server_stream_process_file
+    procedure, pass :: put_command    => local_server_stream_put_command
+    procedure, pass :: process_stream => local_server_stream_process_stream
     procedure, pass :: request_open   => local_server_stream_request_open
     procedure, pass :: request_close  => local_server_stream_request_close
     procedure, pass :: put_data       => local_server_stream_put_data
@@ -120,10 +129,13 @@ contains
     integer, intent(in) :: stream_id   !< ID of the stream. Will be used to associate it with a "model stream"
     integer, intent(in) :: owner_id    !< Which server process will own this stream
     type(shared_server_stream) :: new_shared_server_stream
+    logical :: success
     ! print '(A, I3, A, I2)', 'Creating stream ', stream_id, ' with owner ', owner_id
     new_shared_server_stream % stream_id = stream_id
     new_shared_server_stream % owner_id  = owner_id
     new_shared_server_stream % status    = STREAM_STATUS_INITIALIZED
+
+    success = new_shared_server_stream % command_buffer % create_bytes(c_loc(new_shared_server_stream % command_buffer_data), COMMAND_BUFFER_SIZE_BYTES)
   end function new_shared_server_stream
 
   !> Trigger the opening process for the shared file. This basically sets the name of the file and
@@ -352,12 +364,17 @@ contains
     type(shared_server_stream), pointer, intent(inout) :: shared_instance   !< [in,out] Pointer to the underlying shared instance
     type(heap),                          intent(inout) :: data_heap         !< [in,out] Heap from which to allocate/access shared memory
 
+    logical :: success
+
     this % server_id        =  server_id
     this % is_writer        =  is_writer
     this % debug_mode       =  debug_mode
     this % shared_instance  => shared_instance
     this % data_heap        =  data_heap
     call this % mutex % init_from_int(this % shared_instance % mutex_value, this % server_id)
+
+    success = this % command_buffer % create_bytes(c_loc(this % shared_instance % command_buffer_data))
+
   end subroutine local_server_stream_init
 
   !> Check whether this local stream has been initialized (i.e. it has an ID and is associated with a shared instance)
@@ -379,9 +396,17 @@ contains
     is_owner = (this % server_id == this % shared_instance % get_owner_id()) .and. this % is_writer
   end function local_server_stream_is_owner
 
+  function local_server_stream_put_command(this, command_content) result(success)
+    implicit none
+    class(local_server_stream),             intent(inout) :: this
+    integer(CB_DATA_ELEMENT), dimension(:), intent(in)    :: command_content
+    logical :: success
+    success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true.)
+  end function local_server_stream_put_command
+
   !> Do any task that needs to be done with this stream: open the underlying file, process a completed grid,
   !> close the file.
-  function local_server_stream_process_file(this) result(finished)
+  function local_server_stream_process_stream(this) result(finished)
     implicit none
     class(local_server_stream), intent(inout) :: this
     logical :: finished
@@ -408,6 +433,25 @@ contains
       this % shared_instance % status = STREAM_STATUS_OPEN
     end if
 
+    do while (this % command_buffer % get_num_elements(CB_KIND_INTEGER_8) > 0)
+      ! Extract the command and execute it
+      block
+        integer(CB_DATA_ELEMENT) :: command_size
+        integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
+        type(jar) :: command_content
+        integer   :: jar_ok
+        success = this % command_buffer % get(command_size, 1_8, CB_KIND_INTEGER_8, .true.)
+        command_size = command_size - 1
+        success = this % command_buffer % get(data_buffer, command_size, CB_KIND_INTEGER_8, .true.) .and. success
+        jar_ok = command_content % shape(data_buffer, int(command_size, kind=4))
+        if (.not. success .or. jar_ok .ne. 0) then
+          print *, 'ERROR: Unable to extract and package command from command buffer'
+          error stop 1
+        end if
+        call process_command(command_content)
+      end block
+    end do
+
     num_flushed = this % shared_instance % flush_data(this % unit, this % data_heap)
     finished = .false.
 
@@ -424,7 +468,7 @@ contains
       end if
       finished = .true.
     end if
-  end function local_server_stream_process_file
+  end function local_server_stream_process_stream
 
   !> Open the underlying shared stream, if we are its owner
   !> @return .true. if the underlying instance was successfully opened or if we are *not* the owner of that instance,

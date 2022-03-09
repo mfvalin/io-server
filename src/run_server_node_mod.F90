@@ -24,7 +24,6 @@ module run_server_node_module
   use ioserver_constants
   use ioserver_context_module
   use ioserver_message_module
-  use process_command_module
   use server_stream_module
   implicit none
   private
@@ -279,7 +278,7 @@ function default_grid_processor(context) result(server_success)
     do i_stream = 1, MAX_NUM_SERVER_STREAMS
       ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
       stream_ptr => context % get_stream(i_stream)
-      if (.not. stream_ptr % process_file()) finished = .false.
+      if (.not. stream_ptr % process_stream()) finished = .false.
     end do
   end do
 
@@ -391,24 +390,24 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   !---------------
   ! Open a file
-  else if (header % command == MSG_COMMAND_OPEN_STREAM) then
+  else if (header % command == MSG_COMMAND_OPEN_FILE .or. header % command == MSG_COMMAND_CREATE_STREAM) then
     allocate(character(len=(header % content_length_int8 * 8)) :: filename)
     ! print *, 'Got OPEN message', consumer_id
     success = dcb % get_elems(client_id, filename, header % content_length_int8, CB_KIND_INTEGER_8, .true.)
     ! print *, 'Opening a file named ', filename
     stream_ptr => context % open_stream_server(filename, header % stream_id)
     if (.not. stream_ptr % is_open()) then
-      if (stream_ptr % is_owner()) then
-        print *, 'Failed (?) to open file ', filename
-        error stop 1
-      else
-        ! print *, "DEBUG: File is not open, be we're not the owner, so it's OK"
-      end if
+      ! if (stream_ptr % is_owner()) then
+      !   print *, 'Failed (?) to open file ', filename
+      !   error stop 1
+      ! else
+      !   ! print *, "DEBUG: File is not open, be we're not the owner, so it's OK"
+      ! end if
     end if
 
   !----------------
   ! Close a file
-  else if (header % command == MSG_COMMAND_CLOSE_STREAM) then
+  else if (header % command == MSG_COMMAND_CLOSE_FILE) then
     ! print *, 'Got CLOSE FILE message', consumer_id
     success = context % close_stream_server(header % stream_id)
     if (.not. success) then
@@ -419,11 +418,14 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
+    print *, 'Got a SERVER_CMD message!'
 
-    ! TODO Implement it for real
     block
-      type(jar) :: cmd
-      call process_command(cmd)
+      integer(C_INT64_T), dimension(200) :: buffer
+      success = dcb % get_elems(client_id, buffer, header % content_length_int8, CB_KIND_INTEGER_8, .true.)
+      stream_ptr => context % get_stream(header % stream_id)   ! Retrieve stream ptr
+      print *, 'Putting command ', buffer(1:header % content_length_int8)
+      success = stream_ptr % put_command(buffer(1:header % content_length_int8))
     end block
 
   !----------------
@@ -437,22 +439,13 @@ function receive_message(context, dcb, client_id, state) result(finished)
     if (context % debug_mode()) print '(A, I3)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id
     finished = .true.
 
-    ! if (associated(model_data)) then
-    !   deallocate(model_data)
-    !   nullify(model_data)
-    ! end if
-    ! if (associated(expected_data)) then
-    !   deallocate(expected_data)
-    !   nullify(expected_data)
-    ! end if
-
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
     ! print *, 'Got a MODEL STOP message', consumer_id
 
   !------------
   ! Big no-no
   else
-    print *, 'ERROR Unhandled message type!', header % command
+    print *, 'ERROR: [server] Unhandled message type!', header % command
     error stop 1
   end if
 

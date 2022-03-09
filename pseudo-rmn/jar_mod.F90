@@ -13,7 +13,7 @@
 !
 ! Authors:   M.Valin   , Recherche en Prevision Numerique, 2020-2022
 !            V.Magnoux , Recherche en Prevision Numerique, 2020-2022
-!
+
 ! _the Cray Fortran compiler treats loc() as a type(C_PTR), other compilers as integer(C_INTPTR_T)
 #if defined(_CRAYFTN)
 #define WHAT_TYPE type(C_PTR)
