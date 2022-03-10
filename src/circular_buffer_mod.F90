@@ -67,13 +67,20 @@ contains
   !> Check integrity of the circular buffer: the pointer is valid and the integrity check on the underlying C struct passes.
   !> \sa CB_check_integrity
   !> \return Wether the circular buffer passes all checks
-  pure function is_valid(this)
+  pure function is_valid(this, verbose)
     implicit none
     class(circular_buffer), intent(IN) :: this
+    logical, intent(in) :: verbose !< Whether to print more info when the check fails
     logical :: is_valid
+
+    integer(C_INT) :: verbose_val
+
+    verbose_val = 0
+    if (verbose) verbose_val = 1
+
     is_valid = c_associated(this % p)
     if (is_valid) then
-      is_valid = (CB_check_integrity(this % p) == 0)
+      is_valid = (CB_check_integrity(this % p, verbose_val) == 0)
     end if
   end function is_valid
 
@@ -98,7 +105,7 @@ contains
     this % p = CB_create_bytes(num_bytes)
     this % is_owner = .true.
     this % is_shared = .false.
-    success = this % is_valid()
+    success = this % is_valid(.true.)
   end function create_local_bytes
 
   !> \brief create a circular buffer in shared memory
@@ -115,7 +122,7 @@ contains
     this % p = CB_create_shared_bytes(shmid, num_bytes)
     this % is_owner = .false.
     this % is_shared = .true.
-    success = this % is_valid()
+    success = this % is_valid(.true.)
   end function create_shared_bytes
 
   !> \brief Create a circular buffer from user supplied memory
@@ -132,7 +139,7 @@ contains
     this % p = CB_from_pointer_bytes(ptr, num_bytes)
     this % is_owner = .false.
     this % is_shared = .false.
-    success = this % is_valid()
+    success = this % is_valid(.true.)
   end function create_from_pointer_bytes
 
   !> \brief Create a circular buffer from address of another circular buffer
@@ -147,7 +154,7 @@ contains
     this % p = ptr
     this % is_owner = .false.
     this % is_shared = .false.
-    success = this % is_valid()
+    success = this % is_valid(.true.)
   end function create_from_other
   
   !> \brief Get number of empty element slots available in the buffer
@@ -316,7 +323,7 @@ contains
     with_header_c = 0
     if (with_header) with_header_c = 1
 
-    if (this % is_valid()) call CB_print_stats(this % p, buffer_id, with_header_c)
+    if (this % is_valid(.false.)) call CB_print_stats(this % p, buffer_id, with_header_c)
   end subroutine print_stats
 
 end module circular_buffer_module

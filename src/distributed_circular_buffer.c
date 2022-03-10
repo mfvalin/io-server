@@ -261,33 +261,37 @@ static inline size_t get_available_data_bytes(
   return CB_get_available_data_bytes(&buffer->circ_buffer);
 }
 
-static inline int check_instance_consistency(const circular_buffer_instance_p instance) {
+static inline int check_instance_consistency(
+    const circular_buffer_instance_p instance,  //!< Buffer to check
+    const int verbose                           //!< Whether to print something when the check fails
+    )
+{
   if (instance == NULL) {
-    // printf("Invalid b/c NULL pointer\n");
+    if (verbose) printf("Invalid b/c NULL pointer\n");
     return -1;
   }
 
   if (instance->capacity != CB_get_capacity_bytes(&instance->circ_buffer))
   {
-    // printf("Invalid b/c wrong instance capacity (%ld, but CB has %ld)\n", instance->capacity, CB_get_capacity_bytes(&instance->circ_buffer));
+    if (verbose) printf("Invalid b/c wrong instance capacity (%ld, but CB has %ld)\n", instance->capacity, CB_get_capacity_bytes(&instance->circ_buffer));
     return -1;
   }
 
   if (instance->target_rank < 0)
   {
-    // printf("Invalid rank\n");
+    if (verbose) printf("Invalid rank\n");
     return -1;
   }
 
   if (instance->id < 0)
   {
-    // printf("Invalid instance ID\n");
+    if (verbose) printf("Invalid instance ID\n");
     return -1;
   }
 
-  if (CB_check_integrity(&instance->circ_buffer) < 0)
+  if (CB_check_integrity(&instance->circ_buffer, verbose) < 0)
   {
-    // printf("Invalid b/c CB integrity check failed\n");
+    if (verbose) printf("Invalid b/c CB integrity check failed\n");
     return -1;
   }
 
@@ -676,7 +680,7 @@ static int64_t DCB_wait_space_available_client(
 
   const circular_buffer_instance_p instance = &buffer->local_header;
   if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer) ||
-      check_instance_consistency(instance) < 0)
+      check_instance_consistency(instance, 1) < 0)
     return -1;
 
   // First check locally for space
@@ -711,7 +715,7 @@ static int64_t DCB_wait_data_available_server(
     return -1;
 
   const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE);
-  if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer) || check_instance_consistency(instance) < 0)
+  if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer) || check_instance_consistency(instance, 1) < 0)
     return -1;
 
   // Only check locally, waiting a bit between each check
@@ -870,11 +874,11 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
     MPI_Reduce(&zero, &buffer->control_metadata.num_server_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
     MPI_Reduce(&zero, &buffer->control_metadata.num_client_bound_instances, 1, MPI_INT, MPI_SUM, buffer->control_metadata.root_rank, buffer->communicator);
 
-    printf("%d cons, %d prod, %d channels, %d sb, %d cb (rank %d)\n", 
-      buffer->control_metadata.num_server_consumers, buffer->control_metadata.num_server_producers, buffer->control_metadata.num_channels,
-      buffer->control_metadata.num_server_bound_instances, buffer->control_metadata.num_client_bound_instances,
-      buffer->dcb_rank
-    );
+    // printf("%d cons, %d prod, %d channels, %d sb, %d cb (rank %d)\n", 
+    //   buffer->control_metadata.num_server_consumers, buffer->control_metadata.num_server_producers, buffer->control_metadata.num_channels,
+    //   buffer->control_metadata.num_server_bound_instances, buffer->control_metadata.num_client_bound_instances,
+    //   buffer->dcb_rank
+    // );
 
     // Do some sanity checks
     if (buffer->server_rank == DCB_SERVER_ROOT_RANK) {
@@ -1770,7 +1774,7 @@ int DCB_check_instance_integrity(
     const int communication_type //!< [in] Whether we are looking for a server- or client-bound CB
 ) {
   const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, communication_type);
-  if (instance == NULL || check_instance_consistency(instance) != 0)
+  if (instance == NULL || check_instance_consistency(instance, 1) != 0)
     return -1;
 
   return 0;
@@ -1806,7 +1810,7 @@ int DCB_check_integrity(
   }
 
   if (is_client(buffer)) {
-    if (check_instance_consistency(&buffer->local_header) != 0) {
+    if (check_instance_consistency(&buffer->local_header, verbose) != 0) {
       if (verbose) printf("Local instance %d/%d failed integrity check!\n", buffer->server_bound_client_id, buffer->client_bound_client_id);
       return -1;
     }

@@ -511,9 +511,10 @@ end function close_stream_server
 !> Fetch the shared memory structs created by other model PEs on this node and initialize the
 !> corresponding access to them on this PE. There is a set of heap, model-bound CBs and
 !> server-bound CBs
-subroutine fetch_node_shmem_structs(context)
+function fetch_node_shmem_structs(context) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
+  logical :: success
 
   integer             :: i
   integer(C_INTPTR_T) :: new
@@ -523,6 +524,7 @@ subroutine fetch_node_shmem_structs(context)
 
   my_base = context % shmem % pe(context % node_rank) % arena_ptr
 
+  success = .true.
   do i = 0, context % max_smp_pe ! Loop on every PE on this node
     if (is_color_model(context % shmem % pe(i) % color)) then ! Only work on model PEs
 
@@ -532,32 +534,22 @@ subroutine fetch_node_shmem_structs(context)
       new        = transfer(my_base, new)                                 ! make large integer from C pointer
       new        = new + context % shmem % pe(i) % model_bound_cb_offset  ! add offset to my base
       local_addr = transfer(new, local_addr)                              ! honest C pointer
-      success    = context % model_bound_cbs(target_rank) % create_bytes(local_addr)   ! Initialize the local circular buffer structure
-
-      if (.not. success) then
-        print *, 'ERROR: Could not fetch input CB from PE ', i
-        error stop 1
-      end if
+      success    = context % model_bound_cbs(target_rank) % create_bytes(local_addr) .and. success ! Initialize the local circular buffer structure
 
       ! Server-bound CB
       new        = transfer(my_base, new)                                 ! make large integer from C pointer
       new        = new + context % shmem % pe(i) % server_bound_cb_offset ! add offset to my base
       local_addr = transfer(new, local_addr)                              ! honest C pointer
-      success    = context % server_bound_cbs(target_rank) % create_bytes(local_addr)  ! Initialize the local circular buffer structure
-
-      if (.not. success) then
-        print *, 'ERROR: Could not fetch output CB from PE ', i
-        error stop 1
-      end if
+      success    = context % server_bound_cbs(target_rank) % create_bytes(local_addr) .and. success  ! Initialize the local circular buffer structure
 
       ! The heap
       new        = transfer(my_base, new)
       new        = new + context % shmem % pe(i) % heap_offset
       local_addr = transfer(new, local_addr)
-      success    = context % local_heaps(target_rank) % clone(local_addr)
+      success    = context % local_heaps(target_rank) % clone(local_addr) .and. success
     end if
   end do
-end subroutine fetch_node_shmem_structs
+end function fetch_node_shmem_structs
 
 !> Set time to quit flag in control area
 subroutine set_time_to_quit(context)
@@ -1358,7 +1350,7 @@ function init_shared_mem(context) result(success)
   integer     :: i_stream
   type(C_PTR) :: temp_ptr
   type(shared_server_stream)  :: dummy_server_stream
-  logical :: alloc_success, heap_create_success
+  logical :: alloc_success, heap_create_success, stream_create_success
   integer :: ierr
 
   success = .false.
@@ -1447,6 +1439,8 @@ function init_shared_mem(context) result(success)
       heap_create_success = context % node_heap % clone(context % server_heap_shmem)
     end if
 
+    call MPI_Barrier(context % server_comm, ierr)
+
     ! Create local stream instances on server-bound PEs
     if (context % is_server_bound() .or. context % is_grid_processor()) then
       block
@@ -1460,7 +1454,11 @@ function init_shared_mem(context) result(success)
         allocate(context % local_server_streams(MAX_NUM_SERVER_STREAMS))
         do i_stream = 1, MAX_NUM_SERVER_STREAMS
           tmp_ptr => context % common_server_streams(i_stream)
-          call context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % debug_mode(), tmp_ptr, context % node_heap)
+          stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % debug_mode(), tmp_ptr, context % node_heap)
+          if (.not. stream_create_success) then
+            print *, 'ERROR: initializing local server stream'
+            goto 2
+          end if
         end do
       end block
     end if
@@ -1548,7 +1546,11 @@ function init_shared_mem(context) result(success)
 
   if (context % is_relay() .or. context % is_model()) then
     call context % build_relay_model_index()
-    call context % fetch_node_shmem_structs()
+    success = context % fetch_node_shmem_structs()
+    if (.not. success) then
+      print *, 'ERROR: Unable to retrieved share mem structs from other PEs on the node'
+      return
+    end if
   endif
 
   ! IO Relay or Server

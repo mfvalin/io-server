@@ -246,7 +246,7 @@ static const int CB_DATA_CHECK_DELAY_US = 10;
 //! Number of microseconds to wait between reads of the IN/OUT indices of a buffer when waiting for space to be freed
 static const int CB_SPACE_CHECK_DELAY_US = 10;
 
-int CB_check_integrity(const circular_buffer_p buffer);
+int CB_check_integrity(const circular_buffer_p buffer, const int verbose);
 
 //C_StArT
 int CB_get_elem_size(
@@ -602,7 +602,7 @@ int64_t CB_wait_space_available_bytes(
     )
 //C_EnD
 {
-  if (CB_check_integrity(p) != 0)
+  if (CB_check_integrity(p, 1) != 0)
     return -1;
 
   if (num_bytes_wanted > p->m.capacity_byte)
@@ -647,7 +647,7 @@ int64_t CB_wait_data_available_bytes(
     )
 //C_EnD
 {
-  if (CB_check_integrity(p) != 0)
+  if (CB_check_integrity(p, 1) != 0)
     return -1;
 
   if (num_bytes_wanted > p->m.capacity_byte)
@@ -834,11 +834,12 @@ int CB_put(
 }
 
 //  F_StArT
-//    pure function CB_check_integrity(buffer) result(is_valid) BIND(C, name = 'CB_check_integrity')
+//    pure function CB_check_integrity(buffer, verbose) result(is_valid) BIND(C, name = 'CB_check_integrity')
 //      import C_INT, C_PTR
 //      implicit none
-//      type(C_PTR), intent(in), value :: buffer
-//      integer(C_INT) is_valid
+//      type(C_PTR),    intent(in), value :: buffer
+//      integer(C_INT), intent(in), value :: verbose
+//      integer(C_INT) :: is_valid
 //    end function CB_check_integrity
 //  F_EnD
 /**
@@ -846,48 +847,51 @@ int CB_put(
  * @return 0 if the Buffer is consistent, a negative number otherwise
  */
 //  C_StArT
-int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
-                       )
+int CB_check_integrity(
+    const circular_buffer_p buffer, //!< [in] The buffer we want to check
+    const int verbose               //!< [in] Whether to print a reason, when check fails
+    )
 //  C_EnD
 {
   if (buffer == NULL) {
-    printf("Invalid b/c NULL pointer\n");
+    if (verbose) printf("Invalid b/c NULL pointer\n");
     return -1;
   }
 
   if (buffer->m.version != FIOL_VERSION) {
-    printf("INVALID b/c wrong version (%ld, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
+    if (verbose) printf("INVALID b/c wrong version (%ld, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
+    // printf("crash %ld\n", ((circular_buffer_p)NULL)->m.first);
     return -1;
   }
 
   if (buffer->m.first != 0) {
-    printf("INVALID b/c m.first is NOT 0 (%ld)\n", buffer->m.first);
+    if (verbose) printf("INVALID b/c m.first is NOT 0 (%ld)\n", buffer->m.first);
     return -1;
   }
 
   if (buffer->m.in[CB_FULL] < buffer->m.first || buffer->m.in[CB_FULL] >= buffer->m.limit) {
-    printf(
+    if (verbose) printf(
         "INVALID b/c \"in\" full pointer is not between first and limit (%ld, limit = %ld)\n", buffer->m.in[CB_FULL],
         buffer->m.version);
     return -1;
   }
 
   if (buffer->m.out[CB_FULL] < buffer->m.first || buffer->m.out[CB_FULL] >= buffer->m.limit) {
-    printf(
+    if (verbose) printf(
         "INVALID b/c \"out\" full pointer is not between first and limit (%ld, limit = %ld)\n", buffer->m.out[CB_FULL],
         buffer->m.limit);
     return -1;
   }
 
   if (buffer->m.in[CB_PARTIAL] < buffer->m.first || buffer->m.in[CB_PARTIAL] >= buffer->m.limit) {
-    printf(
+    if (verbose) printf(
         "INVALID b/c \"in\" partial pointer is not between first and limit (%ld, limit = %ld)\n",
         buffer->m.in[CB_PARTIAL], buffer->m.version);
     return -1;
   }
 
   if (buffer->m.out[CB_PARTIAL] < buffer->m.first || buffer->m.out[CB_PARTIAL] >= buffer->m.limit) {
-    printf(
+    if (verbose) printf(
         "INVALID b/c \"out\" partial pointer is not between first and limit (%ld, limit = %ld)\n",
         buffer->m.out[CB_PARTIAL], buffer->m.limit);
     return -1;
@@ -942,7 +946,7 @@ void CB_print_stats(
     )
 //C_EnD
 {
-  if (CB_check_integrity(buffer) < 0)
+  if (CB_check_integrity(buffer, 0) < 0)
     return;
 
   const cb_stats_p stats = &buffer->stats;

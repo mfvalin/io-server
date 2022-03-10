@@ -90,7 +90,7 @@ contains
 
     num_chars = new_model_stream % set_name(name)
 
-    if (.not. new_model_stream % server_bound_cb % is_valid()) then
+    if (.not. new_model_stream % server_bound_cb % is_valid(.false.)) then
       print *, 'Server-bound CB has not been initialized!'
       return
     end if
@@ -147,7 +147,7 @@ contains
     status = this % is_version_valid()
     status = status .and. (this % stream_id > 0) 
     status = status .and. associated(this % name)
-    status = status .and. this % server_bound_cb % is_valid()
+    status = status .and. this % server_bound_cb % is_valid(.false.)
   end function is_open
 
   function set_name(this, name) result(num_chars)
@@ -203,7 +203,7 @@ contains
 
     ! Check if we actually can send a command to this stream
     if (.not. this % is_open()) return
-    if (.not. this % server_bound_cb % is_valid()) return
+    if (.not. this % server_bound_cb % is_valid(.true.)) return
 
     ! Never forget to get a new message tag! (message only, not file)
     call this % messenger % bump_tag(.false.)
@@ -240,7 +240,7 @@ contains
     if (.not. this % is_version_valid()) return ! wrong version
     if (this % is_open())                return ! already open
 
-    if (.not. this % server_bound_cb % is_valid()) then
+    if (.not. this % server_bound_cb % is_valid(.false.)) then
       print *, 'Server-bound CB has not been initialized!'
       return
     end if

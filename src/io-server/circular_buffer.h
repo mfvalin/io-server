@@ -356,7 +356,9 @@ int CB_put(
     int operation,    //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
     int thread_safe   //!< [in] If 1, perform operation in a thread-safe way
 );
-int CB_check_integrity(const circular_buffer_p buffer //!< [in] The buffer we want to check
+int CB_check_integrity(
+    const circular_buffer_p buffer, //!< [in] The buffer we want to check
+    const int verbose               //!< [in] Whether to print a reason, when check fails
 );
 void readable_element_count(
     const double num_elements, //!< [in]  Number we want to represent

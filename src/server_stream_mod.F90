@@ -357,7 +357,7 @@ contains
   !> Initialize this local instance (but *not* the underlying shared memory stream), associate this local instance with its underlying shared stream,
   !> initialize the mutex to point to the shared instance mutex value, associate this local instance with a shared memory heap where the grids will
   !> actually be assembled
-  subroutine local_server_stream_init(this, server_id, is_writer, debug_mode, shared_instance, data_heap)
+  function local_server_stream_init(this, server_id, is_writer, debug_mode, shared_instance, data_heap) result(success)
     implicit none
     class(local_server_stream),          intent(inout) :: this
     integer,                             intent(in)    :: server_id         !< [in] ID of the stream this local instance will access
@@ -377,7 +377,7 @@ contains
 
     success = this % command_buffer % create_bytes(c_loc(this % shared_instance % command_buffer_data))
 
-  end subroutine local_server_stream_init
+  end function local_server_stream_init
 
   !> Check whether this local stream has been initialized (i.e. it has an ID and is associated with a shared instance)
   function local_server_stream_is_init(this) result (is_init)
