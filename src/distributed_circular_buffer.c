@@ -843,7 +843,6 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
     // Determine rank of the root of the DCB (it's the process with server rank #DCB_SERVER_ROOT_RANK)
     const int root_rank = (buffer->server_rank == DCB_SERVER_ROOT_RANK) ? buffer->dcb_rank : 0;
     MPI_Allreduce(&root_rank, &buffer->control_metadata.root_rank, 1, MPI_INT, MPI_SUM, buffer->communicator);
-    printf("root rank = %d (from %d)\n", buffer->control_metadata.root_rank, buffer->dcb_rank);
 
     if (buffer->communication_type == DCB_SERVER_BOUND_TYPE) {
       // printf("I am a server-bound server (%d)\n", buffer->dcb_rank);

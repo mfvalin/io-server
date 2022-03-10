@@ -35,7 +35,7 @@ program model_integration
   type(jar) :: command
   integer(JAR_ELEMENT) :: num_elem
   character(len=1), dimension(9) :: file_name
-  character(len=:), allocatable :: file_name_char
+  character(len=32) :: file_name_char
   integer :: jar_ok
 
   integer :: ierr

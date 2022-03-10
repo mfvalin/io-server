@@ -26,7 +26,7 @@ subroutine process_command(command_data)
 
   type(jar), intent(inout) :: command_data
   integer(JAR_ELEMENT) :: num_jar_elem
-  integer :: num_char
+  integer(JAR_ELEMENT) :: num_char
 
   character(len=1), dimension(:), allocatable :: filename
   character(len=:), allocatable :: fname
@@ -40,6 +40,6 @@ subroutine process_command(command_data)
 
   fname(1:num_char) = transfer(filename(1:num_char), fname)
   open(newunit = file_unit, file = fname, status = 'replace')
-  ! close(10)
+  close(file_unit)
 
 end subroutine process_command

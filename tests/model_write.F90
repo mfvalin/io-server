@@ -147,11 +147,11 @@ contains
 
     jar_ok = command_jar % new(100)
     allocate(command_filename(len_trim(filename1)))
-    command_filename = filename1
+    command_filename = transfer(filename1, command_filename)
     num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
     deallocate(command_filename)
 
-    call context % open_stream_model(filename1, output_stream_1)
+    call context % open_stream_model(trim(filename1), output_stream_1)
     success = output_stream_1 % send_command(command_jar)
     if (.not. success .or. .not. output_stream_1 % is_open()) then
       print *, 'Unable to open model file 1 !!!!'
@@ -159,12 +159,12 @@ contains
     end if
 
     allocate(command_filename(len_trim(filename2)))
-    command_filename = filename1
+    command_filename = transfer(filename2, command_filename)
     call command_jar % reset()
     num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
     deallocate(command_filename)
 
-    call context % open_stream_model(filename2, output_stream_2)
+    call context % open_stream_model(trim(filename2), output_stream_2)
     success = output_stream_2 % send_command(command_jar)
     if (.not. success .or. .not. output_stream_2 % is_open()) then
       print *, 'Unable to open model file 2 !!!!'

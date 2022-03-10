@@ -462,7 +462,7 @@ function default_model(context) result(model_success)
 
   type(model_stream), pointer :: output_stream_1
   character(len=1), dimension(22) :: stream_name
-  character(len=:), allocatable :: tmp_name
+  character(len=32) :: tmp_name
   type(jar) :: command_jar
   integer :: jar_ok
   integer(JAR_ELEMENT) :: num_elem
@@ -474,7 +474,7 @@ function default_model(context) result(model_success)
   if (context % debug_mode()) print *, 'Using default pseudo-model function. This does not do much.'
 
   tmp_name = 'pseudo_model_results_1'
-  call context % open_stream_model(tmp_name, output_stream_1)
+  call context % open_stream_model(trim(tmp_name), output_stream_1)
   stream_name(1:22) = transfer(tmp_name, stream_name)
   ! print *, 'tmp_name: ', tmp_name
   ! print *, 'stream_name: ', stream_name

@@ -197,7 +197,7 @@ module ioserver_context_module
     integer :: num_server_stream_owners = -1 !< How many server processes can own a stream (can be lower than number of server-bound processes)
     integer :: node_id = -1
 
-    type(model_stream), dimension(:), pointer :: local_model_streams !< List of opened streams, for easy access
+    type(model_stream), dimension(:), pointer :: local_model_streams => NULL() !< List of opened streams, for easy access
     !> @}
 
     !----------------------
@@ -389,35 +389,35 @@ function get_detailed_pe_name(context) result(detailed_name)
   implicit none
   class(ioserver_context), intent(in) :: context
   character(len=:), allocatable :: detailed_name
-  character(len=:), allocatable :: short_name
+  character(len=20)  :: short_name
   character(len=256) :: temp_name
 
   if (context % is_server()) then
     if (context % is_server_bound()) then
       short_name = 'Server/server-bound'
     else if (context % is_model_bound()) then
-      short_name = 'Server/model-bound '
+      short_name = 'Server/model-bound'
     else if (context % is_channel()) then
-      short_name = 'Server/channel     '
+      short_name = 'Server/channel'
     else if (context % is_grid_processor()) then
-      short_name = 'Server/grid worker '
+      short_name = 'Server/grid worker'
     else
-      short_name = 'Server/[unknown]   '
+      short_name = 'Server/[unknown]'
     end if
   else if (context % is_relay()) then
     if (context % is_server_bound()) then
-      short_name = 'Relay/server-bound '
+      short_name = 'Relay/server-bound'
     else if (context % is_model_bound()) then
-      short_name = 'Relay/model-bound  '
+      short_name = 'Relay/model-bound'
     else
-      short_name = 'Relay/[unknown]    '
+      short_name = 'Relay/[unknown]'
     end if
   else if (context % is_model()) then
-    short_name = 'Model              '
+    short_name = 'Model'
   else if (context % is_no_op()) then
-    short_name = 'No-op              '
+    short_name = 'No-op'
   else
-    short_name = '[unknown] '
+    short_name = '[unknown]'
   end if
 
   write(temp_name, '(A, A, I6, A, I6, A, I5, A, I5, A, I6)')         &

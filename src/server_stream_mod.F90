@@ -128,7 +128,7 @@ contains
     implicit none
     integer, intent(in) :: stream_id   !< ID of the stream. Will be used to associate it with a "model stream"
     integer, intent(in) :: owner_id    !< Which server process will own this stream
-    type(shared_server_stream) :: new_shared_server_stream
+    type(shared_server_stream), target :: new_shared_server_stream
     logical :: success
     ! print '(A, I3, A, I2)', 'Creating stream ', stream_id, ' with owner ', owner_id
     new_shared_server_stream % stream_id = stream_id
@@ -303,6 +303,7 @@ contains
     character(len=:), allocatable :: trimmed_filename
     character(len=:), allocatable :: full_filename
 
+    allocate(character(len = len_trim(filename)) :: trimmed_filename)
     trimmed_filename = trim(filename)
     do name_length = 1, len(trimmed_filename)
       if (trimmed_filename(name_length:name_length) == achar(0)) exit
@@ -310,6 +311,7 @@ contains
     
     full_filename =  trimmed_filename(:name_length-1)// '.out'
     name_length = min(name_length + 3, MAX_FILE_NAME_SIZE)
+    deallocate(trimmed_filename)
   end function make_full_filename
 
   !> Check whether this stream has been opened with the given base name

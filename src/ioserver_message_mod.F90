@@ -221,7 +221,7 @@ contains
   function get_message_command_string(command) result(command_string)
     implicit none
     integer, intent(in) :: command
-    character(len=24) :: command_string
+    character(len=32) :: command_string
     select case (command)
     case (MSG_COMMAND_DATA)
       command_string = 'MSG_COMMAND_DATA'
