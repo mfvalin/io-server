@@ -4,7 +4,7 @@ variables:
    # Used to force HOST, remove once sici00 runners are restarted
    ECCI_BACKEND: banting
    ECCI_FRONTEND: ppp3
-   BUILD_BASE_BASE_DIR: /home/sici000/special_builds/
+   BUILD_BASE_BASE_DIR: /home/sici000/special_builds
    BUILD_BASE_DIR: /home/sici000/special_builds/just_to_be_safe
 
 before_script:
@@ -22,28 +22,27 @@ cleanup:all:
    script:
       - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
 
-build:gnu-7.4.0:
+build:gnu-9.3.0:
    stage: build
 #   only:
 #      - master
 #      - dev
 #      - tags
    script:
-      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
-      - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
-      - mkdir build_gnu-7.4.0
-      - cd build_gnu-7.4.0
+      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
+      - mkdir build_gnu-9.3.0
+      - cd build_gnu-9.3.0
       - cmake ../ 
       - make
    artifacts:
       expire_in: 2 hrs
       paths:
-         - build_gnu-7.4.0
+         - build_gnu-9.3.0
 
-test:gnu-7.4.0_job_regular_single_node:
+test:gnu-9.3.0_job_regular_single_node:
    stage: test
    dependencies:
-      - build:gnu-7.4.0
+      - build:gnu-9.3.0
    variables:
       NUM_CPUS: "40"
       OMPI_MCA_opal_cuda_support: "0"
@@ -57,16 +56,15 @@ test:gnu-7.4.0_job_regular_single_node:
       MPI_COMMAND: "mpirun"
 
    script:
-      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
-      - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
-      - cd build_gnu-7.4.0
+      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
+      - cd build_gnu-9.3.0
       - BUILD_PATH=`pwd`
       - source ../tests/script/single_node_tests.sh
 
-# test:gnu-7.4.0_job_regular_multi_node:
+# test:gnu-9.3.0_job_regular_multi_node:
 #    stage: test
 #    dependencies:
-#       - build:gnu-7.4.0
+#       - build:gnu-9.3.0
 #    variables:
 #       NUM_CPUS: "160"
 #       OMPI_MCA_opal_cuda_support: "0"
@@ -80,9 +78,8 @@ test:gnu-7.4.0_job_regular_single_node:
 #       MPI_COMMAND: "mpirun"
 
 #    script:
-#       - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
-#       - . r.load.dot main/opt/openmpi/openmpi-4.1.1a1--hpcx-2.8.0-mofed-5.1--gcc
-#       - cd build_gnu-7.4.0
+#       - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
+#       - cd build_gnu-9.3.0
 #       - BUILD_PATH=`pwd`
 #       - source ../tests/script/multi_node_tests.sh
 
@@ -187,16 +184,16 @@ package:XC50_intel-19.0.5:
 #      - make package
 #      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
 
-package:gnu-7.4.0:
+package:gnu-9.3.0:
    stage: package
    only:
       - tags
    dependencies:
-      - build:gnu-7.4.0
+      - build:gnu-9.3.0
    environment:
       name: testing
    script:
-      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-7.4.0.sh
-      - cd build_gnu-7.4.0
+      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
+      - cd build_gnu-9.3.0
       - make package
       - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
