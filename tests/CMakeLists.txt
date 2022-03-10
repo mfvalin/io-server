@@ -126,6 +126,7 @@ endif()
 # Install launcher
 get_test_name(launch_server.F90 LAUNCHER)
 install(TARGETS ${LAUNCHER}
+   RUNTIME       DESTINATION bin/$ENV{EC_ARCH}
    PUBLIC_HEADER DESTINATION include/$ENV{EC_ARCH}
    LIBRARY       DESTINATION lib/$ENV{EC_ARCH}
    ARCHIVE       DESTINATION lib/$ENV{EC_ARCH})

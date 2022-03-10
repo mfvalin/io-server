@@ -21,6 +21,16 @@ target_include_directories(${PSEUDO_RMN_LIB} INTERFACE ${MODULE_DIR})
 set_target_properties(${PSEUDO_RMN_LIB} PROPERTIES VERSION ${PROJECT_VERSION})
 # target_compile_definitions(${PSEUDO_RMN_LIB} PRIVATE _POSIX_C_SOURCE=199309L)
 
+set(PUBLIC_RMN_MODULES
+   ${MODULE_DIR}/jar_module.mod
+)
+
+install(TARGETS ${PSEUDO_RMN_LIB}
+   PUBLIC_HEADER DESTINATION include/$ENV{EC_ARCH}
+   LIBRARY       DESTINATION lib/$ENV{EC_ARCH}
+   ARCHIVE       DESTINATION lib/$ENV{EC_ARCH})
+install(FILES ${PUBLIC_RMN_MODULES} DESTINATION include/$ENV{EC_ARCH})
+
 target_compile_options(
    ${PSEUDO_RMN_LIB}
    PRIVATE
