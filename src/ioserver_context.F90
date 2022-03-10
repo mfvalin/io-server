@@ -519,7 +519,6 @@ function fetch_node_shmem_structs(context) result(success)
   integer             :: i
   integer(C_INTPTR_T) :: new
   type(C_PTR)         :: my_base, local_addr
-  logical             :: success
   integer :: target_rank
 
   my_base = context % shmem % pe(context % node_rank) % arena_ptr
