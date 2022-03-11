@@ -58,6 +58,7 @@ module server_stream_module
     logical :: needs_closing = .false. !< Whether we want it to be closed
     character(len=MAX_FILE_NAME_SIZE) :: name
     integer :: name_length  = 0
+    integer :: latest_command_tag = 0 !< Tag of the latest command processed (or being processed) by the owner of this stream
 
     type(circular_buffer) :: command_buffer
     integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
@@ -398,12 +399,18 @@ contains
     is_owner = (this % server_id == this % shared_instance % get_owner_id()) .and. this % is_writer
   end function local_server_stream_is_owner
 
-  function local_server_stream_put_command(this, command_content) result(success)
+  function local_server_stream_put_command(this, command_content, tag) result(success)
     implicit none
     class(local_server_stream),             intent(inout) :: this
     integer(CB_DATA_ELEMENT), dimension(:), intent(in)    :: command_content
+    integer(C_INT),                         intent(in)    :: tag
     logical :: success
-    success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true.)
+
+    if (tag > this % shared_instance % latest_command_tag) then
+      success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true.)
+    else
+      success = .true.
+    end if
   end function local_server_stream_put_command
 
   !> Do any task that needs to be done with this stream: open the underlying file, process a completed grid,
@@ -442,15 +449,21 @@ contains
         integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
         type(jar) :: command_content
         integer   :: jar_ok
+        integer(C_INT) :: command_tag
         success = this % command_buffer % get(command_size, 1_8, CB_KIND_INTEGER_8, .true.)
-        command_size = command_size - 1
+        success = this % command_buffer % get(command_tag, 1_8, CB_KIND_INTEGER_4, .true.)          .and. success
+        command_size = command_size - 2
         success = this % command_buffer % get(data_buffer, command_size, CB_KIND_INTEGER_8, .true.) .and. success
-        jar_ok = command_content % shape(data_buffer, int(command_size, kind=4))
-        if (.not. success .or. jar_ok .ne. 0) then
-          print *, 'ERROR: Unable to extract and package command from command buffer'
-          error stop 1
+
+        if (command_tag > this % shared_instance % latest_command_tag) then
+          this % shared_instance % latest_command_tag = command_tag
+          jar_ok = command_content % shape(data_buffer, int(command_size, kind=4))
+          if (.not. success .or. jar_ok .ne. 0) then
+            print *, 'ERROR: Unable to extract and package command from command buffer'
+            error stop 1
+          end if
+          call process_command(command_content)
         end if
-        call process_command(command_content)
       end block
     end do
 

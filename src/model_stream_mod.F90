@@ -208,7 +208,7 @@ contains
     ! Never forget to get a new message tag! (message only, not file)
     call this % messenger % bump_tag(.false.)
 
-    header % content_length_int8 = command_content % high() + 1
+    header % content_length_int8 = command_content % high() + 2
     header % command             = MSG_COMMAND_SERVER_CMD
     header % stream_id           = this % stream_id
     header % message_tag         = this % messenger % get_msg_tag()
@@ -220,7 +220,8 @@ contains
     ! call print_message_header(header)
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(header % content_length_int8, 1_8, CB_KIND_INTEGER_8, .false.)                        .and. success
+    success = this % server_bound_cb % put(header % content_length_int8, 1_8, CB_KIND_INTEGER_8, .false.)                      .and. success
+    success = this % server_bound_cb % put(header % message_tag, 1_8, CB_KIND_INTEGER_4, .false.)                              .and. success
     success = this % server_bound_cb % put(command_content % array(), command_content % high(), CB_DATA_ELEMENT_KIND, .false.) .and. success
     success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)                             .and. success
   end function send_command

@@ -39,10 +39,11 @@ program model_integration
   integer :: jar_ok
 
   integer :: ierr
+  integer :: i
 
   call MPI_Init(ierr)
 
-  params % num_relay_per_node = 2
+  params % num_relay_per_node = 3
   params % is_on_server       = .false.
   params % debug_mode         = .true.
 
@@ -78,17 +79,22 @@ program model_integration
   ! Relay is done now, everything else is model stuff
   !-----------------------------------------------------
 
-  file_name_char = 'test_file'
-  file_name(1:9) = transfer(file_name_char, file_name)
   call context % open_stream_model('test_file', stream)
 
   jar_ok = command % new(20)
-  num_elem = JAR_PUT_ITEMS(command, file_name)
-  if (num_elem <= 0) then 
-    print *, 'ERROR: could not put stuff in command jar!'
-    error stop 1
-  end if
-  success = stream % send_command(command)
+  do i = 1, 50
+    call command % reset
+    write(file_name_char, '(A6, I3.3)') 'test_f', i
+    ! file_name_char = 'test_file'
+    file_name(1:9) = transfer(file_name_char, file_name)
+
+    num_elem = JAR_PUT_ITEMS(command, file_name)
+    if (num_elem <= 0) then 
+      print *, 'ERROR: could not put stuff in command jar!'
+      error stop 1
+    end if
+    success = stream % send_command(command)
+  end do
 
   ! print *, 'Finishing model'
   call context % finalize()

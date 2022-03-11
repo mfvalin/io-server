@@ -170,6 +170,7 @@ function default_server_bound_relay(context) result(relay_success)
   type(jar)            :: dcb_message_jar
   integer              :: jar_ok
   integer(JAR_ELEMENT) :: num_jar_elem
+  integer              :: latest_command_tag
   integer, dimension(:), allocatable :: latest_tags ! Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
 
   relay_success = .false.
@@ -208,6 +209,7 @@ function default_server_bound_relay(context) result(relay_success)
   latest_tags(:) = 0
   call dcb_message_jar % reset()
 
+  latest_command_tag = 0
   param_size_int8 = -1
   largest_tag_diff = 0
   lowest_tag = 0
@@ -337,6 +339,16 @@ function default_server_bound_relay(context) result(relay_success)
         print *, end_cap % cap_tag, end_cap % msg_length, success, content_size
         success = .false.
         return
+      end if
+
+      !----------------------------------------------------------------------------
+      ! If the message is a server command and has already been sent, just skip it
+      if (header % command == MSG_COMMAND_SERVER_CMD) then
+        if (header % message_tag > latest_command_tag) then
+          latest_command_tag = header % message_tag
+        else
+          cycle
+        end if
       end if
 
       !------------------------------------

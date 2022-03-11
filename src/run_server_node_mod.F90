@@ -273,7 +273,8 @@ function default_grid_processor(context) result(server_success)
   end if
   
   finished = .false.
-  do while (.not. finished)
+  ! do while (.not. finished)
+  do while (.not. context % is_time_to_quit())
     if (context % is_time_to_quit()) finished = .true.
     do i_stream = 1, MAX_NUM_SERVER_STREAMS
       ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
@@ -418,14 +419,14 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
-    print *, 'Got a SERVER_CMD message!'
+    ! print *, 'Got a SERVER_CMD message!'
 
     block
       integer(C_INT64_T), dimension(200) :: buffer
       success = dcb % get_elems(client_id, buffer, header % content_length_int8, CB_KIND_INTEGER_8, .true.)
       stream_ptr => context % get_stream(header % stream_id)   ! Retrieve stream ptr
-      print *, 'Putting command ', buffer(1:header % content_length_int8)
-      success = stream_ptr % put_command(buffer(1:header % content_length_int8))
+      ! print '(A, 10(I20))', 'Putting command ', buffer(1:header % content_length_int8)
+      success = stream_ptr % put_command(buffer(1:header % content_length_int8), header % message_tag)
     end block
 
   !----------------

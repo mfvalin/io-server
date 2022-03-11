@@ -36,7 +36,7 @@ subroutine process_command(command_data)
   allocate(filename(num_char))
   allocate(character(len=num_char) :: fname)
   num_jar_elem = JAR_GET_ITEMS(command_data, filename)
-  print *, 'File name = ', filename
+  print '(A, 20A)', ' ------------------ [process_command] ----------------  File name = ', filename
 
   fname(1:num_char) = transfer(filename(1:num_char), fname)
   open(newunit = file_unit, file = fname, status = 'replace')
