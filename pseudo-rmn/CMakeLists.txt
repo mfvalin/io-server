@@ -11,6 +11,7 @@ file(GLOB PROJECT_INCLUDE_FILES *.h *.inc *.hf)
 add_library(${PSEUDO_RMN_LIB} STATIC ${PROJECT_C_FILES} ${PROJECT_F_FILES} ${PROJECT_INCLUDE_FILES})
 # target_include_directories(${PSEUDO_RMN_LIB} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_include_directories(${PSEUDO_RMN_LIB} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+add_library(RMN::RMN ALIAS ${PSEUDO_RMN_LIB})
 
 # Where to put modules
 get_target_property(LIBRARY_DIR ${PSEUDO_RMN_LIB} BINARY_DIR)
@@ -23,6 +24,7 @@ set_target_properties(${PSEUDO_RMN_LIB} PROPERTIES VERSION ${PROJECT_VERSION})
 
 set(PUBLIC_RMN_MODULES
    ${MODULE_DIR}/jar_module.mod
+   ${CMAKE_CURRENT_SOURCE_DIR}/serializer.hf
 )
 
 install(TARGETS ${PSEUDO_RMN_LIB}

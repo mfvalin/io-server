@@ -1,22 +1,21 @@
-!
-! purpose:
-!   inform the Fortran compiler that type, kind, and rank checking should not be performed for
-!   one or more formal arguments
-!
-! usage:
-!   #define IgnoreTypeKindRank name1 [, name2] [, name3] ...
-!   #include <IgnoreTypeKindRank.hf>
-!
-! type(*) is known to be supported by gfortran and Intel Fortran compiler
-!
+!> @brief Inform the Fortran compiler that type, kind, and rank checking should not be performed for
+!> one or more formal arguments
+!>
+!> usage:
+!>   #define IgnoreTypeKindRank name1 [, name2] [, name3] ...
+!>   #include <IgnoreTypeKindRank.hf>
+!>
+!> type(*) is known to be supported by gfortran and Intel Fortran compiler
+
+
 #if defined(__GFORTRAN__) || defined(__INTEL_COMPILER)
-      type(*), dimension(*) ExtraAttributes :: IgnoreTypeKindRank
+    type(*), dimension(*) ExtraAttributes :: IgnoreTypeKindRank
 #else
-      logical, dimension(*) ExtraAttributes :: IgnoreTypeKindRank  ! Cray compiler, PGI/Nvidia, flang, xlf, SunStudio
+    ! Cray compiler, PGI/Nvidia, flang, xlf, SunStudio
+    logical, dimension(*) ExtraAttributes :: IgnoreTypeKindRank
 #endif
-!
-! ignore type, kind, and rank through the use of compiler directives (pragmas)
-!
+
+! Ignore type, kind, and rank through the use of compiler directives (pragmas)
 #if defined(WITH_GNU) || defined(__GFORTRAN__)
 !GCC$ ATTRIBUTES NO_ARG_CHECK :: IgnoreTypeKindRank
 #elif defined(WITH_INTEL) || defined(__INTEL_COMPILER)
@@ -26,9 +25,8 @@
 #elif defined(WITH_IBM) || defined(__xlC__)
 !ibm* ignore_tkr IgnoreTypeKindRank
 #else
-!
-! unrecognized compiler, use all known directives hoping that one gets recognized
-!
+
+! Unrecognized compiler, use all known directives hoping that one gets recognized
 !DEC$ ATTRIBUTES NO_ARG_CHECK :: IgnoreTypeKindRank
 !$PRAGMA IGNORE_TKR IgnoreTypeKindRank
 !DIR$ IGNORE_TKR IgnoreTypeKindRank
