@@ -164,7 +164,7 @@ function default_server_bound_relay(context) result(relay_success)
   type(C_PTR) :: c_data
   integer(C_INT64_T) :: num_data_int8
 
-  type(model_record)   :: record
+  type(data_record)    :: record
   type(message_header) :: header
   type(message_cap)    :: end_cap
   type(jar)            :: dcb_message_jar
@@ -280,7 +280,7 @@ function default_server_bound_relay(context) result(relay_success)
       !------------------------------
       ! Extract/process message data
       if (header % command == MSG_COMMAND_DATA) then
-        success = cb_list(i_compute) % get(record, model_record_size_byte(), CB_KIND_CHAR, .false.) ! Extract record 
+        success = cb_list(i_compute) % get(record, data_record_size_byte(), CB_KIND_CHAR, .false.) ! Extract record 
         ! TODO  Get compression metadata
         ! TODO  Get other metadata
 

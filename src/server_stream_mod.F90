@@ -522,7 +522,7 @@ contains
   function local_server_stream_put_data(this, record, subgrid_data) result(success)
     implicit none
     class(local_server_stream), intent(inout)  :: this
-    type(model_record),         intent(in)     :: record                    !< [in] Record that describes the data to insert
+    type(data_record),          intent(in)     :: record                    !< [in] Record that describes the data to insert
     integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 

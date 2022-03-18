@@ -67,7 +67,7 @@ module ioserver_message_module
   end type subgrid_t
 
   ! Type used as a header when writing data to a stream from a model process
-  type, public, bind(C) :: model_record
+  type, public, bind(C) :: data_record
     integer(HEAP_ELEMENT) :: heap_offset    !< Offset of the data within its heap. Allows to retrieve it from another process
     integer(C_INT64_T)    :: data_size_byte !< Size of the data packet itself, in bytes
     integer(C_INT)        :: cmeta_size     !< Size of the compression metadata included, in # of 64-bit elements
@@ -81,7 +81,12 @@ module ioserver_message_module
 
     integer(C_INT) :: elem_size         !< Size of the grid elements in bytes
     integer(C_INT) :: output_grid_id    !< ID of the grid where the data is being sent
-  end type model_record
+  end type data_record
+
+  type, public, bind(C) :: command_record
+    integer(C_INT) :: length_int8
+    integer(C_INT) :: message_tag
+  end type command_record
 
   integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
   integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010 !< (Second-to-)Last entry of every message. Helps debugging
@@ -109,9 +114,9 @@ module ioserver_message_module
   integer, parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
   integer, parameter, public :: MSG_COMMAND_CREATE_STREAM = 7 !< Indicate a message that want to create a stream on the server
 
-  public :: message_header_size_int8, message_cap_size_int8, model_record_size_int8, cmeta_size_int8
-  public :: message_header_size_byte, message_cap_size_byte, model_record_size_byte, cmeta_size_byte
-  public :: print_message_header, print_model_record
+  public :: message_header_size_int8, message_cap_size_int8, data_record_size_int8, command_record_size_int8, cmeta_size_int8
+  public :: message_header_size_byte, message_cap_size_byte, data_record_size_byte, command_record_size_byte, cmeta_size_byte
+  public :: print_message_header, print_data_record
   public :: MAX_FILE_NAME_SIZE
 
 contains
@@ -144,19 +149,32 @@ contains
     message_cap_size_int8 = num_char_to_num_int8(message_cap_size_byte())
   end function message_cap_size_int8
 
-  function model_record_size_byte()
+  function data_record_size_byte()
     implicit none
-    integer(C_INT64_T) :: model_record_size_byte !< Size of the model_record type in bytes
-    type(model_record) :: dummy_record
+    integer(C_INT64_T) :: data_record_size_byte !< Size of the data_record type in bytes
+    type(data_record) :: dummy_record
 
-    model_record_size_byte = storage_size(dummy_record) / 8
-  end function model_record_size_byte
+    data_record_size_byte = storage_size(dummy_record) / 8
+  end function data_record_size_byte
 
-  function model_record_size_int8()
+  function data_record_size_int8()
     implicit none
-    integer(C_INT64_T) :: model_record_size_int8 !< How many 64-bit integers are needed to contain a model_record
-    model_record_size_int8 = num_char_to_num_int8(model_record_size_byte())
-  end function model_record_size_int8
+    integer(C_INT64_T) :: data_record_size_int8 !< How many 64-bit integers are needed to contain a data_record
+    data_record_size_int8 = num_char_to_num_int8(data_record_size_byte())
+  end function data_record_size_int8
+
+  function command_record_size_byte()
+    implicit none
+    integer(C_INT64_T) :: command_record_size_byte
+    type(command_record) :: dummy_record
+    command_record_size_byte = storage_size(dummy_record) / 8
+  end function command_record_size_byte
+
+  function command_record_size_int8()
+    implicit none
+    integer(C_INT64_T) :: command_record_size_int8
+    command_record_size_int8 = num_char_to_num_int8(command_record_size_byte())
+  end function command_record_size_int8
 
   function cmeta_size_byte()
     implicit none
@@ -257,17 +275,17 @@ contains
       ', relay rank ', header % relay_global_rank
   end subroutine print_message_header
 
-  subroutine print_model_record(record)
+  subroutine print_data_record(record)
     implicit none
-    type(model_record), intent(in) :: record
+    type(data_record), intent(in) :: record
 
-    print *, 'print_model_record() not implemented', record % tag
+    print *, 'print_data_record() not implemented', record % tag
     ! print '(A12,   A, I6, I4, I4,   A, I7, I4,   A, I4, I4, I4, I3, I7,   A, I5, I5, I6, I6, I8, I4)', 'Record info: ', &
     !   'sizes ', record % data_size_byte, record % cmeta_size, record % meta_size, &
     !   ', tag+stream ', record % tag, record % stream, &
     !   ', dimensions ', record % ni, record % nj, record % nk, record % nvar, record % type_kind_rank, &
     !   ', global grid ', record % i0, record % j0, record % grid_size_i, record % grid_size_j, record % gnignj, record % output_grid_id
 
-  end subroutine print_model_record
+  end subroutine print_data_record
 
 end module ioserver_message_module

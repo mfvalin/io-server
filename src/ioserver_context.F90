@@ -1635,7 +1635,7 @@ function ioserver_context_init(context, params) result(success)
     return
   end if
 
-    call MPI_Barrier(context % global_comm, ierr)
+  call MPI_Barrier(context % global_comm, ierr)
 
   if (context % debug_mode()) then
     print '(A, 1X, A)', 'DEBUG: IO-server sucessfully initialized ', context % get_detailed_pe_name()

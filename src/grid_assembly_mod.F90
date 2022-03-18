@@ -68,7 +68,7 @@ contains
   function grid_assembly_get_line_id(this, record, free_line_id_out) result(line_id)
     implicit none
     class(grid_assembly), intent(inout) :: this     !< Grid assembler we are querying
-    type(model_record),   intent(in)    :: record   !< Record that determines the grid we are assembling
+    type(data_record),    intent(in)    :: record   !< Record that determines the grid we are assembling
     integer, optional,    intent(out)   :: free_line_id_out !< [out] [Optional] ID of an assembly line that is free
     integer :: line_id !< Assembly line ID that corresponds to the grid indicated by the record. -1 if that grid is not currently being assembled
 
@@ -92,7 +92,7 @@ contains
   function grid_assembly_create_line(this, record, data_heap, mutex) result(line_id)
     implicit none
     class(grid_assembly), intent(inout) :: this      !< The grid assembly object where we want to assemble a grid
-    type(model_record),   intent(in)    :: record    !< The data record that triggered the creation of an assembly line
+    type(data_record),    intent(in)    :: record    !< The data record that triggered the creation of an assembly line
     type(heap),           intent(inout) :: data_heap !< Heap from which we will allocate the necessary (shared) memory for assembling the grid
     type(simple_mutex),   intent(inout) :: mutex !< Mutex for the owning stream. We don't want other people creating assembly lines simultaneously
     integer :: line_id !< Id of the created line
@@ -170,7 +170,7 @@ contains
   function grid_assembly_put_data(this, record, subgrid_data, data_heap, mutex) result(success)
     implicit none
     class(grid_assembly), intent(inout) :: this       !< [in,out] The grid assembler object where we want to put the data
-    type(model_record),   intent(in)    :: record     !< [in]     Metadata about the subgrid we want to insert
+    type(data_record),    intent(in)    :: record     !< [in]     Metadata about the subgrid we want to insert
     integer(C_INT64_T),   intent(in), dimension(:), pointer, contiguous :: subgrid_data !< [in] The data we want to insert, as a 1-D array of 64-bit integers
     type(heap),           intent(inout) :: data_heap  !< [in,out] The heap that contains the memory where we are assembling the grid
     type(simple_mutex),   intent(inout) :: mutex      !< [in,out] To avoid synchronization issues (allocating memory, updating completion percentage)

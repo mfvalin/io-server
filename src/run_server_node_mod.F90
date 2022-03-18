@@ -310,7 +310,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
   type(message_cap)    :: end_cap
 
   ! Data extraction/processing
-  type(model_record) :: record
+  type(data_record) :: record
   integer(C_INT64_T) :: num_data
   integer(C_INT64_T), dimension(:), pointer, contiguous, save :: model_data => NULL()
 
@@ -367,14 +367,14 @@ function receive_message(context, dcb, client_id, state) result(finished)
   ! Data
   if (header % command == MSG_COMMAND_DATA) then
     ! print *, 'Got DATA message', consumer_id
-    success = dcb % get_elems(client_id, record, model_record_size_byte(), CB_KIND_CHAR, .true.)
+    success = dcb % get_elems(client_id, record, data_record_size_byte(), CB_KIND_CHAR, .true.)
     if (.not. success) then
       print *, 'ERROR: reading record'
       error stop 1
     end if
 
     ! if (record % tag == 2) then
-    !   call print_model_record(record)
+    !   call print_data_record(record)
     ! end if
 
     ! TODO manage compression + other metadata

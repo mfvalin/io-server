@@ -319,7 +319,7 @@ contains
 
     logical :: success
 
-    type(model_record)   :: rec
+    type(data_record)   :: rec
     type(message_header) :: header
     type(message_cap)    :: end_cap
     integer(JAR_ELEMENT), dimension(:), pointer :: metadata
@@ -376,9 +376,9 @@ contains
 
     ! print *, 'From model'
     ! print *, 'Area % nv = ', area % nv
-    ! call print_model_record(rec)
+    ! call print_data_record(rec)
 
-    header % content_length_int8  = model_record_size_int8() + rec % cmeta_size + rec % meta_size
+    header % content_length_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size
     header % command              = MSG_COMMAND_DATA
     header % stream_id            = this % stream_id
     header % message_tag          = this % messenger % get_msg_tag()
@@ -391,7 +391,7 @@ contains
 
     ! Put header + data
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(rec, model_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
+    success = this % server_bound_cb % put(rec, data_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
 
     ! Optional parts of the message
     if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
