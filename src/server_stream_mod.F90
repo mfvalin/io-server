@@ -445,19 +445,16 @@ contains
     do while (this % command_buffer % get_num_elements(CB_KIND_INTEGER_8) > 0)
       ! Extract the command and execute it
       block
-        integer(CB_DATA_ELEMENT) :: command_size
         integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
         type(jar) :: command_content
         integer   :: jar_ok
-        integer(C_INT) :: command_tag
-        success = this % command_buffer % get(command_size, 1_8, CB_KIND_INTEGER_8, .true.)
-        success = this % command_buffer % get(command_tag, 1_8, CB_KIND_INTEGER_4, .true.)          .and. success
-        command_size = command_size - 2
-        success = this % command_buffer % get(data_buffer, command_size, CB_KIND_INTEGER_8, .true.) .and. success
+        type(command_record) :: record
+        success = this % command_buffer % get(record, command_record_size_int8(), CB_KIND_INTEGER_8, .true.)
+        success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
 
-        if (command_tag > this % shared_instance % latest_command_tag) then
-          this % shared_instance % latest_command_tag = command_tag
-          jar_ok = command_content % shape(data_buffer, int(command_size, kind=4))
+        if (record % message_tag > this % shared_instance % latest_command_tag) then
+          this % shared_instance % latest_command_tag = record % message_tag
+          jar_ok = command_content % shape(data_buffer, int(record % size_int8, kind=4))
           if (.not. success .or. jar_ok .ne. 0) then
             print *, 'ERROR: Unable to extract and package command from command buffer'
             error stop 1

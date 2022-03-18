@@ -216,11 +216,11 @@ function default_server_bound_relay(context) result(relay_success)
   finished = .false.
 
   ! Say hi to the consumer processes
-  header % content_length_int8  = 0
-  header % command              = MSG_COMMAND_DUMMY
-  header % sender_global_rank   = context % get_global_rank()
-  header % relay_global_rank    = context % get_global_rank()
-  end_cap % msg_length = header % content_length_int8
+  header % content_size_int8  = 0
+  header % command            = MSG_COMMAND_DUMMY
+  header % sender_global_rank = context % get_global_rank()
+  header % relay_global_rank  = context % get_global_rank()
+  end_cap % msg_length = header % content_size_int8
 
   success = data_buffer % put_elems(header, message_header_size_int8(), CB_KIND_INTEGER_8, .true.)
   success = data_buffer % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success ! Append size
@@ -273,7 +273,7 @@ function default_server_bound_relay(context) result(relay_success)
       highest_tag = max(highest_tag, header % message_tag)
       latest_tags(i_compute) = header % message_tag
 
-      content_size = header % content_length_int8
+      content_size = header % content_size_int8
 
       ! call print_message_header(header)
 
@@ -293,8 +293,8 @@ function default_server_bound_relay(context) result(relay_success)
         c_data = heap_list(i_compute) % get_address_from_offset(record % heap_offset) ! Get proper pointer to data in shared memory
         call c_f_pointer(c_data, f_data, [num_data_int8])                             ! Access it using a fortran pointer, for easy copy into the jar
 
-        header % content_length_int8 = header % content_length_int8 + num_data_int8   ! Update message header
-        total_message_size_int8      = message_header_size_int8() + message_cap_size_int8() + header % content_length_int8
+        header % content_size_int8  = header % content_size_int8 + num_data_int8   ! Update message header
+        total_message_size_int8     = message_header_size_int8() + message_cap_size_int8() + header % content_size_int8
 
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
         latest_tags(i_compute) = -1  ! Indicate this model won't be active anymore
@@ -312,7 +312,7 @@ function default_server_bound_relay(context) result(relay_success)
       else if (header % command == MSG_COMMAND_OPEN_FILE .or.             &
                header % command == MSG_COMMAND_SERVER_CMD .or.            &
                header % command == MSG_COMMAND_CREATE_STREAM) then
-        param_size_int8 = header % content_length_int8
+        param_size_int8 = header % content_size_int8
 
         if (.not. allocated(cb_message)) then
           allocate(cb_message(param_size_int8))
@@ -342,7 +342,7 @@ function default_server_bound_relay(context) result(relay_success)
       end if
 
       !----------------------------------------------------------------------------
-      ! If the message is a server command and has already been sent, just skip it
+      ! If the message is a server command that has already been sent, just skip it
       if (header % command == MSG_COMMAND_SERVER_CMD) then
         if (header % message_tag > latest_command_tag) then
           latest_command_tag = header % message_tag
@@ -372,7 +372,7 @@ function default_server_bound_relay(context) result(relay_success)
       ! Copy message header
 
       header % relay_global_rank = context % get_global_rank()
-      ! print *, 'Message size: ', header % content_length_int8
+      ! print *, 'Message size: ', header % content_size_int8
       num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
 
       !----------------------------
@@ -398,7 +398,7 @@ function default_server_bound_relay(context) result(relay_success)
 
       !---------------------
       ! Put message end cap
-      end_cap % msg_length = header % content_length_int8
+      end_cap % msg_length = header % content_size_int8
       num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, end_cap)
 
     end do ! Loop on each model PE for this relay

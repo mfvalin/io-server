@@ -811,11 +811,11 @@ subroutine finalize_model(this)
   if (this % is_model()) then
     ! Send a signal towards the server to indicate that this PE will no longer send anything
     call this % messenger % bump_tag()
-    header % content_length_int8  = 0
-    header % command              = MSG_COMMAND_MODEL_STOP
-    header % message_tag          = this % messenger % get_msg_tag()
-    header % sender_global_rank   = this % global_rank
-    end_cap % msg_length = header % content_length_int8
+    header % content_size_int8  = 0
+    header % command            = MSG_COMMAND_MODEL_STOP
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
+    end_cap % msg_length        = header % content_size_int8
     success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
     success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
   else
@@ -835,11 +835,11 @@ subroutine finalize_relay(this)
   if (this % is_relay() .and. this % is_server_bound()) then
     ! Send a stop signal to the server
     if (this % debug_mode()) print '(A, I3, A)', 'Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
-    header % content_length_int8  = 0
-    header % command              = MSG_COMMAND_RELAY_STOP
-    header % sender_global_rank   = this % global_rank
-    header % relay_global_rank    = this % global_rank
-    end_cap % msg_length = header % content_length_int8
+    header % content_size_int8  = 0
+    header % command            = MSG_COMMAND_RELAY_STOP
+    header % sender_global_rank = this % global_rank
+    header % relay_global_rank  = this % global_rank
+    end_cap % msg_length        = header % content_size_int8
 
     success = this % local_dcb % put_elems(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
     success = this % local_dcb % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success

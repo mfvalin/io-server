@@ -104,13 +104,13 @@ contains
       return
     end if
 
-    header % content_length_int8 = num_char_to_num_int8(num_chars)
-    header % command             = MSG_COMMAND_CREATE_STREAM
-    header % stream_id           = new_model_stream % stream_id
-    header % message_tag         = new_model_stream % messenger % get_msg_tag()
-    header % sender_global_rank  = new_model_stream % global_rank
+    header % content_size_int8  = num_char_to_num_int8(num_chars)
+    header % command            = MSG_COMMAND_CREATE_STREAM
+    header % stream_id          = new_model_stream % stream_id
+    header % message_tag        = new_model_stream % messenger % get_msg_tag()
+    header % sender_global_rank = new_model_stream % global_rank
 
-    end_cap % msg_length = header % content_length_int8
+    end_cap % msg_length = header % content_size_int8
 
     success = new_model_stream % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
     success = new_model_stream % server_bound_cb % put(new_model_stream % name, num_chars, CB_KIND_CHAR, .false.) .and. success
@@ -196,6 +196,7 @@ contains
 
     type(message_header) :: header
     type(message_cap)    :: end_cap
+    type(command_record) :: command_header
 
     success = .false.
     
@@ -208,20 +209,22 @@ contains
     ! Never forget to get a new message tag! (message only, not file)
     call this % messenger % bump_tag(.false.)
 
-    header % content_length_int8 = command_content % high() + 2
-    header % command             = MSG_COMMAND_SERVER_CMD
-    header % stream_id           = this % stream_id
-    header % message_tag         = this % messenger % get_msg_tag()
-    header % sender_global_rank  = this % global_rank
+    header % content_size_int8  = command_content % high() + command_record_size_int8()
+    header % command            = MSG_COMMAND_SERVER_CMD
+    header % stream_id          = this % stream_id
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
 
-    end_cap % msg_length = header % content_length_int8
+    command_header % size_int8 = command_content % high()
+    command_header % message_tag = header % message_tag
+
+    end_cap % msg_length = header % content_size_int8
 
     ! print *, 'Sending command'
     ! call print_message_header(header)
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(header % content_length_int8, 1_8, CB_KIND_INTEGER_8, .false.)                      .and. success
-    success = this % server_bound_cb % put(header % message_tag, 1_8, CB_KIND_INTEGER_4, .false.)                              .and. success
+    success = this % server_bound_cb % put(command_header, command_record_size_byte(), CB_KIND_CHAR, .false.)                  .and. success
     success = this % server_bound_cb % put(command_content % array(), command_content % high(), CB_DATA_ELEMENT_KIND, .false.) .and. success
     success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)                             .and. success
   end function send_command
@@ -257,13 +260,13 @@ contains
       return
     end if
 
-    header % content_length_int8 = num_char_to_num_int8(filename_num_char)
-    header % command             = MSG_COMMAND_OPEN_FILE
-    header % stream_id           = this % stream_id
-    header % message_tag         = this % messenger % get_msg_tag()
-    header % sender_global_rank  = this % global_rank
+    header % content_size_int8  = num_char_to_num_int8(filename_num_char)
+    header % command            = MSG_COMMAND_OPEN_FILE
+    header % stream_id          = this % stream_id
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
 
-    end_cap % msg_length = header % content_length_int8
+    end_cap % msg_length = header % content_size_int8
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
     success = this % server_bound_cb % put(this % name, filename_num_char, CB_KIND_CHAR, .false.) .and. success
@@ -284,13 +287,13 @@ contains
 
     call this % messenger % bump_tag()
 
-    header % content_length_int8  = 0
-    header % stream_id            = this % stream_id
-    header % message_tag          = this  % messenger % get_msg_tag()
-    header % command              = MSG_COMMAND_CLOSE_FILE
-    header % sender_global_rank   = this % global_rank
+    header % content_size_int8  = 0
+    header % stream_id          = this % stream_id
+    header % message_tag        = this  % messenger % get_msg_tag()
+    header % command            = MSG_COMMAND_CLOSE_FILE
+    header % sender_global_rank = this % global_rank
 
-    end_cap % msg_length = header % content_length_int8
+    end_cap % msg_length = header % content_size_int8
 
     this % stream_id = -1
     deallocate(this % name)
@@ -378,13 +381,13 @@ contains
     ! print *, 'Area % nv = ', area % nv
     ! call print_data_record(rec)
 
-    header % content_length_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size
-    header % command              = MSG_COMMAND_DATA
-    header % stream_id            = this % stream_id
-    header % message_tag          = this % messenger % get_msg_tag()
-    header % sender_global_rank   = this % global_rank
+    header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size
+    header % command            = MSG_COMMAND_DATA
+    header % stream_id          = this % stream_id
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
 
-    end_cap % msg_length = header % content_length_int8
+    end_cap % msg_length = header % content_size_int8
 
     !-------------------
     ! Send the message

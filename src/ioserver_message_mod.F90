@@ -84,8 +84,8 @@ module ioserver_message_module
   end type data_record
 
   type, public, bind(C) :: command_record
-    integer(C_INT) :: length_int8
-    integer(C_INT) :: message_tag
+    integer(C_INT64_T) :: size_int8   !< Size of the command content (excluding this header)
+    integer(C_INT)     :: message_tag !< Tag of the message that sends this command
   end type command_record
 
   integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
@@ -93,7 +93,7 @@ module ioserver_message_module
   type, public, bind(C) :: message_header
     integer(C_INT)     :: header_tag          = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
     integer(C_INT)     :: command             = -1  !< What this message contains
-    integer(C_INT64_T) :: content_length_int8 = -1  !< Message length (excluding this header), in number of 64-bit elements
+    integer(C_INT64_T) :: content_size_int8   = -1  !< Message length (excluding this header), in number of 64-bit elements
     integer(C_INT)     :: stream_id           = -1  !< To what stream this message is destined
     integer(C_INT)     :: message_tag         = -1  !< A collective tag associated with messages from model processes (incremented at every message)
     integer(C_INT)     :: sender_global_rank  = -1  !< Who is sending that message
@@ -267,7 +267,7 @@ contains
     type(message_header), intent(in) :: header
     print '(A, I8, A, I8, A, I3, 1X, A, A, I3, A, I8, A, I5, A, I5)', &
       'Header: header tag ', header % header_tag, &
-      ', len ', header % content_length_int8, &
+      ', len ', header % content_size_int8, &
       ', cmd ', header % command, get_message_command_string(header % command), &
       ', stream ', header % stream_id, &
       ', message tag ', header % message_tag, &

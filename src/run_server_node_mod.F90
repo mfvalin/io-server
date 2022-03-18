@@ -355,9 +355,9 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   ! call print_message_header(header)
 
-  if (header % content_length_int8 > capacity) then
+  if (header % content_size_int8 > capacity) then
     print *, 'ERROR: Message is larger than what we can deal with. That is problematic. (server)'
-    print *, '   Message size:  ', header % content_length_int8
+    print *, '   Message size:  ', header % content_size_int8
     print *, '   capacity     = ', capacity
     print *, '   client id    = ', client_id
     error stop 1
@@ -392,9 +392,9 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !---------------
   ! Open a file
   else if (header % command == MSG_COMMAND_OPEN_FILE .or. header % command == MSG_COMMAND_CREATE_STREAM) then
-    allocate(character(len=(header % content_length_int8 * 8)) :: filename)
+    allocate(character(len=(header % content_size_int8 * 8)) :: filename)
     ! print *, 'Got OPEN message', consumer_id
-    success = dcb % get_elems(client_id, filename, header % content_length_int8, CB_KIND_INTEGER_8, .true.)
+    success = dcb % get_elems(client_id, filename, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     ! print *, 'Opening a file named ', filename
     stream_ptr => context % open_stream_server(filename, header % stream_id)
     if (.not. stream_ptr % is_open()) then
@@ -423,10 +423,10 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
     block
       integer(C_INT64_T), dimension(200) :: buffer
-      success = dcb % get_elems(client_id, buffer, header % content_length_int8, CB_KIND_INTEGER_8, .true.)
+      success = dcb % get_elems(client_id, buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
       stream_ptr => context % get_stream(header % stream_id)   ! Retrieve stream ptr
-      ! print '(A, 10(I20))', 'Putting command ', buffer(1:header % content_length_int8)
-      success = stream_ptr % put_command(buffer(1:header % content_length_int8), header % message_tag)
+      ! print '(A, 10(I20))', 'Putting command ', buffer(1:header % content_size_int8)
+      success = stream_ptr % put_command(buffer(1:header % content_size_int8), header % message_tag)
     end block
 
   !----------------
@@ -440,8 +440,11 @@ function receive_message(context, dcb, client_id, state) result(finished)
     if (context % debug_mode()) print '(A, I3)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id
     finished = .true.
 
+  !------------------------------------
+  ! Should not receive MODEL_STOP command, relays don't transmit these...
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
     ! print *, 'Got a MODEL STOP message', consumer_id
+    print *, 'ERROR: [server] Received a MODEL_STOP command'
 
   !------------
   ! Big no-no
@@ -452,8 +455,8 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   success = dcb % get_elems(client_id, end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)
 
-  if ((.not. success) .or. (end_cap % msg_length .ne. header % content_length_int8) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
-    print *, 'Discrepancy between message length and end cap', header % content_length_int8, end_cap % msg_length, end_cap % cap_tag
+  if ((.not. success) .or. (end_cap % msg_length .ne. header % content_size_int8) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
+    print *, 'Discrepancy between message length and end cap', header % content_size_int8, end_cap % msg_length, end_cap % cap_tag
     call print_message_header(header)
     ! call dcb % print(.true.)
     error stop 1
