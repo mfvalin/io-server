@@ -42,6 +42,14 @@ module jar_module
         implicit none
         type(C_PTR), intent(IN), value :: ptr
         end subroutine libc_free
+
+        function libc_memcpy(data_dest, data_src, num_bytes) BIND(C, name='memcpy')
+            import C_SIZE_T, C_PTR
+            implicit none
+            type(C_PTR),       intent(IN), value :: data_dest, data_src
+            integer(C_SIZE_T), intent(IN), value :: num_bytes
+            type(C_PTR) :: libc_memcpy
+        end function libc_memcpy
     end interface
 
     logical, save, private :: debug_mode = .false.
@@ -390,8 +398,9 @@ module jar_module
         if (pos + intsize > jar_instance%top) return                     ! insufficient data in jar
 
         temp = C_LOC(object)
-        call C_F_POINTER(temp, je, [intsize])                            ! make what into an integer array
-        je(1 : intsize) = content(pos + 1 : pos + intsize)               ! insert into data portion of jar
+        ! call C_F_POINTER(temp, je, [intsize])                            ! make what into an integer array
+        ! je(1 : intsize) = content(pos + 1 : pos + intsize)               ! copy data into object
+        temp = libc_memcpy(temp, C_LOC(content(pos + 1)), int(size / 8, kind=8))
         jar_instance%bot = pos + intsize                                 ! update top of jar position
         sz = jar_instance%bot                                            ! position of last extracted element
     end function get_outof_jar
