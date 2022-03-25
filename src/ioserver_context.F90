@@ -38,8 +38,8 @@ module ioserver_context_module
   public :: no_op_function_template, default_no_op
   public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
 
-  integer, parameter, public :: MAX_NUM_SERVER_STREAMS = 128 !< How many streams we can open within a single context
-  integer, parameter         :: MAX_PES_PER_NODE       = 128 !< How many PEs per node we can manage
+  integer, parameter, public :: MAX_NUM_STREAMS   = 128 !< How many streams we can open within a single context
+  integer, parameter         :: MAX_PES_PER_NODE  = 128 !< How many PEs per node we can manage
 
   !> Struct to hold information for PEs on a node (_shared memory addresses are valid for the corresponding PE only_)
   type, bind(C) :: pe_info 
@@ -279,8 +279,8 @@ module ioserver_context_module
 
     !> @{ \name File management
     procedure, pass, public :: open_stream_model
-    procedure, pass, public :: open_stream_server
-    procedure, pass, public :: close_stream_server
+    ! procedure, pass, public :: open_stream_server
+    ! procedure, pass, public :: close_stream_server
     !> @}
     
     !> @{ \name Debugging
@@ -429,14 +429,18 @@ end function get_detailed_pe_name
 
 !> Open a stream where the model can write data
 !> \return A stream object that is already open and can be written to
-subroutine open_stream_model(context, filename, new_stream)
+subroutine open_stream_model(context, new_stream)
   implicit none
   class(ioserver_context),     intent(inout) :: context
-  character(len=*),            intent(in)    :: filename !< Base name of the file to open
-  type(model_stream), pointer, intent(out)   :: new_stream
+  type(model_stream), pointer, intent(inout) :: new_stream
 
   integer :: i_stream
   type(model_stream), pointer :: tmp_stream
+
+
+  if (associated(new_stream)) then
+    if (new_stream % is_open()) return
+  end if
 
   nullify(new_stream)
 
@@ -445,68 +449,58 @@ subroutine open_stream_model(context, filename, new_stream)
     return
   end if
 
-  nullify(tmp_stream)
-  do i_stream = 1, MAX_NUM_SERVER_STREAMS
-    if (context % local_model_streams(i_stream) % has_name(filename)) then
-      new_stream => context % local_model_streams(i_stream)
+  do i_stream = 1, MAX_NUM_STREAMS
+    tmp_stream => context % local_model_streams(i_stream)
+    print *, 'Testing stream ', i_stream
+    if (.not. tmp_stream % is_open()) then
+      if (tmp_stream % open()) then
+        new_stream => tmp_stream
+      else
+        print '(A, I3)', 'ERROR: Unable to open new model stream with rank ', i_stream
+      end if
       return
-    else if (.not. context % local_model_streams(i_stream) % is_open()) then
-      if (.not. associated(tmp_stream)) tmp_stream => context % local_model_streams(i_stream)
     end if
   end do
 
-  if (.not. associated(tmp_stream)) then
-    print *, 'ERROR: No space left in the list of (model) streams to open a new one ', filename
-    return
-  end if
-
-  if (context % debug_mode()) print *, 'DEBUG: (Model) Opening file with name ', filename
-
-  new_stream => tmp_stream
-  new_stream = model_stream(context % global_rank,            &
-                            context % local_heap,             &
-                            context % local_server_bound_cb,  &
-                            context % debug_mode(),           &
-                            context % messenger,              &
-                            filename)
+  print *, 'ERROR: No space left in the list of (model) streams to open a new one'
 end subroutine open_stream_model
 
-!> Request the opening of a stream on the server. The underlying shared stream will eventually be opened, following
-!> this request.
-!> \return A pointer to the local stream instance able to access the underlying shared memory stream
-!> \sa server_stream_module::local_server_stream, server_stream_module::shared_server_stream
-function open_stream_server(context, filename, stream_id) result(new_stream)
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-  character(len=*),        intent(in)    :: filename  !< Base name of the file to open
-  integer,                 intent(in)    :: stream_id !< ID of the stream to open (they should all be already initialized, we just need to open them)
-  type(local_server_stream), pointer :: new_stream
+! !> Request the opening of a stream on the server. The underlying shared stream will eventually be opened, following
+! !> this request.
+! !> \return A pointer to the local stream instance able to access the underlying shared memory stream
+! !> \sa server_stream_module::local_server_stream, server_stream_module::shared_server_stream
+! subroutine open_stream_server(context, filename, stream_id, new_stream)
+!   implicit none
+!   class(ioserver_context), intent(inout) :: context
+!   character(len=*),        intent(in)    :: filename  !< Base name of the file to open
+!   integer,                 intent(in)    :: stream_id !< ID of the stream to open (they should all be already initialized, we just need to open them)
+!   type(local_server_stream), pointer, intent(out) :: new_stream
 
-  type(local_server_stream), pointer :: tmp_stream
-  logical :: success
+!   type(local_server_stream), pointer :: tmp_stream
+!   logical :: success
 
-  nullify(new_stream)
-  tmp_stream => context % local_server_streams(stream_id)
+!   nullify(new_stream)
+!   tmp_stream => context % local_server_streams(stream_id)
 
-  success = tmp_stream % request_open(filename)
+!   success = tmp_stream % request_open(filename)
   
-  if (.not. success) then
-    print *, 'ERROR: Unable to properly open stream file (request) ', filename, stream_id
-    error stop 1
-  end if
+!   if (.not. success) then
+!     print *, 'ERROR: Unable to properly open stream file (request) ', filename, stream_id
+!     error stop 1
+!   end if
 
-  new_stream => tmp_stream
-end function open_stream_server
+!   new_stream => tmp_stream
+! end subroutine open_stream_server
 
-!> Close the specified server stream
-!> \return Whether the operation was successful
-function close_stream_server(context, stream_id) result(success)
-  implicit none
-  class(ioserver_context), intent(inout) :: context
-  integer,                 intent(in)    :: stream_id   !< ID of the stream to close
-  logical :: success
-  success = context % local_server_streams(stream_id) % request_close()
-end function close_stream_server
+! !> Close the specified server stream
+! !> \return Whether the operation was successful
+! function close_stream_server(context, stream_id) result(success)
+!   implicit none
+!   class(ioserver_context), intent(inout) :: context
+!   integer,                 intent(in)    :: stream_id   !< ID of the stream to close
+!   logical :: success
+!   success = context % local_server_streams(stream_id) % request_close()
+! end function close_stream_server
 
 !> Fetch the shared memory structs created by other model PEs on this node and initialize the
 !> corresponding access to them on this PE. There is a set of heap, model-bound CBs and
@@ -721,12 +715,12 @@ function IOserver_get_messenger(context) result(messenger)
 end function IOserver_get_messenger
 
 !> Get a local accessor to a specific stream
-function IOserver_get_stream(context, stream_id) result(stream)
+function IOserver_get_stream(context, stream_rank) result(stream)
   implicit none
   class(ioserver_context), intent(inout) :: context
-  integer,                 intent(in)    :: stream_id !< ID of the stream we want to access
+  integer,                 intent(in)    :: stream_rank !< Rank of the stream we want to access
   type(local_server_stream), pointer     :: stream
-  stream => context % local_server_streams(stream_id)
+  stream => context % local_server_streams(stream_rank)
 end function IOserver_get_stream
 
 !> Get the value of relay_pipeline_depth
@@ -856,19 +850,16 @@ subroutine finalize_server(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
-  type(local_server_stream), pointer :: file
-  logical :: success
+  type(local_server_stream), pointer :: stream
   integer :: i
 
   if (associated(this % local_server_streams)) then
     ! Close all owned streams
-    do i = 1, MAX_NUM_SERVER_STREAMS
-      file => this % local_server_streams(i)
-      if (file % is_open()) then
-        if (file % is_owner()) then
-          print *, 'DEBUG: Heeeeeyyyy forgot to close file #, owned by myself'
-          success = file % request_close()
-          success = .not. (file % process_stream()) .and. success
+    do i = 1, MAX_NUM_STREAMS
+      stream => this % local_server_streams(i)
+      if (stream % is_open()) then
+        if (stream % is_owner()) then
+          print '(A, I4, A, A)', 'ERROR: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
         end if
       end if
     end do
@@ -1392,6 +1383,10 @@ function init_shared_mem(context) result(success)
   allocate(context % server_bound_cbs(0:context % max_smp_pe))
   allocate(context % local_heaps     (0:context % max_smp_pe))
 
+  allocate(context % messenger)
+  call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
+  call context % messenger % set_debug(context % debug_mode())
+
   ! Determine how many server-bound server processes can actually open streams
   context % num_server_stream_owners = context % params % num_grid_processors
 
@@ -1405,7 +1400,7 @@ function init_shared_mem(context) result(success)
     context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm) ! The heap
 
     ! Allocate shared memory to hold server stream instances
-    context % server_file_shmem_size = MAX_NUM_SERVER_STREAMS * (storage_size(dummy_server_stream) / 8)
+    context % server_file_shmem_size = MAX_NUM_STREAMS * (storage_size(dummy_server_stream) / 8)
     context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm) ! The set of files that can be opened/written
 
     if (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
@@ -1424,12 +1419,12 @@ function init_shared_mem(context) result(success)
       end block
     end if
 
-    call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_SERVER_STREAMS])
+    call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_STREAMS])
 
     ! Create shared data structures
     if (context % server_comm_rank == 0) then
       heap_create_success = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
-      do i_stream = 1, MAX_NUM_SERVER_STREAMS
+      do i_stream = 1, MAX_NUM_STREAMS
         context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_stream_owners))  ! Initialize stream files
       end do
 
@@ -1450,8 +1445,8 @@ function init_shared_mem(context) result(success)
         else
           call MPI_Comm_rank(context % grid_processor_server_comm, rank, ierr)
         end if
-        allocate(context % local_server_streams(MAX_NUM_SERVER_STREAMS))
-        do i_stream = 1, MAX_NUM_SERVER_STREAMS
+        allocate(context % local_server_streams(MAX_NUM_STREAMS))
+        do i_stream = 1, MAX_NUM_STREAMS
           tmp_ptr => context % common_server_streams(i_stream)
           stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % debug_mode(), tmp_ptr, context % node_heap)
           if (.not. stream_create_success) then
@@ -1524,7 +1519,16 @@ function init_shared_mem(context) result(success)
 
     ! Initialize array of model streams
     if (context % is_model()) then
-      allocate(context % local_model_streams(MAX_NUM_SERVER_STREAMS))
+      allocate(context % local_model_streams(MAX_NUM_STREAMS))
+      do i_stream = 1, MAX_NUM_STREAMS
+        context % local_model_streams(i_stream) = model_stream(       &
+                            context % global_rank,                    &
+                            i_stream,                                 &
+                            context % local_heap,                     &
+                            context % local_server_bound_cb,          &
+                            context % debug_mode(),                   &
+                            context % messenger)
+      end do
     end if
 
   endif   ! (server process)
@@ -1589,10 +1593,6 @@ function init_shared_mem(context) result(success)
 
   ! Make sure processes are synchronized on the server
   if (context % is_server()) call MPI_Barrier(context % server_comm, ierr)
-
-  allocate(context % messenger)
-  call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
-  call context % messenger % set_debug(context % debug_mode())
 
   success = .true.
 end function init_shared_mem

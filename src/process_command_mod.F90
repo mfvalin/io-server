@@ -18,9 +18,10 @@
 ! Authors:
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-module process_command_module
+module process_command_internal_module
   !> Provides interface to the process_command function from the model (GEM)
+  use iso_c_binding
   use jar_module
   implicit none
   include 'io-server/process_command.inc'
-end module process_command_module
+end module process_command_internal_module

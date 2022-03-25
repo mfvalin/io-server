@@ -26,7 +26,7 @@ module server_stream_module
   use grid_assembly_module
   use ioserver_message_module
   use heap_module
-  use process_command_module
+  use process_command_internal_module
   use rpn_extra_module, only: sleep_us
   use simple_mutex_module
   implicit none
@@ -40,9 +40,9 @@ module server_stream_module
 
   integer, parameter :: STREAM_STATUS_UNINITIALIZED = -1 !< Not even initialized
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open
-  integer, parameter :: STREAM_STATUS_OPEN_NEEDED   =  1 !< Opening has been requested, but not completed yet
+  ! integer, parameter :: STREAM_STATUS_OPEN_NEEDED   =  1 !< Opening has been requested, but not completed yet
   integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
-  integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
+  ! integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
 
   integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 50000 !< Size of the buffer used to send commands to the stream owner
 
@@ -51,14 +51,12 @@ module server_stream_module
   !> owner can trigger the processing of a completed grid (interpolation, writing to file, etc.)
   type, public :: shared_server_stream
     private
-    integer :: stream_id    = -1     !< Stream ID, for internal use. Assigned at object creation, associated with a model stream when opening it
-    integer :: owner_id     = -1     !< Who owns (will read/write/process) this stream and its physical file
-    integer :: mutex_value  = 0      !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
-    integer :: status       = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
-    logical :: needs_closing = .false. !< Whether we want it to be closed
-    character(len=MAX_FILE_NAME_SIZE) :: name
-    integer :: name_length  = 0
-    integer :: latest_command_tag = 0 !< Tag of the latest command processed (or being processed) by the owner of this stream
+    integer :: stream_rank        = -1  !< Rank of this stream in the list of streams. Can be reused after a stream is closed
+    integer :: stream_id          = -1  !< Stream ID, for internal use. Assigned at object creation, associated with a model stream when opening it
+    integer :: owner_id           = -1  !< Who owns (will read/write/process) this stream and its physical file
+    integer :: mutex_value        =  0  !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
+    integer :: status             = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
+    integer :: latest_command_tag =  0  !< Tag of the latest command processed (or being processed) by the owner of this stream
 
     type(circular_buffer) :: command_buffer
     integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
@@ -68,23 +66,17 @@ module server_stream_module
 
     contains
     private
-    procedure, pass :: request_open   => shared_server_stream_request_open
-    procedure, pass :: request_close  => shared_server_stream_request_close
+    procedure, pass :: open           => shared_server_stream_open
     procedure, pass :: close          => shared_server_stream_close
-    procedure, pass :: flush_data     => shared_server_stream_flush_data
+    procedure, pass :: get_id         => shared_server_stream_get_id
 
-    procedure, pass :: needs_open   => shared_server_stream_needs_open
-    procedure, pass :: needs_close  => shared_server_stream_needs_close
     procedure, pass :: is_open      => shared_server_stream_is_open
-    procedure, pass :: is_closed    => shared_server_stream_is_closed
     procedure, pass :: is_valid     => shared_server_stream_is_valid
     procedure, pass :: print        => shared_server_stream_print
-    procedure, pass :: is_same_name => shared_server_stream_is_same_name
-    procedure, pass :: get_owner_id => shared_server_stream_get_owner_id
+    procedure, pass, private :: get_owner_id => shared_server_stream_get_owner_id
 
     final :: shared_server_stream_finalize
 
-    procedure, nopass, private :: make_full_filename
   end type shared_server_stream
 
   interface shared_server_stream
@@ -111,13 +103,14 @@ module server_stream_module
     procedure, pass :: is_init  => local_server_stream_is_init
     procedure, pass :: is_owner => local_server_stream_is_owner
     procedure, pass :: is_open  => local_server_stream_is_open
+    procedure, pass :: get_id   => local_server_stream_get_id
+
 
     procedure, pass :: put_command    => local_server_stream_put_command
     procedure, pass :: process_stream => local_server_stream_process_stream
-    procedure, pass :: request_open   => local_server_stream_request_open
-    procedure, pass :: request_close  => local_server_stream_request_close
     procedure, pass :: put_data       => local_server_stream_put_data
 
+    procedure, pass, private :: open  => local_server_stream_open
     procedure, pass, private :: close => local_server_stream_close
   end type local_server_stream
 
@@ -125,136 +118,74 @@ contains
 
   !> Create a shared server stream object. This ensures that the stream has an ID and an owner.
   !> This sets its status to "initialized" (but it's not open yet!)
-  function new_shared_server_stream(stream_id, owner_id)
+  function new_shared_server_stream(stream_rank, owner_id)
     implicit none
-    integer, intent(in) :: stream_id   !< ID of the stream. Will be used to associate it with a "model stream"
-    integer, intent(in) :: owner_id    !< Which server process will own this stream
+    integer, intent(in) :: stream_rank  !< Rank of the stream within the list of streams
+    integer, intent(in) :: owner_id     !< Which server process will own this stream
     type(shared_server_stream), target :: new_shared_server_stream
     logical :: success
     ! print '(A, I3, A, I2)', 'Creating stream ', stream_id, ' with owner ', owner_id
-    new_shared_server_stream % stream_id = stream_id
-    new_shared_server_stream % owner_id  = owner_id
-    new_shared_server_stream % status    = STREAM_STATUS_INITIALIZED
+    new_shared_server_stream % stream_rank = stream_rank
+    new_shared_server_stream % owner_id    = owner_id
 
     success = new_shared_server_stream % command_buffer % create_bytes(c_loc(new_shared_server_stream % command_buffer_data), COMMAND_BUFFER_SIZE_BYTES)
+
+    new_shared_server_stream % status = STREAM_STATUS_INITIALIZED
   end function new_shared_server_stream
 
-  !> Trigger the opening process for the shared file. This basically sets the name of the file and
-  !> signals that we want to open it.
-  function shared_server_stream_request_open(this, file_name, mutex) result(success)
+  function shared_server_stream_get_id(this) result(stream_id)
     implicit none
     class(shared_server_stream), intent(inout) :: this
-    character(len=*),            intent(in)    :: file_name !< [in] Base name of the file to open for that stream
-    type(simple_mutex),          intent(inout) :: mutex
-    logical :: success
+    integer :: stream_id
+    stream_id = this % stream_id
+  end function shared_server_stream_get_id
 
-    success = .false.
-
-    if (.not. this % is_valid()) then
-      print *, 'ERROR: Requesting opening of an invalid file'
-      return
-    end if
-
-    ! Try setting the filename
-    if (this % status < STREAM_STATUS_OPEN_NEEDED) then
-      call mutex % lock()
-      if (this % status < STREAM_STATUS_OPEN_NEEDED) then
-        this % name = this % make_full_filename(file_name, this % name_length)
-        this % status = STREAM_STATUS_OPEN_NEEDED
-      end if
-      call mutex % unlock()
-    end if
-
-    ! Verify that the stream filename is the same as the one requested (in case it was requested multiple times with different ones)
-    success = this % is_same_name(file_name)
-    if (.not. success) print *, 'ERROR: Requesting opening of a same file with a different name'
-  end function shared_server_stream_request_open
-
-  !> Request that this stream be closed by its owner
-  function shared_server_stream_request_close(this) result(success)
+  !> Open this shared stream. Basically checks whether it is initialized and not already open.
+  function shared_server_stream_open(this, stream_id) result(success)
     implicit none
     class(shared_server_stream), intent(inout) :: this
-    logical :: success
-    success = .false.
+    integer,                     intent(in)    :: stream_id
+    logical :: success !< Whether we were able to actually open it (.false. if it wasn't valid or if it was already open)
 
+    success = .false.
     if (this % is_valid()) then
-      this % needs_closing = .true.
-      success = .true.
+      print *, 'Valid stream!'
+      if (.not. this % is_open()) then
+        print *, 'Not already open!'
+        this % stream_id = stream_id
+        this % status    = STREAM_STATUS_OPEN
+        success          = .true.
+      end if
+    else
+      print *, 'INVALID STREAM!!!'
     end if
-  end function shared_server_stream_request_close
+  end function shared_server_stream_open
 
-  !> Close this shared stream. Closes the file associated with it
-  !> @return .true. if the stream was closed peacefully (i.e. there were no incomplete grids left) or if it was already closed,
-  !> .false. if it didn't close or if there were incomplete grids and it was forcefully closed
-  function shared_server_stream_close(this, file_unit, data_heap) result(success)
+  !> Close this shared stream.
+  !> @return .true. if the stream was closed peacefully (i.e. there were no incomplete grids left)
+  !> .false. if it wasn't open or if there were incomplete grids
+  function shared_server_stream_close(this) result(success)
     implicit none
     class(shared_server_stream), intent(inout) :: this
-    integer,                     intent(in)    :: file_unit     !< [in] Fortran file unit where we write the grids
-    type(heap),                  intent(inout) :: data_heap     !< [in,out] Heap from which we can allocate/access shared memory
     logical :: success
 
-    integer :: num_flushed, num_incomplete, old_num_incomplete
-
-    integer, parameter :: WAIT_TIME_US     = 100000
-    real,    parameter :: TOTAL_WAIT_TIME_S = 20.0
-    integer(kind=8) :: i
+    integer :: num_grids
 
     success = .false.
 
     if (this % is_open()) then
-      i = 1
-      num_incomplete = this % partial_grid_data % get_num_partial_grids()
-      old_num_incomplete = num_incomplete
-      do while (real(i * WAIT_TIME_US) / 1000000.0 < TOTAL_WAIT_TIME_S)
-        i = i + 1
-
-        ! Process completed grids
-        num_flushed = this % partial_grid_data % flush_completed_grids(file_unit, data_heap)
-
-        ! Find out how many grids are started but incomplete
-        num_incomplete = this % partial_grid_data % get_num_partial_grids()
-        
-        if (num_incomplete > 0) then
-          ! Still not finished. Gotta wait a bit more before trying to flush again
-
-          if (num_incomplete < old_num_incomplete) then
-            ! There's been some progress, so let's reset the wait time
-            old_num_incomplete = num_incomplete
-            i = 1
-          end if
-
-          ! Occasionally print what's holding up the closing process
-          if (mod(i, 10_8) == 0) &
-            print '(I2, A, I4, A, A, A, F6.2, A)', this % get_owner_id(), ' DEBUG: There are still ', num_incomplete, &
-                  ' incomplete grids in file "', this % name(:this % name_length), '", will wait another ', &
-                  TOTAL_WAIT_TIME_S - real(i * WAIT_TIME_US) / 1000000.0, ' second(s)'
-
-          call sleep_us(WAIT_TIME_US)
-        else
-          ! We done!
-          exit
-        end if
-      end do
-
+      num_grids = this % partial_grid_data % get_num_grids()
+      if (num_grids > 0) then
+        print '(A, I3, A)', 'ERROR: There are still ', num_grids, ' in this stream. We should not be closing it.'
+        this % status = STREAM_STATUS_UNINITIALIZED
+        return
+      end if
       ! Close the stream
-      this % status = STREAM_STATUS_CLOSED
+      this % status = STREAM_STATUS_INITIALIZED
       this % stream_id = -1
-      this % owner_id = -1
-      success = (num_incomplete == 0)
+      success = .true.
     end if
   end function shared_server_stream_close
-
-  !> Flush any grids that are complete within this stream. For now, this just writes them to file
-  !> @return How many grids were flushed
-  function shared_server_stream_flush_data(this, file_unit, data_heap) result(num_lines_flushed)
-    implicit none
-    class(shared_server_stream), intent(inout) :: this
-    integer,                     intent(in)    :: file_unit
-    type(heap),                  intent(inout) :: data_heap !< [in,out] Heap from which we can access shared memory
-    integer :: num_lines_flushed
-
-    num_lines_flushed = this % partial_grid_data % flush_completed_grids(file_unit, data_heap)
-  end function shared_server_stream_flush_data
 
   !> Whether this stream has been properly initialized (so whether the constructor has been called on it)
   function shared_server_stream_is_valid(this) result(is_valid)
@@ -264,22 +195,6 @@ contains
     is_valid = (this % status >= 0)
   end function shared_server_stream_is_valid
 
-  !> Whether the opening of this stream has been requested
-  function shared_server_stream_needs_open(this) result(needs_open)
-    implicit none
-    class(shared_server_stream), intent(in) :: this
-    logical :: needs_open
-    needs_open = (this % status == STREAM_STATUS_OPEN_NEEDED)
-  end function shared_server_stream_needs_open
-
-  !> Whether closing this stream was requested
-  function shared_server_stream_needs_close(this) result(needs_close)
-    implicit none
-    class(shared_server_stream), intent(in) :: this
-    logical :: needs_close
-    needs_close = this % needs_closing
-  end function shared_server_stream_needs_close
-
   !> Whether this stream has been successfully opened
   function shared_server_stream_is_open(this) result(is_open)
     implicit none
@@ -287,44 +202,6 @@ contains
     logical :: is_open
     is_open = (this % status == STREAM_STATUS_OPEN)
   end function shared_server_stream_is_open
-
-  !> Whether this stream has been closed
-  function shared_server_stream_is_closed(this) result(is_closed)
-    implicit none
-    class(shared_server_stream), intent(in) :: this
-    logical :: is_closed
-    is_closed = (this % status == STREAM_STATUS_CLOSED)
-  end function shared_server_stream_is_closed
-
-  !> Create a complete filename from the given base name. This adds a suffix to the base name after removing trailing nulls from it.
-  function make_full_filename(filename, name_length) result(full_filename)
-    implicit none
-    character(len=*), intent(in)  :: filename          !< [in] The base name to give to the file
-    integer,          intent(out) :: name_length
-    character(len=:), allocatable :: trimmed_filename
-    character(len=:), allocatable :: full_filename
-
-    allocate(character(len = len_trim(filename)) :: trimmed_filename)
-    trimmed_filename = trim(filename)
-    do name_length = 1, len(trimmed_filename)
-      if (trimmed_filename(name_length:name_length) == achar(0)) exit
-    end do
-    
-    full_filename =  trimmed_filename(:name_length-1)// '.out'
-    name_length = min(name_length + 3, MAX_FILE_NAME_SIZE)
-    deallocate(trimmed_filename)
-  end function make_full_filename
-
-  !> Check whether this stream has been opened with the given base name
-  function shared_server_stream_is_same_name(this, filename) result(is_same_name)
-    implicit none
-    class(shared_server_stream), intent(in) :: this
-    character(len=*),     intent(in) :: filename !< [in] Base name to check against
-    integer :: name_length
-    logical :: is_same_name
-
-    is_same_name = (this % name(:this % name_length) == this % make_full_filename(filename, name_length))
-  end function shared_server_stream_is_same_name
 
   !> Retrieve the owner ID of this stream
   function shared_server_stream_get_owner_id(this) result(owner_id)
@@ -352,7 +229,8 @@ contains
   subroutine shared_server_stream_print(this)
     implicit none
     class(shared_server_stream), intent(in) :: this
-    print '(A, I4, I4, I4)', this % name, this % stream_id, this % status, this % owner_id, this % mutex_value
+    print '(A, I4, A, I4, A, I4, A, I4, A, I2)', 'Stream rank: ', this % stream_rank, ', stream ID: ', this % stream_id,  &
+          ', status: ', this % status, ', owner ID: ', this % owner_id, ', mutex value: ', this % mutex_value
   end subroutine shared_server_stream_print
 
   !> Initialize this local instance (but *not* the underlying shared memory stream), associate this local instance with its underlying shared stream,
@@ -399,6 +277,14 @@ contains
     is_owner = (this % server_id == this % shared_instance % get_owner_id()) .and. this % is_writer
   end function local_server_stream_is_owner
 
+  function local_server_stream_get_id(this) result(stream_id)
+    implicit none
+    class(local_server_stream), intent(inout) :: this
+    integer :: stream_id
+    stream_id = -1
+    if (this % is_init()) stream_id = this % shared_instance % get_id()
+  end function local_server_stream_get_id
+
   function local_server_stream_put_command(this, command_content, tag) result(success)
     implicit none
     class(local_server_stream),             intent(inout) :: this
@@ -407,6 +293,7 @@ contains
     logical :: success
 
     if (tag > this % shared_instance % latest_command_tag) then
+      ! print '(A, I8, A, I8)', 'Enqueuing command, tag ', tag, ', size ', size(command_content)
       success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true.)
     else
       success = .true.
@@ -415,92 +302,76 @@ contains
 
   !> Do any task that needs to be done with this stream: open the underlying file, process a completed grid,
   !> close the file.
-  function local_server_stream_process_stream(this) result(finished)
+  function local_server_stream_process_stream(this) result(success)
     implicit none
     class(local_server_stream), intent(inout) :: this
-    logical :: finished
-
-    integer :: num_flushed
     logical :: success
 
-    finished = .true.
-    if (.not. this % is_writer) then
-      print *, 'ERROR: This function should only be called from a "writer" process (not a server receiver)'
+    ! integer :: num_flushed
+
+    integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
+    type(command_record) :: record
+    type(C_PTR) :: grid_data
+
+    success = .false.
+
+    ! if (.not. this % is_writer) then
+    !   print *, 'ERROR: This function should only be called from a "writer" process (not a server receiver)'
+    !   return
+    ! end if
+
+    if (.not. this % is_owner()) then
+      print *, 'AAAHHHHH NOT OWNER'
       return
     end if
+    ! if (this % shared_instance % status == 0) return
 
-    if (.not. this % is_owner()) return
-    if (this % shared_instance % status == 0) return
-
-    if (this % shared_instance % needs_open()) then
-      if (this % debug_mode) then
-        print '(I2, A, A, A, I2)', this % server_id, ' Opening file ',                              &
-            this % shared_instance % name(:this % shared_instance % name_length), ', owner ID ',    &
-            this % shared_instance % owner_id
-      end if
-      open(newunit = this % unit, file = this % shared_instance % name(:this % shared_instance % name_length), status = 'replace', form = 'unformatted')
-      this % shared_instance % status = STREAM_STATUS_OPEN
-    end if
-
-    do while (this % command_buffer % get_num_elements(CB_KIND_INTEGER_8) > 0)
+    success = .true.
+    do while (this % command_buffer % get_num_elements(CB_KIND_INTEGER_8) > 0 .and. success)
       ! Extract the command and execute it
-      block
-        integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
-        type(jar) :: command_content
-        integer   :: jar_ok
-        type(command_record) :: record
-        success = this % command_buffer % get(record, command_record_size_int8(), CB_KIND_INTEGER_8, .true.)
-        success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
+      grid_data = C_NULL_PTR ! TODO Get the actual grid data
 
-        if (record % message_tag > this % shared_instance % latest_command_tag) then
-          this % shared_instance % latest_command_tag = record % message_tag
-          jar_ok = command_content % shape(data_buffer, int(record % size_int8, kind=4))
-          if (.not. success .or. jar_ok .ne. 0) then
-            print *, 'ERROR: Unable to extract and package command from command buffer'
-            error stop 1
-          end if
-          call process_command(command_content)
+      ! print *, 'Getting from command queue, size ', command_record_size_int8()
+      success = this % command_buffer % get(record, command_record_size_int8(), CB_KIND_INTEGER_8, .true.)
+      if (.not. success) return
+      if (record % message_tag > this % shared_instance % latest_command_tag) then
+        this % shared_instance % latest_command_tag = record % message_tag
+        call print_command_record(record)
+
+        if (record % command_type == MSG_COMMAND_OPEN_STREAM) then
+          success = this % open(record % stream_id) .and. success
+          if (.not. success) print*, 'FAILED TO OPEN'
+        else if (record % command_type == MSG_COMMAND_CLOSE_STREAM) then
+          success = this % close() .and. success
+          if (.not. success) print*, 'FAILED TO CLOSE'
+        else if (record % command_type == MSG_COMMAND_SERVER_CMD) then
+          block
+            type(jar) :: command_content ! Using a new jar every time
+            integer   :: jar_ok
+
+            ! print *, 'Getting from command queue, size ', record % size_int8
+            success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
+            if (.not. success) print*, 'FAILED TO GET COMMAND'
+            ! call command_content % reset()
+            jar_ok = command_content % shape(data_buffer, int(record % size_int8, kind=4))
+            if (.not. success .or. jar_ok .ne. 0) then
+              print *, 'ERROR: Unable to extract and package command from command buffer'
+              success = .false.
+              return
+            end if
+            call process_command(command_content, grid_data)
+          end block
+        else
+          print '(A, I3, A)', 'ERROR: Unknown message command ', record % command_type, '. Will just stop processing this stream.'
+          success = .false.
         end if
-      end block
+      else
+        ! Command has already been executed, so skip it
+        ! Don't forget to discard data from the already-executed command
+        if (record % size_int8 > 0) success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.)
+      end if
     end do
-
-    num_flushed = this % shared_instance % flush_data(this % unit, this % data_heap)
-    finished = .false.
-
-    if (this % shared_instance % is_open() .and. this % shared_instance % needs_close()) then
-      if (this % debug_mode) then
-        print '(I2, A, A, A, I2)', this % server_id, ' Closing file ',                              &
-            this % shared_instance % name(:this % shared_instance % name_length), ', owner ID ',    &
-            this % shared_instance % owner_id
-      end if
-      ! Start closing, waiting (not indefinitely) for any incomplete grids
-      success = this % close()
-      if (.not. success) then
-        print *, 'ERROR: Unable to close file ', this % shared_instance % name
-      end if
-      finished = .true.
-    end if
   end function local_server_stream_process_stream
-
-  !> Open the underlying shared stream, if we are its owner
-  !> @return .true. if the underlying instance was successfully opened or if we are *not* the owner of that instance,
-  !> .false. if we are the owner and opening it failed.
-  function local_server_stream_request_open(this, file_name) result(success)
-    implicit none
-    class(local_server_stream), intent(inout) :: this
-    character(len=*),           intent(in)    :: file_name !< [in] Base name of the file to open with the shared stream
-    logical :: success
-    success = this % shared_instance % request_open(file_name, this % mutex)
-  end function local_server_stream_request_open
-
-  !> Close the underlying shared stream, if we are its owner
-  !> @return The result of closing the underlying stream (if we are indeed the owner), .true. otherwise
-  function local_server_stream_request_close(this) result(success)
-    implicit none
-    class(local_server_stream), intent(inout) :: this
-    logical :: success
-    success = this % shared_instance % request_close()
-  end function local_server_stream_request_close
 
   !> Check whether the underlying shared stream is open
   function local_server_stream_is_open(this) result(is_open)
@@ -548,14 +419,25 @@ contains
 
   end function local_server_stream_put_data
 
+  function local_server_stream_open(this, stream_id) result(success)
+    implicit none
+    class(local_server_stream), intent(inout) :: this
+    integer,                    intent(in)    :: stream_id
+    logical :: success
+
+    success = .false.
+    if (this % is_init() .and. this % is_owner() .and. .not. this % is_open()) then
+      success = this % shared_instance % open(stream_id)
+    end if
+  end function local_server_stream_open
+
   function local_server_stream_close(this) result(success)
     implicit none
     class(local_server_stream), intent(inout) :: this
     logical :: success
     success = .false.
-    if (this % is_open()) then
-      success = this % shared_instance % close(this % unit, this % data_heap)
-      close(this % unit)
+    if (this % is_init() .and. this % is_owner() .and. this % is_open()) then
+      success = this % shared_instance % close()
     end if
   end function local_server_stream_close
 end module server_stream_module

@@ -305,13 +305,8 @@ function default_server_bound_relay(context) result(relay_success)
 
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
-      else if (header % command == MSG_COMMAND_CLOSE_FILE) then
-        ! Do nothing, just send the header along
-        total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
-
-      else if (header % command == MSG_COMMAND_OPEN_FILE .or.             &
-               header % command == MSG_COMMAND_SERVER_CMD .or.            &
-               header % command == MSG_COMMAND_CREATE_STREAM) then
+      else if (header % command == MSG_COMMAND_SERVER_CMD .or.            &
+               header % command == MSG_COMMAND_OPEN_STREAM) then
         param_size_int8 = header % content_size_int8
 
         if (.not. allocated(cb_message)) then
@@ -325,7 +320,7 @@ function default_server_bound_relay(context) result(relay_success)
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8() + param_size_int8
 
       else
-        print *, 'ERROR: [relay] Unknown message type'
+        print *, 'ERROR: [relay] Unexpected message type'
         call print_message_header(header)
         return
       end if
@@ -390,9 +385,17 @@ function default_server_bound_relay(context) result(relay_success)
           return
         end if
 
-      else if (header % command == MSG_COMMAND_OPEN_FILE .or. header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_CREATE_STREAM) then
+      else if (header % command == MSG_COMMAND_SERVER_CMD) then
 
         num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8))
+
+      else if (header % command == MSG_COMMAND_MODEL_STOP) then
+        ! No arguments to send
+
+      else
+        print *, 'ERROR: [relay] Unexpected message type! '
+        call print_message_header(header)
+        return
 
       end if
 
@@ -465,7 +468,6 @@ function default_model(context) result(model_success)
 
   use heap_module
   use ioserver_message_module
-  use jar_module
   use rpn_extra_module, only: sleep_us
   implicit none
 
@@ -473,11 +475,6 @@ function default_model(context) result(model_success)
   logical :: model_success
 
   type(model_stream), pointer :: output_stream_1
-  character(len=1), dimension(22) :: stream_name
-  character(len=32) :: tmp_name
-  type(jar) :: command_jar
-  integer :: jar_ok
-  integer(JAR_ELEMENT) :: num_elem
   type(circular_buffer) :: data_buffer
   logical :: success
 
@@ -485,16 +482,10 @@ function default_model(context) result(model_success)
 
   if (context % debug_mode()) print *, 'Using default pseudo-model function. This does not do much.'
 
-  tmp_name = 'pseudo_model_results_1'
-  call context % open_stream_model(trim(tmp_name), output_stream_1)
-  stream_name(1:22) = transfer(tmp_name, stream_name)
-  ! print *, 'tmp_name: ', tmp_name
-  ! print *, 'stream_name: ', stream_name
-  jar_ok = command_jar % new(100)
-  num_elem = JAR_PUT_ITEMS(command_jar, stream_name)
-  success = output_stream_1 % send_command(command_jar)
-  if (.not. success .or. .not. output_stream_1 % is_open()) then
-    print *, 'Unable to open model file 1 !!!!', success, output_stream_1 % is_open()
+  call context % open_stream_model(output_stream_1)
+
+  if (.not. associated(output_stream_1)) then
+    print *,'ERROR: Could not open a stream!!!'
     return
   end if
 

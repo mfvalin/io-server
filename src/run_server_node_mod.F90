@@ -142,13 +142,13 @@ function default_server_bound(context) result(server_success)
 
   type(comm_rank_size)                :: consumer_crs
   type(distributed_circular_buffer)   :: data_buffer
-  type(local_server_stream), pointer  :: file_ptr
+  ! type(local_server_stream), pointer  :: file_ptr
   type(server_receiver_state)         :: current_state
 
   integer :: server_id, num_consumers, num_producers
   logical, dimension(:), allocatable :: active_producers
-  logical :: server_finished, producer_finished, success
-  integer :: i_producer, producer_id, i_file
+  logical :: server_finished, producer_finished !, success
+  integer :: i_producer, producer_id !, i_file
   integer :: num_errors, ierr
 
   num_errors = 0
@@ -196,17 +196,6 @@ function default_server_bound(context) result(server_success)
     end do
   end do
   if (context % debug_mode()) print '(A, I3, A)', 'DEBUG: Server ', server_id, ' done receiving. Will now close owned files.'
-
-  do i_file = 1, MAX_NUM_SERVER_STREAMS
-    file_ptr => context % get_stream(i_file)
-    if (file_ptr % is_open()) then
-      success = context % close_stream_server(i_file)
-      if (.not. success) then
-        print *, 'ERROR: Unable to try closing server stream ', i_file, server_id
-        error stop 1
-      end if
-    end if
-  end do
 
   ! Final check on the buffers' content
   if (context % debug_mode()) then
@@ -259,27 +248,31 @@ function default_grid_processor(context) result(server_success)
   logical :: server_success
 
   type(local_server_stream), pointer  :: stream_ptr
-  integer :: i_stream
-  logical :: finished
-
   type(comm_rank_size) :: grid_proc_crs
+  logical :: early_stop
+  integer :: i_stream
 
   server_success = .false.
+  early_stop     = .false.
 
   grid_proc_crs = context % get_crs(GRID_PROCESSOR_COLOR)
 
   if (context % debug_mode()) then
     print '(A, I2, A, I2)', 'DEBUG: Grid processor process rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
   end if
-  
-  finished = .false.
-  ! do while (.not. finished)
-  do while (.not. context % is_time_to_quit())
-    if (context % is_time_to_quit()) finished = .true.
-    do i_stream = 1, MAX_NUM_SERVER_STREAMS
+
+  do while (.not. context % is_time_to_quit() .and. .not. early_stop)
+    ! if (context % is_time_to_quit()) finished = .true.
+    do i_stream = 1, MAX_NUM_STREAMS
       ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
       stream_ptr => context % get_stream(i_stream)
-      if (.not. stream_ptr % process_stream()) finished = .false.
+      if (stream_ptr % is_owner()) then
+        if (.not. stream_ptr % process_stream()) then
+          print '(A, I3, A, I4)', 'ERROR: when processing stream rank ', i_stream, ', ID ', stream_ptr % get_id()
+          early_stop = .true.
+          exit
+        end if
+      end if
     end do
   end do
 
@@ -287,7 +280,7 @@ function default_grid_processor(context) result(server_success)
     print '(A, I2, A, I2)', 'DEBUG: Grid processor process DONE. Rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
   end if
 
-  server_success = .true.
+  server_success = .not. early_stop
 end function default_grid_processor
 
 function receive_message(context, dcb, client_id, state) result(finished)
@@ -301,7 +294,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
   logical :: success
 
   ! File management
-  character(len=:), allocatable      :: filename
+  ! character(len=:), allocatable      :: filename
   type(local_server_stream), pointer :: stream_ptr
 
   ! Message reading
@@ -382,37 +375,10 @@ function receive_message(context, dcb, client_id, state) result(finished)
     num_data = (record % data_size_byte + 7) / 8
     success = dcb % get_elems(client_id, model_data, num_data, CB_KIND_INTEGER_8, .true.) ! Extract data
 
-    stream_ptr => context % get_stream(header % stream_id)   ! Retrieve stream ptr
+    stream_ptr => context % get_stream(header % stream_rank)   ! Retrieve stream ptr
     success = stream_ptr % put_data(record, model_data)      ! Put data in its proper place within a global grid
     if (.not. success) then
       print *, 'ERROR: Could not put data into partial grid!'
-      error stop 1
-    end if
-
-  !---------------
-  ! Open a file
-  else if (header % command == MSG_COMMAND_OPEN_FILE .or. header % command == MSG_COMMAND_CREATE_STREAM) then
-    allocate(character(len=(header % content_size_int8 * 8)) :: filename)
-    ! print *, 'Got OPEN message', consumer_id
-    success = dcb % get_elems(client_id, filename, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
-    ! print *, 'Opening a file named ', filename
-    stream_ptr => context % open_stream_server(filename, header % stream_id)
-    if (.not. stream_ptr % is_open()) then
-      ! if (stream_ptr % is_owner()) then
-      !   print *, 'Failed (?) to open file ', filename
-      !   error stop 1
-      ! else
-      !   ! print *, "DEBUG: File is not open, be we're not the owner, so it's OK"
-      ! end if
-    end if
-
-  !----------------
-  ! Close a file
-  else if (header % command == MSG_COMMAND_CLOSE_FILE) then
-    ! print *, 'Got CLOSE FILE message', consumer_id
-    success = context % close_stream_server(header % stream_id)
-    if (.not. success) then
-      print *, 'ERROR: File does not seem closable', header % stream_id, consumer_id
       error stop 1
     end if
 
@@ -424,7 +390,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
     block
       integer(C_INT64_T), dimension(200) :: buffer
       success = dcb % get_elems(client_id, buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
-      stream_ptr => context % get_stream(header % stream_id)   ! Retrieve stream ptr
+      stream_ptr => context % get_stream(header % stream_rank)   ! Retrieve stream ptr
       ! print '(A, 10(I20))', 'Putting command ', buffer(1:header % content_size_int8)
       success = stream_ptr % put_command(buffer(1:header % content_size_int8), header % message_tag)
     end block
@@ -443,8 +409,8 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !------------------------------------
   ! Should not receive MODEL_STOP command, relays don't transmit these...
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
+    ! Do nothing for that
     ! print *, 'Got a MODEL STOP message', consumer_id
-    print *, 'ERROR: [server] Received a MODEL_STOP command'
 
   !------------
   ! Big no-no

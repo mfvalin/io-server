@@ -28,7 +28,7 @@ module ioserver_message_module
   implicit none
   private
 
-  integer, parameter :: MAX_FILE_NAME_SIZE = 2048
+  integer, parameter, public :: MAX_FILE_NAME_SIZE = 2048
 
   type, public :: ioserver_messenger
     private
@@ -84,8 +84,10 @@ module ioserver_message_module
   end type data_record
 
   type, public, bind(C) :: command_record
-    integer(C_INT64_T) :: size_int8   !< Size of the command content (excluding this header)
-    integer(C_INT)     :: message_tag !< Tag of the message that sends this command
+    integer(C_INT64_T) :: size_int8     =  0  !< Size of the command content (excluding this header)
+    integer(C_INT)     :: command_type  = -1  !< Type of command (in order to know who will have to process it)
+    integer(C_INT)     :: stream_id     = -1  !< ID of the stream where the command should be executed
+    integer(C_INT)     :: message_tag   = -1  !< Tag of the message that sends this command
   end type command_record
 
   integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
@@ -94,6 +96,7 @@ module ioserver_message_module
     integer(C_INT)     :: header_tag          = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
     integer(C_INT)     :: command             = -1  !< What this message contains
     integer(C_INT64_T) :: content_size_int8   = -1  !< Message length (excluding this header), in number of 64-bit elements
+    integer(C_INT)     :: stream_rank         = -1  !< Stream number in the (fixed) list of stream objects
     integer(C_INT)     :: stream_id           = -1  !< To what stream this message is destined
     integer(C_INT)     :: message_tag         = -1  !< A collective tag associated with messages from model processes (incremented at every message)
     integer(C_INT)     :: sender_global_rank  = -1  !< Who is sending that message
@@ -105,19 +108,19 @@ module ioserver_message_module
     integer(C_INT64_T) :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
   end type message_cap
 
-  integer, parameter, public :: MSG_COMMAND_DATA          = 0 !< Indicate a message that contains grid data
-  integer, parameter, public :: MSG_COMMAND_DUMMY         = 1 !< Indicate a message without content or purpose
-  integer, parameter, public :: MSG_COMMAND_OPEN_FILE     = 2 !< Indicate a message that wants to open a file
-  integer, parameter, public :: MSG_COMMAND_CLOSE_FILE    = 3 !< Indicate a message that wants to close a file
-  integer, parameter, public :: MSG_COMMAND_MODEL_STOP    = 4 !< Indicate that the model that sends this message will no longer send anything
-  integer, parameter, public :: MSG_COMMAND_RELAY_STOP    = 5 !< Indicate that the relay that sends this message will no longer send anything
-  integer, parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
-  integer, parameter, public :: MSG_COMMAND_CREATE_STREAM = 7 !< Indicate a message that want to create a stream on the server
+  integer(C_INT), parameter, public :: MSG_COMMAND_DATA          = 0 !< Indicate a message that contains grid data
+  integer(C_INT), parameter, public :: MSG_COMMAND_DUMMY         = 1 !< Indicate a message without content or purpose
+  ! integer(C_INT), parameter, public :: MSG_COMMAND_OPEN_FILE     = 2 !< Indicate a message that wants to open a file
+  ! integer(C_INT), parameter, public :: MSG_COMMAND_CLOSE_FILE    = 3 !< Indicate a message that wants to close a file
+  integer(C_INT), parameter, public :: MSG_COMMAND_MODEL_STOP    = 4 !< Indicate that the model that sends this message will no longer send anything
+  integer(C_INT), parameter, public :: MSG_COMMAND_RELAY_STOP    = 5 !< Indicate that the relay that sends this message will no longer send anything
+  integer(C_INT), parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
+  integer(C_INT), parameter, public :: MSG_COMMAND_OPEN_STREAM   = 7 !< Indicate a message that want to create a stream on the server
+  integer(C_INT), parameter, public :: MSG_COMMAND_CLOSE_STREAM  = 8 !< Indicate a message that want to create a stream on the server
 
   public :: message_header_size_int8, message_cap_size_int8, data_record_size_int8, command_record_size_int8, cmeta_size_int8
   public :: message_header_size_byte, message_cap_size_byte, data_record_size_byte, command_record_size_byte, cmeta_size_byte
-  public :: print_message_header, print_data_record
-  public :: MAX_FILE_NAME_SIZE
+  public :: print_message_header, print_data_record, print_command_record
 
 contains
 
@@ -243,20 +246,22 @@ contains
     select case (command)
     case (MSG_COMMAND_DATA)
       command_string = 'MSG_COMMAND_DATA'
-    case (MSG_COMMAND_CLOSE_FILE)
-      command_string = 'MSG_COMMAND_CLOSE_FILE'
+    ! case (MSG_COMMAND_CLOSE_FILE)
+    !   command_string = 'MSG_COMMAND_CLOSE_FILE'
     case (MSG_COMMAND_DUMMY)
       command_string = 'MSG_COMMAND_DUMMY'
     case (MSG_COMMAND_MODEL_STOP)
       command_string = 'MSG_COMMAND_MODEL_STOP'
-    case (MSG_COMMAND_OPEN_FILE)
-      command_string = 'MSG_COMMAND_OPEN_FILE'
+    ! case (MSG_COMMAND_OPEN_FILE)
+    !   command_string = 'MSG_COMMAND_OPEN_FILE'
     case (MSG_COMMAND_RELAY_STOP)
       command_string = 'MSG_COMMAND_RELAY_STOP'
     case (MSG_COMMAND_SERVER_CMD)
       command_string = 'MSG_COMMAND_SERVER_CMD'
-    case (MSG_COMMAND_CREATE_STREAM)
-      command_string = 'MSG_COMMAND_CREATE_STREAM'
+    case (MSG_COMMAND_OPEN_STREAM)
+      command_string = 'MSG_COMMAND_OPEN_STREAM'
+    case (MSG_COMMAND_CLOSE_STREAM)
+      command_string = 'MSG_COMMAND_CLOSE_STREAM'
     case default
       command_string = '[ERROR] unknown number'
     end select
@@ -265,15 +270,26 @@ contains
   subroutine print_message_header(header)
     implicit none
     type(message_header), intent(in) :: header
-    print '(A, I8, A, I8, A, I3, 1X, A, A, I3, A, I8, A, I5, A, I5)', &
+    print '(A, I8, A, I8, A, I3, 1X, A, A, I4, A, I3, A, I8, A, I5, A, I5)', &
       'Header: header tag ', header % header_tag, &
       ', len ', header % content_size_int8, &
       ', cmd ', header % command, get_message_command_string(header % command), &
-      ', stream ', header % stream_id, &
+      ', stream rank ', header % stream_rank, &
+      ', stream ID   ', header % stream_id, &
       ', message tag ', header % message_tag, &
-      ', rank ', header % sender_global_rank, &
+      ', sender rank ', header % sender_global_rank, &
       ', relay rank ', header % relay_global_rank
   end subroutine print_message_header
+
+  subroutine print_command_record(record)
+    implicit none
+    type(command_record), intent(in) :: record
+    print '(A, I5, A, A, A, I5, A, I8)',                   &
+      'Command record: Size (int8) ', record % size_int8,   &
+      ', command type ', get_message_command_string(record % command_type),             &
+      ', stream ID ', record % stream_id,                   &
+      ', message tag ', record % message_tag
+  end subroutine print_command_record
 
   subroutine print_data_record(record)
     implicit none

@@ -35,30 +35,28 @@ module model_stream_module
 
   type, public :: model_stream
     private
-    integer               :: version = VERSION    ! version marker, used to check version coherence
-    integer               :: stream_id = -1       ! Stream ID, for internal use
-    character(len=1), dimension(:), pointer :: name => NULL()
-    logical               :: debug = .false.      ! debug mode at the file level
-    integer               :: global_rank = -1
-    type(heap)            :: local_heap
-    type(circular_buffer) :: server_bound_cb
-    type(ioserver_messenger), pointer :: messenger => NULL()
+    integer               :: version = VERSION      !< Version marker, used to check version coherence
+    integer               :: stream_rank = -1       !< Stream rank in fixed list of streams, for internal use
+    integer               :: stream_id = -1         !< Unique stream ID, for internal use
+    logical               :: debug = .false.        !< debug mode at the file level (is this even used?)
+    integer               :: global_rank = -1       !< Rank of the model PE that created this object
+    type(heap)            :: local_heap             !< Access to the shared memory heap owned by this model PE
+    type(circular_buffer) :: server_bound_cb        !< Access to the server-bound buffer owned by this model PE
+    type(ioserver_messenger), pointer :: messenger => NULL() !< Messenger used to manage/synchronized data transmission to the server
 
     contains
 
     ! initial, pass :: server_file_construct
-    procedure :: open  => model_stream_open
+    ! procedure :: open  => model_stream_open
     procedure :: read  => model_stream_read
-    procedure :: write => model_stream_write
+    procedure :: open  => model_stream_open
     procedure :: close => model_stream_close
     procedure :: is_open
-    procedure :: is_version_valid
+    procedure, private :: is_version_valid
+    procedure :: is_valid
     procedure :: set_debug
     procedure :: send_command
-
-    procedure, private :: set_name
-    procedure :: has_name
-
+    procedure :: send_data
   end type
 
   interface model_stream
@@ -67,56 +65,30 @@ module model_stream_module
 
 contains
 
-  function new_model_stream(global_rank, local_heap, server_bound_cb, debug_mode, messenger, name)
+  function new_model_stream(global_rank, stream_rank, local_heap, server_bound_cb, debug_mode, messenger)
     implicit none
     integer,                intent(in)  :: global_rank
+    integer,                intent(in)  :: stream_rank
     type(heap),             intent(in)  :: local_heap
     type(circular_buffer),  intent(in)  :: server_bound_cb
     logical,                intent(in)  :: debug_mode
     type(ioserver_messenger), pointer, intent(in) :: messenger
-    character(len=*),       intent(in)  :: name
     type(model_stream) :: new_model_stream
 
-    integer(kind = 8) :: num_chars
-    type(message_header) :: header
-    type(message_cap)    :: end_cap
-    logical :: success
-
-    new_model_stream % global_rank = global_rank
-    new_model_stream % local_heap  = local_heap
-    new_model_stream % server_bound_cb = server_bound_cb
-    new_model_stream % debug = debug_mode
-    new_model_stream % messenger => messenger
-
-    num_chars = new_model_stream % set_name(name)
-
-    if (.not. new_model_stream % server_bound_cb % is_valid(.false.)) then
+    if (.not. server_bound_cb % is_valid(.false.)) then
       print *, 'Server-bound CB has not been initialized!'
       return
     end if
 
-    call new_model_stream % messenger % bump_tag(.true.)
+    new_model_stream % global_rank = global_rank
+    new_model_stream % stream_rank = stream_rank
+    new_model_stream % local_heap  = local_heap
+    new_model_stream % server_bound_cb = server_bound_cb
+    new_model_stream % debug = debug_mode
+    new_model_stream % messenger => messenger
+    
+    ! print *, 'Creating model stream, rank ', stream_rank
 
-    new_model_stream % stream_id = new_model_stream % messenger % get_file_tag()
-
-    if (num_chars <= 0) then
-      print *, 'ERROR: unable to set the name of the model_stream to ', name
-      return
-    end if
-
-    header % content_size_int8  = num_char_to_num_int8(num_chars)
-    header % command            = MSG_COMMAND_CREATE_STREAM
-    header % stream_id          = new_model_stream % stream_id
-    header % message_tag        = new_model_stream % messenger % get_msg_tag()
-    header % sender_global_rank = new_model_stream % global_rank
-
-    end_cap % msg_length = header % content_size_int8
-
-    success = new_model_stream % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = new_model_stream % server_bound_cb % put(new_model_stream % name, num_chars, CB_KIND_CHAR, .false.) .and. success
-    success = new_model_stream % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success       ! Append length and commit message
-
-    if (.not. success) new_model_stream % stream_id = -1
   end function new_model_stream
 
   function set_debug(this, dbg) result(status)
@@ -134,59 +106,29 @@ contains
     implicit none
     class(model_stream), intent(IN) :: this
     logical :: status
-
     status = this % version == VERSION
-
   end function is_version_valid
+
+  function is_valid(this)
+    implicit none
+    class(model_stream), intent(in) :: this
+    logical :: is_valid
+    is_valid = .false.
+    if (this % is_version_valid()) then
+      is_valid = this % stream_rank >= 0                    .and. &
+                 this % global_rank >= 0                    .and. &
+                 this % server_bound_cb % is_valid(.false.) .and. &
+                 associated(this % messenger)
+    end if
+  end function is_valid
 
   function is_open(this) result(status)
     implicit none
     class(model_stream), intent(IN) :: this
     logical :: status
 
-    status = this % is_version_valid()
-    status = status .and. (this % stream_id > 0) 
-    status = status .and. associated(this % name)
-    status = status .and. this % server_bound_cb % is_valid(.false.)
+    status = this % is_valid() .and. this % stream_id > 0
   end function is_open
-
-  function set_name(this, name) result(num_chars)
-    implicit none
-    class(model_stream), intent(inout) :: this
-    character(len=*),    intent(in)    :: name
-    integer(kind=8) :: num_chars
-
-    num_chars = len(trim(name)) + 1
-    if (num_chars > MAX_FILE_NAME_SIZE) then
-      print *, 'ERROR: Requested file name (for opening) is longer than the limit of ', MAX_FILE_NAME_SIZE - 1, ' characters'
-      num_chars = -1
-      return
-    end if
-
-    allocate(this % name(num_chars))
-    this % name(1:num_chars) = transfer(trim(name) // char(0), this % name) ! Append a NULL character because this might be read in C code
-  end function set_name
-
-  function has_name(this, name)
-    implicit none
-    class(model_stream), intent(in) :: this
-    character(len=*),    intent(in) :: name
-    logical :: has_name
-
-    character(len=1), dimension(:), allocatable :: full_name 
-    integer :: num_chars
-
-    has_name = .false.
-    if (.not. associated(this % name)) return
-
-    num_chars = len(trim(name)) + 1
-    if (num_chars .ne. size(this % name)) return
-
-    allocate(full_name(num_chars))
-    full_name = transfer(trim(name) // char(0), full_name)
-
-    has_name = all(full_name == this % name)
-  end function has_name
 
   function send_command(this, command_content) result(success)
     implicit none
@@ -211,17 +153,22 @@ contains
 
     header % content_size_int8  = command_content % high() + command_record_size_int8()
     header % command            = MSG_COMMAND_SERVER_CMD
+    header % stream_rank        = this % stream_rank
     header % stream_id          = this % stream_id
     header % message_tag        = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
 
-    command_header % size_int8 = command_content % high()
-    command_header % message_tag = header % message_tag
+    command_header % size_int8    = command_content % high()
+    command_header % command_type = MSG_COMMAND_SERVER_CMD
+    command_header % stream_id    = header % stream_id
+    command_header % message_tag  = header % message_tag
 
     end_cap % msg_length = header % content_size_int8
 
     ! print *, 'Sending command'
     ! call print_message_header(header)
+
+    print '(A, I8)', 'Sending command with content size ', command_header % size_int8
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
     success = this % server_bound_cb % put(command_header, command_record_size_byte(), CB_KIND_CHAR, .false.)                  .and. success
@@ -229,48 +176,50 @@ contains
     success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)                             .and. success
   end function send_command
 
-  function model_stream_open(this, name) result(success)
+  function model_stream_open(this) result(success)
     implicit none
     class(model_stream),    intent(INOUT) :: this
-    character(len=*),      intent(IN)    :: name
     logical :: success
 
-    integer(kind=8)      :: filename_num_char
     type(message_header) :: header
     type(message_cap)    :: end_cap
+    type(command_record) :: command
 
     success = .false.
 
-    if (.not. this % is_version_valid()) return ! wrong version
-    if (this % is_open())                return ! already open
-
-    if (.not. this % server_bound_cb % is_valid(.false.)) then
-      print *, 'Server-bound CB has not been initialized!'
+    if (.not. this % is_valid()) then
+      print *, 'ERROR trying to open model stream: invalid stream object'
+      ! print '(A, I3, A, I3, A, L, A, L)', 'stream rank ', this % stream_rank, ' global rank ', this % global_rank,     &
+      !       ' valid CB ', this % server_bound_cb % is_valid(.false.),                &
+      !       ' associated messenger ', associated(this % messenger)
       return
     end if
+
+    if (this % is_open()) return ! already open
 
     call this % messenger % bump_tag(.true.)
 
     this % stream_id = this % messenger % get_file_tag()
 
-    filename_num_char = this % set_name(name)
+    print *, 'Opening stream, rank ', this % stream_rank
 
-    if (filename_num_char <= 0) then
-      print *, 'ERROR: unable to set the name of the model_stream to ', name
-      return
-    end if
-
-    header % content_size_int8  = num_char_to_num_int8(filename_num_char)
-    header % command            = MSG_COMMAND_OPEN_FILE
+    header % content_size_int8  = command_record_size_int8()
+    header % command            = MSG_COMMAND_SERVER_CMD
+    header % stream_rank        = this % stream_rank
     header % stream_id          = this % stream_id
     header % message_tag        = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
 
+    command % size_int8    = 0
+    command % command_type = MSG_COMMAND_OPEN_STREAM
+    command % stream_id    = header % stream_id
+    command % message_tag  = header % message_tag
+
     end_cap % msg_length = header % content_size_int8
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(this % name, filename_num_char, CB_KIND_CHAR, .false.) .and. success
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success       ! Append length and commit message
+    success = this % server_bound_cb % put(command, command_record_size_byte(), CB_KIND_CHAR, .false.)  .and. success
+    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)      .and. success   ! Append cap and commit message
 
   end function model_stream_open
 
@@ -281,33 +230,39 @@ contains
 
     type(message_header) :: header
     type(message_cap)    :: end_cap
+    type(command_record) :: command
 
     success = .false.
     if (.not. this % is_open()) return
 
     call this % messenger % bump_tag()
 
-    header % content_size_int8  = 0
+    header % content_size_int8  = command_record_size_int8()
+    header % stream_rank        = this % stream_rank
     header % stream_id          = this % stream_id
     header % message_tag        = this  % messenger % get_msg_tag()
-    header % command            = MSG_COMMAND_CLOSE_FILE
+    header % command            = MSG_COMMAND_SERVER_CMD
     header % sender_global_rank = this % global_rank
 
+    command % size_int8    = 0
+    command % command_type = MSG_COMMAND_CLOSE_STREAM
+    command % stream_id    = header % stream_id
+    command % message_tag  = header % message_tag
+  
     end_cap % msg_length = header % content_size_int8
-
-    this % stream_id = -1
-    deallocate(this % name)
-    nullify(this % messenger)
     
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)  .and. success ! Append length + commit
+    success = this % server_bound_cb % put(command, command_record_size_byte(), CB_KIND_CHAR, .false.)  .and. success
+    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)      .and. success ! Append cap + commit
+
+    this % stream_id = -1
 
     ! call print_message_header(header)
 
   end function model_stream_close
 
   ! cprs and meta only need to be supplied by one of the writing PEs
-  function model_stream_write(this, my_data, subgrid_area, global_grid, grid_out, cprs, meta) result(success)
+  function send_data(this, my_data, subgrid_area, global_grid, grid_out, command, cprs, meta) result(success)
     use iso_c_binding
     use jar_module
     implicit none
@@ -317,16 +272,18 @@ contains
     type(grid_t),         intent(IN)    :: global_grid      !< global grid info
     type(grid_t),         intent(IN)    :: grid_out         !< output grid
 
-    type(cmeta), intent(IN), optional  :: cprs             !< compression related metadata (carried serialized)
-    type(jar),   intent(IN), optional  :: meta             !< metadata associated with data (carried serialized and blindly)
+    type(jar),   intent(IN), optional :: command          !< Command to apply to the data by the model once assembled
+    type(cmeta), intent(IN), optional :: cprs             !< compression related metadata (carried serialized)
+    type(jar),   intent(IN), optional :: meta             !< metadata associated with data (carried serialized and blindly)
 
-    logical :: success
+    logical :: success  !< Whether this function call succeeded
 
-    type(data_record)   :: rec
-    type(message_header) :: header
-    type(message_cap)    :: end_cap
+    type(data_record)     :: rec
+    type(message_header)  :: header
+    type(message_cap)     :: end_cap
+    type(command_record)  :: command_meta
+    integer(JAR_ELEMENT)  :: low, high
     integer(JAR_ELEMENT), dimension(:), pointer :: metadata
-    integer(JAR_ELEMENT) :: low, high
 
     success = .false.
     if(this % stream_id <= 0) return
@@ -381,10 +338,17 @@ contains
     ! print *, 'Area % nv = ', area % nv
     ! call print_data_record(rec)
 
-    header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size
+    command_meta % size_int8    = 0
+    command_meta % command_type = MSG_COMMAND_DATA
+    command_meta % stream_id    = this % stream_id
+    command_meta % message_tag  = this % messenger % get_msg_tag()
+    if (present(command)) command_meta % size_int8 = command % high()
+
+    header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size + command_record_size_int8() + command_meta % size_int8
     header % command            = MSG_COMMAND_DATA
+    header % stream_rank        = this % stream_rank
     header % stream_id          = this % stream_id
-    header % message_tag        = this % messenger % get_msg_tag()
+    header % message_tag        = command_meta % message_tag
     header % sender_global_rank = this % global_rank
 
     end_cap % msg_length = header % content_size_int8
@@ -396,13 +360,17 @@ contains
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
     success = this % server_bound_cb % put(rec, data_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
 
+    success = this % server_bound_cb % put(command_meta, command_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
+    if (present(command)) success = this % server_bound_cb % put(command % array(), command % high(), CB_DATA_ELEMENT_KIND, .false.) .and. success
+
     ! Optional parts of the message
     if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
     if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
 
     ! Add the end cap and commit the message
     success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success
-  end function model_stream_write
+
+  end function send_data
 
   function model_stream_read(this) result(status)
     implicit none

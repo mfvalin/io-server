@@ -51,7 +51,7 @@ module grid_assembly_module
     private
     procedure, pass, public :: put_data              => grid_assembly_put_data
     procedure, pass, public :: flush_completed_grids => grid_assembly_flush_completed_grids
-    procedure, pass, public :: get_num_partial_grids
+    procedure, pass, public :: get_num_grids
 
     procedure, pass :: is_line_full => grid_assembly_is_line_full
     procedure, pass :: get_line_id  => grid_assembly_get_line_id
@@ -310,11 +310,11 @@ contains
     this % lines(line_id) = grid_assembly_line()
   end subroutine grid_assembly_flush_line
 
-  !> Find how many grid are currently being assembled and are still incomplete
-  function get_num_partial_grids(this) result(num_partial_grids)
+  !> Find how many grid are currently being assembled (some may be complete)
+  function get_num_grids(this) result(num_partial_grids)
     implicit none
     class(grid_assembly), intent(in) :: this
-    integer :: num_partial_grids !< How many grids are being assembled and still incomplete
+    integer :: num_partial_grids !< How many grids are being assembled (some might be complete)
 
     integer :: i
 
@@ -324,6 +324,6 @@ contains
         num_partial_grids = num_partial_grids + 1
       end if
     end do
-  end function get_num_partial_grids
+  end function get_num_grids
 
 end module grid_assembly_module

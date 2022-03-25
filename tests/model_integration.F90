@@ -23,6 +23,7 @@ program model_integration
   use ioserver_run_module
   use ioserver_mpi
   use jar_module
+  use process_command_module
   implicit none
 
 #include <serializer.hf>
@@ -32,11 +33,14 @@ program model_integration
   logical :: success
 
   type(model_stream), pointer :: stream
+
+  type(command_header) :: header
   type(jar) :: command
   integer(JAR_ELEMENT) :: num_elem
+  integer :: jar_ok
+
   character(len=1), dimension(9) :: file_name
   character(len=32) :: file_name_char
-  integer :: jar_ok
 
   integer :: ierr
   integer :: i
@@ -79,22 +83,66 @@ program model_integration
   ! Relay is done now, everything else is model stuff
   !-----------------------------------------------------
 
-  call context % open_stream_model('test_file', stream)
+  call context % open_stream_model(stream)
+  if (.not. associated(stream)) then
+    print *, 'ERROR: Could not open model stream'
+    error stop 1
+  end if
 
   jar_ok = command % new(20)
-  do i = 1, 50
-    call command % reset
-    write(file_name_char, '(A6, I3.3)') 'test_f', i
+  do i = 1, 1
+
+
+    !---------------------
+    ! Open file command
+    call command % reset()
+    write(file_name_char, '(A6, I3.3)') 'blah_f', i
     ! file_name_char = 'test_file'
+    
+    header % command_type = COMMAND_TYPE_OPEN_FILE
+    header % size_bytes   = 9
     file_name(1:9) = transfer(file_name_char, file_name)
 
+    ! print *, 'MODEL into jar'
+    num_elem = JAR_PUT_ITEM(command, header)
     num_elem = JAR_PUT_ITEMS(command, file_name)
+    ! print *, 'MODEL into jar done'
     if (num_elem <= 0) then 
       print *, 'ERROR: could not put stuff in command jar!'
       error stop 1
     end if
     success = stream % send_command(command)
+
+    if (.not. success) then
+      print *, 'ERROR: Failed to send open file command'
+      error stop 1
+    end if
+
+    !---------------------
+    ! Close file command
+    header % command_type = COMMAND_TYPE_CLOSE_FILE
+    header % size_bytes = 0
+
+    call command % reset()
+    num_elem = JAR_PUT_ITEM(command, header)
+    if (num_elem <= 0) then 
+      print *, 'ERROR: could not put stuff in command jar!'
+      error stop 1
+    end if
+
+    success = stream % send_command(command)
+    if (.not. success) then
+      print *, 'ERROR: Failed to send close file command'
+      error stop 1
+    end if
+
   end do
+
+  success = stream % close()
+  if (.not. success) then
+    print *, 'ERROR: Unable to close stream'
+    error stop 1
+  end if
 
   ! print *, 'Finishing model'
   call context % finalize()

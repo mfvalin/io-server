@@ -151,10 +151,15 @@ contains
     num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
     deallocate(command_filename)
 
-    call context % open_stream_model(trim(filename1), output_stream_1)
+    call context % open_stream_model(output_stream_1)
+    if (.not. associated(output_stream_1)) then
+      print *, 'ERROR: Could not open model stream'
+      return
+    end if 
+
     success = output_stream_1 % send_command(command_jar)
-    if (.not. success .or. .not. output_stream_1 % is_open()) then
-      print *, 'Unable to open model file 1 !!!!'
+    if (.not. success) then
+      print *, 'Unable to send command to model stream 1 !!!!'
       return
     end if
 
@@ -164,7 +169,12 @@ contains
     num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
     deallocate(command_filename)
 
-    call context % open_stream_model(trim(filename2), output_stream_2)
+    call context % open_stream_model(output_stream_2)
+    if (.not. associated(output_stream_2)) then
+      print *, 'ERROR: Could not open second model stream'
+      return
+    end if
+
     success = output_stream_2 % send_command(command_jar)
     if (.not. success .or. .not. output_stream_2 % is_open()) then
       print *, 'Unable to open model file 2 !!!!'
@@ -269,10 +279,10 @@ contains
         end do
 
         ! Write the data to a file (i.e. send it to the server to do that for us)
-        success = output_stream_1 % write(data_array_info_1, local_grid, input_grid_4, output_grid)
+        success = output_stream_1 % send_data(data_array_info_1, local_grid, input_grid_4, output_grid)
 
         if (.not. success) then
-          print *, 'ERROR: Write into model stream failed'
+          print *, 'ERROR: Send data into model stream failed'
           return
         end if
 
@@ -309,10 +319,10 @@ contains
           end do
         end do
 
-        success = output_stream_2 % write(data_array_info_2, local_grid, input_grid_8, output_grid)
-        success = output_stream_2 % write(big_array_info, big_local_grid, big_grid, output_grid) .and. success
+        success = output_stream_2 % send_data(data_array_info_2, local_grid, input_grid_8, output_grid)
+        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_grid, output_grid)    .and. success
         if (.not. success) then
-          print *, 'ERROR while trying to do a WRITE'
+          print *, 'ERROR while trying to do a SEND DATA'
           return
         end if
 

@@ -44,4 +44,6 @@ program launch_server
   end if
 
   call MPI_Finalize(ierr)
+
+  if (.not. success) error stop 1
 end program launch_server
