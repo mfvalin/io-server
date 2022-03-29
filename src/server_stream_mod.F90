@@ -347,13 +347,12 @@ contains
         else if (record % command_type == MSG_COMMAND_SERVER_CMD) then
           block
             type(jar) :: command_content ! Using a new jar every time
-            logical   :: jar_ok
 
             ! print *, 'Getting from command queue, size ', record % size_int8
             success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
             ! call command_content % reset()
             success = command_content % shape_with(data_buffer, int(record % size_int8, kind=4)) .and. success
-            if (.not. success .or. .not. jar_ok) then
+            if (.not. success) then
               print *, 'ERROR: Unable to extract and package command from command buffer'
               success = .false.
               return
