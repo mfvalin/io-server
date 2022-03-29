@@ -36,11 +36,10 @@ program model_integration
 
   type(command_header) :: header
   type(jar) :: command
-  integer(JAR_ELEMENT) :: num_elem
-  integer :: jar_ok
 
-  character(len=1), dimension(9) :: file_name
-  character(len=32) :: file_name_char
+  type(comm_rank_size) :: model_crs
+
+  character(len=32) :: file_name
 
   integer :: ierr
   integer :: i
@@ -83,36 +82,37 @@ program model_integration
   ! Relay is done now, everything else is model stuff
   !-----------------------------------------------------
 
+  model_crs = context % get_crs(MODEL_COLOR)
+
   call context % open_stream_model(stream)
   if (.not. associated(stream)) then
     print *, 'ERROR: Could not open model stream'
     error stop 1
   end if
 
-  jar_ok = command % new(20)
+  success = command % new(20)
+  file_name = ''
   do i = 1, 1
 
 
     !---------------------
     ! Open file command
     call command % reset()
-    write(file_name_char, '(A6, I3.3)') 'blah_f', i
-    ! file_name_char = 'test_file'
+    write(file_name, '(A6, I3.3)') 'blah_f', i
     
     header % command_type = COMMAND_TYPE_OPEN_FILE
-    header % size_bytes   = 9
-    file_name(1:9) = transfer(file_name_char, file_name)
+    header % size_bytes   = len_trim(file_name)
 
     ! print *, 'MODEL into jar'
-    num_elem = JAR_PUT_ITEM(command, header)
-    num_elem = JAR_PUT_ITEMS(command, file_name)
+    success = JAR_PUT_ITEM(command, header) .and. success
+    success = JAR_PUT_ITEM(command, trim(file_name)) .and. success
     ! print *, 'MODEL into jar done'
-    if (num_elem <= 0) then 
+    if (.not. success) then 
       print *, 'ERROR: could not put stuff in command jar!'
       error stop 1
     end if
-    success = stream % send_command(command)
 
+    success = stream % send_command(command)
     if (.not. success) then
       print *, 'ERROR: Failed to send open file command'
       error stop 1
@@ -124,8 +124,8 @@ program model_integration
     header % size_bytes = 0
 
     call command % reset()
-    num_elem = JAR_PUT_ITEM(command, header)
-    if (num_elem <= 0) then 
+    success = JAR_PUT_ITEM(command, header) .and. success
+    if (.not. success) then 
       print *, 'ERROR: could not put stuff in command jar!'
       error stop 1
     end if

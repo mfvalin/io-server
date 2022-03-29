@@ -135,9 +135,6 @@ contains
     integer :: compute_width, compute_height
 
     type(jar) :: command_jar
-    integer :: jar_ok
-    integer(C_INT64_T) :: num_jar_elem
-    character(len=1), dimension(:), allocatable :: command_filename
 
     logical :: success
 
@@ -145,14 +142,11 @@ contains
 
     node_heap = context % get_local_heap()
 
-    jar_ok = command_jar % new(100)
-    allocate(command_filename(len_trim(filename1)))
-    command_filename = transfer(filename1, command_filename)
-    num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
-    deallocate(command_filename)
+    success = command_jar % new(100)
+    success = JAR_PUT_ITEM(command_jar, filename1) .and. success
 
     call context % open_stream_model(output_stream_1)
-    if (.not. associated(output_stream_1)) then
+    if (.not. success .or. .not. associated(output_stream_1)) then
       print *, 'ERROR: Could not open model stream'
       return
     end if 
@@ -163,11 +157,8 @@ contains
       return
     end if
 
-    allocate(command_filename(len_trim(filename2)))
-    command_filename = transfer(filename2, command_filename)
     call command_jar % reset()
-    num_jar_elem = JAR_PUT_ITEMS(command_jar, command_filename)
-    deallocate(command_filename)
+    success = JAR_PUT_ITEM(command_jar, filename2)
 
     call context % open_stream_model(output_stream_2)
     if (.not. associated(output_stream_2)) then

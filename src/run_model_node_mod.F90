@@ -168,8 +168,6 @@ function default_server_bound_relay(context) result(relay_success)
   type(message_header) :: header
   type(message_cap)    :: end_cap
   type(jar)            :: dcb_message_jar
-  integer              :: jar_ok
-  integer(JAR_ELEMENT) :: num_jar_elem
   integer              :: latest_command_tag
   integer, dimension(:), allocatable :: latest_tags ! Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
 
@@ -194,8 +192,8 @@ function default_server_bound_relay(context) result(relay_success)
   dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure there will be a bit of loose space in the server-side buffer
 
   ! Create buffer for outbound data
-  jar_ok = dcb_message_jar % new(dcb_message_buffer_size)
-  if (jar_ok .ne. 0) then
+  success = dcb_message_jar % new(dcb_message_buffer_size)
+  if (.not. success) then
     print *, 'Could not create jar to contain DCB message...'
     error stop 1
   end if
@@ -348,8 +346,8 @@ function default_server_bound_relay(context) result(relay_success)
 
       !------------------------------------
       ! If the DCB message buffer is too full to contain that new package, flush it now
-      if (dcb_message_jar % high() + total_message_size_int8 > dcb_message_buffer_size) then
-        success = data_buffer % put_elems(dcb_message_jar % array(), dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
+      if (dcb_message_jar % get_top() + total_message_size_int8 > dcb_message_buffer_size) then
+        success = data_buffer % put_elems(dcb_message_jar % f_array(), dcb_message_jar % get_top(), CB_DATA_ELEMENT_KIND, .true.)
         call dcb_message_jar % reset()
 
         if (.not. success) then
@@ -357,8 +355,8 @@ function default_server_bound_relay(context) result(relay_success)
           return
         end if
 
-        if (total_message_size_int8 > dcb_message_jar % usable()) then
-          print *, 'ERROR: Too much data to fit in jar...', total_message_size_int8, dcb_message_jar % usable()
+        if (total_message_size_int8 > dcb_message_jar % get_size()) then
+          print *, 'ERROR: Too much data to fit in jar...', total_message_size_int8, dcb_message_jar % get_size()
           return
         end if
       end if
@@ -368,26 +366,26 @@ function default_server_bound_relay(context) result(relay_success)
 
       header % relay_global_rank = context % get_global_rank()
       ! print *, 'Message size: ', header % content_size_int8
-      num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, header)
+      success = JAR_PUT_ITEM(dcb_message_jar, header)
 
       !----------------------------
       ! Copy message body
       if (header % command == MSG_COMMAND_DATA) then
 
-        num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, record)      ! Data header
-        !TODO                                                     ! Compression metadata
-        !TODO                                                     ! Other metadata
-        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))  ! The data
+        success = JAR_PUT_ITEM(dcb_message_jar, record) .and. success       ! Data header
+        !TODO                                                               ! Compression metadata
+        !TODO                                                               ! Other metadata
+        success = JAR_PUT_ITEMS(dcb_message_jar, f_data(:)) .and. success   ! The data
         
-        success = heap_list(i_compute) % free(c_data)            ! Free the shared memory
+        success = heap_list(i_compute) % free(c_data) .and. success         ! Free the shared memory
         if (.not. success) then
-          print*, 'ERROR: Unable to free heap data (from RELAY)'
+          print*, 'ERROR: [relay] Unable to free heap data or maybe put stuff in the jar'
           return
         end if
 
       else if (header % command == MSG_COMMAND_SERVER_CMD) then
 
-        num_jar_elem = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8))
+        success = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8)) .and. success
 
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
         ! No arguments to send
@@ -402,7 +400,7 @@ function default_server_bound_relay(context) result(relay_success)
       !---------------------
       ! Put message end cap
       end_cap % msg_length = header % content_size_int8
-      num_jar_elem = JAR_PUT_ITEM(dcb_message_jar, end_cap)
+      success = JAR_PUT_ITEM(dcb_message_jar, end_cap) .and. success
 
     end do ! Loop on each model PE for this relay
 
@@ -411,8 +409,8 @@ function default_server_bound_relay(context) result(relay_success)
       largest_tag_diff = max(largest_tag_diff, highest_tag - lowest_tag)
     else
       ! No one put anything to send. Send what's in the buffer, while we're just waiting for stuff...
-      if (dcb_message_jar % high() > 0) then
-        success = data_buffer % put_elems(dcb_message_jar % array(), dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
+      if (dcb_message_jar % get_top() > 0) then
+        success = data_buffer % put_elems(dcb_message_jar % f_array(), dcb_message_jar % get_top(), CB_DATA_ELEMENT_KIND, .true.)
         call dcb_message_jar % reset()
 
         if (.not. success) then
@@ -425,9 +423,9 @@ function default_server_bound_relay(context) result(relay_success)
   end do ! Loop until finished
 
   ! Send the remaining data
-  if (dcb_message_jar % high() > 0) then
+  if (dcb_message_jar % get_top() > 0) then
     ! print *, 'Sending remaining data: ', dcb_message_jar % high()
-    success = data_buffer % put_elems(dcb_message_jar % array(), dcb_message_jar % high(), CB_DATA_ELEMENT_KIND, .true.)
+    success = data_buffer % put_elems(dcb_message_jar % f_array(), dcb_message_jar % get_top(), CB_DATA_ELEMENT_KIND, .true.)
 
     if (.not. success) then
       print *, 'ERROR sending remaining data!'

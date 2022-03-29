@@ -151,17 +151,17 @@ contains
     ! Never forget to get a new message tag! (message only, not file)
     call this % messenger % bump_tag(.false.)
 
-    header % content_size_int8  = command_content % high() + command_record_size_int8()
+    command_header % size_int8    = command_content % get_top()
+    command_header % command_type = MSG_COMMAND_SERVER_CMD
+    command_header % stream_id    = this % stream_id
+    command_header % message_tag  = this % messenger % get_msg_tag()
+
+    header % content_size_int8  = command_record_size_int8() + command_header % size_int8
     header % command            = MSG_COMMAND_SERVER_CMD
     header % stream_rank        = this % stream_rank
     header % stream_id          = this % stream_id
-    header % message_tag        = this % messenger % get_msg_tag()
+    header % message_tag        = command_header % message_tag
     header % sender_global_rank = this % global_rank
-
-    command_header % size_int8    = command_content % high()
-    command_header % command_type = MSG_COMMAND_SERVER_CMD
-    command_header % stream_id    = header % stream_id
-    command_header % message_tag  = header % message_tag
 
     end_cap % msg_length = header % content_size_int8
 
@@ -171,9 +171,9 @@ contains
     print '(A, I8)', 'Sending command with content size ', command_header % size_int8
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(command_header, command_record_size_byte(), CB_KIND_CHAR, .false.)                  .and. success
-    success = this % server_bound_cb % put(command_content % array(), command_content % high(), CB_DATA_ELEMENT_KIND, .false.) .and. success
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)                             .and. success
+    success = this % server_bound_cb % put(command_header, command_record_size_byte(), CB_KIND_CHAR, .false.)                    .and. success
+    success = this % server_bound_cb % put(command_content % f_array(), command_header % size_int8, CB_DATA_ELEMENT_KIND, .false.) .and. success
+    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)                               .and. success
   end function send_command
 
   function model_stream_open(this) result(success)
@@ -313,10 +313,10 @@ contains
       rec % cmeta_size = int(cmeta_size_int8(), kind=4)
     endif
     if(present(meta)) then
-      low  = meta % low()
-      high = meta % high()
+      low  = meta % get_bot()
+      high = meta % get_top()
       rec % meta_size = high - low       ! useful number of elements
-      metadata => meta % array()
+      metadata => meta % f_array()
     endif
 
     rec % tag            = this % messenger % get_msg_tag()
@@ -338,11 +338,11 @@ contains
     ! print *, 'Area % nv = ', area % nv
     ! call print_data_record(rec)
 
-    command_meta % size_int8    = 0
+    command_meta % size_int8    = command % get_top()
     command_meta % command_type = MSG_COMMAND_DATA
     command_meta % stream_id    = this % stream_id
     command_meta % message_tag  = this % messenger % get_msg_tag()
-    if (present(command)) command_meta % size_int8 = command % high()
+    if (present(command)) command_meta % size_int8 = command % get_top()
 
     header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size + command_record_size_int8() + command_meta % size_int8
     header % command            = MSG_COMMAND_DATA
@@ -361,7 +361,7 @@ contains
     success = this % server_bound_cb % put(rec, data_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
 
     success = this % server_bound_cb % put(command_meta, command_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
-    if (present(command)) success = this % server_bound_cb % put(command % array(), command % high(), CB_DATA_ELEMENT_KIND, .false.) .and. success
+    if (present(command)) success = this % server_bound_cb % put(command % f_array(), command_meta % size_int8, CB_DATA_ELEMENT_KIND, .false.) .and. success
 
     ! Optional parts of the message
     if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success

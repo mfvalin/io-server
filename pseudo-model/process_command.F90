@@ -48,7 +48,7 @@ subroutine process_command(command_data, stream_id)
   type(jar), intent(inout) :: command_data
   integer,   intent(in)    :: stream_id
 
-  integer(JAR_ELEMENT) :: num_jar_elem
+  logical :: success
   integer(JAR_ELEMENT) :: num_char
   type(command_header) :: header
 
@@ -56,9 +56,9 @@ subroutine process_command(command_data, stream_id)
   character(len=:), allocatable :: fname
   integer :: i_stream, first_free_stream
 
-  print '(A, I8)', 'Processing command with size ', command_data % high()
+  print '(A, I8)', 'Processing command with size ', command_data % get_top()
 
-  num_jar_elem = JAR_GET_ITEM(command_data, header)
+  success = JAR_GET_ITEM(command_data, header)
 
   if (header % command_type == COMMAND_TYPE_OPEN_FILE) then
     print '(A, I5)', 'OPENING FILE for stream ', stream_id
@@ -83,7 +83,7 @@ subroutine process_command(command_data, stream_id)
     print *, 'NUM CHARS: ', num_char
     allocate(filename(num_char))
     allocate(character(len=num_char) :: fname)
-    num_jar_elem = JAR_GET_ITEMS(command_data, filename)
+    success = JAR_GET_ITEMS(command_data, filename)
     print '(A, 20A)', ' ------------------ [process_command] ----------------  File name = ', filename(1:num_char + 1)
 
     fname(1:num_char) = transfer(filename(1:num_char), fname)
