@@ -72,6 +72,7 @@ module ioserver_message_module
     integer(C_INT64_T)    :: data_size_byte !< Size of the data packet itself, in bytes
     integer(C_INT)        :: cmeta_size     !< Size of the compression metadata included, in # of 64-bit elements
     integer(JAR_ELEMENT)  :: meta_size      !< Size of other metadata included, in number of 64-bit elements
+    integer(C_INT64_T)    :: command_size_int8 !< Size of the command part of the message, in 64-bit elements
 
     integer(C_INT) :: tag               !< Tag associated with this particular message (to be able to group with that of other model PEs)
     integer(C_INT) :: stream            !< Stream to which the data is being sent

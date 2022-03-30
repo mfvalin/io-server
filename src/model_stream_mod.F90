@@ -165,10 +165,9 @@ contains
 
     end_cap % msg_length = header % content_size_int8
 
-    ! print *, 'Sending command'
     ! call print_message_header(header)
-
-    print '(A, I8)', 'Sending command with content size ', command_header % size_int8
+    ! call print_command_record(command_header)
+    ! print '(A, I8)', 'Sending command with content size ', command_header % size_int8
 
     success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
     success = this % server_bound_cb % put(command_header, command_record_size_byte(), CB_KIND_CHAR, .false.)                    .and. success
@@ -201,7 +200,7 @@ contains
 
     this % stream_id = this % messenger % get_file_tag()
 
-    print *, 'Opening stream, rank ', this % stream_rank
+    ! print *, 'Opening stream, rank ', this % stream_rank
 
     header % content_size_int8  = command_record_size_int8()
     header % command            = MSG_COMMAND_SERVER_CMD
@@ -288,17 +287,24 @@ contains
     success = .false.
     if(this % stream_id <= 0) return
 
-    ! Check that dimensions in area are consistent with metadata
-    if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
-      print *, 'ERROR: Trying to send data array that does not match subgrid dimensions'
-      ! print *, 'Data dimension: ', my_data % get_dimensions()
-      ! print *, 'Subgrid dims:   ', subgrid_area % size
-      return
-    end if
+    ! Perform a short series of checks on the inputs
+    block
+      ! Check that dimensions in area are consistent with metadata
+      if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
+        print '(A, 5I4, 1X, 5I4)', 'ERROR: Trying to send data array that does not match subgrid dimensions', my_data % get_dimensions(), subgrid_area % size
+        return
+      end if
+
+      ! Check that the given offset of the subgrid can fit within the global grid
+      if (any(subgrid_area % offset < 1) .or. any(subgrid_area % offset > global_grid % size)) then
+        print '(A, 5I4)', 'ERROR: Subgrid offset is invalid!', subgrid_area % offset
+        return
+      end if
+    end block
 
     ! Check that given element size is the same as in the global grid
     if (my_data % get_kind() .ne. global_grid % elem_size) then
-      print *, 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, my_data % get_kind()
+      print '(A, 1X, I2, 1X, I2)', 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, my_data % get_kind()
     end if
 
     call this % messenger % bump_tag()
@@ -319,6 +325,13 @@ contains
       metadata => meta % f_array()
     endif
 
+    command_meta % size_int8    = 0
+    command_meta % command_type = MSG_COMMAND_DATA
+    command_meta % stream_id    = this % stream_id
+    command_meta % message_tag  = this % messenger % get_msg_tag()
+    if (present(command)) command_meta % size_int8 = command % get_top()
+    rec % command_size_int8 = command_meta % size_int8 + command_record_size_int8()
+
     rec % tag            = this % messenger % get_msg_tag()
     rec % stream         = this % stream_id
 
@@ -337,12 +350,6 @@ contains
     ! print *, 'From model'
     ! print *, 'Area % nv = ', area % nv
     ! call print_data_record(rec)
-
-    command_meta % size_int8    = command % get_top()
-    command_meta % command_type = MSG_COMMAND_DATA
-    command_meta % stream_id    = this % stream_id
-    command_meta % message_tag  = this % messenger % get_msg_tag()
-    if (present(command)) command_meta % size_int8 = command % get_top()
 
     header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size + command_record_size_int8() + command_meta % size_int8
     header % command            = MSG_COMMAND_DATA

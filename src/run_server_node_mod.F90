@@ -24,6 +24,7 @@ module run_server_node_module
   use ioserver_constants
   use ioserver_context_module
   use ioserver_message_module
+  use rpn_extra_module
   use server_stream_module
   implicit none
   private
@@ -34,7 +35,14 @@ module run_server_node_module
     private
     integer :: lowest_tag          = 0
     integer :: previous_lowest_tag = 0
-    integer(C_INT64_T), dimension(:), pointer, contiguous :: model_data => NULL()
+    integer(C_INT64_T), dimension(:), pointer, contiguous :: model_data     => NULL()
+    integer(C_INT64_T), dimension(:), pointer, contiguous :: command_buffer => NULL()
+
+    contains
+    procedure, pass :: allocate_model_data
+    procedure, pass :: allocate_command_buffer
+    procedure, nopass, private :: allocate_buffer
+    final :: server_receive_state_final
   end type server_receiver_state
 
   abstract interface
@@ -265,7 +273,7 @@ function default_grid_processor(context) result(server_success)
     ! if (context % is_time_to_quit()) finished = .true.
     do i_stream = 1, MAX_NUM_STREAMS
       ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
-      stream_ptr => context % get_stream(i_stream)
+      call context % get_stream(i_stream, stream_ptr)
       if (stream_ptr % is_owner()) then
         if (.not. stream_ptr % process_stream()) then
           print '(A, I3, A, I4)', 'ERROR: when processing stream rank ', i_stream, ', ID ', stream_ptr % get_id()
@@ -304,8 +312,8 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   ! Data extraction/processing
   type(data_record) :: record
-  integer(C_INT64_T) :: num_data
-  integer(C_INT64_T), dimension(:), pointer, contiguous, save :: model_data => NULL()
+  integer(C_INT64_T) :: num_data_int8
+  ! integer(C_INT64_T), dimension(:), pointer, contiguous, save :: model_data => NULL()
 
   integer :: consumer_id
 
@@ -315,7 +323,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
 
   ! print '(A, I3, A I4)', 'Server ', consumer_id, ' receiving message from client ', client_id
 
-  if (.not. associated(model_data)) allocate(model_data(capacity))
+  ! if (.not. associated(model_data)) allocate(model_data(capacity))
 
   ! print *, 'Receiving a message'
   finished = .false.
@@ -346,6 +354,9 @@ function receive_message(context, dcb, client_id, state) result(finished)
   ! Actually extract the header
   success = dcb % get_elems(client_id, header, message_header_size_byte(), CB_KIND_CHAR, .true.)
 
+  ! Retrieve stream ptr
+  call context % get_stream(header % stream_rank, stream_ptr)
+
   ! call print_message_header(header)
 
   if (header % content_size_int8 > capacity) then
@@ -366,19 +377,28 @@ function receive_message(context, dcb, client_id, state) result(finished)
       error stop 1
     end if
 
-    ! if (record % tag == 2) then
-    !   call print_data_record(record)
-    ! end if
+    if (record % cmeta_size > 0) then
+      print *, 'ERROR: Cannot handle compression metadata'
+      error stop 1
+    end if
 
-    ! TODO manage compression + other metadata
+    if (record % meta_size > 0) then
+      print *, 'ERROR: Cannot handle other metadata'
+      error stop 1
+    end if
 
-    num_data = (record % data_size_byte + 7) / 8
-    success = dcb % get_elems(client_id, model_data, num_data, CB_KIND_INTEGER_8, .true.) ! Extract data
 
-    stream_ptr => context % get_stream(header % stream_rank)   ! Retrieve stream ptr
-    success = stream_ptr % put_data(record, model_data)      ! Put data in its proper place within a global grid
+    call state % allocate_command_buffer(record % command_size_int8)
+    success = dcb % get_elems(client_id, state % command_buffer, record % command_size_int8, CB_KIND_INTEGER_8, .true.) .and. success ! Extract command from DCB
+    success = stream_ptr % put_command(state % command_buffer(1:record % command_size_int8), header % message_tag)      .and. success ! Send command for later processing
+ 
+    num_data_int8 = num_char_to_num_int8(record % data_size_byte)
+    call state % allocate_model_data(num_data_int8)
+    success = dcb % get_elems(client_id, state % model_data, num_data_int8, CB_KIND_INTEGER_8, .true.) .and. success ! Extract data from DCB
+    success = stream_ptr % put_data(record, state % model_data) .and. success   ! Put data in its proper place within a global grid
+
     if (.not. success) then
-      print *, 'ERROR: Could not put data into partial grid!'
+      print *, 'ERROR: Could not put data into partial grid! (or maybe something else)'
       error stop 1
     end if
 
@@ -386,19 +406,14 @@ function receive_message(context, dcb, client_id, state) result(finished)
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
     ! print *, 'Got a SERVER_CMD message!'
-
-    block
-      integer(C_INT64_T), dimension(200) :: buffer
-      success = dcb % get_elems(client_id, buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
-      stream_ptr => context % get_stream(header % stream_rank)   ! Retrieve stream ptr
-      ! print '(A, 10(I20))', 'Putting command ', buffer(1:header % content_size_int8)
-      success = stream_ptr % put_command(buffer(1:header % content_size_int8), header % message_tag)
-    end block
+    call state % allocate_command_buffer(header % content_size_int8)
+    success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
+    success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
 
   !----------------
   ! Misc. message
   else if (header % command == MSG_COMMAND_DUMMY) then
-    if (context % debug_mode()) print *, 'DEBUG: Got a DUMMY message!', consumer_id
+    if (context % debug_mode()) print '(A, I3)', 'DEBUG: Got a DUMMY message!', consumer_id
 
   !---------------------------------
   ! Stop receiving from this relay
@@ -429,5 +444,37 @@ function receive_message(context, dcb, client_id, state) result(finished)
   end if
 
 end function receive_message
+
+subroutine allocate_model_data(state, num_elements)
+  implicit none
+  class(server_receiver_state), intent(inout) :: state
+  integer(C_INT64_T),           intent(in)    :: num_elements
+  call allocate_buffer(state % model_data, num_elements)
+end subroutine allocate_model_data
+
+subroutine allocate_command_buffer(state, num_elements)
+  implicit none
+  class(server_receiver_state), intent(inout) :: state
+  integer(C_INT64_T),           intent(in)    :: num_elements
+  call allocate_buffer(state % command_buffer, num_elements)
+end subroutine allocate_command_buffer
+
+subroutine allocate_buffer(buffer, num_elements)
+  implicit none
+  integer(C_INT64_T), dimension(:), pointer, contiguous, intent(inout) :: buffer
+  integer(C_INT64_T), intent(in) :: num_elements
+  if (associated(buffer)) then
+    if (size(buffer) >= num_elements) return
+    deallocate(buffer)
+  end if
+  allocate(buffer(num_elements))
+end subroutine allocate_buffer
+
+subroutine server_receive_state_final(state)
+  implicit none
+  type(server_receiver_state), intent(inout) :: state
+  if (associated(state % model_data)) deallocate(state % model_data)
+  if (associated(state % command_buffer)) deallocate(state % command_buffer)
+end subroutine server_receive_state_final
 
 end module run_server_node_module

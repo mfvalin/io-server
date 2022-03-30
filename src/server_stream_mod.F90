@@ -311,7 +311,6 @@ contains
 
     integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
     type(command_record) :: record
-    type(C_PTR) :: grid_data
 
     success = .false.
 
@@ -329,7 +328,6 @@ contains
     success = .true.
     do while (this % command_buffer % get_num_elements(CB_KIND_INTEGER_8) > 0 .and. success)
       ! Extract the command and execute it
-      grid_data = C_NULL_PTR ! TODO Get the actual grid data
 
       ! print *, 'Getting from command queue, size ', command_record_size_int8()
       success = this % command_buffer % get(record, command_record_size_int8(), CB_KIND_INTEGER_8, .true.)
@@ -341,12 +339,16 @@ contains
         if (record % command_type == MSG_COMMAND_OPEN_STREAM) then
           success = this % open(record % stream_id) .and. success
           if (.not. success) print*, 'FAILED TO OPEN'
+
         else if (record % command_type == MSG_COMMAND_CLOSE_STREAM) then
           success = this % close() .and. success
           if (.not. success) print*, 'FAILED TO CLOSE'
-        else if (record % command_type == MSG_COMMAND_SERVER_CMD) then
+
+        else if (record % command_type == MSG_COMMAND_SERVER_CMD .or. record % command_type == MSG_COMMAND_DATA) then
+
           block
-            type(jar) :: command_content ! Using a new jar every time
+            type(jar) :: command_content ! We want a new jar every time
+            type(C_PTR) :: grid_data
 
             ! print *, 'Getting from command queue, size ', record % size_int8
             success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
@@ -357,8 +359,26 @@ contains
               success = .false.
               return
             end if
-            call process_command(command_content, grid_data)
+            
+            if (record % command_type == MSG_COMMAND_SERVER_CMD) then
+              call process_command(command_content, this % shared_instance % get_id())
+            else if (record % command_type == MSG_COMMAND_DATA) then
+              print *, 'First checking heap: ', this % data_heap % check()
+              grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(record % message_tag, this % data_heap)
+              if (.not. c_associated(grid_data)) then
+                print *, 'ERROR: Could not get completed line data!!!'
+                success = .false.
+                return 
+              end if
+              call process_data(grid_data, command_content, this % shared_instance % get_id())
+              success = this % shared_instance % partial_grid_data % free_line(record % message_tag, this % data_heap, this % mutex)
+              if (.not. success) then
+                print *, 'ERROR: Could not free line data!'
+                return
+              end if
+            end if
           end block
+
         else
           print '(A, I3, A)', 'ERROR: Unknown message command ', record % command_type, '. Will just stop processing this stream.'
           success = .false.

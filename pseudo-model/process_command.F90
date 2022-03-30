@@ -15,8 +15,10 @@
 ! Free Software Foundation, Inc., 59 Temple Place - Suite 330,
 ! Boston, MA 02111-1307, USA.
 !
-! Authors:
-!     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
+!> \author  V. Magnoux, Recherche en Prevision Numerique
+!> \date    2020-2022
+!> \file process_command.F90 Example implementation of the command/data processing functions provided by a model
+
 module process_command_module
   use iso_c_binding
   implicit none
@@ -25,17 +27,53 @@ module process_command_module
   integer(C_INT), parameter :: COMMAND_TYPE_OPEN_FILE   =  0
   integer(C_INT), parameter :: COMMAND_TYPE_CLOSE_FILE  =  1
   integer(C_INT), parameter :: COMMAND_TYPE_WRITE_DATA  =  2
+  integer(C_INT), parameter :: COMMAND_TYPE_WRITE_DISPLAY_DATA  =  3
   
   type, public, bind(C) :: command_header
     integer(C_INT) :: command_type = COMMAND_TYPE_NONE  !< Indicates what kind of command we want to execute
     integer(C_INT) :: size_bytes   = 0                  !< Size of the data sent along with the command
   end type command_header
 
+  type, public, bind(C) :: model_grid
+    integer(C_INT), dimension(5) :: dims
+    integer(C_INT) :: elem_size
+  end type model_grid
+
   integer, parameter :: MAX_NUM_OPEN_STREAMS = 20
   integer, dimension(MAX_NUM_OPEN_STREAMS) :: stream_ids = -1
   integer, dimension(MAX_NUM_OPEN_STREAMS) :: file_units = -1
 
 contains
+
+  function get_free_stream_rank(stream_id) result(free_stream_rank)
+    implicit none
+    integer, intent(in) :: stream_id
+    integer :: free_stream_rank
+
+    integer :: i_stream
+
+    free_stream_rank = -1
+    do i_stream = 1, MAX_NUM_OPEN_STREAMS
+      if (stream_ids(i_stream) == -1 .and. free_stream_rank == -1) free_stream_rank = i_stream
+      if (stream_ids(i_stream) == stream_id) then
+        print *, 'AAAAhhhhh ERROR WE already have an open file on that stream!!!!!'
+        error stop 1
+      end if
+    end do
+
+  end function get_free_stream_rank
+
+  function get_stream_rank(stream_id) result(stream_rank)
+    implicit none
+    integer, intent(in) :: stream_id
+    integer :: stream_rank
+
+    do stream_rank = 1, MAX_NUM_OPEN_STREAMS
+      if (stream_ids(stream_rank) == stream_id) return
+    end do
+    stream_rank = -1
+  end function get_stream_rank
+
 end module process_command_module
 
 subroutine process_command(command_data, stream_id)
@@ -52,9 +90,8 @@ subroutine process_command(command_data, stream_id)
   integer(JAR_ELEMENT) :: num_char
   type(command_header) :: header
 
-  character(len=1), dimension(:), allocatable :: filename
-  character(len=:), allocatable :: fname
-  integer :: i_stream, first_free_stream
+  character(len=:), allocatable :: filename
+  integer :: stream_rank
 
   print '(A, I8)', 'Processing command with size ', command_data % get_top()
 
@@ -63,51 +100,41 @@ subroutine process_command(command_data, stream_id)
   if (header % command_type == COMMAND_TYPE_OPEN_FILE) then
     print '(A, I5)', 'OPENING FILE for stream ', stream_id
 
-    first_free_stream = -1
-    do i_stream = 1, MAX_NUM_OPEN_STREAMS
-      if (stream_ids(i_stream) == -1 .and. first_free_stream == -1) first_free_stream = i_stream
-      if (stream_ids(i_stream) == stream_id) then
-        print *, 'AAAAhhhhh ERROR WE already have an open file on that stream!!!!!'
-        error stop 1
-      end if
-    end do
-
-    if (first_free_stream == -1) then
+    stream_rank = get_free_stream_rank(stream_id)
+    if (stream_rank == -1) then
       print *, 'AAAAHHHHHH no more room left to open new files!!!'
       error stop 1
     end if
 
-    stream_ids(first_free_stream) = stream_id
+    stream_ids(stream_rank) = stream_id
 
+    ! Retrieve file name
     num_char = header % size_bytes
-    print *, 'NUM CHARS: ', num_char
-    allocate(filename(num_char))
-    allocate(character(len=num_char) :: fname)
-    success = JAR_GET_ITEMS(command_data, filename)
-    print '(A, 20A)', ' ------------------ [process_command] ----------------  File name = ', filename(1:num_char + 1)
+    allocate(character(len=num_char) :: filename)
+    success = JAR_GET_ITEM(command_data, filename)
+    print '(A, A)', ' OPENING FILE! File name = ', filename
 
-    fname(1:num_char) = transfer(filename(1:num_char), fname)
-    open(newunit = file_units(first_free_stream), file = fname, status = 'replace')
+    open(newunit = file_units(stream_rank), file = filename, status = 'replace', form = 'unformatted')
 
     deallocate(filename)
-    deallocate(fname)
 
   else if (header % command_type == COMMAND_TYPE_CLOSE_FILE) then
-    do i_stream = 1, MAX_NUM_OPEN_STREAMS
-      if (stream_ids(i_stream) == stream_id) exit
-    end do
-    if (i_stream <= MAX_NUM_OPEN_STREAMS) then
+    stream_rank = get_stream_rank(stream_id)
+    if (stream_rank > 0) then
       print '(A, I5)', 'CLOSING FILE! for stream ', stream_id
-      close(file_units(i_stream))
+      close(file_units(stream_rank))
     else
       print *, 'ERROR: This stream had no open file!!!!'
       error stop 1
     end if
-  else if (header % command_type == COMMAND_TYPE_WRITE_DATA) then
+
+  else if (header % command_type == COMMAND_TYPE_WRITE_DATA .or. header % command_type == COMMAND_TYPE_WRITE_DISPLAY_DATA) then
     print *, 'WRITING DATA. Should not be doing it in this function!!!'
+
   else
     print *, 'AHHHH INVALID COMMAND TYPE'
     error stop 1
+
   end if
 
 end subroutine process_command
@@ -122,4 +149,52 @@ subroutine process_data(data_c, command, stream_id)
   type(C_PTR), intent(in)    :: data_c
   type(jar),   intent(inout) :: command
   integer,     intent(in)    :: stream_id
+
+  type(command_header) :: header
+  type(model_grid)     :: grid
+  integer(C_INT8_T), dimension(:, :, :, :, :), pointer :: grid_data_byte
+  integer(C_INT64_T), dimension(5) :: grid_size_byte
+  integer :: stream_rank
+  logical :: success
+
+  success = JAR_GET_ITEM(command, header)
+
+  print *, 'Processing data for stream ', stream_id, transfer(data_c, 1_8), command % get_top(), header % command_type
+  
+  if (header % command_type == COMMAND_TYPE_WRITE_DATA .or. header % command_type == COMMAND_TYPE_WRITE_DISPLAY_DATA) then
+    success = JAR_GET_ITEM(command, grid)
+    print *, 'Grid: ', grid % dims, grid % elem_size
+
+    if (grid % elem_size .ne. 8) then
+      print *, 'ERROR: Can only handle grid elements of size 8 for now'
+      error stop 1
+    end if
+
+    if (header % command_type == COMMAND_TYPE_WRITE_DISPLAY_DATA) then
+      block
+        integer(C_INT64_T), dimension(:, :, :, :, :), pointer :: grid_data_int8
+        call c_f_pointer(data_c, grid_data_int8, grid % dims)
+        print '(A, /, (5I5))', 'Grid content: ', grid_data_int8
+      end block
+    end if
+
+    stream_rank = get_stream_rank(stream_id)
+
+    if (stream_rank > 0) then
+      grid_size_byte = grid % dims
+      grid_size_byte(1) = grid_size_byte(1) * 8
+      call c_f_pointer(data_c, grid_data_byte, grid_size_byte)
+      write(unit=file_units(stream_rank)) grid_data_byte
+    end if
+  
+  else
+    print *, 'ERROR: Unrecognized command type for processing data', header % command_type
+    error stop 1
+
+  end if
+  
+  if (command % get_num_avail() > 0) then
+    print *, 'ERROR: There is still data available in the command buffer', command % get_num_avail()
+  end if
+  
 end subroutine process_data

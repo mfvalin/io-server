@@ -22,6 +22,7 @@
 #include <serializer.hf>
 
 module run_model_node_module
+  use iso_c_binding
   use ioserver_context_module
   implicit none
   private
@@ -278,9 +279,12 @@ function default_server_bound_relay(context) result(relay_success)
       !------------------------------
       ! Extract/process message data
       if (header % command == MSG_COMMAND_DATA) then
-        success = cb_list(i_compute) % get(record, data_record_size_byte(), CB_KIND_CHAR, .false.) ! Extract record 
-        ! TODO  Get compression metadata
-        ! TODO  Get other metadata
+        param_size_int8 = header % content_size_int8 - data_record_size_int8()
+        call allocate_message_buffer(cb_message, param_size_int8)
+
+        ! Extract record first, then the rest of metadata
+        success = cb_list(i_compute) % get(record, data_record_size_byte(), CB_KIND_CHAR, .false.)
+        success = cb_list(i_compute) % get(cb_message, param_size_int8, CB_KIND_INTEGER_8, .false.) .and. success
 
         if (.not. success) then
           print *, 'ERROR Could not get record from data message'
@@ -307,12 +311,7 @@ function default_server_bound_relay(context) result(relay_success)
                header % command == MSG_COMMAND_OPEN_STREAM) then
         param_size_int8 = header % content_size_int8
 
-        if (.not. allocated(cb_message)) then
-          allocate(cb_message(param_size_int8))
-        else if (size(cb_message) < param_size_int8) then
-          deallocate(cb_message)
-          allocate(cb_message(param_size_int8))
-        end if
+        call allocate_message_buffer(cb_message, param_size_int8)
 
         success = cb_list(i_compute) % get(cb_message, param_size_int8, CB_KIND_INTEGER_8, .true.) ! Extract file name
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8() + param_size_int8
@@ -329,7 +328,7 @@ function default_server_bound_relay(context) result(relay_success)
       if ((.not. success) .or. (content_size .ne. end_cap % msg_length) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
         print *, 'ERROR We have a problem with message size (end cap does not match)'
         call print_message_header(header)
-        print *, end_cap % cap_tag, end_cap % msg_length, success, content_size
+        print '(I10, 1X, I10, 1X, L2, I11)', end_cap % cap_tag, end_cap % msg_length, success, content_size
         success = .false.
         return
       end if
@@ -372,12 +371,12 @@ function default_server_bound_relay(context) result(relay_success)
       ! Copy message body
       if (header % command == MSG_COMMAND_DATA) then
 
-        success = JAR_PUT_ITEM(dcb_message_jar, record) .and. success       ! Data header
-        !TODO                                                               ! Compression metadata
-        !TODO                                                               ! Other metadata
-        success = JAR_PUT_ITEMS(dcb_message_jar, f_data(:)) .and. success   ! The data
-        
-        success = heap_list(i_compute) % free(c_data) .and. success         ! Free the shared memory
+        success = JAR_PUT_ITEM (dcb_message_jar, record)                        .and. success   ! Data header
+        success = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8)) .and. success   ! All other metadata
+        success = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))                     .and. success   ! The data
+
+        ! Free the shared memory
+        success = heap_list(i_compute) % free(c_data) .and. success
         if (.not. success) then
           print*, 'ERROR: [relay] Unable to free heap data or maybe put stuff in the jar'
           return
@@ -436,7 +435,7 @@ function default_server_bound_relay(context) result(relay_success)
   if (allocated(cb_message)) deallocate(cb_message)
   if (allocated(latest_tags)) deallocate(latest_tags)
 
-  if (context % debug_mode()) print *, 'DEBUG: Largest diff b/w tags in one pass: ', largest_tag_diff
+  if (context % debug_mode()) print '(A, I3)', 'DEBUG: Largest diff b/w tags in one pass: ', largest_tag_diff
 
   if (local_relay_id == 0) then
     ! call heap_list(0) % dumpinfo()
@@ -449,6 +448,19 @@ function default_server_bound_relay(context) result(relay_success)
 
 end function default_server_bound_relay
 
+!> Make sure [buffer] has size at least [num_elem]
+subroutine allocate_message_buffer(buffer, num_elem)
+  implicit none
+  integer(C_INT64_T), dimension(:), allocatable, intent(inout) :: buffer
+  integer(C_INT64_T),                            intent(in)    :: num_elem
+
+  if (allocated(buffer)) then
+    if (size(buffer) >= num_elem) return
+    deallocate(buffer)
+  end if
+  allocate(buffer(num_elem))
+end subroutine allocate_message_buffer
+
 function default_model_bound_relay(context) result(relay_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
@@ -456,7 +468,7 @@ function default_model_bound_relay(context) result(relay_success)
 
   relay_success = .false.
 
-  if (context % debug_mode()) print *, 'Model-bound relay process'
+  if (context % debug_mode()) print '(A)', 'DEBUG: Model-bound relay process'
 
   relay_success = .true.
 end function default_model_bound_relay

@@ -24,6 +24,7 @@ module grid_assembly_module
   
   use ioserver_message_module
   use heap_module
+  use rpn_extra_module
   use simple_mutex_module
   implicit none
   private
@@ -52,6 +53,10 @@ module grid_assembly_module
     procedure, pass, public :: put_data              => grid_assembly_put_data
     procedure, pass, public :: flush_completed_grids => grid_assembly_flush_completed_grids
     procedure, pass, public :: get_num_grids
+    procedure, pass, public :: get_completed_line_data
+    procedure, pass, public :: free_line
+
+    procedure, pass :: get_line_id_from_tag
 
     procedure, pass :: is_line_full => grid_assembly_is_line_full
     procedure, pass :: get_line_id  => grid_assembly_get_line_id
@@ -270,7 +275,7 @@ contains
   !> because of little- and big-endian stuff.
   subroutine grid_assembly_flush_line(this, line_id, file_unit, data_heap)
     implicit none
-    class(grid_assembly), intent(inout) :: this       !< 
+    class(grid_assembly), intent(inout) :: this       !< Grid assembly instance
     integer,              intent(in)    :: line_id    !< [in] ID of the line we want to flush
     integer,              intent(in)    :: file_unit  !< [in] File unit where we want to write the content of the assembly line
     type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
@@ -325,5 +330,99 @@ contains
       end if
     end do
   end function get_num_grids
+
+  !> Find the line ID that has the given tag. Will wait for a certain (optionally specified) timeout
+  !> before deciding the tag just doesn't exist
+  function get_line_id_from_tag(this, tag, timeout_ms) result(line_id)
+    implicit none
+    class(grid_assembly), intent(in) :: this        !< Grid assembly instance
+    integer,              intent(in) :: tag         !< Tag we are looking for
+    integer, optional,    intent(in) :: timeout_ms  !< [optional] How long (in ms) we want to wait before giving up
+    integer :: line_id !< ID of the assembly line with the given tag in the lines array. -1 if not found
+
+    integer, parameter :: DEFAULT_TOTAL_WAIT_TIME_MS = 1000
+    integer, parameter :: SINGLE_WAIT_TIME_MS = 1
+    integer :: wait_time_ms
+
+    integer :: i_wait, i_line
+
+    wait_time_ms = DEFAULT_TOTAL_WAIT_TIME_MS
+    if (present(timeout_ms)) wait_time_ms = timeout_ms
+
+    line_id = -1
+
+    do i_wait = 1, wait_time_ms / SINGLE_WAIT_TIME_MS
+      do i_line = 1, MAX_ASSEMBLY_LINES
+        if (this % lines(i_line) % tag == tag) then
+          line_id = i_line
+          return
+        end if
+      end do
+      call sleep_us(SINGLE_WAIT_TIME_MS * 1000)
+    end do
+  end function get_line_id_from_tag
+
+  function get_completed_line_data(this, tag, data_heap) result(data_ptr)
+    implicit none
+    class(grid_assembly), intent(inout) :: this
+    integer,              intent(in)    :: tag
+    type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
+    type(C_PTR) :: data_ptr
+
+    integer, parameter :: TOTAL_ASSEMBLY_WAIT_TIME_MS = 5000
+    integer, parameter :: SINGLE_ASSEMBLY_WAIT_TIME_MS = 1
+
+    integer :: i_wait_assembly
+
+    integer :: line_id
+
+    data_ptr = C_NULL_PTR
+
+    line_id = this % get_line_id_from_tag(tag)
+    if (line_id < 1) return
+
+    do i_wait_assembly = 1, TOTAL_ASSEMBLY_WAIT_TIME_MS / SINGLE_ASSEMBLY_WAIT_TIME_MS
+      if (this % is_line_full(line_id)) then
+        data_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
+        print *, 'address = ', transfer(data_ptr, 1_8)
+        if (.not. data_heap % is_valid_block(data_ptr)) print *, 'ERROR: INVALID BLOCK!!!'
+        if (.not. data_heap % check()) print *, 'ERROR: HEAP NOT OK'
+        return
+      end if
+      call sleep_us(SINGLE_ASSEMBLY_WAIT_TIME_MS * 1000)
+    end do
+  end function get_completed_line_data
+
+  function free_line(this, tag, data_heap, mutex) result(success)
+    implicit none
+    class(grid_assembly), intent(inout) :: this       !< Grid assembly instance
+    integer,              intent(in)    :: tag        !< Tag of the data we want to delete
+    type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
+    type(simple_mutex),   intent(inout) :: mutex      !< [in,out] To avoid synchronization issues (allocating memory, updating completion percentage)
+    logical :: success
+    
+    integer :: line_id
+
+    type(C_PTR) :: tmp
+
+    success = .false.
+
+    line_id = this % get_line_id_from_tag(tag)
+    if (line_id < 1) then
+      print *, 'ERROR: Did not find requested line!'
+      return
+    end if
+
+    tmp = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
+    print *, 'address (2) = ', transfer(tmp, 1_8)
+
+    call mutex % lock()
+    success = data_heap % free(this % lines(line_id) % data_offset)
+    this % lines(line_id) = grid_assembly_line()
+    call mutex % unlock()
+
+    if (.not. success) print *, 'ERROR: Unable to free from heap'
+
+  end function free_line
 
 end module grid_assembly_module

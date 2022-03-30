@@ -451,7 +451,6 @@ subroutine open_stream_model(context, new_stream)
 
   do i_stream = 1, MAX_NUM_STREAMS
     tmp_stream => context % local_model_streams(i_stream)
-    print *, 'Testing stream ', i_stream
     if (.not. tmp_stream % is_open()) then
       if (tmp_stream % open()) then
         new_stream => tmp_stream
@@ -715,13 +714,13 @@ function IOserver_get_messenger(context) result(messenger)
 end function IOserver_get_messenger
 
 !> Get a local accessor to a specific stream
-function IOserver_get_stream(context, stream_rank) result(stream)
+subroutine IOserver_get_stream(context, stream_rank, stream)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_rank !< Rank of the stream we want to access
-  type(local_server_stream), pointer     :: stream
+  type(local_server_stream), pointer, intent(out) :: stream
   stream => context % local_server_streams(stream_rank)
-end function IOserver_get_stream
+end subroutine IOserver_get_stream
 
 !> Get the value of relay_pipeline_depth
 function get_relay_pipeline_depth(context) result(depth)
@@ -813,7 +812,7 @@ subroutine finalize_model(this)
     success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
     success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
   else
-    print *, 'Should NOT be calling "finish_model"'
+    print '(A)', 'WARNING: Should NOT be calling "finish_model"'
   end if
 end subroutine finalize_model
 
@@ -828,7 +827,7 @@ subroutine finalize_relay(this)
 
   if (this % is_relay() .and. this % is_server_bound()) then
     ! Send a stop signal to the server
-    if (this % debug_mode()) print '(A, I3, A)', 'Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
+    if (this % debug_mode()) print '(A, I3, A)', 'DEBUG: Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
     header % content_size_int8  = 0
     header % command            = MSG_COMMAND_RELAY_STOP
     header % sender_global_rank = this % global_rank
@@ -839,7 +838,7 @@ subroutine finalize_relay(this)
     success = this % local_dcb % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
 
     if (.not. success) then
-      if (this % debug_mode()) print *, 'WARNING: Relay could not send a stop signal!!!'
+      if (this % debug_mode()) print '(A)', 'WARNING: Relay could not send a stop signal!!!'
       call print_message_header(header)
     end if
   end if
