@@ -59,7 +59,9 @@ test:gnu-9.3.0_job_regular_single_node:
       - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
       - cd build_gnu-9.3.0
       - BUILD_PATH=`pwd`
+      - set -x
       - source ../tests/script/single_node_tests.sh
+      - set +x
 
 # test:gnu-9.3.0_job_regular_multi_node:
 #    stage: test
