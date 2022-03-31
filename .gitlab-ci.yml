@@ -153,7 +153,9 @@ test:XC50_intel-19.0.5_job_multi_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
+      - set -x
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
+      - set +x
 
 package:XC50_intel-19.0.5:
    stage: package
