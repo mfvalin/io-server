@@ -156,7 +156,7 @@ program model_integration
 
       ! Command header
       header % command_type = COMMAND_TYPE_WRITE_DATA
-      header % size_bytes   = (storage_size(m_grid) + 63) / 64
+      header % size_bytes   = (storage_size(m_grid) + 7) / 8
       success = JAR_PUT_ITEM(command, header)
 
       ! Grid metadata

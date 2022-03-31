@@ -111,6 +111,7 @@ contains
     use ioserver_context_module
     use ioserver_message_module
     use jar_module
+    use process_command_module
     use rpn_extra_module, only: sleep_us
     implicit none
 
@@ -131,6 +132,8 @@ contains
     integer(kind=8), dimension(:,:), pointer :: data_array_8
     real(kind=8), dimension(:,:,:,:,:), pointer :: big_array
 
+    type(command_header) :: c_header
+
     integer :: global_model_id
     integer :: compute_width, compute_height
 
@@ -141,32 +144,40 @@ contains
     model_success = .false.
 
     node_heap = context % get_local_heap()
-
     success = command_jar % new(100)
-    success = JAR_PUT_ITEM(command_jar, filename1) .and. success
 
+    ! Open and check stream 1
     call context % open_stream_model(output_stream_1)
     if (.not. success .or. .not. associated(output_stream_1)) then
       print *, 'ERROR: Could not open model stream'
       return
     end if 
 
+    ! Send "open file" command into stream 1
+    c_header % command_type = COMMAND_TYPE_OPEN_FILE
+    c_header % size_bytes   = len_trim(filename1)
+    success = JAR_PUT_ITEM(command_jar, c_header)        .and. success
+    success = JAR_PUT_ITEM(command_jar, trim(filename1)) .and. success
     success = output_stream_1 % send_command(command_jar)
     if (.not. success) then
       print *, 'Unable to send command to model stream 1 !!!!'
       return
     end if
 
-    call command_jar % reset()
-    success = JAR_PUT_ITEM(command_jar, filename2)
-
+    ! Open and check stream 2
     call context % open_stream_model(output_stream_2)
     if (.not. associated(output_stream_2)) then
       print *, 'ERROR: Could not open second model stream'
       return
     end if
 
-    success = output_stream_2 % send_command(command_jar)
+    ! Send "open file" command into stream 2
+    call command_jar % reset()
+    c_header % command_type = COMMAND_TYPE_OPEN_FILE
+    c_header % size_bytes   = len_trim(filename2)
+    success = JAR_PUT_ITEM(command_jar, c_header)        .and. success
+    success = JAR_PUT_ITEM(command_jar, trim(filename2)) .and. success
+    success = output_stream_2 % send_command(command_jar) .and. success
     if (.not. success .or. .not. output_stream_2 % is_open()) then
       print *, 'Unable to open model file 2 !!!!'
       return
@@ -242,6 +253,7 @@ contains
 
     ! call sleep_us(5000)
     block
+      type(model_grid) :: m_grid
       integer :: i_msg, i_data, j_data, current_tag
       integer(C_INT64_T), dimension(2) :: array_dims
       integer(C_INT64_T), dimension(5) :: big_array_dims
@@ -269,8 +281,19 @@ contains
           end do
         end do
 
+        ! Command header
+        call command_jar % reset()
+        c_header % command_type = COMMAND_TYPE_WRITE_DATA
+        c_header % size_bytes   = (storage_size(m_grid) + 7) / 8
+        success = JAR_PUT_ITEM(command_jar, c_header)
+
+        ! Grid metadata (for model processing)
+        m_grid % dims      = input_grid_4 % size
+        m_grid % elem_size = input_grid_4 % elem_size
+        success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
+
         ! Write the data to a file (i.e. send it to the server to do that for us)
-        success = output_stream_1 % send_data(data_array_info_1, local_grid, input_grid_4, output_grid)
+        success = output_stream_1 % send_data(data_array_info_1, local_grid, input_grid_4, output_grid, command = command_jar) .and. success
 
         if (.not. success) then
           print *, 'ERROR: Send data into model stream failed'
@@ -310,8 +333,31 @@ contains
           end do
         end do
 
-        success = output_stream_2 % send_data(data_array_info_2, local_grid, input_grid_8, output_grid)
-        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_grid, output_grid)    .and. success
+        ! Command header
+        call command_jar % reset()
+        c_header % command_type = COMMAND_TYPE_WRITE_DATA
+        c_header % size_bytes   = (storage_size(m_grid) + 7) / 8
+        success = JAR_PUT_ITEM(command_jar, c_header)
+
+        ! Grid metadata (for model processing)
+        m_grid % dims      = input_grid_8 % size
+        m_grid % elem_size = input_grid_8 % elem_size
+        success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
+
+        success = output_stream_2 % send_data(data_array_info_2, local_grid, input_grid_8, output_grid, command = command_jar) .and. success
+
+        ! Command header
+        call command_jar % reset()
+        c_header % command_type = COMMAND_TYPE_WRITE_DATA
+        c_header % size_bytes   = (storage_size(m_grid) + 7) / 8
+        success = JAR_PUT_ITEM(command_jar, c_header) .and. success
+
+        ! Grid metadata (for model processing)
+        m_grid % dims      = big_grid % size
+        m_grid % elem_size = big_grid % elem_size
+        success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
+
+        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_grid, output_grid, command = command_jar)    .and. success
         if (.not. success) then
           print *, 'ERROR while trying to do a SEND DATA'
           return
@@ -321,7 +367,16 @@ contains
       end do
     end block
 
-    success = output_stream_1 % close()
+    ! Close files
+    call command_jar % reset()
+    c_header % command_type = COMMAND_TYPE_CLOSE_FILE
+    c_header % size_bytes = 0
+    success = JAR_PUT_ITEM(command_jar, c_header)
+    success = output_stream_1 % send_command(command_jar) .and. success
+    success = output_stream_2 % send_command(command_jar) .and. success
+
+    ! Close streams
+    success = output_stream_1 % close() .and. success
     success = output_stream_2 % close() .and. success
     if (.not. success) then
       print *, 'Unable to close model file!!!!'
@@ -375,7 +430,7 @@ contains
     tmp_ptr = c_loc(read2)
     call c_f_pointer(tmp_ptr, array2, dims2)
 
-    open(newunit = file_unit, file = trim(filename2)//'.out', status = 'old', form = 'unformatted', action = 'read')
+    open(newunit = file_unit, file = trim(filename2), status = 'old', form = 'unformatted', action = 'read')
 
     tag = 2
     do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT ! Loop through all pairs of records in this file

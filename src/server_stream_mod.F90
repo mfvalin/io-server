@@ -149,15 +149,11 @@ contains
 
     success = .false.
     if (this % is_valid()) then
-      print *, 'Valid stream!'
       if (.not. this % is_open()) then
-        print *, 'Not already open!'
         this % stream_id = stream_id
         this % status    = STREAM_STATUS_OPEN
         success          = .true.
       end if
-    else
-      print *, 'INVALID STREAM!!!'
     end if
   end function shared_server_stream_open
 
@@ -320,7 +316,7 @@ contains
     ! end if
 
     if (.not. this % is_owner()) then
-      print *, 'AAAHHHHH NOT OWNER'
+      print '(A)', 'ERROR: I am not the owner of that stream'
       return
     end if
     ! if (this % shared_instance % status == 0) return
@@ -334,15 +330,15 @@ contains
       if (.not. success) return
       if (record % message_tag > this % shared_instance % latest_command_tag) then
         this % shared_instance % latest_command_tag = record % message_tag
-        call print_command_record(record)
+        ! call print_command_record(record)
 
         if (record % command_type == MSG_COMMAND_OPEN_STREAM) then
           success = this % open(record % stream_id) .and. success
-          if (.not. success) print*, 'FAILED TO OPEN'
+          if (.not. success) print '(A, I4)', 'ERROR: Failed to open stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_CLOSE_STREAM) then
           success = this % close() .and. success
-          if (.not. success) print*, 'FAILED TO CLOSE'
+          if (.not. success) print '(A, I4)', 'ERROR: Failed to close stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_SERVER_CMD .or. record % command_type == MSG_COMMAND_DATA) then
 
@@ -355,32 +351,36 @@ contains
             ! call command_content % reset()
             success = command_content % shape_with(data_buffer, int(record % size_int8, kind=4)) .and. success
             if (.not. success) then
-              print *, 'ERROR: Unable to extract and package command from command buffer'
+              print '(A, I4)', 'ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
+              call print_command_record(record)
               success = .false.
               return
             end if
             
             if (record % command_type == MSG_COMMAND_SERVER_CMD) then
-              call process_command(command_content, this % shared_instance % get_id())
+              ! Simply execute the command
+              success = process_command(command_content, this % shared_instance % get_id())
+
             else if (record % command_type == MSG_COMMAND_DATA) then
-              print *, 'First checking heap: ', this % data_heap % check()
+              ! First get a pointer to the assembled grid that comes with the command. Might have to wait a bit for it
               grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(record % message_tag, this % data_heap)
               if (.not. c_associated(grid_data)) then
-                print *, 'ERROR: Could not get completed line data!!!'
+                print '(A)', 'ERROR: Could not get completed line data!!!'
                 success = .false.
                 return 
               end if
-              call process_data(grid_data, command_content, this % shared_instance % get_id())
-              success = this % shared_instance % partial_grid_data % free_line(record % message_tag, this % data_heap, this % mutex)
-              if (.not. success) then
-                print *, 'ERROR: Could not free line data!'
-                return
-              end if
+
+              ! Then execute the command on that assembled grid
+              success = process_data(grid_data, command_content, this % shared_instance % get_id())
+
+              ! Free the grid data
+              success = this % shared_instance % partial_grid_data % free_line(record % message_tag, this % data_heap, this % mutex) .and. success
             end if
           end block
 
         else
           print '(A, I3, A)', 'ERROR: Unknown message command ', record % command_type, '. Will just stop processing this stream.'
+          call print_command_record(record)
           success = .false.
         end if
       else

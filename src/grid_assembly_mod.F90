@@ -384,9 +384,9 @@ contains
     do i_wait_assembly = 1, TOTAL_ASSEMBLY_WAIT_TIME_MS / SINGLE_ASSEMBLY_WAIT_TIME_MS
       if (this % is_line_full(line_id)) then
         data_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
-        print *, 'address = ', transfer(data_ptr, 1_8)
-        if (.not. data_heap % is_valid_block(data_ptr)) print *, 'ERROR: INVALID BLOCK!!!'
-        if (.not. data_heap % check()) print *, 'ERROR: HEAP NOT OK'
+        ! print *, 'address = ', transfer(data_ptr, 1_8)
+        ! if (.not. data_heap % is_valid_block(data_ptr)) print *, 'ERROR: INVALID BLOCK!!!'
+        ! if (.not. data_heap % check()) print *, 'ERROR: HEAP NOT OK'
         return
       end if
       call sleep_us(SINGLE_ASSEMBLY_WAIT_TIME_MS * 1000)
@@ -413,8 +413,8 @@ contains
       return
     end if
 
-    tmp = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
-    print *, 'address (2) = ', transfer(tmp, 1_8)
+    ! tmp = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
+    ! print *, 'address (2) = ', transfer(tmp, 1_8)
 
     call mutex % lock()
     success = data_heap % free(this % lines(line_id) % data_offset)

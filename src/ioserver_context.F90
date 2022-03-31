@@ -428,19 +428,13 @@ function get_detailed_pe_name(context) result(detailed_name)
 end function get_detailed_pe_name
 
 !> Open a stream where the model can write data
-!> \return A stream object that is already open and can be written to
 subroutine open_stream_model(context, new_stream)
   implicit none
-  class(ioserver_context),     intent(inout) :: context
-  type(model_stream), pointer, intent(inout) :: new_stream
+  class(ioserver_context),     intent(inout) :: context     !< io-server context instance
+  type(model_stream), pointer, intent(out)   :: new_stream  !< A pointer to a newly-opened stream. NULL() if there was an error
 
   integer :: i_stream
   type(model_stream), pointer :: tmp_stream
-
-
-  if (associated(new_stream)) then
-    if (new_stream % is_open()) return
-  end if
 
   nullify(new_stream)
 

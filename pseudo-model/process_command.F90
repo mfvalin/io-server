@@ -76,7 +76,7 @@ contains
 
 end module process_command_module
 
-subroutine process_command(command_data, stream_id)
+function process_command(command_data, stream_id) result(success)
   use iso_c_binding
   use jar_module
   use process_command_module
@@ -97,13 +97,16 @@ subroutine process_command(command_data, stream_id)
 
   success = JAR_GET_ITEM(command_data, header)
 
+  if (.not. success) return
+
   if (header % command_type == COMMAND_TYPE_OPEN_FILE) then
     print '(A, I5)', 'OPENING FILE for stream ', stream_id
 
     stream_rank = get_free_stream_rank(stream_id)
     if (stream_rank == -1) then
       print *, 'AAAAHHHHHH no more room left to open new files!!!'
-      error stop 1
+      success = .false.
+      return
     end if
 
     stream_ids(stream_rank) = stream_id
@@ -112,9 +115,8 @@ subroutine process_command(command_data, stream_id)
     num_char = header % size_bytes
     allocate(character(len=num_char) :: filename)
     success = JAR_GET_ITEM(command_data, filename)
-    print '(A, A)', ' OPENING FILE! File name = ', filename
 
-    open(newunit = file_units(stream_rank), file = filename, status = 'replace', form = 'unformatted')
+    if (success) open(newunit = file_units(stream_rank), file = filename, status = 'replace', form = 'unformatted')
 
     deallocate(filename)
 
@@ -123,23 +125,26 @@ subroutine process_command(command_data, stream_id)
     if (stream_rank > 0) then
       print '(A, I5)', 'CLOSING FILE! for stream ', stream_id
       close(file_units(stream_rank))
+      success = .true.
     else
       print *, 'ERROR: This stream had no open file!!!!'
-      error stop 1
+      success = .false.
+      return
     end if
 
   else if (header % command_type == COMMAND_TYPE_WRITE_DATA .or. header % command_type == COMMAND_TYPE_WRITE_DISPLAY_DATA) then
-    print *, 'WRITING DATA. Should not be doing it in this function!!!'
+    print *, 'ERROR: WRITING DATA. Should not be doing it in this function!!!'
+    success = .false.
 
   else
-    print *, 'AHHHH INVALID COMMAND TYPE'
-    error stop 1
+    print '(A, I12)', 'ERROR: AHHHH INVALID COMMAND TYPE ', header % command_type
+    success = .false.
 
   end if
 
-end subroutine process_command
+end function process_command
 
-subroutine process_data(data_c, command, stream_id)
+function process_data(data_c, command, stream_id) result(success)
   use iso_c_binding
   use jar_module
   use process_command_module
@@ -157,24 +162,33 @@ subroutine process_data(data_c, command, stream_id)
   integer :: stream_rank
   logical :: success
 
+  if (command % get_num_avail() <= 0) then
+    print *, 'ERROR: There is no command coming with the data!'
+    success = .false.
+    return
+  end if
+
   success = JAR_GET_ITEM(command, header)
 
-  print *, 'Processing data for stream ', stream_id, transfer(data_c, 1_8), command % get_top(), header % command_type
+  ! print *, 'Processing data for stream ', stream_id, transfer(data_c, 1_8), command % get_top(), header % command_type
   
   if (header % command_type == COMMAND_TYPE_WRITE_DATA .or. header % command_type == COMMAND_TYPE_WRITE_DISPLAY_DATA) then
     success = JAR_GET_ITEM(command, grid)
-    print *, 'Grid: ', grid % dims, grid % elem_size
+    ! print *, 'Grid: ', grid % dims, grid % elem_size
 
-    if (grid % elem_size .ne. 8) then
-      print *, 'ERROR: Can only handle grid elements of size 8 for now'
-      error stop 1
-    end if
+    if (.not. success) return
 
     if (header % command_type == COMMAND_TYPE_WRITE_DISPLAY_DATA) then
+      if (grid % elem_size .ne. 8) then
+        print *, 'ERROR: Can only handle grid elements of size 8 for now'
+        success = .false.
+        return
+      end if
+
       block
         integer(C_INT64_T), dimension(:, :, :, :, :), pointer :: grid_data_int8
         call c_f_pointer(data_c, grid_data_int8, grid % dims)
-        print '(A, /, (5I5))', 'Grid content: ', grid_data_int8
+        print '(A, /, (10I5))', 'Grid content: ', grid_data_int8
       end block
     end if
 
@@ -182,19 +196,25 @@ subroutine process_data(data_c, command, stream_id)
 
     if (stream_rank > 0) then
       grid_size_byte = grid % dims
-      grid_size_byte(1) = grid_size_byte(1) * 8
+      grid_size_byte(1) = grid_size_byte(1) * grid % elem_size
       call c_f_pointer(data_c, grid_data_byte, grid_size_byte)
       write(unit=file_units(stream_rank)) grid_data_byte
+    else
+      success = .false.
+      return
     end if
   
   else
     print *, 'ERROR: Unrecognized command type for processing data', header % command_type
-    error stop 1
+    success = .false.
+    return
 
   end if
   
   if (command % get_num_avail() > 0) then
     print *, 'ERROR: There is still data available in the command buffer', command % get_num_avail()
+    success = .false.
+    return
   end if
   
-end subroutine process_data
+end function process_data
