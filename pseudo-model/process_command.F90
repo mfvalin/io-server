@@ -35,7 +35,7 @@ module process_command_module
   end type command_header
 
   type, public, bind(C) :: model_grid
-    integer(C_INT), dimension(5) :: dims
+    integer(C_INT64_T), dimension(5) :: dims
     integer(C_INT) :: elem_size
   end type model_grid
 
