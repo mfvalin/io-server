@@ -51,7 +51,7 @@ test:gnu-9.3.0_job_regular_single_node:
       ORD_SOUMET_C: "${NUM_CPUS}"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: io-server-regular-single-node
-      ORD_SOUMET_M: "4G"
+      ORD_SOUMET_M: "16G"
       ORD_SOUMET_TMPFS: "1024M"
       MPI_COMMAND: "mpirun"
 
