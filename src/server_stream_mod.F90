@@ -44,7 +44,7 @@ module server_stream_module
   integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
   ! integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
 
-  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 50000 !< Size of the buffer used to send commands to the stream owner
+  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 500000 !< Size of the buffer used to send commands to the stream owner
 
   !> Derived type that handles a server stream in shared memory. This is used to reassemble grids that
   !> are transmitted through that stream. Any server process can contribute to the grids, but only the
