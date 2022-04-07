@@ -20,14 +20,14 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 ! ====================================================
 
-module io_timer_module
+module ioserver_timer_module
   use ISO_C_BINDING
   implicit none
   include 'io-server/timer.inc'
 
   private
   
-  type, public :: io_timer
+  type, public :: ioserver_timer
     private
       type(C_PTR) :: c_timer = C_NULL_PTR !< Pointer to the C struct containing the timer
     contains
@@ -36,7 +36,7 @@ module io_timer_module
       procedure :: start
       procedure :: stop
       procedure :: get_time_ms
-  end type io_timer
+  end type ioserver_timer
 
   public :: rdtscp, rdtsc
 
@@ -45,37 +45,37 @@ contains
   !> See IO_timer_create
   subroutine create(this)
     implicit none
-    class(io_timer), intent(inout) :: this
+    class(ioserver_timer), intent(inout) :: this
     this % c_timer = IO_timer_create()
   end subroutine create
 
   !> See IO_timer_delete
   subroutine delete(this)
     implicit none
-    class(io_timer), intent(inout) :: this
+    class(ioserver_timer), intent(inout) :: this
     call IO_timer_delete(this % c_timer)
   end subroutine delete
 
   !> See IO_timer_start
   subroutine start(this)
     implicit none
-    class(io_timer), intent(inout) :: this
+    class(ioserver_timer), intent(inout) :: this
     call IO_timer_start(this % c_timer)
   end subroutine start
 
   !> See IO_timer_stop
   subroutine stop(this)
     implicit none
-    class(io_timer), intent(inout) :: this
+    class(ioserver_timer), intent(inout) :: this
     call IO_timer_stop(this % c_timer)
   end subroutine stop
 
   !> See IO_time_ms
   function get_time_ms(this) result(time)
     implicit none
-    class(io_timer), intent(inout) :: this
+    class(ioserver_timer), intent(inout) :: this
     real(C_DOUBLE) :: time
     time = IO_time_ms(this % c_timer)
   end function get_time_ms
 
-end module io_timer_module
+end module ioserver_timer_module
