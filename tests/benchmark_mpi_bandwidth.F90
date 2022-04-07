@@ -150,7 +150,7 @@ contains
 
   function run_test(msg_comm, msg_size, msg_count, window, target_channel, num_channels, offset, msg_buffer, &
                     on_server, channel_buffer) result(gb_per_s)
-    use io_timer_module
+    use ioserver_timer_module
     implicit none
 
     integer, intent(in) :: msg_comm
@@ -165,7 +165,7 @@ contains
     real :: gb_per_s
 
     integer :: i, j, ierr
-    type(io_timer) :: timer
+    type(ioserver_timer) :: timer
     real(C_DOUBLE) :: total_time
     integer :: rank, size
     integer :: num_relays
@@ -297,7 +297,7 @@ end module mpi_bw_mod
 
 program mpi_bandwidth
   use mpi_bw_mod
-  use io_timer_module
+  use ioserver_timer_module
   use ISO_C_BINDING
   implicit none
 
@@ -314,7 +314,7 @@ program mpi_bandwidth
   integer(MPI_ADDRESS_KIND) :: offset, window_size
   integer, dimension(:), allocatable :: relay_buffer
 
-  ! type(io_timer) :: small_timer, medium_timer, large_timer
+  ! type(ioserver_timer) :: small_timer, medium_timer, large_timer
   ! real(C_DOUBLE) :: total_time
 
   integer, parameter :: NUM_MESSAGE_SIZES = 6
