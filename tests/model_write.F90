@@ -251,6 +251,15 @@ contains
 
     ! print *, 'Created local grid', local_grid % i0, local_grid % i0 + local_grid % ni
 
+    if (model_crs % rank == 0) then
+      print '(A, I7, A, I3)', 'Blocks:  ', block_width, 'x', block_height
+      print '(A, I7, A, I3)', 'Compute: ', compute_width, 'x', compute_height
+      print '(A, I3, A)', 'Using grids for ', model_crs % size, ' PEs'
+      print '(5I7, I2, I9, I9)', input_grid_4 % size, input_grid_4 % elem_size, product(input_grid_4 % size), product(local_grid % size)
+      print '(5I7, I2, I9, I9)', input_grid_8 % size, input_grid_8 % elem_size, product(input_grid_8 % size), product(local_grid % size)
+      print '(5I7, I2, I9, I9)', big_grid % size, big_grid % elem_size, product(big_grid % size), product(big_local_grid % size)
+    end if
+
     ! call sleep_us(5000)
     block
       type(model_grid) :: m_grid
@@ -410,6 +419,8 @@ contains
     integer :: i, j, k, l, m
     real(kind=8) :: expected, val
 
+    print '(A)', 'Checking written file'
+
     dims1(1) = block_width * num_compute_x
     dims1(2) = block_height * num_compute_y
 
@@ -568,7 +579,7 @@ program pseudomodelandserver
   end if
 
   if (.not. success) then
-    print *, 'ERROR while trying to run model_write'
+    print '(A)', 'ERROR while trying to run model_write'
     error stop 1
   end if
 

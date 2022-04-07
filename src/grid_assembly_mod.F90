@@ -58,6 +58,8 @@ module grid_assembly_module
 
     procedure, pass :: get_line_id_from_tag
 
+    procedure, pass :: print_overview
+
     procedure, pass :: is_line_full => grid_assembly_is_line_full
     procedure, pass :: get_line_id  => grid_assembly_get_line_id
     procedure, pass :: create_line  => grid_assembly_create_line
@@ -66,6 +68,31 @@ module grid_assembly_module
   end type
 
 contains
+
+  subroutine print_overview(this)
+    implicit none
+    class(grid_assembly), intent(in) :: this
+
+    integer :: i_line, num_lines
+
+    integer, dimension(MAX_ASSEMBLY_LINES) :: tags
+    integer(kind=8), dimension(MAX_ASSEMBLY_LINES) :: missing_data
+
+    missing_data(:) = -1
+    num_lines = 0
+    do i_line = 1, MAX_ASSEMBLY_LINES
+      tags(i_line) = this % lines(i_line) % tag
+      if (tags(i_line) > 0) then
+        num_lines = num_lines + 1
+        missing_data(i_line) = this % lines(i_line) % missing_data
+      end if
+    end do
+
+    print '(A, I3, A)', 'There are ', num_lines, ' grids currently being assembled, with tags '
+    print '(10I10)', tags
+    print '(A)', ' and missing data '
+    print '(10I10)', missing_data
+  end subroutine
 
   !> Retrieve the line id where the grid described by the given record is being assembled.
   !> If the grid's assembly has not started yet, this function can optionnally indicate the
@@ -134,7 +161,7 @@ contains
           line % global_grid  = record % global_grid
           line % missing_data = product(line % global_grid % size)
           line % tag          = record % tag ! Signal that the assembly line is ready to be used
-          ! print *, 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
+          ! print '(A, I3, I2, I10, I6)', 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
         end associate
       else
         ! print '(I2, A)', mutex % get_id(), ' ERROR (warning?). We have reached the maximum number of grids being assembled! Will not be able to insert data.'
@@ -391,6 +418,10 @@ contains
       end if
       call sleep_us(SINGLE_ASSEMBLY_WAIT_TIME_MS * 1000)
     end do
+
+    print '(A, F5.1, A, I6, A)', 'ERROR: Timeout after ', TOTAL_ASSEMBLY_WAIT_TIME_MS / 1000.0, 's while waiting for a grid with tag ', tag, ' to be assembled'
+    ! call this % print_overview()
+    ! print '(A, 5I6)', '       Grid ', this % lines(line_id) % global_grid % size
   end function get_completed_line_data
 
   function free_line(this, tag, data_heap, mutex) result(success)
@@ -402,8 +433,6 @@ contains
     logical :: success
     
     integer :: line_id
-
-    type(C_PTR) :: tmp
 
     success = .false.
 

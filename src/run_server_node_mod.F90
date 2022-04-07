@@ -104,7 +104,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
 
   ! Basic check on input params
   if (.not. params % is_on_server) then
-    print *, 'ERROR: Trying to launch the server node, but setting "is_on_server = .false."'
+    print '(A)', 'ERROR: Trying to launch the server node, but setting "is_on_server = .false."'
     return
   end if
 
@@ -112,7 +112,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   success = context % init(params)
 
   if (.not. success) then
-    print *, 'ERROR: Could not initialize IO-server context for server process!'
+    print '(A)', 'ERROR: Could not initialize IO-server context for server process!'
     return
   end if
 
@@ -129,12 +129,12 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   else if (context % is_grid_processor()) then
     success = grid_processor_fn(context)
   else
-    print *, 'ERROR: Server process is not of a known type.'
+    print '(A)', 'ERROR: Server process is not of a known type.'
     return
   end if
 
   if (.not. success) then
-    print *, 'ERROR: Running server process'
+    print '(A)', 'ERROR: Running server process'
     return
   end if
 
@@ -405,7 +405,7 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
-    ! print *, 'Got a SERVER_CMD message!'
+    ! if (context % debug_mode()) print '(A, I4)', 'Got a SERVER_CMD message! From model ', header % sender_global_rank
     call state % allocate_command_buffer(header % content_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
@@ -418,19 +418,20 @@ function receive_message(context, dcb, client_id, state) result(finished)
   !---------------------------------
   ! Stop receiving from this relay
   else if (header % command == MSG_COMMAND_RELAY_STOP) then
-    if (context % debug_mode()) print '(A, I3)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id
+    if (context % debug_mode()) print '(A, I3, I4)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id, header % relay_global_rank
     finished = .true.
 
   !------------------------------------
   ! Should not receive MODEL_STOP command, relays don't transmit these...
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
+    ! if (context % debug_mode()) print '(A, I4)', 'DEBUG: Got a MODEL STOP message from ', header % sender_global_rank
     ! Do nothing for that
-    ! print *, 'Got a MODEL STOP message', consumer_id
 
   !------------
   ! Big no-no
   else
     print *, 'ERROR: [server] Unhandled message type!', header % command
+    call print_message_header(header)
     error stop 1
   end if
 

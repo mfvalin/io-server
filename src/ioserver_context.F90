@@ -38,7 +38,7 @@ module ioserver_context_module
   public :: no_op_function_template, default_no_op
   public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
 
-  integer, parameter, public :: MAX_NUM_STREAMS   = 128 !< How many streams we can open within a single context
+  integer, parameter, public :: MAX_NUM_STREAMS   = 32  !< How many streams we can open within a single context
   integer, parameter         :: MAX_PES_PER_NODE  = 128 !< How many PEs per node we can manage
 
   !> Struct to hold information for PEs on a node (_shared memory addresses are valid for the corresponding PE only_)
@@ -852,7 +852,7 @@ subroutine finalize_server(this)
       stream => this % local_server_streams(i)
       if (stream % is_open()) then
         if (stream % is_owner()) then
-          print '(A, I4, A, A)', 'ERROR: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
+          print '(A, I4, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
         end if
       end if
     end do
@@ -1512,16 +1512,21 @@ function init_shared_mem(context) result(success)
 
     ! Initialize array of model streams
     if (context % is_model()) then
-      allocate(context % local_model_streams(MAX_NUM_STREAMS))
-      do i_stream = 1, MAX_NUM_STREAMS
-        context % local_model_streams(i_stream) = model_stream(       &
-                            context % global_rank,                    &
-                            i_stream,                                 &
-                            context % local_heap,                     &
-                            context % local_server_bound_cb,          &
-                            context % debug_mode(),                   &
-                            context % messenger)
-      end do
+      block
+        integer :: model_rank
+        allocate(context % local_model_streams(MAX_NUM_STREAMS))
+        call MPI_Comm_rank(context % model_comm, model_rank, ierr)
+        do i_stream = 1, MAX_NUM_STREAMS
+          context % local_model_streams(i_stream) = model_stream(       &
+                              context % global_rank,                    &
+                              model_rank,                               &
+                              i_stream,                                 &
+                              context % local_heap,                     &
+                              context % local_server_bound_cb,          &
+                              context % debug_mode(),                   &
+                              context % messenger)
+        end do
+      end block
     end if
 
   endif   ! (server process)

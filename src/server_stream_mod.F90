@@ -25,6 +25,7 @@ module server_stream_module
   use circular_buffer_module
   use grid_assembly_module
   use ioserver_message_module
+  use ioserver_timer_module
   use heap_module
   use process_command_internal_module
   use rpn_extra_module, only: sleep_us
@@ -74,8 +75,6 @@ module server_stream_module
     procedure, pass :: is_valid     => shared_server_stream_is_valid
     procedure, pass :: print        => shared_server_stream_print
     procedure, pass, private :: get_owner_id => shared_server_stream_get_owner_id
-
-    final :: shared_server_stream_finalize
 
   end type shared_server_stream
 
@@ -207,20 +206,6 @@ contains
     owner_id = this % owner_id
   end function shared_server_stream_get_owner_id
 
-  !> Check whether the stream is still open, print an error message if it is.
-  subroutine shared_server_stream_finalize(this)
-    implicit none
-    type(shared_server_stream), intent(inout) :: this
-
-    logical :: success
-    if (this % is_open()) then
-      success = .false.
-      print *, 'ERROR: Shared server stream is still open on finalize()'
-    else
-      success = .true.
-    end if
-  end subroutine shared_server_stream_finalize
-
   !> Print member values of this stream
   subroutine shared_server_stream_print(this)
     implicit none
@@ -345,6 +330,9 @@ contains
           block
             type(jar) :: command_content ! We want a new jar every time
             type(C_PTR) :: grid_data
+            type(ioserver_timer) :: timer
+
+            call timer % create()
 
             ! print *, 'Getting from command queue, size ', record % size_int8
             success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
@@ -363,12 +351,16 @@ contains
 
             else if (record % command_type == MSG_COMMAND_DATA) then
               ! First get a pointer to the assembled grid that comes with the command. Might have to wait a bit for it
+              call timer % start()
               grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(record % message_tag, this % data_heap)
+              call timer % stop()
               if (.not. c_associated(grid_data)) then
                 print '(A)', 'ERROR: Could not get completed line data!!!'
                 success = .false.
                 return 
               end if
+
+              ! print '(A, F8.3, A)', 'DEBUG: Waited ', timer % get_time_ms() / 1000.0, ' seconds for grid to be assembled'
 
               ! Then execute the command on that assembled grid
               success = process_data(grid_data, command_content, this % shared_instance % get_id())
@@ -376,6 +368,8 @@ contains
               ! Free the grid data
               success = this % shared_instance % partial_grid_data % free_line(record % message_tag, this % data_heap, this % mutex) .and. success
             end if
+
+            call timer % delete()
           end block
 
         else

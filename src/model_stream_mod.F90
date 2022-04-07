@@ -39,7 +39,8 @@ module model_stream_module
     integer               :: stream_rank = -1       !< Stream rank in fixed list of streams, for internal use
     integer               :: stream_id = -1         !< Unique stream ID, for internal use
     logical               :: debug = .false.        !< debug mode at the file level (is this even used?)
-    integer               :: global_rank = -1       !< Rank of the model PE that created this object
+    integer               :: global_rank = -1       !< Rank of the model PE that created this object, within the world communicator
+    integer               :: model_rank = -1        !< Rank of the model PE that created this object, within the model-only communicator
     type(heap)            :: local_heap             !< Access to the shared memory heap owned by this model PE
     type(circular_buffer) :: server_bound_cb        !< Access to the server-bound buffer owned by this model PE
     type(ioserver_messenger), pointer :: messenger => NULL() !< Messenger used to manage/synchronized data transmission to the server
@@ -65,9 +66,10 @@ module model_stream_module
 
 contains
 
-  function new_model_stream(global_rank, stream_rank, local_heap, server_bound_cb, debug_mode, messenger)
+  function new_model_stream(global_rank, model_rank, stream_rank, local_heap, server_bound_cb, debug_mode, messenger)
     implicit none
     integer,                intent(in)  :: global_rank
+    integer,                intent(in)  :: model_rank
     integer,                intent(in)  :: stream_rank
     type(heap),             intent(in)  :: local_heap
     type(circular_buffer),  intent(in)  :: server_bound_cb
@@ -81,6 +83,7 @@ contains
     end if
 
     new_model_stream % global_rank = global_rank
+    new_model_stream % model_rank  = model_rank
     new_model_stream % stream_rank = stream_rank
     new_model_stream % local_heap  = local_heap
     new_model_stream % server_bound_cb = server_bound_cb
