@@ -78,7 +78,7 @@ contains
     implicit none
     type(distributed_circular_buffer), intent(inout) :: dcb
     logical :: success
-    integer :: i
+    integer(C_INT64_T) :: i
 
     !------------------------
     call dcb % full_barrier()

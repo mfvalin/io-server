@@ -28,7 +28,7 @@ program circular_buffer_timeout
   use shared_mem_alloc_module
   implicit none
 
-  integer, parameter :: CONSUMER_RANK = 0
+  ! integer, parameter :: CONSUMER_RANK = 0
   integer, parameter :: PRODUCER_RANK = 1
   integer(MPI_ADDRESS_KIND), parameter :: CB_SIZE_BYTES = 1024
   integer(C_INT64_T), parameter :: TEST_VAL = 123454321
@@ -39,7 +39,7 @@ program circular_buffer_timeout
   logical :: success
   type(ioserver_timer) :: timer
 
-  integer :: i
+  integer(C_INT64_T) :: i
   integer(C_INT64_T) :: result
 
   call MPI_Init(ierr)
