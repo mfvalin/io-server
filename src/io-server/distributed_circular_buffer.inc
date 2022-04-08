@@ -137,24 +137,26 @@ import :: C_PTR, C_INT
 implicit none
 type(C_PTR), intent(in), value :: buffer
 end subroutine DCB_server_barrier
-function DCB_put_client(buffer, src_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_put_client')
+function DCB_put_client(buffer, src_data, num_bytes, operation, timeout_ms) result(status) BIND(C, name = 'DCB_put_client')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR),       intent(in), value :: buffer    !< Buffer where we want to insert data
-type(C_PTR),       intent(in), value :: src_data  !< Data to insert
-integer(C_SIZE_T), intent(in), value :: num_bytes !< How many data elements we want to insert
-integer(C_INT),    intent(in), value :: operation !< Whether to commit the transaction or wait
-integer(C_INT) :: status !< 0 if success, -1 if failure
+type(C_PTR),       intent(in), value :: buffer      !< Buffer where we want to insert data
+type(C_PTR),       intent(in), value :: src_data    !< Data to insert
+integer(C_SIZE_T), intent(in), value :: num_bytes   !< How many data elements we want to insert
+integer(C_INT),    intent(in), value :: operation   !< Whether to commit the transaction or wait
+integer(C_INT),    intent(in), value :: timeout_ms  !< How long (in ms) we should wait before declaring failure, forever if negative
+integer(C_INT) :: status !< CB_SUCCESS if success, a negative error code if failure
 end function DCB_put_client
-function DCB_get_server(buffer, buffer_id, dest_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_get_server')
+function DCB_get_server(buffer, buffer_id, dest_data, num_bytes, operation, timeout_ms) result(status) BIND(C, name = 'DCB_get_server')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
-type(C_PTR),       intent(in), value :: buffer    !< DCB from which we want to read
-integer(C_INT),    intent(in), value :: buffer_id !< Which buffer in the DCB we want to read from
-type(C_PTR),       intent(in), value :: dest_data !< Where to put the data from the buffer
-integer(C_SIZE_T), intent(in), value :: num_bytes !< How many bytes to read
-integer(C_INT),    intent(in), value :: operation !< Whether to actually extract, read or just peek at the data
-integer(C_INT) :: status
+type(C_PTR),       intent(in), value :: buffer      !< DCB from which we want to read
+integer(C_INT),    intent(in), value :: buffer_id   !< Which buffer in the DCB we want to read from
+type(C_PTR),       intent(in), value :: dest_data   !< Where to put the data from the buffer
+integer(C_SIZE_T), intent(in), value :: num_bytes   !< How many bytes to read
+integer(C_INT),    intent(in), value :: operation   !< Whether to actually extract, read or just peek at the data
+integer(C_INT),    intent(in), value :: timeout_ms  !< How long (in ms) to wait before declaring failure. Forever, if negative
+integer(C_INT) :: status  !< CB_SUCCESS on success, a negative error code on failure
 end function DCB_get_server
 function DCB_check_integrity(buffer, verbose) result(result) BIND(C, name = 'DCB_check_integrity')
 import :: C_PTR, C_INT

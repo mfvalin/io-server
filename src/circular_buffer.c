@@ -583,22 +583,24 @@ size_t CB_get_capacity_bytes(const circular_buffer_p buffer //!< [in] The buffer
 
 //F_StArT
 //   !> wait until at least num_bytes_wanted empty slots are available for inserting data<br>
-//   !> n = CB_wait_space_available_bytes(p, num_bytes_wanted)
-//   function CB_wait_space_available_bytes(p, num_bytes_wanted) result(n) BIND(C,name='CB_wait_space_available_bytes')
-//     import :: C_PTR, C_SIZE_T, C_INT64_t
+//   !> n = CB_wait_space_available_bytes(p, num_bytes_wanted, timeout_ms)
+//   function CB_wait_space_available_bytes(p, num_bytes_wanted, timeout_ms) result(n) BIND(C,name='CB_wait_space_available_bytes')
+//     import :: C_PTR, C_SIZE_T, C_INT64_T, C_INT
 //     implicit none
 //     type(C_PTR),       intent(IN), value :: p                 !< pointer to a circular buffer
 //     integer(C_SIZE_T), intent(IN), value :: num_bytes_wanted  !< needed number of available bytes
-//     integer(C_INT64_T) :: n                                   !< actual number of available bytes, -1 on error
+//     integer(C_INT),    intent(IN), value :: timeout_ms        !< How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
+//     integer(C_INT64_T) :: n                                   !< actual number of available bytes, a negative error code on error
 //   end function CB_wait_space_available_bytes
 //F_EnD
 //C_StArT
 //! wait until at least num_bytes_wanted empty slots are available for inserting data
-//! <br> = CB_wait_space_available_bytes(p, num_bytes)
+//! <br> = CB_wait_space_available_bytes(p, num_bytes, timeout_ms)
 //! @return actual number of bytes available, a negative error code on error
 int64_t CB_wait_space_available_bytes(
     circular_buffer_p p,                //!< [in]  pointer to a circular buffer
-    size_t            num_bytes_wanted  //!< [in]  needed number of available bytes
+    size_t            num_bytes_wanted, //!< [in]  needed number of available bytes
+    int               timeout_ms        //!< [in]  How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
     )
 //C_EnD
 {
@@ -617,27 +619,33 @@ int64_t CB_wait_space_available_bytes(
   if (num_available + num_removable_data < num_bytes_wanted)
     return CB_ERROR_INSUFFICIENT_SPACE;
 
-  int    num_waits     = 0;
-  while (num_available < num_bytes_wanted) {
+  // Wait until there is enough space (up to the specified amount of time)
+  const size_t max_num_waits = timeout_ms < 0 ? (size_t)(-1) : (size_t)timeout_ms * 1000 / CB_SPACE_CHECK_DELAY_US;
+  size_t num_waits = 0;
+  for (num_waits = 0; num_waits < max_num_waits && num_available < num_bytes_wanted; ++num_waits) {
     sleep_us(CB_SPACE_CHECK_DELAY_US);
     num_available = CB_get_available_space_bytes(p);
-    num_waits++;
   }
 
+  // Update stats
   p->stats.total_write_wait_time_ms += num_waits * CB_SPACE_CHECK_DELAY_US / 1000.0;
 
-  return num_available;
+  // Check if there still isn't enough space
+  if (num_available < num_bytes_wanted) return CB_ERROR_TIMEOUT;
+
+  return (int64_t)num_available;
 }
 
 //F_StArT
 //   !> wait until at least num_bytes_wanted are available for extracting data<br>
-//   !> p = CB_wait_data_available_bytes(p, num_bytes_wanted)
-//   function CB_wait_data_available_bytes(p, num_bytes_wanted) result(n) BIND(C,name='CB_wait_data_available_bytes')
-//     import :: C_PTR, C_SIZE_T, C_INT64_T
+//   !> p = CB_wait_data_available_bytes(p, num_bytes_wanted, timeout_ms)
+//   function CB_wait_data_available_bytes(p, num_bytes_wanted, timeout_ms) result(n) BIND(C,name='CB_wait_data_available_bytes')
+//     import :: C_PTR, C_SIZE_T, C_INT64_T, C_INT
 //     implicit none
 //     type(C_PTR),       intent(IN), value :: p                !< pointer to a circular buffer
 //     integer(C_SIZE_T), intent(IN), value :: num_bytes_wanted !< needed number of available bytes
-//     integer(C_INT64_T) :: n                                  !< actual number of bytes available, -1 if error
+//     integer(C_INT),    intent(IN), value :: timeout_ms       !< How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
+//     integer(C_INT64_T) :: n                                  !< actual number of bytes available, a negative error code if error
 //   end function CB_wait_data_available_bytes
 //F_EnD
 //C_StArT
@@ -646,7 +654,8 @@ int64_t CB_wait_space_available_bytes(
 //! @return actual number of bytes available, a negative error code if error
 int64_t CB_wait_data_available_bytes(
     circular_buffer_p p,                //!< [in] pointer to a circular buffer
-    size_t            num_bytes_wanted  //!< [in] needed number of available bytes
+    size_t            num_bytes_wanted, //!< [in] needed number of available bytes
+    int               timeout_ms        //!< [in] How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
     )
 //C_EnD
 {
@@ -657,29 +666,35 @@ int64_t CB_wait_data_available_bytes(
   if (num_bytes_wanted > p->m.capacity_byte)
     return CB_ERROR_INSUFFICIENT_SPACE;
 
+  // Wait until data becomes available (up until the specified amount of time)
+  const size_t max_num_waits = timeout_ms < 0 ? (size_t)(-1) : (size_t)timeout_ms * 1000 / CB_DATA_CHECK_DELAY_US;
   size_t num_available = CB_get_available_data_bytes(p);
-  int    num_waits     = 0;
-  while (num_available < num_bytes_wanted) {
+  size_t num_waits = 0;
+  for (num_waits = 0; num_waits < max_num_waits && num_available < num_bytes_wanted; ++num_waits) {
     sleep_us(CB_DATA_CHECK_DELAY_US);
     num_available = CB_get_available_data_bytes(p);
-    num_waits++;
   }
 
+  // Update stats
   p->stats.total_read_wait_time_ms += num_waits * CB_DATA_CHECK_DELAY_US / 1000.0;
 
-  return num_available;
+  // Check whether there still isn't enough data
+  if (num_available < num_bytes_wanted) return CB_ERROR_TIMEOUT;
+
+  return (int64_t)num_available;
 }
 
 //F_StArT
 //   !> wait until num_bytes are available then extract them into dst<br>
 //   !> CB_get(p, dest, num_bytes, operation)
-//   function CB_get(p, dest, num_bytes, operation) result(status) BIND(C, name='CB_get')
+//   function CB_get(p, dest, num_bytes, operation, timeout_ms) result(status) BIND(C, name='CB_get')
 //     import :: C_PTR, C_INT, C_SIZE_T
 //     implicit none
 //     type(C_PTR),       intent(IN), value :: p             !< pointer to a circular buffer
 //     integer(C_SIZE_T), intent(IN), value :: num_bytes     !< number of bytes to extract
 //     type(C_PTR),       intent(IN), value :: dest          !< destination array to receive extracted data
 //     integer(C_INT),    intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
+//     integer(C_INT),    intent(IN), value :: timeout_ms    !< How long to wait (in ms) before giving up and returning an error
 //     integer(C_INT) :: status                              !< 0 if success, -1 if error
 //   end function CB_get
 //F_EnD
@@ -688,17 +703,18 @@ int64_t CB_wait_data_available_bytes(
 //! <br> = CB_get(p, dest, num_bytes)
 //! @return CB_SUCCESS on success, a negative error code on error
 int CB_get(
-    circular_buffer_p buffer,    //!< [in]  Pointer to a circular buffer
-    void*             dest,      //!< [out] Destination array for data extraction
-    size_t            num_bytes, //!< [in]  Number of #data_element data items to extract
-    int operation                //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
+    circular_buffer_p buffer,     //!< [in]  Pointer to a circular buffer
+    void*             dest,       //!< [out] Destination array for data extraction
+    size_t            num_bytes,  //!< [in]  Number of #data_element data items to extract
+    int               operation,  //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
+    int               timeout_ms  //!< [in]  How long to wait (in ms) before giving up and returning an error
     )
 //C_EnD
 {
   io_timer_t timer = {0, 0};
   IO_timer_start(&timer);
 
-  const int64_t num_available = CB_wait_data_available_bytes(buffer, num_bytes);
+  const int64_t num_available = CB_wait_data_available_bytes(buffer, num_bytes, timeout_ms);
   if (num_available < 0)
     return num_available;
 
@@ -756,13 +772,14 @@ int CB_get(
 //F_StArT
 //   !> wait until num_bytes are available then insert from src array<br>
 //   !> n = CB_put(p, src, num_bytes, commit_transaction)
-//   function CB_put(p, src, num_bytes, commit_transaction, thread_safe) result(status) BIND(C,name='CB_put')
+//   function CB_put(p, src, num_bytes, commit_transaction, timeout_ms, thread_safe) result(status) BIND(C,name='CB_put')
 //     import :: C_PTR, C_INT, C_SIZE_T
 //     implicit none
 //     type(C_PTR),       intent(IN), value :: p                  !< pointer to a circular buffer
 //     integer(C_SIZE_T), intent(IN), value :: num_bytes          !< number of bytes to insert from src
 //     type(C_PTR),       intent(IN), value :: src                !< source array for data insertion
 //     integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+//     integer(C_INT),    intent(IN), value :: timeout_ms         !< How long to wait (in ms) before giving up and returning an error
 //     integer(C_INT),    intent(IN), value :: thread_safe        !< Whether to perform the operation in a thread-safe manner (when == 1)
 //     integer(C_INT) :: status                                   !< 0 if success, -1 if failure
 //   end function CB_put
@@ -776,6 +793,7 @@ int CB_put(
     void*             src,       //!< [in] Source array for data insertion
     size_t            num_bytes, //!< [in] Number of bytes to insert
     int operation,    //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
+    int timeout_ms,   //!< [in] How long to wait (in ms) before giving up and returning an error
     int thread_safe   //!< [in] If 1, perform operation in a thread-safe way
     )
 //C_EnD
@@ -790,7 +808,7 @@ int CB_put(
 
   if (thread_safe == 1) acquire_lock(&buffer->m.lock);
 
-  const int64_t num_available = CB_wait_space_available_bytes(buffer, num_bytes);
+  const int64_t num_available = CB_wait_space_available_bytes(buffer, num_bytes, timeout_ms);
   if (num_available < 0) {
     if (thread_safe == 1) release_lock(&buffer->m.lock);
     return num_available;

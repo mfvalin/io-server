@@ -29,6 +29,8 @@
 #define DCB_INVALID_CAPACITY_val    -60
 #define DCB_INVALID_RANK_val        -61
 #define DCB_INVALID_INSTANCE_val    -62
+#define DCB_WRONG_CALLER_ROLE_val   -63
+#define DCB_INVALID_BUFFER_ID_val   -64
 
 #ifndef IN_FORTRAN_CODE
 enum
@@ -64,6 +66,8 @@ enum
   DCB_ERROR_INVALID_CAPACITY    = DCB_INVALID_CAPACITY_val,
   DCB_ERROR_INVALID_RANK        = DCB_INVALID_RANK_val,
   DCB_ERROR_INVALID_INSTANCE    = DCB_INVALID_INSTANCE_val,
+  DCB_ERROR_WRONG_CALLER_ROLE   = DCB_WRONG_CALLER_ROLE_val,
+  DCB_ERROR_INVALID_BUFFER_ID   = DCB_INVALID_BUFFER_ID_val,
 };
 
 #else
@@ -97,6 +101,8 @@ enum
         integer(C_INT), parameter :: DCB_ERROR_INVALID_CAPACITY    = DCB_INVALID_CAPACITY_val
         integer(C_INT), parameter :: DCB_ERROR_INVALID_RANK        = DCB_INVALID_RANK_val
         integer(C_INT), parameter :: DCB_ERROR_INVALID_INSTANCE    = DCB_INVALID_INSTANCE_val
+        integer(C_INT), parameter :: DCB_ERROR_WRONG_CALLER_ROLE   = DCB_WRONG_CALLER_ROLE_val
+        integer(C_INT), parameter :: DCB_ERROR_INVALID_BUFFER_ID   = DCB_INVALID_BUFFER_ID_val
 #endif
 
 #ifndef IN_FORTRAN_CODE
@@ -127,8 +133,11 @@ integer, parameter :: CB_DATA_ELEMENT_KIND = CB_KIND_INTEGER_8
 #undef CB_INSUFFICIENT_SPACE_val
 #undef CB_TIMEOUT_val             
 #undef CB_NOT_ALLOWED_val
+
 #undef DCB_INVALID_CAPACITY_val
 #undef DCB_INVALID_RANK_val
 #undef DCB_INVALID_INSTANCE_val
+#undef DCB_WRONG_CALLER_ROLE_val
+#undef DCB_INVALID_BUFFER_ID_val
 
 #endif /* IO_SERVER_CB_DATA_H_ */

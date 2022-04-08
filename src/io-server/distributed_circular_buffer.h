@@ -238,7 +238,8 @@ int DCB_put_client(
     distributed_circular_buffer_p buffer,    //!< [in,out] Distributed buffer in which we want to put data
     void* const                   src_data,  //!< [in] Pointer to the data we want to insert
     const size_t                  num_bytes, //!< [in] How many bytes we want to insert
-    const int                     operation  //!< [in] What operation to perform (whether to commit the transaction)
+    const int                     operation, //!< [in] What operation to perform (whether to commit the transaction)
+    const int                     timeout_ms //!< [in] How long (in ms) we should wait before declaring failure
 );
 //! Read data from the specified buffer. This operation does not perform any MPI communication.
 //! 
@@ -248,13 +249,14 @@ int DCB_put_client(
 //!
 //! _Can only be called from a server-bound server process._
 //!
-//! @return 0 on success, -1 on error
+//! @return CB_SUCCESS on success, a negative error code on error
 int DCB_get_server(
     distributed_circular_buffer_p buffer,    //!< [in,out] DCB from which we want to read
     const int                     buffer_id, //!< [in] Specific buffer in the DCB
     void*                         dest_data, //!< [in] Where to put the data from the buffer
     const size_t                  num_bytes, //!< [in] How many bytes to read
-    const int                     operation  //!< [in] What operation to perform: extract, read or just peek
+    const int                     operation, //!< [in] What operation to perform: extract, read or just peek
+    const int                     timeout_ms //!< [in] How long (in ms) to wait before declaring failure. Forever, if negative
 );
 
 #endif // IO_SERVER_distributed_circular_buffer_GEN_H

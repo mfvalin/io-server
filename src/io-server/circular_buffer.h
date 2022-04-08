@@ -324,27 +324,30 @@ size_t CB_get_available_data_bytes(const circular_buffer_p buffer //!< [in] The 
 size_t CB_get_capacity_bytes(const circular_buffer_p buffer //!< [in] The buffer we want to query
 );
 //! wait until at least num_bytes_wanted empty slots are available for inserting data
-//! <br> = CB_wait_space_available_bytes(p, num_bytes)
+//! <br> = CB_wait_space_available_bytes(p, num_bytes, timeout_ms)
 //! @return actual number of bytes available, a negative error code on error
 int64_t CB_wait_space_available_bytes(
     circular_buffer_p p,                //!< [in]  pointer to a circular buffer
-    size_t            num_bytes_wanted  //!< [in]  needed number of available bytes
+    size_t            num_bytes_wanted, //!< [in]  needed number of available bytes
+    int               timeout_ms        //!< [in]  How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
 );
 //! wait until at least num_bytes_wanted are available for extracting data
 //! <br> = CB_wait_data_available_bytes(p, num_bytes_wanted)
 //! @return actual number of bytes available, a negative error code if error
 int64_t CB_wait_data_available_bytes(
     circular_buffer_p p,                //!< [in] pointer to a circular buffer
-    size_t            num_bytes_wanted  //!< [in] needed number of available bytes
+    size_t            num_bytes_wanted, //!< [in] needed number of available bytes
+    int               timeout_ms        //!< [in] How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
 );
 //! wait until num_bytes are available then extract them into dst
 //! <br> = CB_get(p, dest, num_bytes)
 //! @return CB_SUCCESS on success, a negative error code on error
 int CB_get(
-    circular_buffer_p buffer,    //!< [in]  Pointer to a circular buffer
-    void*             dest,      //!< [out] Destination array for data extraction
-    size_t            num_bytes, //!< [in]  Number of #data_element data items to extract
-    int operation                //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
+    circular_buffer_p buffer,     //!< [in]  Pointer to a circular buffer
+    void*             dest,       //!< [out] Destination array for data extraction
+    size_t            num_bytes,  //!< [in]  Number of #data_element data items to extract
+    int               operation,  //!< [in]  Whether to update the buffer, do a partial read, or simply peek at the next values
+    int               timeout_ms  //!< [in]  How long to wait (in ms) before giving up and returning an error
 );
 //! wait until num_bytes are available then insert from src array
 //! <br> = CB_put(p, src, num_bytes, commit_transaction)
@@ -354,6 +357,7 @@ int CB_put(
     void*             src,       //!< [in] Source array for data insertion
     size_t            num_bytes, //!< [in] Number of bytes to insert
     int operation,    //!< [in] Whether to update the IN pointer so that the newly-inserted data can be read right away
+    int timeout_ms,   //!< [in] How long to wait (in ms) before giving up and returning an error
     int thread_safe   //!< [in] If 1, perform operation in a thread-safe way
 );
 int CB_check_integrity(

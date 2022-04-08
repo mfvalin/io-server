@@ -60,18 +60,18 @@ void consumer_process(distributed_circular_buffer_p dcb)
             peeked[j] = '\0';
 
         // Check read of a partial element (that it copies exactly the number of bytes asked)
-        result = DCB_get_server(dcb, 0, peeked, i, CB_PEEK);
+        result = DCB_get_server(dcb, 0, peeked, i, CB_PEEK, -1);
         if (result != 0) exit(-1);
         check_msg_length(peeked, i);
 
         // Peek exact message size
-        result = DCB_get_server(dcb, 0, peeked, NUM_CHARS - i, CB_PEEK);
+        result = DCB_get_server(dcb, 0, peeked, NUM_CHARS - i, CB_PEEK, -1);
         if (result != 0) exit(-1);
         check_msg_length(peeked, NUM_CHARS - i - 1);
 
         // Extract message, rounding the number of bytes up to the size of an element (this should NOT affect the next message)
         const size_t round_num = ((NUM_CHARS - i + sizeof(data_element) - 1) / sizeof(data_element)) * sizeof(data_element);
-        result = DCB_get_server(dcb, 0, message, round_num, CB_COMMIT);
+        result = DCB_get_server(dcb, 0, message, round_num, CB_COMMIT, -1);
         if (result != 0) exit(-1);
         printf("received: %s (len = %ld)\n", message, strlen(message));
         check_msg_length(message, NUM_CHARS - i - 1);
@@ -100,7 +100,7 @@ void producer_process(distributed_circular_buffer_p dcb)
     {
         const size_t count = NUM_CHARS - i;
 
-        const int result = DCB_put_client(dcb, message + i, count, CB_COMMIT);
+        const int result = DCB_put_client(dcb, message + i, count, CB_COMMIT, -1);
         if (result < 0) exit(-1);
 
         total_sent += (count + sizeof(data_element) - 1) / sizeof(data_element) * sizeof(data_element); 

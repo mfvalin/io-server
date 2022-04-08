@@ -671,34 +671,47 @@ static inline size_t get_available_space_from_remote_bytes(
 //! Otherwise, copy metadata from the consumer process and check, until there is enough space.
 //! _Can only be called from a server-bound client._
 //! @return The number of available elements according to the latest copy of the header. If there was not enough
-//! initially, that copy is updated. If there is an error, returns -1.
+//! initially, that copy is updated. If there is an error, returns a negative error code.
 static int64_t DCB_wait_space_available_client(
-    distributed_circular_buffer_p buffer,             //!< [in] Pointer to the distributed buffer we're waiting for
-    const size_t                  num_requested_bytes //!< [in] Needed number of available bytes
+    distributed_circular_buffer_p buffer,               //!< [in] Pointer to the distributed buffer we're waiting for
+    const size_t                  num_requested_bytes,  //!< [in] Needed number of available bytes
+    const int                     timeout_ms            //!< [in] How long (in ms) to wait before declaring failure, (almost) forever if negative
 ) {
   // Function inputs and buffer consistency checks
-  if (buffer == NULL || !is_server_bound_client(buffer))
-    return -1;
+  if (buffer == NULL)
+    return CB_ERROR_INVALID_POINTER;
+
+  if (!is_server_bound_client(buffer))
+    return DCB_ERROR_WRONG_CALLER_ROLE;
 
   const circular_buffer_instance_p instance = &buffer->local_header;
-  if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer) ||
-      check_instance_consistency(instance, 1) < 0)
-    return -1;
+  if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer))
+    return CB_ERROR_INSUFFICIENT_SPACE;
+  
+  const int status = check_instance_consistency(instance, 1);
+  if (status != CB_SUCCESS)
+    return status;
 
   // First check locally for space
   size_t num_available_bytes = get_available_space_bytes(instance);
   if (num_available_bytes >= num_requested_bytes)
     return num_available_bytes;
 
-  // Then get info from remote location, until there is enough space
-  int num_waits = 0;
-  while ((void)(num_available_bytes = get_available_space_from_remote_bytes(buffer)), num_available_bytes < num_requested_bytes) {
-    num_waits++;
+  // Then get info from remote location, until there is enough space (or time runs out)
+  size_t num_waits = 0;
+  const size_t max_num_waits = timeout_ms < 0 ? (size_t)(-1) : (size_t)timeout_ms * 1000 / DCB_SPACE_CHECK_DELAY_US;
+  num_available_bytes = get_available_space_from_remote_bytes(buffer);
+  for (num_waits = 0; num_waits < max_num_waits && num_available_bytes < num_requested_bytes; ++num_waits) {
     sleep_us(DCB_SPACE_CHECK_DELAY_US);
+    num_available_bytes = get_available_space_from_remote_bytes(buffer);
   }
 
   // Update stats
   buffer->local_header.circ_buffer.stats.total_write_wait_time_ms += num_waits * DCB_SPACE_CHECK_DELAY_US / 1000.0;
+
+  // Check whether there still isn't enough free space in the buffer
+  if (num_available_bytes < num_requested_bytes)
+    return CB_ERROR_TIMEOUT;
 
   return num_available_bytes;
 }
@@ -709,27 +722,40 @@ static int64_t DCB_wait_space_available_client(
 //! @return The number of data elements in the buffer, if everything goes smoothly, -1 otherwise.
 static int64_t DCB_wait_data_available_server(
     const distributed_circular_buffer_p buffer, //!< [in] Buffer we are querying
-    const int buffer_id,             //!< [in] Which specific circular buffer we want to query (there are multiple ones)
-    const size_t num_requested_bytes //!< [in] Number of bytes we want to read
+    const int    buffer_id,           //!< [in] Which specific circular buffer we want to query (there are multiple ones)
+    const size_t num_requested_bytes, //!< [in] Number of bytes we want to read
+    const int    timeout_ms           //!< [in] How long (in ms) to wait before declaring failure, (almost) forever if negative
 ) {
   // Function inputs and buffer consistency checks
-  if (buffer == NULL || !is_server_bound_server(buffer))
-    return -1;
+  if (buffer == NULL)
+    return CB_ERROR_INVALID_POINTER;
+  
+  if (!is_server_bound_server(buffer))
+    return DCB_ERROR_WRONG_CALLER_ROLE;
 
   const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE);
-  if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer) || check_instance_consistency(instance, 1) < 0)
-    return -1;
+  if (num_requested_bytes > CB_get_capacity_bytes(&instance->circ_buffer))
+    return CB_ERROR_INSUFFICIENT_SPACE;
+  
+  const int status = check_instance_consistency(instance, 1);
+  if (status != CB_SUCCESS)
+    return status;
 
   // Only check locally, waiting a bit between each check
-  size_t num_available_bytes = 0;
-  int    num_waits           = 0;
-  while ((void)(num_available_bytes = get_available_data_bytes(instance)), num_available_bytes < num_requested_bytes) {
-    num_waits++;
+  size_t num_available_bytes = get_available_data_bytes(instance);
+  size_t num_waits           = 0;
+  const size_t max_num_waits = timeout_ms < 0 ? (size_t)(-1) : (size_t)timeout_ms * 1000 / DCB_DATA_CHECK_DELAY_US;
+  for (num_waits = 0; num_waits < max_num_waits && num_available_bytes < num_requested_bytes; ++num_waits) {
     sleep_us(DCB_DATA_CHECK_DELAY_US);
+    num_available_bytes = get_available_data_bytes(instance);
   }
 
   // Update stats
   instance->circ_buffer.stats.total_read_wait_time_ms += num_waits * DCB_DATA_CHECK_DELAY_US / 1000.0;
+
+  // Check whether there still isn't enough data in the buffer
+  if (num_available_bytes < num_requested_bytes)
+    return CB_ERROR_TIMEOUT;
 
   return (int64_t)num_available_bytes;
 }
@@ -746,11 +772,11 @@ static inline int init_circular_buffer_instance(
   instance->capacity    = 0;
 
   if (CB_init_bytes(&instance->circ_buffer, num_elements * sizeof(data_element)) == NULL)
-    return -1;
+    return CB_ERROR;
 
   instance->capacity = CB_get_capacity_bytes(&instance->circ_buffer);
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 //! Print the collected stats for a single buffer instance
@@ -1354,9 +1380,13 @@ int64_t DCB_get_available_data(
     )
 //C_EnD
 {
-  if (buffer != NULL && is_server_bound_server(buffer) && buffer_id < buffer->control_metadata.num_server_bound_instances && buffer_id >= 0)
-    return (int64_t)get_available_data_bytes(get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE));
-  return -1;
+  if (buffer == NULL) return CB_ERROR_INVALID_POINTER;
+  if (!is_server_bound_server(buffer)) return DCB_ERROR_WRONG_CALLER_ROLE;
+  if (buffer_id < 0 || buffer_id >= buffer->control_metadata.num_server_bound_instances) return DCB_ERROR_INVALID_BUFFER_ID;
+
+  const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE);
+  if (instance == NULL) return CB_ERROR_INVALID_POINTER;
+  return (int64_t)get_available_data_bytes(instance);
 }
 
 //F_StArT
@@ -1376,13 +1406,12 @@ int64_t DCB_get_available_space(
     )
 //C_EnD
 {
-  if (is_server_bound_client(buffer)) {
-    if (update_from_remote == 1)
-      return get_available_space_from_remote_bytes(buffer);
-    else
-      return get_available_space_bytes(&buffer->local_header);
-  }
-  return -1;
+  if (!is_server_bound_client(buffer)) return DCB_ERROR_WRONG_CALLER_ROLE;
+
+  if (update_from_remote == 1)
+    return get_available_space_from_remote_bytes(buffer);
+  else
+    return get_available_space_bytes(&buffer->local_header);
 }
 
 //F_StArT
@@ -1458,9 +1487,8 @@ int64_t DCB_get_capacity_local(const distributed_circular_buffer_p buffer
 )
 //C_EnD
 {
-  if (is_client(buffer))
-    return buffer->local_header.capacity;
-  return -1;
+  if (!is_client(buffer)) return DCB_ERROR_WRONG_CALLER_ROLE;
+  return buffer->local_header.capacity;
 }
 
 //F_StArT
@@ -1475,11 +1503,19 @@ int64_t DCB_get_capacity_local(const distributed_circular_buffer_p buffer
 //! Must be called from a server process.
 //! @return Capacity of the specified buffer, or -1 if we are not a server process
 int64_t DCB_get_capacity_server(const distributed_circular_buffer_p buffer, int buffer_id) {
-  if (is_server_bound_server(buffer))
+
+  if (buffer_id < 0) return DCB_ERROR_INVALID_BUFFER_ID;
+
+  if (is_server_bound_server(buffer)) {
+    if (buffer_id >= buffer->control_metadata.num_server_bound_instances) return DCB_ERROR_INVALID_BUFFER_ID;
     return get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE)->capacity;
-  else if (is_client_bound_server(buffer))
+  }
+  else if (is_client_bound_server(buffer)) {
+    if (buffer_id >= buffer->control_metadata.num_client_bound_instances) return DCB_ERROR_INVALID_BUFFER_ID;
     return get_circular_buffer_instance(buffer, buffer_id, DCB_CLIENT_BOUND_TYPE)->capacity;
-  return -1;
+  }
+  
+  return DCB_ERROR_WRONG_CALLER_ROLE;
 }
 
 //F_StArT
@@ -1502,7 +1538,7 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [i
 //C_EnD
 {
   if (!is_channel(buffer))
-    return -1;
+    return DCB_ERROR_WRONG_CALLER_ROLE;
 
   volatile channel_signal_t* signal = buffer->channel_signals + buffer->channel_id;
 
@@ -1520,7 +1556,7 @@ int32_t DCB_channel_start_listening(distributed_circular_buffer_p buffer //!< [i
       MPI_Barrier(buffer->communicator);
       *signal = RSIG_NONE;
       break;
-    case RSIG_STOP: return 0;
+    case RSIG_STOP: return CB_SUCCESS;
     case RSIG_NONE: break;
     }
   }
@@ -1562,14 +1598,15 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 }
 
 //F_StArT
-//  function DCB_put_client(buffer, src_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_put_client')
+//  function DCB_put_client(buffer, src_data, num_bytes, operation, timeout_ms) result(status) BIND(C, name = 'DCB_put_client')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
-//    type(C_PTR),       intent(in), value :: buffer    !< Buffer where we want to insert data
-//    type(C_PTR),       intent(in), value :: src_data  !< Data to insert
-//    integer(C_SIZE_T), intent(in), value :: num_bytes !< How many data elements we want to insert
-//    integer(C_INT),    intent(in), value :: operation !< Whether to commit the transaction or wait
-//    integer(C_INT) :: status !< 0 if success, -1 if failure
+//    type(C_PTR),       intent(in), value :: buffer      !< Buffer where we want to insert data
+//    type(C_PTR),       intent(in), value :: src_data    !< Data to insert
+//    integer(C_SIZE_T), intent(in), value :: num_bytes   !< How many data elements we want to insert
+//    integer(C_INT),    intent(in), value :: operation   !< Whether to commit the transaction or wait
+//    integer(C_INT),    intent(in), value :: timeout_ms  !< How long (in ms) we should wait before declaring failure, forever if negative
+//    integer(C_INT) :: status !< CB_SUCCESS if success, a negative error code if failure
 //  end function DCB_put_client
 //F_EnD
 //! @brief Insert data into the given buffer, once there is enough space (will wait if there isn't enough initially)
@@ -1584,13 +1621,14 @@ void DCB_server_barrier(distributed_circular_buffer_p buffer) {
 //!
 //! _Can only be called from a server-bound client process._
 //!
-//! @return 0 if everything went smoothly, -1 otherwise
+//! @return CB_SUCCESS if everything went smoothly, a negative error code otherwise
 //C_StArT
 int DCB_put_client(
     distributed_circular_buffer_p buffer,    //!< [in,out] Distributed buffer in which we want to put data
     void* const                   src_data,  //!< [in] Pointer to the data we want to insert
     const size_t                  num_bytes, //!< [in] How many bytes we want to insert
-    const int                     operation  //!< [in] What operation to perform (whether to commit the transaction)
+    const int                     operation, //!< [in] What operation to perform (whether to commit the transaction)
+    const int                     timeout_ms //!< [in] How long (in ms) we should wait before declaring failure
     )
 //C_EnD
 {
@@ -1598,9 +1636,9 @@ int DCB_put_client(
   IO_timer_start(&timer);
 
   const size_t  num_elements = num_bytes_to_num_elem(num_bytes);
-  const int64_t num_spaces   = DCB_wait_space_available_client(buffer, num_elements * sizeof(data_element));
+  const int64_t num_spaces   = DCB_wait_space_available_client(buffer, num_elements * sizeof(data_element), timeout_ms);
   if (num_spaces < 0)
-    return -1;
+    return num_spaces;
 
   const int target_rank = buffer->local_header.target_rank;
 
@@ -1667,19 +1705,20 @@ int DCB_put_client(
 
   if (num_bytes != num_elements * sizeof(data_element)) buffer->local_header.circ_buffer.stats.num_fractional_writes++;
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 //F_StArT
-//  function DCB_get_server(buffer, buffer_id, dest_data, num_bytes, operation) result(status) BIND(C, name = 'DCB_get_server')
+//  function DCB_get_server(buffer, buffer_id, dest_data, num_bytes, operation, timeout_ms) result(status) BIND(C, name = 'DCB_get_server')
 //    import :: C_PTR, C_INT, C_SIZE_T
 //    implicit none
-//    type(C_PTR),       intent(in), value :: buffer    !< DCB from which we want to read
-//    integer(C_INT),    intent(in), value :: buffer_id !< Which buffer in the DCB we want to read from
-//    type(C_PTR),       intent(in), value :: dest_data !< Where to put the data from the buffer
-//    integer(C_SIZE_T), intent(in), value :: num_bytes !< How many bytes to read
-//    integer(C_INT),    intent(in), value :: operation !< Whether to actually extract, read or just peek at the data
-//    integer(C_INT) :: status
+//    type(C_PTR),       intent(in), value :: buffer      !< DCB from which we want to read
+//    integer(C_INT),    intent(in), value :: buffer_id   !< Which buffer in the DCB we want to read from
+//    type(C_PTR),       intent(in), value :: dest_data   !< Where to put the data from the buffer
+//    integer(C_SIZE_T), intent(in), value :: num_bytes   !< How many bytes to read
+//    integer(C_INT),    intent(in), value :: operation   !< Whether to actually extract, read or just peek at the data
+//    integer(C_INT),    intent(in), value :: timeout_ms  !< How long (in ms) to wait before declaring failure. Forever, if negative
+//    integer(C_INT) :: status  !< CB_SUCCESS on success, a negative error code on failure
 //  end function DCB_get_server
 //F_EnD
 //C_StArT
@@ -1691,13 +1730,14 @@ int DCB_put_client(
 //!
 //! _Can only be called from a server-bound server process._
 //!
-//! @return 0 on success, -1 on error
+//! @return CB_SUCCESS on success, a negative error code on error
 int DCB_get_server(
     distributed_circular_buffer_p buffer,    //!< [in,out] DCB from which we want to read
     const int                     buffer_id, //!< [in] Specific buffer in the DCB
     void*                         dest_data, //!< [in] Where to put the data from the buffer
     const size_t                  num_bytes, //!< [in] How many bytes to read
-    const int                     operation  //!< [in] What operation to perform: extract, read or just peek
+    const int                     operation, //!< [in] What operation to perform: extract, read or just peek
+    const int                     timeout_ms //!< [in] How long (in ms) to wait before declaring failure. Forever, if negative
     )
 //C_EnD
 {
@@ -1705,9 +1745,9 @@ int DCB_get_server(
   IO_timer_start(&timer);
 
   const size_t  num_elements       = num_bytes_to_num_elem(num_bytes);
-  const int64_t num_available_elem = DCB_wait_data_available_server(buffer, buffer_id, num_elements * sizeof(data_element));
+  const int64_t num_available_elem = DCB_wait_data_available_server(buffer, buffer_id, num_elements * sizeof(data_element), timeout_ms);
   if (num_available_elem < 0)
-    return -1;
+    return num_available_elem;
 
   circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, DCB_SERVER_BOUND_TYPE);
 
@@ -1763,12 +1803,12 @@ int DCB_get_server(
 
   if (num_bytes != num_elements * sizeof(data_element)) instance->circ_buffer.stats.num_fractional_reads++;
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 /**
  * @brief Check the integrity of a single CB instance within the given DCB _(only valid for server processes)_
- * @return 0 if the check is successful, a negative value otherwise
+ * @return CB_SUCCESS if the check is successful, a negative error code otherwise
  */
 int DCB_check_instance_integrity(
     const distributed_circular_buffer_p buffer,     //!< [in] The DCB we want to check
@@ -1776,10 +1816,7 @@ int DCB_check_instance_integrity(
     const int communication_type //!< [in] Whether we are looking for a server- or client-bound CB
 ) {
   const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, buffer_id, communication_type);
-  if (instance == NULL || check_instance_consistency(instance, 1) != 0)
-    return -1;
-
-  return 0;
+  return check_instance_consistency(instance, 1);
 }
 
 //F_StArT
@@ -1802,19 +1839,20 @@ int DCB_check_integrity(
 ) {
   if (buffer == NULL) {
     if (verbose) printf("Buffer pointer is NULL!\n");
-    return -1;
+    return CB_ERROR_INVALID_POINTER;
   }
 
   if ((buffer->server_bound_server_id >= 0) + (buffer->client_bound_server_id >= 0) + (buffer->channel_id >= 0) +
       (buffer->server_bound_client_id >= 0) + (buffer->client_bound_client_id >= 0) != 1) {
     if (verbose) printf("Inconsistency in DCB IDs\n");
-    return -1;
+    return DCB_ERROR_WRONG_CALLER_ROLE;
   }
 
   if (is_client(buffer)) {
-    if (check_instance_consistency(&buffer->local_header, verbose) != 0) {
+    const int status = check_instance_consistency(&buffer->local_header, verbose);
+    if (status != CB_SUCCESS) {
       if (verbose) printf("Local instance %d/%d failed integrity check!\n", buffer->server_bound_client_id, buffer->client_bound_client_id);
-      return -1;
+      return status;
     }
   }
   else if (is_server_bound_server(buffer)) {
@@ -1828,13 +1866,14 @@ int DCB_check_integrity(
 
         if ((void*)end_of_buffer != (void*)next_instance) {
           printf("AAAHHHHhhh end of CB %d (0x%.16lx) does not match with start of CB %d (0x%.16lx)\n", i, (uint64_t)end_of_buffer, i + 1, (uint64_t)next_instance);
-          return -1;
+          return CB_ERROR;
         }
       }
 
       // Check consistency of that particular buffer
-      if (DCB_check_instance_integrity(buffer, i, DCB_SERVER_BOUND_TYPE) != 0)
-        return -1;
+      const int status = DCB_check_instance_integrity(buffer, i, DCB_SERVER_BOUND_TYPE);
+      if (status != CB_SUCCESS)
+        return status;
     }
   }
   else if (is_client_bound_server(buffer)) {
@@ -1848,17 +1887,18 @@ int DCB_check_integrity(
 
         if ((void*)end_of_buffer != (void*)next_instance) {
           printf("AAAHHHHhhh end of CB %d (%ld) does not match with start of CB %d (%ld)\n", i, (uint64_t)end_of_buffer, i + 1, (uint64_t)next_instance);
-          return -1;
+          return CB_ERROR;
         }
       }
 
       // Check consistency of that particular buffer
-      if (DCB_check_instance_integrity(buffer, i, DCB_SERVER_BOUND_TYPE) != 0)
-        return -1;
+      const int status = DCB_check_instance_integrity(buffer, i, DCB_CLIENT_BOUND_TYPE);
+      if (status != CB_SUCCESS)
+        return status;
     }
   }
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 //! @}

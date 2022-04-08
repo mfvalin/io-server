@@ -47,6 +47,7 @@ program circular_buffer_concurrent
 
   if (size < 3) then
     print *, 'ERROR. This test must use at the very least 3 processes'
+    error stop 1
   end if
 
   cb_memory = RPN_allocate_shared(CB_SIZE_BYTES, MPI_COMM_WORLD)

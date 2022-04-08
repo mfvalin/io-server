@@ -201,7 +201,7 @@ contains
   !> \sa CB_get_available_data_bytes()
   pure function get_num_elements(this, type_id) result(num_elements)
     implicit none
-    class(circular_buffer), intent(IN) :: this     !< circular_buffer
+    class(circular_buffer), intent(IN) :: this     !< circular_buffer instance
     integer, intent(IN)                :: type_id  !< ID of the type of elements we want to fit
     integer(C_INT64_T) :: num_elements             !< Number of (full) data elements stored, -1 if error
 
@@ -218,7 +218,7 @@ contains
   !> \sa CB_get_capacity_bytes()
   function get_capacity(this, type_id) result(num_elements)
     implicit none
-    class(circular_buffer), intent(INOUT) :: this         !< The circular buffer
+    class(circular_buffer), intent(INOUT) :: this         !< The circular buffer instance
     integer,                intent(IN)    :: type_id      !< ID of the type of elements we want to fit
     integer(C_INT64_T)                    :: num_elements !< Max number of elements that can fit in the buffer
 
@@ -230,23 +230,27 @@ contains
   !> \sa CB_get()
 #define IgnoreTypeKindRank dest
 #define ExtraAttributes , target
-  function peek(this, dest, num_elements, type_id) result(success)
+  function peek(this, dest, num_elements, type_id, timeout_ms) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT)     :: this         !< The circular_buffer
+    class(circular_buffer), intent(INOUT)     :: this         !< The circular_buffer instance
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements !< How many elements we want to look at
     integer,                intent(IN), value :: type_id      !< ID of the type of elements we are looking for
+    integer, optional,      intent(IN)        :: timeout_ms   !< [optional] Number of milliseconds to wait before failing, (practically) infinity if absent
     logical :: success
 
     type(C_PTR)    :: temp
     integer        :: type_size
     integer(C_INT) :: status
+    integer(C_INT) :: timeout_c
 
     success   = .false.
     temp      = C_LOC(dest)
     type_size = get_type_size(type_id)
+    timeout_c = -1
+    if (present(timeout_ms)) timeout_c = timeout_ms
 
-    status = CB_get(this % p, temp, num_elements * type_size, CB_PEEK)
+    status = CB_get(this % p, temp, num_elements * type_size, CB_PEEK, timeout_c)
     if (status == 0) success = .true.
   end function peek
 
@@ -255,18 +259,18 @@ contains
   !> \sa CB_get()
 #define IgnoreTypeKindRank dest
 #define ExtraAttributes , target
-  function get(this, dest, num_elements, type_id, commit_transaction) result(success)
+  function get(this, dest, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer
+    class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer instance
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements       !< number of elements to extract
     integer,                intent(IN), value :: type_id            !< ID of the type of elements we're looking for
     logical,                intent(IN), value :: commit_transaction !< Whether to update the buffer (ie _extract_ the data)
+    integer, optional,      intent(IN)        :: timeout_ms         !< [optional] Number of milliseconds to wait before failing, (practically) infinity if absent
     logical :: success                                              !< Whether the operation was successful
 
     integer        :: type_size
-    integer(C_INT) :: operation
-    integer(C_INT) :: status
+    integer(C_INT) :: operation, status, timeout_c
     type(C_PTR)    :: temp
 
     success   = .false.
@@ -274,8 +278,10 @@ contains
     type_size = get_type_size(type_id)
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
+    timeout_c = -1
+    if (present(timeout_ms)) timeout_c = timeout_ms
 
-    status = CB_get(this % p, temp, num_elements * type_size, operation)
+    status = CB_get(this % p, temp, num_elements * type_size, operation, timeout_c)
     if (status == 0) success = .true.
   end function get
 
@@ -284,21 +290,22 @@ contains
   !> \sa CB_put()
 #define IgnoreTypeKindRank src
 #define ExtraAttributes , target
-  function put(this, src, num_elements, type_id, commit_transaction, thread_safe) result(success)
+  function put(this, src, num_elements, type_id, commit_transaction, timeout_ms, thread_safe) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer
+    class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer instance
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements       !< number of tokens to insert from src
     integer,                intent(IN), value :: type_id            !< ID of the type of elements we're looking for
     logical,                intent(IN), value :: commit_transaction !< Whether to make the inserted data immediately available
-    logical, optional,      intent(IN)        :: thread_safe        !< Whether to perform the operation in a thread-safe way (must *not* be passed by value!)
+    integer, optional,      intent(IN)        :: timeout_ms         !< [optional] Number of milliseconds to wait before failing, (practically) infinity if absent
+    logical, optional,      intent(IN)        :: thread_safe        !< [optional] Whether to perform the operation in a thread-safe way (.false. by default)
     logical :: success                                              !< Whether the operation was successful
 
     integer        :: type_size
     integer(C_INT) :: operation
     integer(C_INT) :: status
     type(C_PTR)    :: temp
-    integer(C_INT) :: thread_safe_val
+    integer(C_INT) :: timeout_c, thread_safe_val
 
     success   = .false.
     temp      = C_LOC(src)
@@ -306,12 +313,15 @@ contains
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
 
+    timeout_c = -1
+    if (present(timeout_ms)) timeout_c = timeout_ms
+
     thread_safe_val = 0
     if (present(thread_safe)) then
       if (thread_safe) thread_safe_val = 1
     end if
 
-    status = CB_put(this % p, temp, num_elements * type_size, operation, thread_safe_val)
+    status = CB_put(this % p, temp, num_elements * type_size, operation, timeout_c, thread_safe_val)
     if (status == 0) success = .true.
   end function put
 

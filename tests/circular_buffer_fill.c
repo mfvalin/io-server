@@ -95,17 +95,17 @@ int fill_test(int argc, char** argv) {
       return num_errors;
     }
 
-    const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT, 0);
+    const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT, -1, 0);
     if (expected_error == CB_SUCCESS) {
       printf("Wrong return value (%s) after trying to put more than max into the buffer!\n", CB_error_code_to_string(expected_error));
       num_errors++;
       return num_errors;
     }
 
-    const int status = CB_put(local_buffer, local_data, capacity, CB_COMMIT, 0);
-    if (status != 0)
+    const int status = CB_put(local_buffer, local_data, capacity, CB_COMMIT, -1, 0);
+    if (status != CB_SUCCESS)
     {
-      printf("ERROR put failed (capacity)\n");
+      printf("ERROR: put failed (capacity) with %s\n", CB_error_code_to_string(status));
       num_errors++;
       return num_errors;
     }
@@ -128,12 +128,12 @@ int fill_test(int argc, char** argv) {
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
         sleep_us(READ_DELAY_US);
-        CB_get(all_buffers[i], received_data, NUM_BUFFER_BYTES / 2, CB_COMMIT);
+        CB_get(all_buffers[i], received_data, NUM_BUFFER_BYTES / 2, CB_COMMIT, -1);
       }
     }
     else {
       // At first, buffer is full, so we can't put anything in it (hence the delay)
-      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*8, CB_COMMIT, 0);
+      CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*8, CB_COMMIT, -1, 0);
       IO_timer_stop(&put_time);
 
       const double t = IO_time_ms(&put_time);
@@ -162,7 +162,7 @@ int fill_test(int argc, char** argv) {
 
     if (my_rank == 0) {
       for (int i = 1; i < num_procs; ++i) {
-        CB_get(all_buffers[i], received_data, max_num_bytes - NUM_BUFFER_BYTES / 2 + 2*8, CB_COMMIT);
+        CB_get(all_buffers[i], received_data, max_num_bytes - NUM_BUFFER_BYTES / 2 + 2*8, CB_COMMIT, -1);
         IO_timer_stop(&read_time);
         // IO_timer_start(&read_time);
         const double t = IO_time_ms(&read_time);
@@ -175,7 +175,7 @@ int fill_test(int argc, char** argv) {
 
         //        printf("Read in %f ms\n", t);
 
-        const int expected_error = CB_get(all_buffers[i], received_data, capacity + 1, CB_COMMIT);
+        const int expected_error = CB_get(all_buffers[i], received_data, capacity + 1, CB_COMMIT, -1);
         if (expected_error == CB_SUCCESS) {
           printf("Wrong return code after trying to read more than max buffer size! (%s)\n", CB_error_code_to_string(expected_error));
           num_errors++;
@@ -185,7 +185,7 @@ int fill_test(int argc, char** argv) {
     }
     else {
       sleep_us(WRITE_DELAY_US * my_rank);
-      CB_put(local_buffer, local_data, 1*8, CB_COMMIT, 0);
+      CB_put(local_buffer, local_data, 1*8, CB_COMMIT, -1, 0);
     }
   }
 

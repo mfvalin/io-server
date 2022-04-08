@@ -139,18 +139,20 @@ contains
   !> Insert elements into a distributed circular buffer. See DCB_put_client
 #define IgnoreTypeKindRank src_data
 #define ExtraAttributes , target
-  function put_elems(this, src_data, num_elements, type_id, commit_transaction) result(success)
+  function put_elems(this, src_data, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to insert
     integer,           intent(in) :: type_id      !< Type of elements to insert
     logical,           intent(in) :: commit_transaction !< Whether to make the inserted elements immediately available to the server process
+    integer, optional, intent(in) :: timeout_ms   !< [optional] How long (in ms) to wait for free space before failing, (practically) infinity if not present
     logical :: success !< Whether the operation was successful
 
     type(C_PTR)    :: src_ptr
     integer(C_INT) :: status
     integer(C_INT) :: operation
+    integer(C_INT) :: timeout_c
     integer        :: type_size
 
     success   = .false.
@@ -158,16 +160,17 @@ contains
     type_size = get_type_size(type_id)
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
+    timeout_c = -1
+    if (present(timeout_ms)) timeout_c = timeout_ms
 
-    status = DCB_put_client(this % c_buffer, src_ptr, num_elements * type_size, operation)
-
-    if (status == 0) success = .true.
+    status = DCB_put_client(this % c_buffer, src_ptr, num_elements * type_size, operation, timeout_c)
+    success = (status == 0)
   end function put_elems
 
   !> Extract elements from a distributed circular buffer. See DCB_get_server
 #define IgnoreTypeKindRank dest_data
 #define ExtraAttributes , target
-  function get_elems(this, buffer_id, dest_data, num_elements, type_id, commit_transaction) result(success)
+  function get_elems(this, buffer_id, dest_data, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(C_INT), intent(in)                          :: buffer_id !< The individual buffer instance from which we want to read
@@ -175,10 +178,12 @@ contains
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to read
     integer,           intent(in) :: type_id      !< Type of elements to read
     logical,           intent(in) :: commit_transaction !< Whether to immediately free the space used by the read elements for the corresponding producer
+    integer, optional, intent(in) :: timeout_ms   !< [optional] How long (in ms) to wait for data before failing, (practically) infinity if not present
     logical :: success !< Whether the operation was successful
 
     type(C_PTR)    :: dest_ptr
     integer(C_INT) :: operation
+    integer(C_INT) :: timeout_c
     integer        :: type_size
     integer(C_INT) :: status
 
@@ -187,32 +192,38 @@ contains
     type_size = get_type_size(type_id)
     operation = CB_NO_COMMIT
     if (commit_transaction) operation = CB_COMMIT
+    timeout_c = -1
+    if (present(timeout_ms)) timeout_c = timeout_ms
 
-    status = DCB_get_server(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, operation)
-    if (status == 0) success = .true.
+    status = DCB_get_server(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, operation, timeout_c)
+    success = (status == 0)
   end function get_elems
 
   !> Read the next elements in a buffer instance, without removing them. See DCB_get_server
 #define IgnoreTypeKindRank dest_data
 #define ExtraAttributes , target
-  function peek_elems(this, buffer_id, dest_data, num_elements, type_id) result(success)
+  function peek_elems(this, buffer_id, dest_data, num_elements, type_id, timeout_ms) result(success)
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this
     integer(C_INT), intent(in)                          :: buffer_id !< The individual buffer instance from which we want to peek
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to look at
     integer,           intent(in) :: type_id      !< Type of elements we want to look at
+    integer, optional, intent(in) :: timeout_ms   !< [optional] How long (in ms) to wait for data before failing, (practically) infinity if not present
     logical :: success !< Whether the operation was successful
 
     type(C_PTR)    :: dest_ptr
     integer        :: type_size
     integer(C_INT) :: status
+    integer(C_INT) :: timeout_c
 
     success   = .false.
     dest_ptr  = C_LOC(dest_data)
     type_size = get_type_size(type_id)
+    timeout_c = -1
+    if (present(timeout_ms)) timeout_c = timeout_ms
 
-    status = DCB_get_server(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, CB_PEEK)
+    status = DCB_get_server(this % c_buffer, buffer_id, dest_ptr, num_elements * type_size, CB_PEEK, timeout_c)
     if (status == 0) success = .true.
   end function peek_elems
 

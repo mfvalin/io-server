@@ -185,43 +185,47 @@ type(C_PTR), intent(in), value :: buffer !< Pointer to the circular buffer we wa
 integer(C_SIZE_T) :: num_bytes           !< How many total elements can potentially be store in the buffer
 end function CB_get_capacity_bytes
 !> wait until at least num_bytes_wanted empty slots are available for inserting data<br>
-!> n = CB_wait_space_available_bytes(p, num_bytes_wanted)
-function CB_wait_space_available_bytes(p, num_bytes_wanted) result(n) BIND(C,name='CB_wait_space_available_bytes')
-import :: C_PTR, C_SIZE_T, C_INT64_t
+!> n = CB_wait_space_available_bytes(p, num_bytes_wanted, timeout_ms)
+function CB_wait_space_available_bytes(p, num_bytes_wanted, timeout_ms) result(n) BIND(C,name='CB_wait_space_available_bytes')
+import :: C_PTR, C_SIZE_T, C_INT64_T, C_INT
 implicit none
 type(C_PTR),       intent(IN), value :: p                 !< pointer to a circular buffer
 integer(C_SIZE_T), intent(IN), value :: num_bytes_wanted  !< needed number of available bytes
-integer(C_INT64_T) :: n                                   !< actual number of available bytes, -1 on error
+integer(C_INT),    intent(IN), value :: timeout_ms        !< How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
+integer(C_INT64_T) :: n                                   !< actual number of available bytes, a negative error code on error
 end function CB_wait_space_available_bytes
 !> wait until at least num_bytes_wanted are available for extracting data<br>
-!> p = CB_wait_data_available_bytes(p, num_bytes_wanted)
-function CB_wait_data_available_bytes(p, num_bytes_wanted) result(n) BIND(C,name='CB_wait_data_available_bytes')
-import :: C_PTR, C_SIZE_T, C_INT64_T
+!> p = CB_wait_data_available_bytes(p, num_bytes_wanted, timeout_ms)
+function CB_wait_data_available_bytes(p, num_bytes_wanted, timeout_ms) result(n) BIND(C,name='CB_wait_data_available_bytes')
+import :: C_PTR, C_SIZE_T, C_INT64_T, C_INT
 implicit none
 type(C_PTR),       intent(IN), value :: p                !< pointer to a circular buffer
 integer(C_SIZE_T), intent(IN), value :: num_bytes_wanted !< needed number of available bytes
-integer(C_INT64_T) :: n                                  !< actual number of bytes available, -1 if error
+integer(C_INT),    intent(IN), value :: timeout_ms       !< How long to wait (in ms) before giving up and returning an error. Wait (almost) forever if negative
+integer(C_INT64_T) :: n                                  !< actual number of bytes available, a negative error code if error
 end function CB_wait_data_available_bytes
 !> wait until num_bytes are available then extract them into dst<br>
 !> CB_get(p, dest, num_bytes, operation)
-function CB_get(p, dest, num_bytes, operation) result(status) BIND(C, name='CB_get')
+function CB_get(p, dest, num_bytes, operation, timeout_ms) result(status) BIND(C, name='CB_get')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
 type(C_PTR),       intent(IN), value :: p             !< pointer to a circular buffer
 integer(C_SIZE_T), intent(IN), value :: num_bytes     !< number of bytes to extract
 type(C_PTR),       intent(IN), value :: dest          !< destination array to receive extracted data
 integer(C_INT),    intent(IN), value :: operation     !< Whether to update the OUT index, partially read, or peek
+integer(C_INT),    intent(IN), value :: timeout_ms    !< How long to wait (in ms) before giving up and returning an error
 integer(C_INT) :: status                              !< 0 if success, -1 if error
 end function CB_get
 !> wait until num_bytes are available then insert from src array<br>
 !> n = CB_put(p, src, num_bytes, commit_transaction)
-function CB_put(p, src, num_bytes, commit_transaction, thread_safe) result(status) BIND(C,name='CB_put')
+function CB_put(p, src, num_bytes, commit_transaction, timeout_ms, thread_safe) result(status) BIND(C,name='CB_put')
 import :: C_PTR, C_INT, C_SIZE_T
 implicit none
 type(C_PTR),       intent(IN), value :: p                  !< pointer to a circular buffer
 integer(C_SIZE_T), intent(IN), value :: num_bytes          !< number of bytes to insert from src
 type(C_PTR),       intent(IN), value :: src                !< source array for data insertion
 integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make the inserted data available immediately (1) or not (0)
+integer(C_INT),    intent(IN), value :: timeout_ms         !< How long to wait (in ms) before giving up and returning an error
 integer(C_INT),    intent(IN), value :: thread_safe        !< Whether to perform the operation in a thread-safe manner (when == 1)
 integer(C_INT) :: status                                   !< 0 if success, -1 if failure
 end function CB_put

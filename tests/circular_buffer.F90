@@ -24,10 +24,11 @@ module test_circular_buffer_module
 contains
 
 subroutine shared_mem_test()
-
   use ISO_C_BINDING
   use ioserver_mpi
+
   use circular_buffer_module
+  use ioserver_timer_module
   implicit none
 
   integer(C_SIZE_T), parameter :: BUFFER_SIZE_BYTE = 128 * 4
@@ -54,6 +55,8 @@ subroutine shared_mem_test()
   integer :: target_proc, source_proc
   integer(C_INT64_T) :: capacity
 
+  type(ioserver_timer) :: timer
+
   integer :: ierr
 
   errors = 0
@@ -68,6 +71,8 @@ subroutine shared_mem_test()
     errors = 1
     error stop 1
   end if
+
+  call timer % create()
 
   target_proc = mod(my_rank + 1, num_procs)             ! next in the "ring"
   source_proc = mod(my_rank + num_procs - 1, num_procs) ! previous in the "ring"
@@ -242,6 +247,8 @@ subroutine shared_mem_test()
 
   success = buffer_a % delete()
   success = buffer_b % delete()
+
+  call timer % delete()
 
   call MPI_Win_free(window, ierr)
   call MPI_Finalize(ierr)
