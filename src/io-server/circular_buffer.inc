@@ -225,13 +225,18 @@ integer(C_INT),    intent(IN), value :: commit_transaction !< Whether to make th
 integer(C_INT),    intent(IN), value :: thread_safe        !< Whether to perform the operation in a thread-safe manner (when == 1)
 integer(C_INT) :: status                                   !< 0 if success, -1 if failure
 end function CB_put
-pure function CB_check_integrity(buffer, verbose) result(is_valid) BIND(C, name = 'CB_check_integrity')
+pure function CB_check_integrity(buffer) result(status) BIND(C, name = 'CB_check_integrity')
 import C_INT, C_PTR
 implicit none
 type(C_PTR),    intent(in), value :: buffer
-integer(C_INT), intent(in), value :: verbose
-integer(C_INT) :: is_valid
+integer(C_INT) :: status
 end function CB_check_integrity
+pure function CB_error_code_to_string(error_code) result(error_string) BIND(C, name = 'CB_error_code_to_string')
+import C_INT, C_PTR
+implicit none
+integer(C_INT), intent(in), value :: error_code
+type(C_PTR) :: error_string
+end function CB_error_code_to_string
 subroutine CB_print_stats(buffer, buffer_id, with_header) BIND(C, name = 'CB_print_stats')
 import C_INT, C_PTR
 implicit none

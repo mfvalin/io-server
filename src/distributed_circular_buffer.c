@@ -261,6 +261,7 @@ static inline size_t get_available_data_bytes(
   return CB_get_available_data_bytes(&buffer->circ_buffer);
 }
 
+//! @return CB_SUCCESS if everythin is fine, a negative error code if not
 static inline int check_instance_consistency(
     const circular_buffer_instance_p instance,  //!< Buffer to check
     const int verbose                           //!< Whether to print something when the check fails
@@ -268,34 +269,35 @@ static inline int check_instance_consistency(
 {
   if (instance == NULL) {
     if (verbose) printf("Invalid b/c NULL pointer\n");
-    return -1;
+    return CB_ERROR_INVALID_POINTER;
   }
 
   if (instance->capacity != CB_get_capacity_bytes(&instance->circ_buffer))
   {
     if (verbose) printf("Invalid b/c wrong instance capacity (%ld, but CB has %ld)\n", instance->capacity, CB_get_capacity_bytes(&instance->circ_buffer));
-    return -1;
+    return DCB_ERROR_INVALID_CAPACITY;
   }
 
   if (instance->target_rank < 0)
   {
     if (verbose) printf("Invalid rank\n");
-    return -1;
+    return DCB_ERROR_INVALID_RANK;
   }
 
   if (instance->id < 0)
   {
     if (verbose) printf("Invalid instance ID\n");
-    return -1;
+    return DCB_ERROR_INVALID_INSTANCE;
   }
 
-  if (CB_check_integrity(&instance->circ_buffer, verbose) < 0)
+  const int cb_status = CB_check_integrity(&instance->circ_buffer);
+  if (cb_status < 0)
   {
-    if (verbose) printf("Invalid b/c CB integrity check failed\n");
-    return -1;
+    if (verbose) printf("Invalid b/c CB integrity check failed: %s\n", CB_error_code_to_string(cb_status));
+    return cb_status;
   }
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 //! @}

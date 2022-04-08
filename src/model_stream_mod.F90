@@ -77,8 +77,8 @@ contains
     type(ioserver_messenger), pointer, intent(in) :: messenger
     type(model_stream) :: new_model_stream
 
-    if (.not. server_bound_cb % is_valid(.false.)) then
-      print *, 'Server-bound CB has not been initialized!'
+    if (.not. server_bound_cb % is_valid()) then
+      print '(A)', 'ERROR: Server-bound CB has not been initialized!'
       return
     end if
 
@@ -120,7 +120,7 @@ contains
     if (this % is_version_valid()) then
       is_valid = this % stream_rank >= 0                    .and. &
                  this % global_rank >= 0                    .and. &
-                 this % server_bound_cb % is_valid(.false.) .and. &
+                 this % server_bound_cb % is_valid()        .and. &
                  associated(this % messenger)
     end if
   end function is_valid
@@ -149,7 +149,7 @@ contains
 
     ! Check if we actually can send a command to this stream
     if (.not. this % is_open()) return
-    if (.not. this % server_bound_cb % is_valid(.true.)) return
+    if (.not. this % server_bound_cb % is_valid()) return
 
     ! Never forget to get a new message tag! (message only, not file)
     call this % messenger % bump_tag(.false.)

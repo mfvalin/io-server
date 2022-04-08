@@ -246,7 +246,7 @@ static const int CB_DATA_CHECK_DELAY_US = 10;
 //! Number of microseconds to wait between reads of the IN/OUT indices of a buffer when waiting for space to be freed
 static const int CB_SPACE_CHECK_DELAY_US = 10;
 
-int CB_check_integrity(const circular_buffer_p buffer, const int verbose);
+int CB_check_integrity(const circular_buffer_p buffer);
 
 //C_StArT
 int CB_get_elem_size(
@@ -465,7 +465,7 @@ int32_t CB_detach_shared(circular_buffer_p p //!< [in] pointer to a circular buf
 //C_EnD
 {
   if (p == NULL)
-    return -1;
+    return CB_ERROR;
   return shmdt(p); // detach from "shared memory segment" creeated by CB_create_shared
 }
 
@@ -595,24 +595,27 @@ size_t CB_get_capacity_bytes(const circular_buffer_p buffer //!< [in] The buffer
 //C_StArT
 //! wait until at least num_bytes_wanted empty slots are available for inserting data
 //! <br> = CB_wait_space_available_bytes(p, num_bytes)
-//! @return actual number of bytes available, -1 on error
+//! @return actual number of bytes available, a negative error code on error
 int64_t CB_wait_space_available_bytes(
     circular_buffer_p p,                //!< [in]  pointer to a circular buffer
     size_t            num_bytes_wanted  //!< [in]  needed number of available bytes
     )
 //C_EnD
 {
-  if (CB_check_integrity(p, 1) != 0)
-    return -1;
+  const int status = CB_check_integrity(p);
+  if (status != CB_SUCCESS)
+    return status;
 
+  // Check whether there is enough space in the entire CB
   if (num_bytes_wanted > p->m.capacity_byte)
-    return -1;
+    return CB_ERROR_INSUFFICIENT_SPACE;
 
   const size_t num_removable_data = CB_get_available_data_bytes(p);
   size_t num_available = CB_get_available_space_bytes(p);
 
+  // Check whether there is enough fillable space in the CB
   if (num_available + num_removable_data < num_bytes_wanted)
-    return -1; // We will never have the necessary space in these conditions
+    return CB_ERROR_INSUFFICIENT_SPACE;
 
   int    num_waits     = 0;
   while (num_available < num_bytes_wanted) {
@@ -640,18 +643,19 @@ int64_t CB_wait_space_available_bytes(
 //C_StArT
 //! wait until at least num_bytes_wanted are available for extracting data
 //! <br> = CB_wait_data_available_bytes(p, num_bytes_wanted)
-//! @return actual number of bytes available, -1 if error
+//! @return actual number of bytes available, a negative error code if error
 int64_t CB_wait_data_available_bytes(
     circular_buffer_p p,                //!< [in] pointer to a circular buffer
     size_t            num_bytes_wanted  //!< [in] needed number of available bytes
     )
 //C_EnD
 {
-  if (CB_check_integrity(p, 1) != 0)
-    return -1;
+  const int status = CB_check_integrity(p);
+  if (status != CB_SUCCESS)
+    return status;
 
   if (num_bytes_wanted > p->m.capacity_byte)
-    return -1;
+    return CB_ERROR_INSUFFICIENT_SPACE;
 
   size_t num_available = CB_get_available_data_bytes(p);
   int    num_waits     = 0;
@@ -682,7 +686,7 @@ int64_t CB_wait_data_available_bytes(
 //C_StArT
 //! wait until num_bytes are available then extract them into dst
 //! <br> = CB_get(p, dest, num_bytes)
-//! @return 0 on success, -1 on error
+//! @return CB_SUCCESS on success, a negative error code on error
 int CB_get(
     circular_buffer_p buffer,    //!< [in]  Pointer to a circular buffer
     void*             dest,      //!< [out] Destination array for data extraction
@@ -696,7 +700,7 @@ int CB_get(
 
   const int64_t num_available = CB_wait_data_available_bytes(buffer, num_bytes);
   if (num_available < 0)
-    return -1;
+    return num_available;
 
   // Update "max fill" metric
   if (buffer->stats.max_fill < (uint64_t)num_available)
@@ -746,7 +750,7 @@ int CB_get(
   // Only count fractional reads that won't be read again (so no CB_PEEK)
   if (num_bytes_1 != num_elements * sizeof(data_element) && operation != CB_PEEK) buffer->stats.num_fractional_reads++;
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 //F_StArT
@@ -766,7 +770,7 @@ int CB_get(
 //C_StArT
 //! wait until num_bytes are available then insert from src array
 //! <br> = CB_put(p, src, num_bytes, commit_transaction)
-//! @return 0 upon success, -1 upon error
+//! @return CB_SUCCESS upon success, a negative error code upon error
 int CB_put(
     circular_buffer_p buffer,    //!< [in] Pointer to a circular buffer
     void*             src,       //!< [in] Source array for data insertion
@@ -781,14 +785,15 @@ int CB_put(
 
   if (thread_safe == 1 && operation != CB_COMMIT) {
     printf("WARNING: Trying to put data in a CB in a thread safe way, but not committing the message. We don't allow that for now.\n");
-    return -1;
+    return CB_ERROR_NOT_ALLOWED;
   }
 
   if (thread_safe == 1) acquire_lock(&buffer->m.lock);
 
-  if (CB_wait_space_available_bytes(buffer, num_bytes) < 0) {
+  const int64_t num_available = CB_wait_space_available_bytes(buffer, num_bytes);
+  if (num_available < 0) {
     if (thread_safe == 1) release_lock(&buffer->m.lock);
-    return -1;
+    return num_available;
   }
 
   data_element*  data       = buffer->data;
@@ -830,74 +835,91 @@ int CB_put(
 
   if (thread_safe == 1) release_lock(&buffer->m.lock);
 
-  return 0;
+  return CB_SUCCESS;
 }
 
 //  F_StArT
-//    pure function CB_check_integrity(buffer, verbose) result(is_valid) BIND(C, name = 'CB_check_integrity')
+//    pure function CB_check_integrity(buffer) result(status) BIND(C, name = 'CB_check_integrity')
 //      import C_INT, C_PTR
 //      implicit none
 //      type(C_PTR),    intent(in), value :: buffer
-//      integer(C_INT), intent(in), value :: verbose
-//      integer(C_INT) :: is_valid
+//      integer(C_INT) :: status
 //    end function CB_check_integrity
 //  F_EnD
 /**
  * @brief Verify the header of the given buffer is self-consistent (correct version, first = 0, in/out within limits)
- * @return 0 if the Buffer is consistent, a negative number otherwise
+ * @return CB_SUCCESS if the Buffer is consistent, an error code otherwise
  */
 //  C_StArT
 int CB_check_integrity(
-    const circular_buffer_p buffer, //!< [in] The buffer we want to check
-    const int verbose               //!< [in] Whether to print a reason, when check fails
+    const circular_buffer_p buffer  //!< [in] The buffer we want to check
     )
 //  C_EnD
 {
   if (buffer == NULL) {
-    if (verbose) printf("Invalid b/c NULL pointer\n");
-    return -1;
+    return CB_ERROR_INVALID_POINTER;
   }
 
   if (buffer->m.version != FIOL_VERSION) {
-    if (verbose) printf("INVALID b/c wrong version (%ld, should be %d) %ld\n", buffer->m.version, FIOL_VERSION, (long)buffer);
-    // printf("crash %ld\n", ((circular_buffer_p)NULL)->m.first);
-    return -1;
+    return CB_ERROR_INVALID_VERSION;
   }
 
   if (buffer->m.first != 0) {
-    if (verbose) printf("INVALID b/c m.first is NOT 0 (%ld)\n", buffer->m.first);
-    return -1;
+    return CB_ERROR_INVALID_FIRST;
   }
 
   if (buffer->m.in[CB_FULL] < buffer->m.first || buffer->m.in[CB_FULL] >= buffer->m.limit) {
-    if (verbose) printf(
-        "INVALID b/c \"in\" full pointer is not between first and limit (%ld, limit = %ld)\n", buffer->m.in[CB_FULL],
-        buffer->m.version);
-    return -1;
+    return CB_ERROR_INVALID_FULL_IN;
   }
 
   if (buffer->m.out[CB_FULL] < buffer->m.first || buffer->m.out[CB_FULL] >= buffer->m.limit) {
-    if (verbose) printf(
-        "INVALID b/c \"out\" full pointer is not between first and limit (%ld, limit = %ld)\n", buffer->m.out[CB_FULL],
-        buffer->m.limit);
-    return -1;
+    return CB_ERROR_INVALID_FULL_OUT;
   }
 
   if (buffer->m.in[CB_PARTIAL] < buffer->m.first || buffer->m.in[CB_PARTIAL] >= buffer->m.limit) {
-    if (verbose) printf(
-        "INVALID b/c \"in\" partial pointer is not between first and limit (%ld, limit = %ld)\n",
-        buffer->m.in[CB_PARTIAL], buffer->m.version);
-    return -1;
+    return CB_ERROR_INVALID_PARTIAL_IN;
   }
 
   if (buffer->m.out[CB_PARTIAL] < buffer->m.first || buffer->m.out[CB_PARTIAL] >= buffer->m.limit) {
-    if (verbose) printf(
-        "INVALID b/c \"out\" partial pointer is not between first and limit (%ld, limit = %ld)\n",
-        buffer->m.out[CB_PARTIAL], buffer->m.limit);
-    return -1;
+    return CB_ERROR_INVALID_PARTIAL_OUT;
   }
 
-  return 0;
+  return CB_SUCCESS;
+}
+
+//  F_StArT
+//  pure function CB_error_code_to_string(error_code) result(error_string) BIND(C, name = 'CB_error_code_to_string')
+//    import C_INT, C_PTR
+//    implicit none
+//    integer(C_INT), intent(in), value :: error_code
+//    type(C_PTR) :: error_string
+//  end function CB_error_code_to_string
+//  F_EnD
+// C_StArT
+const char* CB_error_code_to_string(
+    const int error_code  //!< [in] The error code we want to translate into a string
+    )
+// C_EnD
+{
+  switch (error_code)
+  {
+  case CB_SUCCESS:                    return "CB_SUCCESS";
+  case CB_ERROR:                      return "CB_ERROR";
+  case CB_ERROR_INVALID_POINTER:      return "CB_ERROR_INVALID_POINTER";
+  case CB_ERROR_INVALID_VERSION:      return "CB_ERROR_INVALID_VERSION";
+  case CB_ERROR_INVALID_FIRST:        return "CB_ERROR_INVALID_FIRST";
+  case CB_ERROR_INVALID_FULL_IN:      return "CB_ERROR_INVALID_FULL_IN";
+  case CB_ERROR_INVALID_FULL_OUT:     return "CB_ERROR_INVALID_FULL_OUT";
+  case CB_ERROR_INVALID_PARTIAL_IN:   return "CB_ERROR_INVALID_PARTIAL_IN";
+  case CB_ERROR_INVALID_PARTIAL_OUT:  return "CB_ERROR_INVALID_PARTIAL_OUT";
+  case CB_ERROR_INSUFFICIENT_SPACE:   return "CB_ERROR_INSUFFICIENT_SPACE";
+  case CB_ERROR_TIMEOUT:              return "CB_ERROR_TIMEOUT";
+  case CB_ERROR_NOT_ALLOWED:          return "CB_ERROR_NOT_ALLOWED";
+  case DCB_ERROR_INVALID_CAPACITY:    return "DCB_ERROR_INVALID_CAPACITY";
+  case DCB_ERROR_INVALID_RANK:        return "DCB_ERROR_INVALID_RANK";
+  case DCB_ERROR_INVALID_INSTANCE:    return "DCB_ERROR_INVALID_INSTANCE";
+  default:                            return "[UNKNOWN CB ERROR CODE]";
+  }
 }
 
 //! Provide a string representation of a number in a human readable way (with the k, M or G suffix if needed)
@@ -946,8 +968,11 @@ void CB_print_stats(
     )
 //C_EnD
 {
-  if (CB_check_integrity(buffer, 0) < 0)
+  const int status = CB_check_integrity(buffer);
+  if (status != CB_SUCCESS) {
+    printf("ERROR: Cannot print CB because CB is not valid: %s\n", CB_error_code_to_string(status));
     return;
+  }
 
   const cb_stats_p stats = &buffer->stats;
 

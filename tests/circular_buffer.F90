@@ -93,8 +93,8 @@ subroutine shared_mem_test()
   call MPI_Barrier(MPI_COMM_WORLD, ierr)
   !--------------------------------------
 
-  if (.not. success .or. .not. buffer_a % is_valid(.false.) .or. .not. buffer_b % is_valid(.false.)) then
-    print *, 'Buffer initialisation failed ', buffer_a % is_valid(.true.), buffer_b % is_valid(.true.)
+  if (.not. success .or. .not. buffer_a % is_valid() .or. .not. buffer_b % is_valid()) then
+    print *, 'Buffer initialisation failed ', error_code_to_string(buffer_a % get_integrity_status()), error_code_to_string(buffer_b % get_integrity_status())
     errors = errors + 1
     error stop 1
   end if

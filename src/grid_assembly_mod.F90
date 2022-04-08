@@ -50,8 +50,7 @@ module grid_assembly_module
 
   contains
     private
-    procedure, pass, public :: put_data              => grid_assembly_put_data
-    procedure, pass, public :: flush_completed_grids => grid_assembly_flush_completed_grids
+    procedure, pass, public :: put_data => grid_assembly_put_data
     procedure, pass, public :: get_num_grids
     procedure, pass, public :: get_completed_line_data
     procedure, pass, public :: free_line
@@ -63,8 +62,6 @@ module grid_assembly_module
     procedure, pass :: is_line_full => grid_assembly_is_line_full
     procedure, pass :: get_line_id  => grid_assembly_get_line_id
     procedure, pass :: create_line  => grid_assembly_create_line
-    procedure, pass :: get_lowest_completed_line
-    procedure, pass :: flush_line   => grid_assembly_flush_line
   end type
 
 contains
@@ -254,94 +251,6 @@ contains
     success = .true.
   end function grid_assembly_put_data
 
-  !> Clear the assembly lines that contain completed grids. For now this means write them to the
-  !> given file
-  function grid_assembly_flush_completed_grids(this, file_unit, data_heap) result(num_flushed)
-    implicit none
-    class(grid_assembly), intent(inout) :: this       !< [in,out] The assembler we are cleaning up
-    integer,              intent(in)    :: file_unit  !< [in]     File (unit) where to write the completed grids
-    type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the grid data is located
-    integer :: num_flushed !< How many assembly lines were flushed
-
-    integer :: i, line_id
-
-    num_flushed = 0
-    ! The maximum number of completed lines is the total number of lines that the assembler can contain,
-    ! so we loop over that amount
-    do i = 1, MAX_ASSEMBLY_LINES
-      line_id = this % get_lowest_completed_line()          ! Find the completed assembly line with the lowest tag
-      if (line_id < 0) return                               ! There isn't any
-      call this % flush_line(line_id, file_unit, data_heap) ! Flush it
-      num_flushed = num_flushed + 1
-    end do
-  end function grid_assembly_flush_completed_grids
-
-  !> Find the assembly line with the lowest tag, whose grid is also completely assembled.
-  !> If a line is fully assembled, but has a higher tag that an incomplete one, it will *not*
-  !> be selected.
-  function get_lowest_completed_line(this) result(line_id)
-    implicit none
-    class(grid_assembly), intent(inout) :: this
-    integer :: line_id !< ID of the line with the lowest tag, if it is completed. -1 otherwise
-
-    integer :: i, lowest_tag
-
-    line_id = -1
-    lowest_tag = -1
-
-    do i = 1, MAX_ASSEMBLY_LINES
-      if (this % lines(i) % tag > 0 .and. (lowest_tag < 0 .or. lowest_tag > this % lines(i) % tag)) then
-        lowest_tag = this % lines(i) % tag      ! Keep track of the lowest tag
-        if (this % is_line_full(i)) line_id = i ! Select this line for now
-      end if
-    end do
-  end function get_lowest_completed_line
-
-  !> Flush the given assembly line into the given file unit.
-  !> *BIG WARNING*: Since we write as a set of bytes, we need to read it the same way,
-  !> because of little- and big-endian stuff.
-  subroutine grid_assembly_flush_line(this, line_id, file_unit, data_heap)
-    implicit none
-    class(grid_assembly), intent(inout) :: this       !< Grid assembly instance
-    integer,              intent(in)    :: line_id    !< [in] ID of the line we want to flush
-    integer,              intent(in)    :: file_unit  !< [in] File unit where we want to write the content of the assembly line
-    type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
-
-    type(C_PTR) :: data_ptr
-    integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: data_array_byte
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: grid_size
-
-    logical :: success
-    integer :: num_bytes, elem_size
-
-    ! Retrieve pointer to grid data
-    data_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
-    if (.not. c_associated(data_ptr)) then
-      print *, 'ERROR: Pointer retrieved from heap is not associated!', this % lines(line_id) % data_offset
-      error stop 1
-    end if
-
-    ! Get a Fortran pointer to that data
-    elem_size = this % lines(line_id) % global_grid % elem_size
-    grid_size = this % lines(line_id) % global_grid % size
-    grid_size(1) = grid_size(1) * elem_size
-    call c_f_pointer(data_ptr, data_array_byte, grid_size)
-
-    ! Write it to the file
-    num_bytes = size(data_array_byte)
-    write(unit=file_unit) data_array_byte
-
-    ! print '(A, I4, A, I6)', 'Flushed line ', line_id, ', tag ', this % lines(line_id) % tag
-
-    ! Reset the assembly line
-    success = data_heap % free(this % lines(line_id) % data_offset)
-    if (.not. success) then
-      print *, 'ERROR: Could not free the assembly line!'
-      error stop 1
-    end if
-    this % lines(line_id) = grid_assembly_line()
-  end subroutine grid_assembly_flush_line
-
   !> Find how many grid are currently being assembled (some may be complete)
   function get_num_grids(this) result(num_partial_grids)
     implicit none
@@ -424,6 +333,7 @@ contains
     ! print '(A, 5I6)', '       Grid ', this % lines(line_id) % global_grid % size
   end function get_completed_line_data
 
+  !> Free the space used by the given grid assembly line on the shared memory heap
   function free_line(this, tag, data_heap, mutex) result(success)
     implicit none
     class(grid_assembly), intent(inout) :: this       !< Grid assembly instance
@@ -441,9 +351,6 @@ contains
       print *, 'ERROR: Did not find requested line!'
       return
     end if
-
-    ! tmp = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
-    ! print *, 'address (2) = ', transfer(tmp, 1_8)
 
     call mutex % lock()
     success = data_heap % free(this % lines(line_id) % data_offset)

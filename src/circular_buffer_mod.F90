@@ -32,6 +32,7 @@ module circular_buffer_module
   private
 
   public :: CB_KIND_CHAR, CB_KIND_INTEGER_4, CB_KIND_INTEGER_8, CB_KIND_REAL_4, CB_KIND_REAL_8, CB_DATA_ELEMENT, CB_DATA_ELEMENT_KIND
+  public :: error_code_to_string
 
   !> \brief User-defined type for a one-producer, one-consumer circular queue. See #circular_buffer
   type, public :: circular_buffer
@@ -57,8 +58,11 @@ module circular_buffer_module
     procedure :: put              !< circular_buffer_module::put
 
     procedure :: is_valid     !< circular_buffer_module::is_valid
+    procedure :: get_integrity_status !< circular_buffer_module::get_integrity_status
     procedure :: print_header !< Print the buffer header (to help debugging). circular_buffer_module::print_header
     procedure :: print_stats  !< Print stats collected during the buffer's lifetime. circular_buffer_module::print_stats
+
+    procedure, nopass :: error_code_to_string
 
   end type circular_buffer
 
@@ -66,22 +70,22 @@ contains
 
   !> Check integrity of the circular buffer: the pointer is valid and the integrity check on the underlying C struct passes.
   !> \sa CB_check_integrity
+  !> \return A status code that indicate a specific error, if there is one
+  pure function get_integrity_status(this) result(integrity_status)
+    implicit none
+    class(circular_buffer), intent(in) :: this    !< circular_buffer instance
+    integer(C_INT) :: integrity_status
+    integrity_status = CB_check_integrity(this % p)
+  end function get_integrity_status
+
+  !> Check integrity of the circular buffer: the pointer is valid and the integrity check on the underlying C struct passes.
+  !> \sa CB_check_integrity
   !> \return Wether the circular buffer passes all checks
-  pure function is_valid(this, verbose)
+  pure function is_valid(this)
     implicit none
     class(circular_buffer), intent(IN) :: this
-    logical, intent(in) :: verbose !< Whether to print more info when the check fails
     logical :: is_valid
-
-    integer(C_INT) :: verbose_val
-
-    verbose_val = 0
-    if (verbose) verbose_val = 1
-
-    is_valid = c_associated(this % p)
-    if (is_valid) then
-      is_valid = (CB_check_integrity(this % p, verbose_val) == 0)
-    end if
+    is_valid = (this % get_integrity_status() == CB_SUCCESS)
   end function is_valid
 
   !> Print the C struct header of this circular buffer. See CB_print_header()
@@ -99,13 +103,17 @@ contains
   !> \sa CB_create_bytes()
   function create_local_bytes(this, num_bytes) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT)     :: this      !< circular_buffer
+    class(circular_buffer), intent(INOUT)     :: this      !< circular_buffer instance
     integer(C_SIZE_T),      intent(IN), value :: num_bytes !< size in bytes of the circular buffer
     logical :: success                                     !< Whether the created buffer is valid
+    integer(C_INT) :: status
+
     this % p = CB_create_bytes(num_bytes)
     this % is_owner = .true.
     this % is_shared = .false.
-    success = this % is_valid(.true.)
+    status = this % get_integrity_status()
+    success = (status == CB_SUCCESS)
+    if (.not. success) print '(A, A)', 'ERROR: local creation failed: ', error_code_to_string(status)
   end function create_local_bytes
 
   !> \brief create a circular buffer in shared memory
@@ -115,14 +123,17 @@ contains
   !> \sa CB_create_shared_bytes()
   function create_shared_bytes(this, shmid, num_bytes) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT)     :: this   !< circular_buffer
+    class(circular_buffer), intent(INOUT)     :: this   !< circular_buffer instance
     integer(C_INT),         intent(OUT)       :: shmid  !< identifier of shared memory area (see man shmget)
     integer(C_SIZE_T),      intent(IN), value :: num_bytes !< size in 32 bit elements of the circular buffer
     logical :: success                                  !< Whether the created buffer is valid
+    integer(C_INT) :: status
     this % p = CB_create_shared_bytes(shmid, num_bytes)
     this % is_owner = .false.
     this % is_shared = .true.
-    success = this % is_valid(.true.)
+    status = this % get_integrity_status()
+    success = (status == CB_SUCCESS)
+    if (.not. success) print '(A, A)', 'ERROR: creation in shared memory failed: ', error_code_to_string(status)
   end function create_shared_bytes
 
   !> \brief Create a circular buffer from user supplied memory
@@ -136,10 +147,15 @@ contains
     type(C_PTR), intent(IN), value        :: ptr       !< pointer to user supplied memory
     integer(C_SIZE_T), intent(IN), value  :: num_bytes !< size in 32 bit elements of the circular buffer
     logical :: success                                 !< Whether the created buffer is valid
+    integer(C_INT) :: status
+
     this % p = CB_from_pointer_bytes(ptr, num_bytes)
     this % is_owner = .false.
     this % is_shared = .false.
-    success = this % is_valid(.true.)
+
+    status = this % get_integrity_status()
+    success = (status == CB_SUCCESS)
+    if (.not. success) print '(A, A)', 'ERROR: creation from pointer failed: ', error_code_to_string(status)
   end function create_from_pointer_bytes
 
   !> \brief Create a circular buffer from address of another circular buffer
@@ -151,10 +167,15 @@ contains
     class(circular_buffer), intent(INOUT) :: this !< circular_buffer
     type(C_PTR), intent(IN), value        :: ptr  !< pointer to user supplied memory
     logical :: success                            !< Whether the resulting buffer is valid
+    integer(C_INT) :: status
+
     this % p = ptr
     this % is_owner = .false.
     this % is_shared = .false.
-    success = this % is_valid(.true.)
+
+    status = this % get_integrity_status()
+    success = (status == CB_SUCCESS)
+    if (.not. success) print '(A, A)', 'ERROR: creation from existing CB failed: ', error_code_to_string(status)
   end function create_from_other
   
   !> \brief Get number of empty element slots available in the buffer
@@ -323,7 +344,31 @@ contains
     with_header_c = 0
     if (with_header) with_header_c = 1
 
-    if (this % is_valid(.false.)) call CB_print_stats(this % p, buffer_id, with_header_c)
+    if (this % is_valid()) call CB_print_stats(this % p, buffer_id, with_header_c)
   end subroutine print_stats
+
+  function error_code_to_string(error_code) result(error_string)
+    implicit none
+    integer(C_INT), intent(in) :: error_code !< The code we want to translate into a string
+    character(len=:), allocatable :: error_string
+
+    character(len=1), dimension(:), pointer :: tmp_string
+    type(C_PTR) :: c_error_string
+    
+    integer :: i, num_char
+    
+    c_error_string = CB_error_code_to_string(error_code)
+    call c_f_pointer(c_error_string, tmp_string, [8192])
+
+    i = 1
+    do 
+      if (tmp_string(i) == c_null_char) exit
+      i = i + 1
+    end do
+    num_char = i - 1
+
+    allocate(character(len=num_char) :: error_string)
+    error_string = transfer(tmp_string(1:num_char), error_string)
+  end function error_code_to_string
 
 end module circular_buffer_module

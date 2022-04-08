@@ -325,21 +325,21 @@ size_t CB_get_capacity_bytes(const circular_buffer_p buffer //!< [in] The buffer
 );
 //! wait until at least num_bytes_wanted empty slots are available for inserting data
 //! <br> = CB_wait_space_available_bytes(p, num_bytes)
-//! @return actual number of bytes available, -1 on error
+//! @return actual number of bytes available, a negative error code on error
 int64_t CB_wait_space_available_bytes(
     circular_buffer_p p,                //!< [in]  pointer to a circular buffer
     size_t            num_bytes_wanted  //!< [in]  needed number of available bytes
 );
 //! wait until at least num_bytes_wanted are available for extracting data
 //! <br> = CB_wait_data_available_bytes(p, num_bytes_wanted)
-//! @return actual number of bytes available, -1 if error
+//! @return actual number of bytes available, a negative error code if error
 int64_t CB_wait_data_available_bytes(
     circular_buffer_p p,                //!< [in] pointer to a circular buffer
     size_t            num_bytes_wanted  //!< [in] needed number of available bytes
 );
 //! wait until num_bytes are available then extract them into dst
 //! <br> = CB_get(p, dest, num_bytes)
-//! @return 0 on success, -1 on error
+//! @return CB_SUCCESS on success, a negative error code on error
 int CB_get(
     circular_buffer_p buffer,    //!< [in]  Pointer to a circular buffer
     void*             dest,      //!< [out] Destination array for data extraction
@@ -348,7 +348,7 @@ int CB_get(
 );
 //! wait until num_bytes are available then insert from src array
 //! <br> = CB_put(p, src, num_bytes, commit_transaction)
-//! @return 0 upon success, -1 upon error
+//! @return CB_SUCCESS upon success, a negative error code upon error
 int CB_put(
     circular_buffer_p buffer,    //!< [in] Pointer to a circular buffer
     void*             src,       //!< [in] Source array for data insertion
@@ -357,8 +357,10 @@ int CB_put(
     int thread_safe   //!< [in] If 1, perform operation in a thread-safe way
 );
 int CB_check_integrity(
-    const circular_buffer_p buffer, //!< [in] The buffer we want to check
-    const int verbose               //!< [in] Whether to print a reason, when check fails
+    const circular_buffer_p buffer  //!< [in] The buffer we want to check
+);
+const char* CB_error_code_to_string(
+    const int error_code  //!< [in] The error code we want to translate into a string
 );
 void readable_element_count(
     const double num_elements, //!< [in]  Number we want to represent

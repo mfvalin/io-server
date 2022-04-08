@@ -500,7 +500,7 @@ function default_model(context) result(model_success)
   end if
 
   data_buffer = context % get_server_bound_cb()
-  if (.not. data_buffer % is_valid(.false.)) then
+  if (.not. data_buffer % is_valid()) then
     print *, 'ERROR: CB received from context is not valid!'
     return
   end if

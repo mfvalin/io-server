@@ -66,7 +66,7 @@ function(gen_test_target)
       ${TEST_TARGET}
       PRIVATE
       $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wno-integer-division>
-      -g -O0
+      # -g -O0
       )
 
    # Modules
