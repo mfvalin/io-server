@@ -96,8 +96,8 @@ int fill_test(int argc, char** argv) {
     }
 
     const int expected_error = CB_put(local_buffer, local_data, capacity + 1, CB_COMMIT, 0);
-    if (expected_error != -1) {
-      printf("Wrong return value after trying to put more than max into the buffer! %d\n", expected_error);
+    if (expected_error == CB_SUCCESS) {
+      printf("Wrong return value (%s) after trying to put more than max into the buffer!\n", CB_error_code_to_string(expected_error));
       num_errors++;
       return num_errors;
     }
@@ -176,8 +176,8 @@ int fill_test(int argc, char** argv) {
         //        printf("Read in %f ms\n", t);
 
         const int expected_error = CB_get(all_buffers[i], received_data, capacity + 1, CB_COMMIT);
-        if (expected_error != -1) {
-          printf("Wrong return code after trying to read more than max buffer size! (%d)\n", expected_error);
+        if (expected_error == CB_SUCCESS) {
+          printf("Wrong return code after trying to read more than max buffer size! (%s)\n", CB_error_code_to_string(expected_error));
           num_errors++;
           return num_errors;
         }
