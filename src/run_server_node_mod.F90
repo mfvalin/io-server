@@ -391,6 +391,11 @@ function receive_message(context, dcb, client_id, state) result(finished)
     call state % allocate_command_buffer(record % command_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, record % command_size_int8, CB_KIND_INTEGER_8, .true.) .and. success ! Extract command from DCB
     success = stream_ptr % put_command(state % command_buffer(1:record % command_size_int8), header % message_tag)      .and. success ! Send command for later processing
+
+    if (.not. success) then
+      print '(A)', 'ERROR: Unable to enqueue the command accompanying a data packet. The queue is probably full, this could have created a deadlock.'
+      error stop 1
+    end if
  
     num_data_int8 = num_char_to_num_int8(record % data_size_byte)
     call state % allocate_model_data(num_data_int8)

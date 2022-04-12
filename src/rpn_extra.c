@@ -125,6 +125,13 @@ static inline int32_t is_lock_taken(volatile int32_t *lock) {
 static inline void reset_lock(volatile int32_t *lock) { 
   *lock = 0;
 }
+
+//! Try to increment the variable at the given address, if it originally has a certain expected value
+//! @return 1 if the old value was the same as given to the function and the variable was incremented, 0 if the value was not as expected
+static inline int32_t try_increment(volatile int32_t *variable, int32_t expected_old_value) {
+  return (__sync_val_compare_and_swap(variable, expected_old_value, expected_old_value + 1) == expected_old_value);
+}
+
 //C_EnD
 
 //F_StArT
@@ -173,6 +180,19 @@ int32_t is_idlock_taken_F(volatile int32_t *lock, int32_t id) { return is_idlock
 int32_t is_lock_taken_F(volatile int32_t *lock) { return is_lock_taken(lock); }
 void    reset_lock_F(volatile int32_t *lock) { reset_lock(lock); }
 
+//F_StArT
+//  function try_update_int32(variable_ptr, old_value, new_value) result(status) BIND(C, name = 'try_update_int32_F')
+//    import :: C_PTR, C_INT32_T
+//    implicit none
+//    type(C_PTR), intent(in), value :: variable_ptr
+//    integer(C_INT32_T), intent(in), value :: old_value, new_value
+//    integer(C_INT32_T) :: status
+//  end function try_update_int32
+//F_EnD
+//! This is a wrapper on the intrinsic function __sync_val_compare_and_swap() to be able to call it from Fortran code
+int32_t try_update_int32_F(volatile int32_t *variable, int32_t old_value, int32_t new_value) {
+  return __sync_val_compare_and_swap(variable, old_value, new_value) == old_value;
+}
 
 //F_StArT
 //  subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')

@@ -22,6 +22,7 @@
 module server_stream_module
   use iso_c_binding
 
+  use atomic_module
   use circular_buffer_module
   use grid_assembly_module
   use ioserver_message_module
@@ -45,7 +46,7 @@ module server_stream_module
   integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
   ! integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
 
-  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 500000 !< Size of the buffer used to send commands to the stream owner
+  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 50000 !< Size of the buffer used to send commands to the stream owner
 
   !> Derived type that handles a server stream in shared memory. This is used to reassemble grids that
   !> are transmitted through that stream. Any server process can contribute to the grids, but only the
@@ -57,7 +58,8 @@ module server_stream_module
     integer :: owner_id           = -1  !< Who owns (will read/write/process) this stream and its physical file
     integer :: mutex_value        =  0  !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
     integer :: status             = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
-    integer :: latest_command_tag =  0  !< Tag of the latest command processed (or being processed) by the owner of this stream
+    integer :: current_command_tag =  0  !< Tag of the latest command processed (or being processed) by the owner of this stream
+    integer :: command_tag_counter = 0
 
     type(circular_buffer) :: command_buffer
     integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
@@ -75,6 +77,8 @@ module server_stream_module
     procedure, pass :: is_valid     => shared_server_stream_is_valid
     procedure, pass :: print        => shared_server_stream_print
     procedure, pass, private :: get_owner_id => shared_server_stream_get_owner_id
+
+    procedure, pass :: get_tag_counter => shared_server_stream_get_tag_counter
 
   end type shared_server_stream
 
@@ -94,6 +98,7 @@ module server_stream_module
     type(heap)          :: data_heap            !< Heap where we can get space in shared memory
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
     type(circular_buffer) :: command_buffer
+    type(atomic_int32)  :: command_counter
 
     contains
 
@@ -214,6 +219,14 @@ contains
           ', status: ', this % status, ', owner ID: ', this % owner_id, ', mutex value: ', this % mutex_value
   end subroutine shared_server_stream_print
 
+  !> Create an atomic counter from the tag counter variable of this shared_server_stream
+  function shared_server_stream_get_tag_counter(this) result(tag_counter)
+    implicit none
+    class(shared_server_stream), intent(in) :: this   !< shared_server_stream instance
+    type(atomic_int32) :: tag_counter
+    call tag_counter % init_from_int(this % command_tag_counter)
+  end function shared_server_stream_get_tag_counter
+
   !> Initialize this local instance (but *not* the underlying shared memory stream), associate this local instance with its underlying shared stream,
   !> initialize the mutex to point to the shared instance mutex value, associate this local instance with a shared memory heap where the grids will
   !> actually be assembled
@@ -234,6 +247,7 @@ contains
     this % shared_instance  => shared_instance
     this % data_heap        =  data_heap
     call this % mutex % init_from_int(this % shared_instance % mutex_value, this % server_id)
+    this % command_counter = this % shared_instance % get_tag_counter()
 
     success = this % command_buffer % create_bytes(c_loc(this % shared_instance % command_buffer_data))
 
@@ -273,11 +287,14 @@ contains
     integer(C_INT),                         intent(in)    :: tag
     logical :: success
 
-    if (tag > this % shared_instance % latest_command_tag) then
-      ! print '(A, I8, A, I8)', 'Enqueuing command, tag ', tag, ', size ', size(command_content)
-      success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true.)
-    else
-      success = .true.
+    integer(C_INT32_T) :: old_value
+    old_value = this % command_counter % read()
+    success = .true.
+    if (tag > old_value) then
+      if (this % command_counter % try_update(old_value, tag)) then
+        ! print '(A, I8, A, I8, I8)', 'Enqueuing command, tag ', tag, ', size ', size(command_content), this % command_counter % read()
+        success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true., timeout_ms = 0)
+      end if
     end if
   end function local_server_stream_put_command
 
@@ -313,8 +330,8 @@ contains
       ! print *, 'Getting from command queue, size ', command_record_size_int8()
       success = this % command_buffer % get(record, command_record_size_int8(), CB_KIND_INTEGER_8, .true.)
       if (.not. success) return
-      if (record % message_tag > this % shared_instance % latest_command_tag) then
-        this % shared_instance % latest_command_tag = record % message_tag
+      if (record % message_tag > this % shared_instance % current_command_tag) then
+        this % shared_instance % current_command_tag = record % message_tag
         ! call print_command_record(record)
 
         if (record % command_type == MSG_COMMAND_OPEN_STREAM) then

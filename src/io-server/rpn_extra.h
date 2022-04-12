@@ -175,6 +175,13 @@ static inline int32_t is_lock_taken(volatile int32_t *lock) {
 static inline void reset_lock(volatile int32_t *lock) { 
   *lock = 0;
 }
+
+//! Try to increment the variable at the given address, if it originally has a certain expected value
+//! @return 1 if the old value was the same as given to the function and the variable was incremented, 0 if the value was not as expected
+static inline int32_t try_increment(volatile int32_t *variable, int32_t expected_old_value) {
+  return (__sync_val_compare_and_swap(variable, expected_old_value, expected_old_value + 1) == expected_old_value);
+}
+
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );

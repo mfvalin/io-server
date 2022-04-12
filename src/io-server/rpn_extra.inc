@@ -74,6 +74,13 @@ import :: C_PTR
 implicit none
 type(C_PTR), intent(in), value :: lock
 end subroutine reset_lock
+function try_update_int32(variable_ptr, old_value, new_value) result(status) BIND(C, name = 'try_update_int32_F')
+import :: C_PTR, C_INT32_T
+implicit none
+type(C_PTR), intent(in), value :: variable_ptr
+integer(C_INT32_T), intent(in), value :: old_value, new_value
+integer(C_INT32_T) :: status
+end function try_update_int32
 subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 import :: C_INT
 implicit none
