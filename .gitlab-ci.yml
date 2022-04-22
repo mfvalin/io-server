@@ -136,7 +136,7 @@ build:U2_intel-2022.1.2:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/intel-2022.1.2.sh
+      - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
       - SRC_DIR=$(pwd)
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
@@ -158,7 +158,7 @@ test:U2_intel-2022.1.2_single_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/intel-2022.1.2.sh
+      - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
@@ -180,7 +180,7 @@ test:U2_intel-2022.1.2_multi_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/intel-2022.1.2.sh
+      - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
