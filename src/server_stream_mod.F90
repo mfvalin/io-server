@@ -46,7 +46,7 @@ module server_stream_module
   integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
   ! integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
 
-  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 50000 !< Size of the buffer used to send commands to the stream owner
+  integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 5000 !< Size of the buffer used to send commands to the stream owner
 
   !> Derived type that handles a server stream in shared memory. This is used to reassemble grids that
   !> are transmitted through that stream. Any server process can contribute to the grids, but only the
@@ -58,8 +58,9 @@ module server_stream_module
     integer :: owner_id           = -1  !< Who owns (will read/write/process) this stream and its physical file
     integer :: mutex_value        =  0  !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
     integer :: status             = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
-    integer :: current_command_tag =  0  !< Tag of the latest command processed (or being processed) by the owner of this stream
-    integer :: command_tag_counter = 0
+    integer :: current_command_tag = 0  !< Tag of the latest command processed (or being processed) by the owner of this stream
+    integer :: command_tag_counter = 0  !< DO NOT TOUCH DIRECTLY. Atomically accessed counter for the latest command put in the command buffer
+    integer :: num_opens           = 0  !< How many times this stream rank was opened
 
     type(circular_buffer) :: command_buffer
     integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
@@ -113,6 +114,7 @@ module server_stream_module
     procedure, pass :: put_command    => local_server_stream_put_command
     procedure, pass :: process_stream => local_server_stream_process_stream
     procedure, pass :: put_data       => local_server_stream_put_data
+    procedure, pass :: print_command_stats => local_server_stream_print_command_stats
 
     procedure, pass, private :: open  => local_server_stream_open
     procedure, pass, private :: close => local_server_stream_close
@@ -156,6 +158,7 @@ contains
       if (.not. this % is_open()) then
         this % stream_id = stream_id
         this % status    = STREAM_STATUS_OPEN
+        this % num_opens = this % num_opens + 1
         success          = .true.
       end if
     end if
@@ -447,6 +450,18 @@ contains
     end do
 
   end function local_server_stream_put_data
+
+  subroutine local_server_stream_print_command_stats(this, id, with_header)
+    implicit none
+    class(local_server_stream), intent(in) :: this
+    integer, intent(in) :: id
+    logical, intent(in) :: with_header
+    if (this % is_init()) then
+      if (this % shared_instance % num_opens > 0) then
+        call this % command_buffer % print_stats(id, with_header)
+      end if
+    end if
+  end subroutine local_server_stream_print_command_stats
 
   function local_server_stream_open(this, stream_id) result(success)
     implicit none

@@ -184,6 +184,23 @@ typedef struct {
 //! pointer to circular buffer management part
 typedef fiol_management* fiol_management_p;
 
+//F_StArT
+// type :: cb_stats
+//   integer(C_INT64_T) :: num_reads            = 0
+//   integer(C_INT64_T) :: num_unique_reads     = 0
+//   integer(C_INT64_T) :: num_read_elems       = 0
+//   integer(C_INT64_T) :: num_fractional_reads = 0
+//   real(C_DOUBLE)     :: total_read_wait_time_ms = 0.0
+//   real(C_DOUBLE)     :: total_read_time_ms      = 0.0
+//   integer(C_INT64_T) :: max_fill       = 0
+
+//   integer(C_INT64_T) :: num_writes            = 0
+//   integer(C_INT64_T) :: num_write_elems       = 0
+//   integer(C_INT64_T) :: num_fractional_writes = 0
+//   real(C_DOUBLE)     :: total_write_wait_time_ms = 0.0
+//   real(C_DOUBLE)     :: total_write_time_ms      = 0.0
+// end type cb_stats
+//F_EnD
 //! Set of statistics we want to record as a circular buffer is used
 //! Only use 64-bit members in that struct. Better for alignment
 typedef struct {

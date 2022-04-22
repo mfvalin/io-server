@@ -308,7 +308,7 @@ function default_server_bound_relay(context) result(relay_success)
         total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
       else if (header % command == MSG_COMMAND_SERVER_CMD .or.            &
-               header % command == MSG_COMMAND_OPEN_STREAM) then
+               header % command == MSG_COMMAND_MODEL_STATS) then
         param_size_int8 = header % content_size_int8
 
         call allocate_message_buffer(cb_message, param_size_int8)
@@ -382,7 +382,7 @@ function default_server_bound_relay(context) result(relay_success)
           return
         end if
 
-      else if (header % command == MSG_COMMAND_SERVER_CMD) then
+      else if (header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_MODEL_STATS) then
 
         success = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8)) .and. success
 

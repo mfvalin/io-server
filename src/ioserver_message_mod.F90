@@ -118,6 +118,7 @@ module ioserver_message_module
   integer(C_INT), parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
   integer(C_INT), parameter, public :: MSG_COMMAND_OPEN_STREAM   = 7 !< Indicate a message that want to create a stream on the server
   integer(C_INT), parameter, public :: MSG_COMMAND_CLOSE_STREAM  = 8 !< Indicate a message that want to create a stream on the server
+  integer(C_INT), parameter, public :: MSG_COMMAND_MODEL_STATS   = 9 !< Indicate a message that contains model statistics to transmit to the server
 
   public :: message_header_size_int8, message_cap_size_int8, data_record_size_int8, command_record_size_int8, cmeta_size_int8
   public :: message_header_size_byte, message_cap_size_byte, data_record_size_byte, command_record_size_byte, cmeta_size_byte
@@ -263,6 +264,8 @@ contains
       command_string = 'MSG_COMMAND_OPEN_STREAM'
     case (MSG_COMMAND_CLOSE_STREAM)
       command_string = 'MSG_COMMAND_CLOSE_STREAM'
+    case (MSG_COMMAND_MODEL_STATS)
+      command_string = 'MSG_COMMAND_MODEL_STATS'
     case default
       command_string = '[ERROR] unknown number'
     end select

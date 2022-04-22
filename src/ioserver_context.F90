@@ -793,9 +793,23 @@ subroutine finalize_model(this)
 
   type(message_header) :: header
   type(message_cap)    :: end_cap
+  type(cb_stats), pointer :: stats
   logical :: success
 
+  success = .false.
   if (this % is_model()) then
+    ! Send statistics
+    stats => this % local_server_bound_cb % get_stats()
+    call this % messenger % bump_tag()
+    header % content_size_int8  = cb_stats_size_int8()
+    header % command            = MSG_COMMAND_MODEL_STATS
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
+    end_cap % msg_length        = header % content_size_int8
+    success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
+    success = this % local_server_bound_cb % put(stats, cb_stats_size_int8(), CB_KIND_INTEGER_8, .false.)     .and. success
+    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
+
     ! Send a signal towards the server to indicate that this PE will no longer send anything
     call this % messenger % bump_tag()
     header % content_size_int8  = 0
@@ -803,8 +817,8 @@ subroutine finalize_model(this)
     header % message_tag        = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
     end_cap % msg_length        = header % content_size_int8
-    success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
-    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
+    success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.) .and. success
+    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.)    .and. success
   else
     print '(A)', 'WARNING: Should NOT be calling "finish_model"'
   end if
@@ -844,21 +858,52 @@ subroutine finalize_server(this)
   class(ioserver_context), intent(inout) :: this
 
   type(local_server_stream), pointer :: stream
-  integer :: i
+  integer :: i, ierr
+
+  ! Print data/stats from grid processors
+  if (this % is_grid_processor()) then
+    block
+      type(comm_rank_size) :: grid_crs
+      grid_crs = this % get_crs(GRID_PROCESSOR_COLOR)
+
+      ! Grid processor barrier
+      call MPI_Barrier(grid_crs % comm, ierr)
+
+      if (grid_crs % rank == 0) then
+        print '(A, /, A)',      &
+            '------------------------------------------------------------------',     &
+            '  Command buffers for stream processors'
+        call this % local_server_streams(1) % print_command_stats(1, .true.)
+      end if
+
+      ! Grid processor barrier
+      call MPI_Barrier(grid_crs % comm, ierr)
+
+      do i = 2, MAX_NUM_STREAMS
+        stream => this % local_server_streams(i)
+        if (stream % is_owner()) call stream % print_command_stats(i, .false.)
+      end do
+
+      do i = 1, MAX_NUM_STREAMS
+        stream => this % local_server_streams(i)
+        if (stream % is_open()) then
+          if (stream % is_owner()) then
+            print '(A, I4, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
+          end if
+        end if
+      end do
+
+    end block
+  end if
 
   if (associated(this % local_server_streams)) then
     ! Close all owned streams
-    do i = 1, MAX_NUM_STREAMS
-      stream => this % local_server_streams(i)
-      if (stream % is_open()) then
-        if (stream % is_owner()) then
-          print '(A, I4, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
-        end if
-      end if
-    end do
     deallocate(this % local_server_streams)
     nullify(this % local_server_streams)
   end if
+
+  ! Sync non-channel processes here
+  if (.not. this % is_channel()) call MPI_Barrier(this % server_work_comm, ierr)
 end subroutine finalize_server
 
 !> Finalize function that can be called explicitly

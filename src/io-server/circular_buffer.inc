@@ -112,7 +112,28 @@
 !>   . = free space     ; = partially extracted data
 !>
 !> \endverbatim
+type :: cb_stats
+integer(C_INT64_T) :: num_reads            = 0
+integer(C_INT64_T) :: num_unique_reads     = 0
+integer(C_INT64_T) :: num_read_elems       = 0
+integer(C_INT64_T) :: num_fractional_reads = 0
+real(C_DOUBLE)     :: total_read_wait_time_ms = 0.0
+real(C_DOUBLE)     :: total_read_time_ms      = 0.0
+integer(C_INT64_T) :: max_fill       = 0
+
+integer(C_INT64_T) :: num_writes            = 0
+integer(C_INT64_T) :: num_write_elems       = 0
+integer(C_INT64_T) :: num_fractional_writes = 0
+real(C_DOUBLE)     :: total_write_wait_time_ms = 0.0
+real(C_DOUBLE)     :: total_write_time_ms      = 0.0
+end type cb_stats
 interface
+function CB_get_stats(buffer) result(stats_ptr) bind(C, name = 'CB_get_stats')
+import :: C_PTR
+implicit none
+type(C_PTR), intent(in), value :: buffer
+type(C_PTR) :: stats_ptr
+end function CB_get_stats
 subroutine CB_print_header(buffer) bind(C, name = 'CB_print_header')
 import :: C_PTR
 implicit none
