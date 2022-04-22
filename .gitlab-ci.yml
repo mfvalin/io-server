@@ -28,8 +28,12 @@ build:gnu-9.3.0:
 #      - master
 #      - dev
 #      - tags
+   variables:
+      ORD_SOUMET_W: "10"
    script:
+      - set +e
       - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
+      - set -e
       - mkdir build_gnu-9.3.0
       - cd build_gnu-9.3.0
       - cmake ../ 
