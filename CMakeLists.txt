@@ -30,9 +30,9 @@ if (MPI_FOUND)
 endif()
 
 
-if (NOT RMN_FOUND)
-   find_package(RMN ${RMN_REQ_VERSION})
-endif()
+# if (NOT RMN_FOUND)
+#    find_package(RMN ${RMN_REQ_VERSION})
+# endif()
 
 if (NOT RMN_FOUND)
     message(WARNING "Did not find a suitable RMN version, so we will use the tiny one bundled with this code")

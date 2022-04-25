@@ -18,8 +18,15 @@ stages:
    - package
 #  - deploy
 
-cleanup:all:
+cleanup:u1:
    stage: cleanup
+   script:
+      - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
+
+cleanup:u2:
+   stage: cleanup
+   tags:
+      - U2
    script:
       - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
 
