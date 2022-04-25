@@ -70,6 +70,8 @@ test:gnu-9.3.0_job_regular_single_node:
 # U2 Intel 2022
 build:U2_intel-2022.1.2:
    stage: build
+   tags:
+      - U2
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
@@ -86,6 +88,8 @@ build:U2_intel-2022.1.2:
 
 test:U2_intel-2022.1.2_single_node:
    stage: test
+   tags:
+      - U2
    dependencies:
       - build:U2_intel-2022.1.2
    variables:
@@ -106,6 +110,8 @@ test:U2_intel-2022.1.2_single_node:
 
 test:U2_intel-2022.1.2_multi_node:
    stage: test
+   tags:
+      - U2
    dependencies:
       - build:U2_intel-2022.1.2
    variables:
