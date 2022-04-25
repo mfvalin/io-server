@@ -1,3 +1,4 @@
+set -x
 ${BUILD_PATH}/tests/io_server_circular_buffer_single_thread                                     || exit -1
 ${BUILD_PATH}/tests/io_server_cb_unaligned_input                                                || exit -1
 ${BUILD_PATH}/tests/io_server_test_serializer                                                   || exit -1
@@ -18,3 +19,4 @@ ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_edge_case_1     
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_unaligned_input                 || exit -1
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_timeout                         || exit -1
 #${MPI_COMMAND} -n 20         ${BUILD_PATH}/tests/io_server_put_error
+set +x
