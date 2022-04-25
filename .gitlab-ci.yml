@@ -2,9 +2,9 @@ variables:
    GIT_SUBMODULE_STRATEGY: recursive
    ORD_SOUMET_SHELL: /bin/bash
    # Used to force HOST, remove once sici00 runners are restarted
-   ECCI_BACKEND: banting
-   ECCI_FRONTEND: ppp3
-   U2_FRONTEND: ppp5
+   # ECCI_BACKEND: banting
+   # ECCI_FRONTEND: ppp3
+   # U2_FRONTEND: ppp5
    BUILD_BASE_BASE_DIR: /home/sici000/special_builds/
    BUILD_BASE_DIR: /home/sici000/special_builds/just_to_be_safe
 
@@ -134,6 +134,7 @@ build:U2_intel-2022.1.2:
    stage: build
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
    script:
       - set +e
       - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
@@ -151,7 +152,7 @@ test:U2_intel-2022.1.2_single_node:
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
       NUM_CPUS: "40"
-      ORD_SOUMET_MACH: ${U2_FRONTEND}
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-intel-single-node
@@ -173,7 +174,7 @@ test:U2_intel-2022.1.2_multi_node:
       NUM_CPUS: "160"
       NUM_SERVER_CPUS: "40"
       NUM_MODEL_CPUS: "120"
-      ORD_SOUMET_MACH: ${U2_FRONTEND}
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}x1"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-intel-multi-node
