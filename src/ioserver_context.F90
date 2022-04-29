@@ -93,7 +93,9 @@ module ioserver_context_module
     integer :: server_pipeline_depth = 10
     !> @}
 
-    logical :: debug_mode = .false.
+    !> Determines the level of debugging statements within the code
+    !> 0: no debug statements. 1: synchronize model commands to the server, print node-wide debug info. 2: Also print PE-specific debug info
+    integer :: debug_level = 0
   end type ioserver_input_parameters
 
   !> Context that allows to interact with the IO-server library (initialization + the rest of the API)
@@ -274,7 +276,6 @@ module ioserver_context_module
 
     !> @{ \name Process function management
     procedure, pass, public :: no_op => IOserver_noop
-    procedure, pass, public :: set_debug => IOserver_set_debug
     !> @}
 
     !> @{ \name File management
@@ -284,7 +285,8 @@ module ioserver_context_module
     !> @}
     
     !> @{ \name Debugging
-    procedure, pass, public :: debug_mode => ioserver_context_debug_mode
+    procedure, pass, public :: set_debug_level  !< Debug level setter. \sa ioserver_input_parameters::debug_level
+    procedure, pass, public :: get_debug_level  !< Debug level getter. \sa ioserver_input_parameters::debug_level
     procedure, pass, public :: get_detailed_pe_name
 
     procedure, pass :: print_io_colors
@@ -378,12 +380,12 @@ function is_no_op(context)
 end function is_no_op
 
 !> Whether debug mode is enabled for this context
-function ioserver_context_debug_mode(context)
+function get_debug_level(context) result(debug_level)
   implicit none
   class(ioserver_context), intent(in) :: context
-  logical :: ioserver_context_debug_mode
-  ioserver_context_debug_mode = context % params % debug_mode
-end function ioserver_context_debug_mode
+  integer :: debug_level
+  debug_level = context % params % debug_level
+end function get_debug_level
 
 function get_detailed_pe_name(context) result(detailed_name)
   implicit none
@@ -542,7 +544,7 @@ subroutine set_time_to_quit(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
   context % shmem % time_to_quit = 1
-  if (context % debug_mode()) print '(A, A)', 'DEBUG: time to quit ', context % get_detailed_pe_name()
+  if (context % get_debug_level() >= 2) print '(A, A)', 'DEBUG: time to quit ', context % get_detailed_pe_name()
 end subroutine set_time_to_quit
 
 !> Check whether the "time-to-quit" flag has been set on this node
@@ -749,14 +751,13 @@ function get_heap_list(context) result(heaps)
 end function get_heap_list
 
 !> Set the debug flag for this context
-subroutine IOserver_set_debug(context, mode)
+subroutine set_debug_level(context, level)
   implicit none
   class(ioserver_context), intent(inout) :: context
-  logical, optional,       intent(in)    :: mode
-  context % params % debug_mode = .true.
-  if (present(mode)) context % params % debug_mode = mode
-  print *, 'INFO: debug mode =', context % debug_mode()
-end subroutine IOserver_set_debug
+  integer, intent(in) :: level
+  context % params % debug_level = min(max(level, 0), 2)
+  if (context % get_debug_level() > 0) print '(A, 1X, I2)', 'INFO: debug level =', context % get_debug_level()
+end subroutine set_debug_level
 
 !> NO OP loop to park processes with minimal CPU consumption
 subroutine IOserver_noop(context) 
@@ -835,7 +836,7 @@ subroutine finalize_relay(this)
 
   if (this % is_relay() .and. this % is_server_bound()) then
     ! Send a stop signal to the server
-    if (this % debug_mode()) print '(A, I3, A)', 'DEBUG: Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
+    if (this % get_debug_level() >= 1) print '(A, I3, A)', 'DEBUG: Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
     header % content_size_int8  = 0
     header % command            = MSG_COMMAND_RELAY_STOP
     header % sender_global_rank = this % global_rank
@@ -846,7 +847,7 @@ subroutine finalize_relay(this)
     success = this % local_dcb % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
 
     if (.not. success) then
-      if (this % debug_mode()) print '(A)', 'WARNING: Relay could not send a stop signal!!!'
+      if (this % get_debug_level() >= 1) print '(A)', 'WARNING: Relay could not send a stop signal!!!'
       call print_message_header(header)
     end if
   end if
@@ -1343,7 +1344,7 @@ function init_communicators(context) result(success)
       call MPI_Allreduce(num_model_bound, context % num_model_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm, ierr)
 
       call MPI_Comm_rank(context % io_comm, io_rank, ierr)
-      if (context % debug_mode() .and. context % server_comm_rank == 0) then
+      if (context % get_debug_level() >= 1 .and. context % server_comm_rank == 0) then
         print '(A, I5, A, I5, A)', 'DEBUG: We have ', context % num_nodes, ' nodes (', context % num_model_nodes, ' model nodes)'
         print '(A, I5, A)',        '               ', context % num_server_bound_relays, ' server-bound relays'
         print '(A, I5, A)',        '               ', context % num_model_bound_relays, ' model-bound relays'
@@ -1423,7 +1424,7 @@ function init_shared_mem(context) result(success)
 
   allocate(context % messenger)
   call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
-  call context % messenger % set_debug(context % debug_mode())
+  call context % messenger % set_debug(context % get_debug_level() >= 1)
 
   ! Determine how many server-bound server processes can actually open streams
   context % num_server_stream_owners = context % params % num_grid_processors
@@ -1446,7 +1447,7 @@ function init_shared_mem(context) result(success)
       goto 2
     end if
 
-    if (context % debug_mode()) then
+    if (context % get_debug_level() >= 1) then
       block
         integer :: server_rank
         call MPI_Comm_rank(context % server_comm, server_rank, ierr)
@@ -1486,7 +1487,7 @@ function init_shared_mem(context) result(success)
         allocate(context % local_server_streams(MAX_NUM_STREAMS))
         do i_stream = 1, MAX_NUM_STREAMS
           tmp_ptr => context % common_server_streams(i_stream)
-          stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % debug_mode(), tmp_ptr, context % node_heap)
+          stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % get_debug_level() >= 1, tmp_ptr, context % node_heap)
           if (.not. stream_create_success) then
             print *, 'ERROR: initializing local server stream'
             goto 2
@@ -1518,7 +1519,7 @@ function init_shared_mem(context) result(success)
         goto 2
       end if
 
-      if (context % debug_mode() .and. context % model_relay_smp_rank == 0) then
+      if (context % get_debug_level() >= 1 .and. context % model_relay_smp_rank == 0) then
         write(6,'(A, I10, 1X, A)') 'DEBUG: Successfully allocated shared mem for relay+model, size = ', context % model_shmem_size, context % get_detailed_pe_name()
         call flush(6)
       end if
@@ -1568,7 +1569,7 @@ function init_shared_mem(context) result(success)
                               i_stream,                                 &
                               context % local_heap,                     &
                               context % local_server_bound_cb,          &
-                              context % debug_mode(),                   &
+                              context % get_debug_level() >= 1,         &
                               context % messenger)
         end do
       end block
@@ -1630,7 +1631,7 @@ function init_shared_mem(context) result(success)
     end block
   endif
 
-  if (context % debug_mode()) then
+  if (context % get_debug_level() >= 2 .or. (context % node_rank == 0 .and. context % get_debug_level() >= 1)) then
     call context % print_shared_mem_sizes()
   end if
 
@@ -1659,6 +1660,7 @@ function ioserver_context_init(context, params) result(success)
   end if
 
   context % params = params
+  call context % set_debug_level(params % debug_level)  ! Adjust debug level to be within valid bounds
 
   success = context % init_communicators()
 
@@ -1667,7 +1669,7 @@ function ioserver_context_init(context, params) result(success)
     return
   end if
 
-  if (context % debug_mode()) then
+  if (context % get_debug_level() >= 2) then
     print '(A, 1X, A)', 'DEBUG: Comm initialized ', context % get_detailed_pe_name()
   end if
 
@@ -1680,7 +1682,7 @@ function ioserver_context_init(context, params) result(success)
 
   call MPI_Barrier(context % global_comm, ierr)
 
-  if (context % debug_mode()) then
+  if (context % get_debug_level() >= 2) then
     print '(A, 1X, A)', 'DEBUG: IO-server sucessfully initialized ', context % get_detailed_pe_name()
   end if
 

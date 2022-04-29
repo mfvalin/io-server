@@ -75,7 +75,7 @@ program default_model
     error stop 1
   end if
 
-  params % debug_mode = .true.
+  params % debug_level = 1
 
   server_node = am_server_node(node_rank, node_size, single_node)
 

@@ -194,7 +194,9 @@ contains
       return
     end if
 
-    if (context % debug_mode()) print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
+    if (context % get_debug_level() >= 1 .and. model_crs % rank == 0) then
+      print '(A, I8, A)', 'INFO: We are using ', model_crs % size, ' pseudo-model processes'
+    end if
 
     ! Init area info
     if (mod(model_crs % size, 4) == 0) then
@@ -500,7 +502,7 @@ program pseudomodelandserver
   use model_write_parameters
   implicit none
 
-  integer :: debug_mode_flag
+  integer :: debug_level
   character(len=128) :: arg
 
   logical :: server_node, single_node
@@ -538,7 +540,7 @@ program pseudomodelandserver
   end if
 
   call GET_COMMAND_ARGUMENT(1, arg)
-  read(arg, *) debug_mode_flag
+  read(arg, *) debug_level
 
   call GET_COMMAND_ARGUMENT(2, arg)
   read(arg, *) num_grid_processors
@@ -563,12 +565,11 @@ program pseudomodelandserver
     if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.
   end if
 
-  if (debug_mode_flag == 1) params % debug_mode = .true.
-
   params % num_relay_per_node      = num_relay_per_node
   params % num_server_bound_server = num_receiver_processes
   params % num_grid_processors     = num_grid_processors
   params % num_channels            = num_channels
+  params % debug_level             = debug_level
 
   params % dcb_server_bound_size_mb = 500.0
 

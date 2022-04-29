@@ -50,7 +50,7 @@ program model_integration
 
   params % num_relay_per_node = 3
   params % is_on_server       = .false.
-  params % debug_mode         = .true.
+  params % debug_level        = 1
 
   success = context % init(params)
 

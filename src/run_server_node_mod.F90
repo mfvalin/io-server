@@ -201,7 +201,7 @@ function default_server_bound(context) result(server_success)
     end do
   end do
 
-  if (context % debug_mode()) then
+  if (context % get_debug_level() >= 1) then
     print '(A, I3, A)', 'DEBUG: Server ', server_id, ' done receiving.'
 
     ! Final check on the buffers' content
@@ -314,7 +314,7 @@ function  default_model_bound(context) result(server_success)
   logical :: server_success
 
   server_success = .false.
-  if (context % debug_mode()) print *, 'DEBUG: Model-bound server process'
+  if (context % get_debug_level() >= 2) print '(A, A)', 'DEBUG: Doing the work - ', context % get_detailed_pe_name()
   server_success = .true.
 end function default_model_bound
 
@@ -350,7 +350,7 @@ function default_grid_processor(context) result(server_success)
 
   grid_proc_crs = context % get_crs(GRID_PROCESSOR_COLOR)
 
-  if (context % debug_mode()) then
+  if (context % get_debug_level() >= 2) then
     print '(A, I2, A, I2)', 'DEBUG: Grid processor process rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
   end if
 
@@ -369,7 +369,7 @@ function default_grid_processor(context) result(server_success)
     end do
   end do
 
-  if (context % debug_mode()) then
+  if (context % get_debug_level() >= 1) then
     print '(A, I2, A, I2)', 'DEBUG: Grid processor process DONE. Rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
   end if
 
@@ -495,7 +495,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
-    ! if (context % debug_mode()) print '(A, I4)', 'Got a SERVER_CMD message! From model ', header % sender_global_rank
+    if (context % get_debug_level() >= 2) print '(A, I4)', 'Got a SERVER_CMD message! From model ', header % sender_global_rank
     call state % allocate_command_buffer(header % content_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
@@ -503,12 +503,12 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !----------------
   ! Misc. message
   else if (header % command == MSG_COMMAND_DUMMY) then
-    if (context % debug_mode()) print '(A, I3)', 'DEBUG: Got a DUMMY message!', consumer_id
+    if (context % get_debug_level() >= 2) print '(A, I3)', 'DEBUG: Got a DUMMY message!', consumer_id
 
   !---------------------------------
   ! Stop receiving from this relay
   else if (header % command == MSG_COMMAND_RELAY_STOP) then
-    if (context % debug_mode()) print '(A, I3, I4)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id, header % relay_global_rank
+    if (context % get_debug_level() >= 1) print '(A, I3, I4)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id, header % relay_global_rank
     state % active_producers(client_id) = .false.
   
   !----------------------------
@@ -516,7 +516,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   else if (header % command == MSG_COMMAND_MODEL_STATS) then
     block
       type(cb_stats) :: stats
-      if (context % debug_mode()) print '(A, I5)', 'DEBUG: Got STATS from model ', header % sender_global_rank
+      if (context % get_debug_level() >= 2) print '(A, I5)', 'DEBUG: Got STATS from model ', header % sender_global_rank
       success = dcb % get_elems(client_id, stats, cb_stats_size_byte(), CB_KIND_CHAR, .true.)
       call state % add_stats(stats, client_id)
     end block
@@ -524,7 +524,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !------------------------------------------------
   ! MODEL_STOP command, don't do anything for that
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
-    ! if (context % debug_mode()) print '(A, I4)', 'DEBUG: Got a MODEL STOP message from ', header % sender_global_rank
+    if (context % get_debug_level() >= 2) print '(A, I4)', 'DEBUG: Got a MODEL STOP message from ', header % sender_global_rank
     ! Do nothing for that
 
   !------------

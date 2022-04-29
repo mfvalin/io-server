@@ -301,7 +301,7 @@ function default_server_bound_relay(context) result(relay_success)
       else if (header % command == MSG_COMMAND_MODEL_STOP) then
         latest_tags(i_compute) = -1  ! Indicate this model won't be active anymore
 
-        if (context % debug_mode()) then
+        if (context % get_debug_level() >= 2) then
           print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
         end if
 
@@ -435,7 +435,7 @@ function default_server_bound_relay(context) result(relay_success)
   if (allocated(cb_message)) deallocate(cb_message)
   if (allocated(latest_tags)) deallocate(latest_tags)
 
-  if (context % debug_mode()) print '(A, I3)', 'DEBUG: Largest diff b/w tags in one pass: ', largest_tag_diff
+  if (context % get_debug_level() >= 1) print '(A, I3)', 'DEBUG: Largest diff b/w tags in one pass: ', largest_tag_diff
 
   if (local_relay_id == 0) then
     ! call heap_list(0) % dumpinfo()
@@ -468,7 +468,7 @@ function default_model_bound_relay(context) result(relay_success)
 
   relay_success = .false.
 
-  if (context % debug_mode()) print '(A)', 'DEBUG: Model-bound relay process'
+  if (context % get_debug_level() >= 2) print '(A, A)', 'DEBUG: Doing its work - ', context % get_detailed_pe_name()
 
   relay_success = .true.
 end function default_model_bound_relay
@@ -490,7 +490,7 @@ function default_model(context) result(model_success)
 
   model_success = .false.
 
-  if (context % debug_mode()) print *, 'Using default pseudo-model function. This does not do much.'
+  if (context % get_debug_level() >= 2) print *, 'Using default pseudo-model function. This does not do much.'
 
   call context % open_stream_model(output_stream_1)
 

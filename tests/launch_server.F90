@@ -34,7 +34,7 @@ program launch_server
   params % num_server_bound_server  = 2
   params % num_grid_processors      = 1
   params % num_channels             = 2
-  params % debug_mode = .true.
+  params % debug_level              = 1
 
   success = ioserver_run_server_node(params)
 

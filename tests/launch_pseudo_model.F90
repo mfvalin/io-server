@@ -59,7 +59,7 @@ program launch_model
   ! params % num_server_bound_server  = -1
   ! params % num_grid_processors      = -1
   ! params % num_channels             = -1
-  params % debug_mode = .true.
+  params % debug_level = 1
 
   success = ioserver_run_model_node(params, model_function = model_fn_ptr)
 
