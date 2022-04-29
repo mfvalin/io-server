@@ -77,12 +77,16 @@ test:gnu-9.3.0_job_regular_single_node:
 # U2 Intel 2022
 build:U2_intel-2022.1.2:
    stage: build
+   dependencies:
+      - cleanup:u2
    tags:
       - U2
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_W: "10"
+      ORD_SOUMET_C: "20"
+      ORD_SOUMET_M: "2G"
    script:
       - set +e
       - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
@@ -104,6 +108,7 @@ test:U2_intel-2022.1.2_single_node:
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
+      ORD_SOUMET_M: "16G"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-intel-single-node
       MPI_COMMAND: "mpirun"
@@ -128,6 +133,7 @@ test:U2_intel-2022.1.2_multi_node:
       NUM_MODEL_CPUS: "240"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}x1"
+      ORD_SOUMET_M: "2G"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-intel-multi-node
       MPI_COMMAND: "mpirun"
@@ -143,6 +149,8 @@ test:U2_intel-2022.1.2_multi_node:
 # U1 Intel 19
 build:XC50_intel-19.0.5:
    stage: build
+   dependencies:
+      - cleanup:u1
    tags:
       - XC50-login
    variables:
