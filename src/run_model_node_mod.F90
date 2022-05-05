@@ -24,11 +24,16 @@
 module run_model_node_module
   use iso_c_binding
   use ioserver_context_module
+  use ioserver_message_module
+  use jar_module
+  use rpn_extra_module
   implicit none
   private
 
   public :: run_model_node, model_function_template, relay_function_template
   public :: default_model_bound_relay, default_server_bound_relay
+
+  real, parameter :: DCB_MESSAGE_RATIO = 0.2 !< What proportion of the DCB capacity should each transmission take (at most)
 
   abstract interface
     function model_function_template(context) result(model_success)
@@ -45,6 +50,41 @@ module run_model_node_module
       logical :: relay_success !< Whether the function terminated successfully
     end function relay_function_template
   end interface
+
+  type, private :: relay_state
+
+    type(circular_buffer), dimension(:), pointer :: model_message_buffers   !< List of CBs where messages are received from model PEs
+    type(heap),            dimension(:), pointer :: model_heaps             !< List of heaps that belong to each model PE
+
+    integer(C_INT64_T), dimension(:), allocatable :: message_content   !< Buffer for extracting model PE message content
+
+    type(distributed_circular_buffer) :: server_bound_sender  !< DCB object used to transmit data to the server
+    type(jar)                         :: server_bound_data    !< Jar object where data to be sent to the servers are accumulated
+    integer                           :: server_bound_data_size_int8 !< Maximum size that can be transmitted to the server in one batch
+
+    integer, dimension(:), allocatable :: latest_tags   !< Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
+
+    integer :: num_local_compute  =  0  !< How many model PEs there are on this node
+    integer :: num_local_relays   =  0  !< How many server-bound relays there are on this node
+    integer :: local_relay_id     = -1  !< ID of this relay among this node's relays
+
+    integer(C_INT) :: lowest_tag         = huge(0_4)  !< After a pass, lowest message tag that was encountered in it
+    integer(C_INT) :: highest_tag        = 0          !< After a pass, highest message tag that was encountered in it
+    integer(C_INT) :: largest_tag_diff   = 0          !< Largest difference between message tags encountered during a single pass
+    integer(C_INT) :: previous_lowest    = -1         !< During a pass, lowest message tag that was encountered in the previous pass
+    integer(C_INT) :: latest_command_tag = 0          !< Latest (i.e. highest) command tag that was transmitted by this relay
+
+    integer :: num_msg_in_pass = 0 !< After a pass, how many model PE messages were processed during it
+
+    logical :: done_transmitting = .false. !< After a pass, whether we can exit the loop (because all model PEs are done)
+  contains
+    procedure, pass :: init       => relay_state_init
+    procedure, pass :: pre_pass   => relay_state_pre_pass
+    procedure, pass :: post_pass  => relay_state_post_pass
+    procedure, pass :: allocate_message_buffer
+    procedure, pass :: flush_dcb_message_buffer
+    final :: relay_state_finalize
+  end type relay_state
 
 contains
 
@@ -134,332 +174,392 @@ function default_server_bound_relay(context) result(relay_success)
   use ISO_C_BINDING
 
   use circular_buffer_module
-  use ioserver_message_module
-  use jar_module
   use rpn_extra_module
   implicit none
 
   type(ioserver_context), intent(inout) :: context
   logical :: relay_success
 
-  integer, parameter :: MAX_DCB_MESSAGE_SIZE_INT = 10000000
-
-  type(circular_buffer), dimension(:), pointer :: cb_list
-  type(heap),            dimension(:), pointer :: heap_list
-  type(distributed_circular_buffer) :: data_buffer
-  type(comm_rank_size)  :: node_crs, local_relay_crs
-  integer :: client_id, num_clients
-  integer :: i_compute
-  integer :: num_local_compute, num_local_relays, local_relay_id
-  integer :: dcb_message_buffer_size
-  integer(C_INT64_T) :: dcb_capacity
-
-  integer(C_INT64_T) :: total_message_size_int8, content_size
-  integer(C_INT64_T) :: param_size_int8
-  logical :: finished, success
-  integer(C_INT64_T), dimension(:), allocatable :: cb_message
-  integer(C_INT) :: lowest_tag, highest_tag, largest_tag_diff, previous_lowest
-  integer :: num_msg_in_pass
-
-  integer(C_INT64_T), dimension(:), pointer :: f_data
-  type(C_PTR) :: c_data
-  integer(C_INT64_T) :: num_data_int8
-
-  type(data_record)    :: record
-  type(message_header) :: header
-  type(message_cap)    :: end_cap
-  type(jar)            :: dcb_message_jar
-  integer              :: latest_command_tag
-  integer, dimension(:), allocatable :: latest_tags ! Tags of the latest message transmitted by the relay for each model PE. -1 means the PE is done
+  type(relay_state) :: state
+  logical :: success
 
   relay_success = .false.
 
-  ! Retrieve useful data structures
-  cb_list     => context % get_server_bound_cb_list()
-  heap_list   => context % get_heap_list()
-  data_buffer =  context % get_dcb()
+  call state % init(context)
 
-  ! Get process info
-  node_crs        = context % get_crs(MODEL_COLOR + RELAY_COLOR + NODE_COLOR)
-  local_relay_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
+  ! Main loop (until all model PEs have sent their STOP signal)
+  do while (.not. state % done_transmitting)
+    success = check_and_process_model_messages(context, state)
+    if (.not. success) exit
+  end do
 
-  num_local_relays  = local_relay_crs % size
-  local_relay_id    = local_relay_crs % rank
-  num_local_compute = context % get_num_local_model()
-
-  client_id               = data_buffer % get_server_bound_client_id()
-  num_clients             = data_buffer % get_num_server_bound_clients()
-  dcb_capacity            = data_buffer % get_capacity(CB_DATA_ELEMENT_KIND)
-  dcb_message_buffer_size = min(int(dcb_capacity, kind=4) / 4, MAX_DCB_MESSAGE_SIZE_INT) - 10  ! Make sure there will be a bit of loose space in the server-side buffer
-
-  ! Create buffer for outbound data
-  success = dcb_message_jar % new(dcb_message_buffer_size)
-  if (.not. success) then
-    print *, 'Could not create jar to contain DCB message...'
-    error stop 1
-  end if
-
-  c_data = C_NULL_PTR
-  nullify(f_data)
-  total_message_size_int8 = 0
-  content_size = 0
-
-  allocate(latest_tags(0:num_local_compute - 1))
-  latest_tags(:) = 0
-  call dcb_message_jar % reset()
-
-  latest_command_tag = 0
-  param_size_int8 = -1
-  largest_tag_diff = 0
-  lowest_tag = 0
-  finished = .false.
-
-  ! Say hi to the consumer processes
-  header % content_size_int8  = 0
-  header % command            = MSG_COMMAND_DUMMY
-  header % sender_global_rank = context % get_global_rank()
-  header % relay_global_rank  = context % get_global_rank()
-  end_cap % msg_length = header % content_size_int8
-
-  success = data_buffer % put_elems(header, message_header_size_int8(), CB_KIND_INTEGER_8, .true.)
-  success = data_buffer % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success ! Append size
+  ! Send the remaining data
+  if (success) success = state % flush_dcb_message_buffer()
 
   if (.not. success) then
-    print *, 'ERROR: Failed saying HI to the consumer...'
+    print '(A)', 'ERROR: Relay did not complete its passes successfully'
+    !TODO Send an error message to the server
     return
   end if
 
-  ! Main loop (until all model PEs have sent their STOP signal)
-  do while (.not. finished)
-
-    ! Prepare pass over each model PE this relay is responsible for
-    previous_lowest = lowest_tag
-    lowest_tag = huge(lowest_tag)
-    highest_tag = 0
-    num_msg_in_pass = 0
-
-    finished = .true.
-    do i_compute = local_relay_id, num_local_compute - 1, num_local_relays
-
-      !---------------------------------------------------------------------------
-      ! Decide whether to process this model PE (if there is anything to process)
-
-      if (latest_tags(i_compute) == -1) cycle               ! This model buffer is done, move on
-      finished = .false.                                    ! This model buffer is not finished yet, so keep the loop active
-      lowest_tag = min(lowest_tag, latest_tags(i_compute))  ! Update lowest tag
-      if (cb_list(i_compute) % get_num_elements(CB_KIND_INTEGER_8) == 0) cycle ! The buffer is empty, move on to the next
-
-      ! From this point on, we know there is something in the buffer
-      success = cb_list(i_compute) % peek(header, message_header_size_byte(), CB_KIND_CHAR)
-
-      if (.not. success .or. header % header_tag .ne. MSG_HEADER_TAG) then
-        print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', header % message_tag, MSG_HEADER_TAG, &
-              ', relay id ', local_relay_id
-        return
-      end if
-
-      ! Skip this model process if we still need to deal with much lower message tags
-      if (header % message_tag - previous_lowest > context % get_relay_pipeline_depth()) cycle
-
-      ! Keep count of number of messages in every pass
-      num_msg_in_pass = num_msg_in_pass + 1
-
-      ! Extract header
-      success = cb_list(i_compute) % get(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-
-      ! Update lowest/highest message tags
-      lowest_tag  = min(lowest_tag, header % message_tag)
-      highest_tag = max(highest_tag, header % message_tag)
-      latest_tags(i_compute) = header % message_tag
-
-      content_size = header % content_size_int8
-
-      ! call print_message_header(header)
-
-      !------------------------------
-      ! Extract/process message data
-      if (header % command == MSG_COMMAND_DATA) then
-        param_size_int8 = header % content_size_int8 - data_record_size_int8()
-        call allocate_message_buffer(cb_message, param_size_int8)
-
-        ! Extract record first, then the rest of metadata
-        success = cb_list(i_compute) % get(record, data_record_size_byte(), CB_KIND_CHAR, .false.)
-        success = cb_list(i_compute) % get(cb_message, param_size_int8, CB_KIND_INTEGER_8, .false.) .and. success
-
-        if (.not. success) then
-          print *, 'ERROR Could not get record from data message'
-          return
-        end if
-
-        num_data_int8 = num_char_to_num_int8(record % data_size_byte)                 ! Get data size in the proper units
-        c_data = heap_list(i_compute) % get_address_from_offset(record % heap_offset) ! Get proper pointer to data in shared memory
-        call c_f_pointer(c_data, f_data, [num_data_int8])                             ! Access it using a fortran pointer, for easy copy into the jar
-
-        header % content_size_int8  = header % content_size_int8 + num_data_int8   ! Update message header
-        total_message_size_int8     = message_header_size_int8() + message_cap_size_int8() + header % content_size_int8
-
-      else if (header % command == MSG_COMMAND_MODEL_STOP) then
-        latest_tags(i_compute) = -1  ! Indicate this model won't be active anymore
-
-        if (context % get_debug_level() >= 2) then
-          print '(A, I3, A, I2, A, I4)', 'DEBUG: Model ', i_compute, ' is finished, relay ', local_relay_id, ' (local), DCB client ', client_id
-        end if
-
-        total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
-
-      else if (header % command == MSG_COMMAND_SERVER_CMD .or.            &
-               header % command == MSG_COMMAND_MODEL_STATS) then
-        param_size_int8 = header % content_size_int8
-
-        call allocate_message_buffer(cb_message, param_size_int8)
-
-        success = cb_list(i_compute) % get(cb_message, param_size_int8, CB_KIND_INTEGER_8, .true.) ! Extract file name
-        total_message_size_int8 = message_header_size_int8() + message_cap_size_int8() + param_size_int8
-
-      else
-        print *, 'ERROR: [relay] Unexpected message type'
-        call print_message_header(header)
-        return
-      end if
-
-      !----------------------------------
-      ! Check the end cap at this point
-      success = cb_list(i_compute) % get(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)
-      if ((.not. success) .or. (content_size .ne. end_cap % msg_length) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
-        print *, 'ERROR We have a problem with message size (end cap does not match)'
-        call print_message_header(header)
-        print '(I10, 1X, I10, 1X, L2, I11)', end_cap % cap_tag, end_cap % msg_length, success, content_size
-        success = .false.
-        return
-      end if
-
-      !----------------------------------------------------------------------------
-      ! If the message is a server command that has already been sent, just skip it
-      if (header % command == MSG_COMMAND_SERVER_CMD) then
-        if (header % message_tag > latest_command_tag) then
-          latest_command_tag = header % message_tag
-        else
-          cycle
-        end if
-      end if
-
-      !------------------------------------
-      ! If the DCB message buffer is too full to contain that new package, flush it now
-      if (dcb_message_jar % get_top() + total_message_size_int8 > dcb_message_buffer_size) then
-        success = data_buffer % put_elems(dcb_message_jar % f_array(), dcb_message_jar % get_top(), CB_DATA_ELEMENT_KIND, .true.)
-        call dcb_message_jar % reset()
-
-        if (.not. success) then
-          print *, 'ERROR sending message from relay to server!'
-          return
-        end if
-
-        if (total_message_size_int8 > dcb_message_jar % get_size()) then
-          print *, 'ERROR: Too much data to fit in jar...', total_message_size_int8, dcb_message_jar % get_size()
-          return
-        end if
-      end if
-
-      !-----------------------------
-      ! Copy message header
-
-      header % relay_global_rank = context % get_global_rank()
-      ! print *, 'Message size: ', header % content_size_int8
-      success = JAR_PUT_ITEM(dcb_message_jar, header)
-
-      !----------------------------
-      ! Copy message body
-      if (header % command == MSG_COMMAND_DATA) then
-
-        success = JAR_PUT_ITEM (dcb_message_jar, record)                        .and. success   ! Data header
-        success = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8)) .and. success   ! All other metadata
-        success = JAR_PUT_ITEMS(dcb_message_jar, f_data(:))                     .and. success   ! The data
-
-        ! Free the shared memory
-        success = heap_list(i_compute) % free(c_data) .and. success
-        if (.not. success) then
-          print*, 'ERROR: [relay] Unable to free heap data or maybe put stuff in the jar'
-          return
-        end if
-
-      else if (header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_MODEL_STATS) then
-
-        success = JAR_PUT_ITEMS(dcb_message_jar, cb_message(1:param_size_int8)) .and. success
-
-      else if (header % command == MSG_COMMAND_MODEL_STOP) then
-        ! No arguments to send
-
-      else
-        print *, 'ERROR: [relay] Unexpected message type! '
-        call print_message_header(header)
-        return
-
-      end if
-
-      !---------------------
-      ! Put message end cap
-      end_cap % msg_length = header % content_size_int8
-      success = JAR_PUT_ITEM(dcb_message_jar, end_cap) .and. success
-
-    end do ! Loop on each model PE for this relay
-
-    if (num_msg_in_pass > 0) then
-      ! Keep track of the largest difference between tags
-      largest_tag_diff = max(largest_tag_diff, highest_tag - lowest_tag)
-    else
-      ! No one put anything to send. Send what's in the buffer, while we're just waiting for stuff...
-      if (dcb_message_jar % get_top() > 0) then
-        success = data_buffer % put_elems(dcb_message_jar % f_array(), dcb_message_jar % get_top(), CB_DATA_ELEMENT_KIND, .true.)
-        call dcb_message_jar % reset()
-
-        if (.not. success) then
-          print *, 'ERROR sending message from relay to server!'
-          return
-        end if
-      end if
-    end if
-
-  end do ! Loop until finished
-
-  ! Send the remaining data
-  if (dcb_message_jar % get_top() > 0) then
-    ! print *, 'Sending remaining data: ', dcb_message_jar % high()
-    success = data_buffer % put_elems(dcb_message_jar % f_array(), dcb_message_jar % get_top(), CB_DATA_ELEMENT_KIND, .true.)
-
-    if (.not. success) then
-      print *, 'ERROR sending remaining data!'
-      return
-    end if
-  end if
-
-  if (allocated(cb_message)) deallocate(cb_message)
-  if (allocated(latest_tags)) deallocate(latest_tags)
-
-  if (context % get_debug_level() >= 1) print '(A, I3)', 'DEBUG: Largest diff b/w tags in one pass: ', largest_tag_diff
-
-  if (local_relay_id == 0) then
-    ! call heap_list(0) % dumpinfo()
-    ! do i_compute = 0, num_local_compute - 1
-    !   call cb_list(i_compute) % print_stats(client_id * 100 + i_compute, i_compute == 0)
-    ! end do
-  end if
+  if (context % get_debug_level() >= 1) print '(A, I3)', 'DEBUG: Largest diff b/w tags in one pass: ', state % largest_tag_diff
 
   relay_success = .true.
 
 end function default_server_bound_relay
 
-!> Make sure [buffer] has size at least [num_elem]
-subroutine allocate_message_buffer(buffer, num_elem)
+function check_and_process_model_messages(context, state) result(pass_success)
   implicit none
-  integer(C_INT64_T), dimension(:), allocatable, intent(inout) :: buffer
-  integer(C_INT64_T),                            intent(in)    :: num_elem
+  type(ioserver_context), intent(inout) :: context
+  type(relay_state),      intent(inout) :: state
+  logical :: pass_success
 
-  if (allocated(buffer)) then
-    if (size(buffer) >= num_elem) return
-    deallocate(buffer)
+  integer :: i_model
+  logical :: success
+
+  pass_success = .false.
+  call state % pre_pass()
+
+  do i_model = state % local_relay_id, state % num_local_compute - 1, state % num_local_relays
+    success = check_and_process_single_message(context, state, i_model)
+    if (.not. success) then
+      print '(A)', 'ERROR: [relay] Processing model PE message failed...'
+      state % done_transmitting = .true.
+      return
+    end if
+  end do ! Loop on each model PE for this relay
+
+  pass_success = state % post_pass()
+end function check_and_process_model_messages
+
+function check_and_process_single_message(context, state, model_id) result(process_success)
+  type(ioserver_context), intent(inout) :: context    !< IO server context
+  type(relay_state),      intent(inout) :: state      !< Current state of the relay
+  integer,                intent(in)    :: model_id   !< ID of the model PE we are checking now
+  logical :: process_success !< Whether we were successful in processing this PE's message
+
+  type(circular_buffer), pointer :: model_buffer ! Shortcut for using the model CB
+  type(heap),            pointer :: model_heap   ! Shortcut for using the model heap
+
+  type(message_header) :: header  ! header struct for both receiving and sending
+  type(message_cap)    :: end_cap ! message cap struct for both receiving and sending
+  type(data_record)    :: record  ! data record struct for both receiving and sending
+
+  integer(C_INT64_T) :: content_size    ! Keep track of the original content size of the message (before the header is modified)
+  integer(C_INT64_T) :: param_size_int8 ! Size of message content without some headers (size that must be extracted blindly)
+  integer(C_INT64_T) :: num_data_int8   ! Size of data content in 64-bit units (for data messages)
+  integer(C_INT64_T) :: total_message_size_int8  ! Total size of the message to be transmitted by the relay (including data)
+
+  type(C_PTR) :: c_data ! C pointer into a heap, to the data to be transmitted
+  integer(C_INT64_T), dimension(:), pointer :: f_data
+
+  logical :: success  ! Result variable for any intermediate steps
+
+  process_success = .false.
+
+  !---------------------------------------------------------------------------
+  ! Decide whether to process this model PE (if there is anything to process)
+
+  ! Move on if this model buffer is done
+  if (state % latest_tags(model_id) == -1) then
+    process_success = .true.
+    return
   end if
-  allocate(buffer(num_elem))
+
+  state % done_transmitting = .false.   ! This model buffer is not finished yet, so keep the loop active
+
+  model_buffer => state % model_message_buffers(model_id)
+  model_heap   => state % model_heaps(model_id)
+
+  state % lowest_tag = min(state % lowest_tag, state % latest_tags(model_id))  ! Update lowest tag
+
+  ! If the buffer is empty, move on to the next
+  if (model_buffer % get_num_elements(CB_KIND_INTEGER_8) == 0) then
+    process_success = .true.
+    return
+  end if
+
+  ! From this point on, we know there is something in the buffer
+  success = model_buffer % peek(header, message_header_size_byte(), CB_KIND_CHAR)
+
+  if (.not. success .or. header % header_tag .ne. MSG_HEADER_TAG) then
+    print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', header % message_tag, MSG_HEADER_TAG, &
+          ', relay id ', state % local_relay_id
+    return
+  end if
+
+  ! Skip this model process if we still need to deal with much lower message tags
+  if (header % message_tag - state % previous_lowest > context % get_relay_pipeline_depth()) then
+    process_success = .true.
+    return
+  end if
+
+  ! Keep count of number of messages in every pass
+  state % num_msg_in_pass = state % num_msg_in_pass + 1
+
+  ! Extract header
+  success = model_buffer % get(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
+
+  ! Update lowest/highest message tags
+  state % lowest_tag  = min(state % lowest_tag, header % message_tag)
+  state % highest_tag = max(state % highest_tag, header % message_tag)
+  state % latest_tags(model_id) = header % message_tag
+
+  content_size = header % content_size_int8
+
+  ! call print_message_header(header)
+
+  !------------------------------
+  ! Extract/process message data
+
+  ! -- MSG_COMMAND_DATA
+  if (header % command == MSG_COMMAND_DATA) then
+    param_size_int8 = header % content_size_int8 - data_record_size_int8()
+    call state % allocate_message_buffer(param_size_int8)
+
+    ! Extract record first, then the rest of metadata
+    success = model_buffer % get(record, data_record_size_byte(), CB_KIND_CHAR, .false.)
+    success = model_buffer % get(state % message_content, param_size_int8, CB_KIND_INTEGER_8, .false.) .and. success
+
+    if (.not. success) then
+      print *, 'ERROR Could not get record from data message'
+      return
+    end if
+
+    c_data = model_heap % get_address_from_offset(record % heap_offset) ! Get proper pointer to data in shared memory
+
+    if (.not. c_associated(c_data)) then
+      print '(A)', 'ERROR: [relay] Unable to retrieve the data from the heap'
+      return
+    end if
+
+    num_data_int8 = num_char_to_num_int8(record % data_size_byte)       ! Get data size in the proper units
+    call c_f_pointer(c_data, f_data, [num_data_int8])                   ! Access data using a fortran pointer, for easy copy into the jar
+
+    header % content_size_int8  = header % content_size_int8 + num_data_int8   ! Update message header
+    total_message_size_int8     = message_header_size_int8() + message_cap_size_int8() + header % content_size_int8
+
+  ! -- MSG_COMMAND_MODEL_STOP
+  else if (header % command == MSG_COMMAND_MODEL_STOP) then
+    state % latest_tags(model_id) = -1  ! Indicate this model won't be active anymore
+
+    if (context % get_debug_level() >= 2) then
+      print '(A, I3, A, I2, A, I4)',                &
+          'DEBUG: Model ', model_id, ' is finished, relay ', state % local_relay_id, &
+          ' (local), DCB client ', state % server_bound_sender % get_server_bound_client_id()
+    end if
+
+    total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
+
+  ! -- MSG_COMMAND_SERVER_CMD, MSG_COMMAND_MODEL_STATS
+  else if (header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_MODEL_STATS) then
+    param_size_int8 = header % content_size_int8
+
+    call state % allocate_message_buffer(param_size_int8)
+
+    success = model_buffer % get(state % message_content, param_size_int8, CB_KIND_INTEGER_8, .true.) ! Extract file name
+    total_message_size_int8 = message_header_size_int8() + message_cap_size_int8() + param_size_int8
+
+  ! -- We should not ever receive anything else
+  else
+    print '(A)', 'ERROR: [relay] Unexpected message type'
+    call print_message_header(header)
+    return
+  end if
+
+  !----------------------------------
+  ! Check the end cap at this point
+  success = model_buffer % get(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)
+  if ((.not. success) .or. (content_size .ne. end_cap % msg_length) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
+    print '(A)', 'ERROR We have a problem with message size (end cap does not match)'
+    call print_message_header(header)
+    print '(I10, 1X, I10, 1X, L2, I11)', end_cap % cap_tag, end_cap % msg_length, success, content_size
+    return
+  end if
+
+  !----------------------------------------------------------------------------
+  ! If the message is a server command that has already been sent, just skip it
+  if (header % command == MSG_COMMAND_SERVER_CMD) then
+    if (header % message_tag <= state % latest_command_tag) then
+      process_success = .true.
+      return
+    end if
+    state % latest_command_tag = header % message_tag ! Update latest command sent
+  end if
+
+  !------------------------------------
+  ! If the DCB message buffer is too full to contain that new package, flush it now
+  if (state % server_bound_data % get_top() + total_message_size_int8 > state % server_bound_data_size_int8) then
+    success = state % flush_dcb_message_buffer()
+
+    if (.not. success) then
+      print *, 'ERROR sending message from relay to server!'
+      return
+    end if
+
+    if (total_message_size_int8 > state % server_bound_data % get_size()) then
+      print *, 'ERROR: Too much data to fit in jar...', total_message_size_int8, state % server_bound_data % get_size()
+      return
+    end if
+  end if
+
+  !-----------------------------
+  ! Copy message header
+
+  header % relay_global_rank = context % get_global_rank()
+  ! print *, 'Message size: ', header % content_size_int8
+  success = JAR_PUT_ITEM(state % server_bound_data, header)
+
+  !----------------------------
+  ! Copy message body
+  if (header % command == MSG_COMMAND_DATA) then
+
+    success = JAR_PUT_ITEM (state % server_bound_data, record)                                     .and. success  ! Data header
+    success = JAR_PUT_ITEMS(state % server_bound_data, state % message_content(1:param_size_int8)) .and. success  ! All other metadata
+    success = JAR_PUT_ITEMS(state % server_bound_data, f_data(:))                                  .and. success  ! The data
+
+    ! Free the shared memory
+    success = model_heap % free(c_data) .and. success
+    if (.not. success) then
+      print*, 'ERROR: [relay] Unable to free heap data or maybe put stuff in the jar'
+      return
+    end if
+
+  else if (header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_MODEL_STATS) then
+
+    success = JAR_PUT_ITEMS(state % server_bound_data, state % message_content(1:param_size_int8)) .and. success
+
+  else if (header % command == MSG_COMMAND_MODEL_STOP) then
+    ! No arguments to send
+
+  else
+    print *, 'ERROR: [relay] Unexpected message type! '
+    call print_message_header(header)
+    return
+
+  end if
+
+  !---------------------
+  ! Put message end cap
+  end_cap % msg_length = header % content_size_int8
+  success = JAR_PUT_ITEM(state % server_bound_data, end_cap) .and. success
+
+  process_success = success
+end function check_and_process_single_message
+
+subroutine relay_state_init(this, context)
+  implicit none
+  class(relay_state),     intent(inout) :: this
+  type(ioserver_context), intent(in)    :: context
+
+  type(comm_rank_size) :: local_relay_crs
+  integer(C_INT64_T)   :: dcb_capacity_int8
+  integer(JAR_ELEMENT) :: dummy_jar_element
+  logical :: success
+
+  ! Retrieve useful data structures
+  call context % get_server_bound_cb_list(this % model_message_buffers)
+  call context % get_heap_list(this % model_heaps)
+  this % server_bound_sender = context % get_dcb()
+
+  ! Get process info
+  local_relay_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
+
+  this % num_local_relays  = local_relay_crs % size
+  this % local_relay_id    = local_relay_crs % rank
+  this % num_local_compute = context % get_num_local_model()
+
+  ! Determine size of buffer for sending data to the server. Make sure there will be a bit of loose space in the server-side buffer
+  dcb_capacity_int8 = this % server_bound_sender % get_capacity(CB_KIND_INTEGER_8)
+  this % server_bound_data_size_int8 = dcb_capacity_int8 * DCB_MESSAGE_RATIO
+
+  if (storage_size(dummy_jar_element) / 8 .ne. 8) then
+    print '(A)', 'ABOOOOOORT - Cannot deal with jar elements other than 64 bits in size'
+    error stop 1
+  end if
+
+  ! Create buffer for outbound data
+  success = this % server_bound_data % new(this % server_bound_data_size_int8)
+  if (.not. success) then
+    print '(A)', 'ERROR: Could not create jar to contain DCB message...'
+    error stop 1
+  end if
+
+  allocate(this % latest_tags(0:this % num_local_compute - 1))
+  this % latest_tags(:) = 0
+
+end subroutine relay_state_init
+
+subroutine relay_state_pre_pass(this)
+  implicit none
+  class(relay_state), intent(inout) :: this !< relay_state instance
+
+  this % previous_lowest = this % lowest_tag
+  this % lowest_tag      = huge(this % lowest_tag)
+  this % highest_tag     = 0
+  this % num_msg_in_pass = 0
+
+  this % done_transmitting = .true.
+end subroutine relay_state_pre_pass
+
+function relay_state_post_pass(this) result(success)
+  implicit none
+  class(relay_state), intent(inout) :: this !< relay_state instance
+  logical :: success
+
+  success = .false.
+  if (this % num_msg_in_pass > 0) then
+    ! Keep track of the largest difference between tags
+    this % largest_tag_diff = max(this % largest_tag_diff, this % highest_tag - this % lowest_tag)
+    success = .true.
+  else
+    ! No one put anything to send. Send what's in the buffer, while we're just waiting for stuff...
+    success = this % flush_dcb_message_buffer()
+  end if
+end function relay_state_post_pass
+
+!> Make sure [buffer] has size at least [num_elem]
+subroutine allocate_message_buffer(this, num_elem)
+  implicit none
+  class(relay_state), intent(inout) :: this     !< Relay state instance
+  integer(C_INT64_T), intent(in)    :: num_elem !< How many 64-bit elements in the buffer
+
+  if (allocated(this % message_content)) then
+    if (size(this % message_content) >= num_elem) return
+    deallocate(this % message_content)
+  end if
+  allocate(this % message_content(num_elem))
 end subroutine allocate_message_buffer
+
+!> If the message buffer is not empty, send its content to the server (through the DCB)
+function flush_dcb_message_buffer(this) result(success)
+  implicit none
+  class(relay_state), intent(inout) :: this
+  logical :: success !< Whether the DCB transmission was successful, if there was one, .true. otherwise
+
+  integer(C_INT64_T) :: num_data
+  integer(JAR_ELEMENT), dimension(:), pointer :: data_ptr
+
+  success = .true.
+
+  num_data = this % server_bound_data % get_top()
+  data_ptr =>  this % server_bound_data % f_array()
+  if (num_data > 0) then
+    success = this % server_bound_sender % put_elems(data_ptr, num_data, CB_DATA_ELEMENT_KIND, .true.)
+    call this % server_bound_data % reset()
+    if (.not. success) print '(A)', 'ERROR: [relay] Flushing message buffer into DCB!'
+  end if
+end function flush_dcb_message_buffer
+
+subroutine relay_state_finalize(this)
+  implicit none
+  type(relay_state), intent(inout) :: this
+  integer :: jar_status
+
+  if (allocated(this % message_content)) deallocate(this % message_content)
+  if (allocated(this % latest_tags)) deallocate(this % latest_tags)
+  jar_status = this % server_bound_data % free()
+end subroutine relay_state_finalize
 
 function default_model_bound_relay(context) result(relay_success)
   implicit none

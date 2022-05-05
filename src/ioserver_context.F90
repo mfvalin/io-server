@@ -696,7 +696,7 @@ end function IOserver_get_server_bound_cb
 !> Get the DCB created when initializing this context
 function IOserver_get_dcb(context) result(dcb)
   implicit none
-  class(ioserver_context), intent(inout) :: context
+  class(ioserver_context), intent(in) :: context
   type(distributed_circular_buffer) :: dcb
   dcb = context % local_dcb
 end function IOserver_get_dcb
@@ -735,20 +735,20 @@ function get_server_pipeline_depth(context) result(depth)
 end function get_server_pipeline_depth
 
 !> Get the list of local accessors to the server-bound CBs created on this node
-function get_server_bound_cb_list(context) result(cbs)
+subroutine get_server_bound_cb_list(context, cb_list)
   implicit none
-  class(ioserver_context), intent(inout) :: context
-  type(circular_buffer), dimension(:), pointer :: cbs
-  cbs => context % server_bound_cbs
-end function get_server_bound_cb_list
+  class(ioserver_context),                      intent(in)  :: context !< The ioserver_context instance
+  type(circular_buffer), dimension(:), pointer, intent(out) :: cb_list !< Pointer to the local list of server-bound CBs
+  cb_list => context % server_bound_cbs
+end subroutine get_server_bound_cb_list
 
 !> Get the list of local accessors to the heaps created on this node
-function get_heap_list(context) result(heaps)
+subroutine get_heap_list(context, heap_list)
   implicit none
-  class(ioserver_context), intent(inout) :: context
-  type(heap), dimension(:), pointer :: heaps
-  heaps => context % local_heaps
-end function get_heap_list
+  class(ioserver_context),           intent(in)  :: context   !< The ioserver_context instance
+  type(heap), dimension(:), pointer, intent(out) :: heap_list !< Pointer to the local list of model heaps
+  heap_list => context % local_heaps
+end subroutine get_heap_list
 
 !> Set the debug flag for this context
 subroutine set_debug_level(context, level)
