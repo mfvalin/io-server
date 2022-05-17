@@ -77,21 +77,18 @@ contains
     type(ioserver_messenger), pointer, intent(in) :: messenger
     type(model_stream) :: new_model_stream
 
-    if (.not. server_bound_cb % is_valid()) then
+    if (server_bound_cb % is_valid()) then
+      new_model_stream % global_rank = global_rank
+      new_model_stream % model_rank  = model_rank
+      new_model_stream % stream_rank = stream_rank
+      new_model_stream % local_heap  = local_heap
+      new_model_stream % server_bound_cb = server_bound_cb
+      new_model_stream % debug = debug_mode
+      new_model_stream % messenger => messenger
+    else
       print '(A)', 'ERROR: Server-bound CB has not been initialized!'
       return
     end if
-
-    new_model_stream % global_rank = global_rank
-    new_model_stream % model_rank  = model_rank
-    new_model_stream % stream_rank = stream_rank
-    new_model_stream % local_heap  = local_heap
-    new_model_stream % server_bound_cb = server_bound_cb
-    new_model_stream % debug = debug_mode
-    new_model_stream % messenger => messenger
-    
-    ! print *, 'Creating model stream, rank ', stream_rank
-
   end function new_model_stream
 
   function set_debug(this, dbg) result(status)

@@ -23,6 +23,8 @@
 
 module run_model_node_module
   use iso_c_binding
+
+  use circular_buffer_module
   use ioserver_context_module
   use ioserver_message_module
   use jar_module
@@ -33,7 +35,7 @@ module run_model_node_module
   public :: run_model_node, model_function_template, relay_function_template
   public :: default_model_bound_relay, default_server_bound_relay
 
-  real, parameter :: DCB_MESSAGE_RATIO = 0.2 !< What proportion of the DCB capacity should each transmission take (at most)
+  real(kind=8), parameter :: DCB_MESSAGE_RATIO = 0.2 !< What proportion of the DCB capacity should each transmission take (at most)
 
   abstract interface
     function model_function_template(context) result(model_success)
@@ -257,6 +259,8 @@ function check_and_process_single_message(context, state, model_id) result(proce
 
   process_success = .false.
 
+  c_data = C_NULL_PTR
+
   !---------------------------------------------------------------------------
   ! Decide whether to process this model PE (if there is anything to process)
 
@@ -469,9 +473,9 @@ subroutine relay_state_init(this, context)
   this % local_relay_id    = local_relay_crs % rank
   this % num_local_compute = context % get_num_local_model()
 
-  ! Determine size of buffer for sending data to the server. Make sure there will be a bit of loose space in the server-side buffer
+  ! Determine size of buffer for sending data to the server
   dcb_capacity_int8 = this % server_bound_sender % get_capacity(CB_KIND_INTEGER_8)
-  this % server_bound_data_size_int8 = dcb_capacity_int8 * DCB_MESSAGE_RATIO
+  this % server_bound_data_size_int8 = int(dcb_capacity_int8 * DCB_MESSAGE_RATIO, kind = 4)
 
   if (storage_size(dummy_jar_element) / 8 .ne. 8) then
     print '(A)', 'ABOOOOOORT - Cannot deal with jar elements other than 64 bits in size'

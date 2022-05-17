@@ -215,7 +215,6 @@ function default_server_bound(context) result(server_success)
 
   ! Combine statistics
   block
-    type(server_receiver_state) :: combined_state
     integer, dimension(:), allocatable :: ranks, ids
     integer :: i_rank, receiver_id
     integer :: dummy_integer
