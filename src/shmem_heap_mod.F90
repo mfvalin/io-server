@@ -94,7 +94,7 @@ module heap_module
     procedure :: clone_h      !< Clone a heap object using the address of an existing heap. \return The given address
     GENERIC   :: clone => clone_h
 
-    procedure :: check        !< Check integrity of heap. \return 0 if OK, something else otherwise
+    procedure :: check        !< Check integrity of heap. \return .true. if OK, something else otherwise
 
     GENERIC :: get_block_size => get_block_size_from_pointer, get_block_size_from_offset
     procedure :: get_block_size_from_pointer
@@ -174,7 +174,8 @@ module heap_module
   subroutine block_meta_print(this)
     implicit none
     class(block_meta_f08), intent(in) :: this
-    print *, 'BLOCK META tkr, kind: ', this % a % tkr, this % get_kind()
+    ! print *, 'BLOCK META tkr, kind: ', this % a % tkr, this % get_kind()
+    print *, this % get_ptr(), this % get_offset(), this % get_type(), this % get_kind(), this % get_rank(), this % get_dimensions()
   end subroutine block_meta_print
 
   !> get heap statistics

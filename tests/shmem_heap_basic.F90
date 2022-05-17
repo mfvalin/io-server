@@ -420,11 +420,11 @@ contains
             end do
           end do
         end do
-      end if
 
-      do i = 1, 6
-        success = the_heap % free(offsets(i))
-      end do
+        do i = 1, 6
+          success = the_heap % free(offsets(i))
+        end do
+      end if
     end subroutine array_tkr_and_values
 
     subroutine big_alloc()
