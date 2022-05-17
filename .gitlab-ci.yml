@@ -145,6 +145,78 @@ test:U2_intel-2022.1.2_multi_node:
       - BUILD_PATH=`pwd`
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
+####################
+# U2 GNU 8.3
+build:U2_gnu-8.3.1:
+   stage: build
+   dependencies:
+      - cleanup:u2
+   tags:
+      - U2
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_W: "10"
+      ORD_SOUMET_C: "20"
+      ORD_SOUMET_M: "2G"
+   script:
+      - set +e
+      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
+      - SRC_DIR=$(pwd)
+      - mkdir -pv ${build_dir}
+      - cd ${build_dir}
+      - pwd
+      - cmake ${SRC_DIR}
+      - make
+
+test:U2_gnu-8.3.1_single_node:
+   stage: test
+   tags:
+      - U2
+   dependencies:
+      - build:U2_gnu-8.3.1
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+      NUM_CPUS: "80"
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_C: "${NUM_CPUS}"
+      ORD_SOUMET_M: "16G"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: u2-gnu-single-node
+      MPI_COMMAND: "mpirun"
+   script:
+      - set +e
+      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
+      - SRC_DIR=$(pwd)
+      - cd ${build_dir}
+      - BUILD_PATH=`pwd`
+      - source ${SRC_DIR}/tests/script/single_node_tests.sh
+
+test:U2_intel-2022.1.2_multi_node:
+   stage: test
+   tags:
+      - U2
+   dependencies:
+      - build:U2_intel-2022.1.2
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      NUM_CPUS: "320"
+      NUM_SERVER_CPUS: "80"
+      NUM_MODEL_CPUS: "240"
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_C: "${NUM_CPUS}x1"
+      ORD_SOUMET_M: "2G"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: u2-intel-multi-node
+      MPI_COMMAND: "mpirun"
+   script:
+      - set +e
+      - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
+      - SRC_DIR=$(pwd)
+      - cd ${build_dir}
+      - BUILD_PATH=`pwd`
+      - source ${SRC_DIR}/tests/script/multi_node_tests.sh
+
 ##################
 # U1 Intel 19
 build:XC50_intel-19.0.5:
