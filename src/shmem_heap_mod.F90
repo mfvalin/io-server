@@ -175,7 +175,7 @@ module heap_module
     implicit none
     class(block_meta_f08), intent(in) :: this
     ! print *, 'BLOCK META tkr, kind: ', this % a % tkr, this % get_kind()
-    print *, this % get_ptr(), this % get_offset(), this % get_type(), this % get_kind(), this % get_rank(), this % get_dimensions()
+    print *, this % get_offset(), this % get_type(), this % get_kind(), this % get_rank(), this % get_dimensions()
   end subroutine block_meta_print
 
   !> get heap statistics
