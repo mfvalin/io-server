@@ -1,8 +1,42 @@
 cmake_minimum_required(VERSION 3.16)
 
 # What to compile
-file(GLOB PROJECT_C_FILES *.c)
-file(GLOB PROJECT_F_FILES *.F90 *.F *.f *.f90)
+set(PROJECT_C_FILES
+   circular_buffer.c
+   distributed_circular_buffer.c
+   rpn_extra.c
+   shmem_arena.c
+   shmem_heap.c
+   timer.c
+)
+
+set(PROJECT_F_FILES
+   atomic.F90
+   cb_common.F90
+   circular_buffer.F90
+   distributed_circular_buffer.F90
+   grid_assembly.F90
+   ioserver_constants.F90
+   ioserver_context.F90
+   ioserver_message.F90
+   ioserver_mpi.F90
+   ioserver_run.F90
+   ioserver_timer.F90
+   model_stream.F90
+   process_command_internal.F90
+   rpn_extra.F90
+   run_model_node.F90
+   run_server_node.F90
+   server_stream.F90
+   shared_mem_alloc.F90
+   shmem_arena.F90
+   shmem_heap.F90
+   simple_mutex.F90
+)
+
+set(LAUNCH_SERVER_SOURCE
+   launch_server.F90
+)
 
 # Headers to generate
 set(C_TO_INC_FILES
@@ -71,7 +105,7 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${MODULE_DIR})
 
 # Specify which modules to include in the public package
 set(PUBLIC_MODULES
-   ${MODULE_DIR}/heap_module.mod
+   ${MODULE_DIR}/shmem_heap_module.mod
    ${MODULE_DIR}/ioserver_context_module.mod
    ${MODULE_DIR}/ioserver_message_module.mod
    ${MODULE_DIR}/ioserver_run_module.mod
@@ -94,7 +128,13 @@ target_compile_options(
    # -g -O0
 )
 
-install(TARGETS ${PROJECT_NAME}
+# Server launcher
+set(LAUNCH_SERVER_TARGET ${PROJECT_NAME}_launch_server)
+add_executable(${LAUNCH_SERVER_TARGET} ${LAUNCH_SERVER_SOURCE})
+target_link_libraries(${LAUNCH_SERVER_TARGET} PUBLIC ${PROJECT_NAME} ioserver_pseudo_model)
+
+install(TARGETS ${PROJECT_NAME} ${LAUNCH_SERVER_TARGET}
+   RUNTIME       DESTINATION bin/$ENV{EC_ARCH}
    PUBLIC_HEADER DESTINATION include/$ENV{EC_ARCH}
    LIBRARY       DESTINATION lib/$ENV{EC_ARCH}
    ARCHIVE       DESTINATION lib/$ENV{EC_ARCH})

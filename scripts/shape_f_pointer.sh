@@ -54,7 +54,7 @@ for RI in I R ; do
 !> \brief ${TYPE}*${L} ${D}D array allocator
 function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(bmi) ! ${TYPE}*${L} ${D}D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc

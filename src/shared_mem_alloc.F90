@@ -29,7 +29,7 @@ contains
   ! given to that process is taken into account.
   function RPN_allocate_shared(wsize, comm) result(shmem_ptr)
     use ISO_C_BINDING
-    use shmem_arena_mod
+    use shmem_arena_module
     use ioserver_mpi
     implicit none
     INTEGER(KIND=MPI_ADDRESS_KIND), INTENT(IN) :: wsize ! Memory size (in bytes)

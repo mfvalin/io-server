@@ -21,20 +21,20 @@ module ioserver_context_module
 
   use circular_buffer_module
   use distributed_circular_buffer_module
-  use heap_module
-  use ioserver_constants
+  use shmem_heap_module
+  use ioserver_constants_module
   use ioserver_message_module
   use model_stream_module
   use rpn_extra_module
   use server_stream_module
-  use shmem_arena_mod
+  use shmem_arena_module
   implicit none
 
   private
   save
 
   ! Publish some types and constants that are useful
-  public :: heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
+  public :: shmem_heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
   public :: no_op_function_template, default_no_op
   public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
 
@@ -165,15 +165,15 @@ module ioserver_context_module
     !----------------------------------------------------
     !> @{ \name Local instances of objects located in shared memory
     type(shmem_arena)      :: arena                 !< Node memory arena
-    type(heap)             :: local_heap            !< Local heap for this process (located in memory arena)
+    type(shmem_heap)       :: local_heap            !< Local heap for this process (located in memory arena)
     type(circular_buffer)  :: local_cio_in          !< Model-bound circular buffer for this process (located in memory arena)
     type(circular_buffer)  :: local_server_bound_cb !< Server-bound circular buffer for this process (located in memory arena)
     type(distributed_circular_buffer) :: local_dcb  !< Distributed circular buffer for communication b/w relay and server processes
-    type(heap)             :: node_heap             !< On server node only. Heap that everyone on the node can use
+    type(shmem_heap)       :: node_heap             !< On server node only. Heap that everyone on the node can use
 
     type(circular_buffer),     dimension(:), pointer :: model_bound_cbs      => NULL() !< The CB objects belonging to model PEs (model-bound)
     type(circular_buffer),     dimension(:), pointer :: server_bound_cbs     => NULL() !< The CB objects belonging to model PEs (server-bound)
-    type(heap),                dimension(:), pointer :: local_heaps          => NULL() !< Shared memory heaps belonging to model PEs
+    type(shmem_heap),          dimension(:), pointer :: local_heaps          => NULL() !< Shared memory heaps belonging to model PEs
     type(local_server_stream), dimension(:), pointer :: local_server_streams => NULL() !< Local stream instances to access the shared ones (on server only)
     !> @}
 
@@ -661,19 +661,19 @@ function IOserver_get_crs(context, color) result(crs)
   endif
 end function IOserver_get_crs
 
-!> Get the local shmem heap that belongs to this PE
+!> Get the local shmem_heap that belongs to this PE
 function IOserver_get_local_heap(context) result(h)
   implicit none
   class(ioserver_context), intent(inout) :: context
-  type(heap) :: h
+  type(shmem_heap) :: h
   h = context % local_heap
 end function IOserver_get_local_heap
 
-!> Get the local shmem heap that belongs to this node (server only?)
+!> Get the local shmem_heap that belongs to this node (server only?)
 function IOserver_get_node_heap(context) result(h)
   implicit none
   class(ioserver_context), intent(inout) :: context
-  type(heap) :: h
+  type(shmem_heap) :: h
   h = context % node_heap
 end function IOserver_get_node_heap
 
@@ -745,8 +745,8 @@ end subroutine get_server_bound_cb_list
 !> Get the list of local accessors to the heaps created on this node
 subroutine get_heap_list(context, heap_list)
   implicit none
-  class(ioserver_context),           intent(in)  :: context   !< The ioserver_context instance
-  type(heap), dimension(:), pointer, intent(out) :: heap_list !< Pointer to the local list of model heaps
+  class(ioserver_context), intent(in)  :: context   !< The ioserver_context instance
+  type(shmem_heap), dimension(:), pointer, intent(out) :: heap_list !< Pointer to the local list of model heaps
   heap_list => context % local_heaps
 end subroutine get_heap_list
 

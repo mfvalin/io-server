@@ -22,7 +22,8 @@
 module shmem_heap_basic_module
   use iso_c_binding
   use ioserver_mpi
-  use heap_module
+
+  use shmem_heap_module
   use rpn_extra_module
   implicit none
 
@@ -46,7 +47,7 @@ contains
 
   subroutine run_test(the_heap)
     implicit none
-    type(heap), intent(inout) :: the_heap
+    type(shmem_heap), intent(inout) :: the_heap
 
     integer :: rank, num_procs
     integer :: ierr
@@ -508,7 +509,7 @@ program shmem_heap_basic
 
   type(C_PTR) :: shared_mem
 
-  type(heap) :: the_heap
+  type(shmem_heap) :: the_heap
   logical    :: success
 
   !!!!!!!!!!!!!!!!!!!!!!

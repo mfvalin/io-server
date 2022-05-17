@@ -23,7 +23,7 @@ module grid_assembly_module
   use iso_c_binding
   
   use ioserver_message_module
-  use heap_module
+  use shmem_heap_module
   use rpn_extra_module
   use simple_mutex_module
   implicit none
@@ -122,7 +122,7 @@ contains
     implicit none
     class(grid_assembly), intent(inout) :: this      !< The grid assembly object where we want to assemble a grid
     type(data_record),    intent(in)    :: record    !< The data record that triggered the creation of an assembly line
-    type(heap),           intent(inout) :: data_heap !< Heap from which we will allocate the necessary (shared) memory for assembling the grid
+    type(shmem_heap),     intent(inout) :: data_heap !< Heap from which we will allocate the necessary (shared) memory for assembling the grid
     type(simple_mutex),   intent(inout) :: mutex !< Mutex for the owning stream. We don't want other people creating assembly lines simultaneously
     integer :: line_id !< Id of the created line
 
@@ -201,7 +201,7 @@ contains
     class(grid_assembly), intent(inout) :: this       !< [in,out] The grid assembler object where we want to put the data
     type(data_record),    intent(in)    :: record     !< [in]     Metadata about the subgrid we want to insert
     integer(C_INT64_T),   intent(in), dimension(:), pointer, contiguous :: subgrid_data !< [in] The data we want to insert, as a 1-D array of 64-bit integers
-    type(heap),           intent(inout) :: data_heap  !< [in,out] The heap that contains the memory where we are assembling the grid
+    type(shmem_heap),     intent(inout) :: data_heap  !< [in,out] The heap that contains the memory where we are assembling the grid
     type(simple_mutex),   intent(inout) :: mutex      !< [in,out] To avoid synchronization issues (allocating memory, updating completion percentage)
 
     logical :: success !< Whether we were able to insert the subgrid into the full grid without issues
@@ -302,7 +302,7 @@ contains
     implicit none
     class(grid_assembly), intent(inout) :: this
     integer,              intent(in)    :: tag
-    type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
+    type(shmem_heap),     intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
     type(C_PTR) :: data_ptr
 
     integer, parameter :: TOTAL_ASSEMBLY_WAIT_TIME_MS = 5000
@@ -338,7 +338,7 @@ contains
     implicit none
     class(grid_assembly), intent(inout) :: this       !< Grid assembly instance
     integer,              intent(in)    :: tag        !< Tag of the data we want to delete
-    type(heap),           intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
+    type(shmem_heap),     intent(inout) :: data_heap  !< [in,out] Heap where the assembled grid is stored
     type(simple_mutex),   intent(inout) :: mutex      !< [in,out] To avoid synchronization issues (allocating memory, updating completion percentage)
     logical :: success
     

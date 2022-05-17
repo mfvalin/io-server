@@ -107,7 +107,7 @@ contains
   end function am_server_node
 
   function pseudo_model_process(context) result(model_success)
-    use heap_module
+    use shmem_heap_module
     use ioserver_context_module
     use ioserver_message_module
     use jar_module
@@ -120,7 +120,7 @@ contains
     type(ioserver_context), intent(inout) :: context
     logical :: model_success
 
-    type(heap)            :: node_heap
+    type(shmem_heap)      :: node_heap
     type(model_stream), pointer :: output_stream_1, output_stream_2
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs

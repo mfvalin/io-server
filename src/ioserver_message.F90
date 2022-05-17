@@ -21,8 +21,8 @@
 
 module ioserver_message_module
   use ISO_C_BINDING
-  use heap_module, only: MAX_ARRAY_RANK, HEAP_ELEMENT
-  use ioserver_constants
+  use shmem_heap_module, only: MAX_ARRAY_RANK, HEAP_ELEMENT
+  use ioserver_constants_module
   use jar_module
   use rpn_extra_module
   implicit none

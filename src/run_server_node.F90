@@ -22,7 +22,7 @@
 module run_server_node_module
   use circular_buffer_module
   use distributed_circular_buffer_module
-  use ioserver_constants
+  use ioserver_constants_module
   use ioserver_context_module
   use ioserver_message_module
   use rpn_extra_module

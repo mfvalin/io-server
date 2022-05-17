@@ -27,7 +27,7 @@ module server_stream_module
   use grid_assembly_module
   use ioserver_message_module
   use ioserver_timer_module
-  use heap_module
+  use shmem_heap_module
   use process_command_internal_module
   use rpn_extra_module, only: sleep_us
   use simple_mutex_module
@@ -96,7 +96,7 @@ module server_stream_module
     integer             :: unit       = -1      !< Fortran file unit, when/if open
     logical             :: debug_mode = .false. !< Whether to print some debug messages
     type(simple_mutex)  :: mutex                !< Used to protect access to the underlying 
-    type(heap)          :: data_heap            !< Heap where we can get space in shared memory
+    type(shmem_heap)    :: data_heap            !< Heap where we can get space in shared memory
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
     type(circular_buffer) :: command_buffer
     type(atomic_int32)  :: command_counter
@@ -240,7 +240,7 @@ contains
     logical,                             intent(in)    :: is_writer         !< [in] Whether the caller is allowed to write to the underlying file
     logical,                             intent(in)    :: debug_mode        !< [in] Whether to print debug messages
     type(shared_server_stream), pointer, intent(inout) :: shared_instance   !< [in,out] Pointer to the underlying shared instance
-    type(heap),                          intent(inout) :: data_heap         !< [in,out] Heap from which to allocate/access shared memory
+    type(shmem_heap),                    intent(inout) :: data_heap         !< [in,out] Heap from which to allocate/access shared memory
 
     logical :: success
 

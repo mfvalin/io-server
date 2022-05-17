@@ -35,7 +35,7 @@
 !> \brief integer*1 5D array allocator
 function allocate_I1_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 5D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -142,7 +142,7 @@ end function blockmeta_to_ptr_I15D
 !> \brief integer*1 4D array allocator
 function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 4D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -249,7 +249,7 @@ end function blockmeta_to_ptr_I14D
 !> \brief integer*1 3D array allocator
 function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 3D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -356,7 +356,7 @@ end function blockmeta_to_ptr_I13D
 !> \brief integer*1 2D array allocator
 function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 2D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -463,7 +463,7 @@ end function blockmeta_to_ptr_I12D
 !> \brief integer*1 1D array allocator
 function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 1D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -570,7 +570,7 @@ end function blockmeta_to_ptr_I11D
 !> \brief integer*2 5D array allocator
 function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 5D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -677,7 +677,7 @@ end function blockmeta_to_ptr_I25D
 !> \brief integer*2 4D array allocator
 function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 4D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -784,7 +784,7 @@ end function blockmeta_to_ptr_I24D
 !> \brief integer*2 3D array allocator
 function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 3D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -891,7 +891,7 @@ end function blockmeta_to_ptr_I23D
 !> \brief integer*2 2D array allocator
 function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 2D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -998,7 +998,7 @@ end function blockmeta_to_ptr_I22D
 !> \brief integer*2 1D array allocator
 function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 1D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_SHORT), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1105,7 +1105,7 @@ end function blockmeta_to_ptr_I21D
 !> \brief integer*4 5D array allocator
 function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 5D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1212,7 +1212,7 @@ end function blockmeta_to_ptr_I45D
 !> \brief integer*4 4D array allocator
 function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 4D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1319,7 +1319,7 @@ end function blockmeta_to_ptr_I44D
 !> \brief integer*4 3D array allocator
 function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 3D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1426,7 +1426,7 @@ end function blockmeta_to_ptr_I43D
 !> \brief integer*4 2D array allocator
 function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 2D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1533,7 +1533,7 @@ end function blockmeta_to_ptr_I42D
 !> \brief integer*4 1D array allocator
 function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 1D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1640,7 +1640,7 @@ end function blockmeta_to_ptr_I41D
 !> \brief integer*8 5D array allocator
 function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 5D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1747,7 +1747,7 @@ end function blockmeta_to_ptr_I85D
 !> \brief integer*8 4D array allocator
 function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 4D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1854,7 +1854,7 @@ end function blockmeta_to_ptr_I84D
 !> \brief integer*8 3D array allocator
 function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 3D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -1961,7 +1961,7 @@ end function blockmeta_to_ptr_I83D
 !> \brief integer*8 2D array allocator
 function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 2D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2068,7 +2068,7 @@ end function blockmeta_to_ptr_I82D
 !> \brief integer*8 1D array allocator
 function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 1D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2175,7 +2175,7 @@ end function blockmeta_to_ptr_I81D
 !> \brief real*4 5D array allocator
 function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 5D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2282,7 +2282,7 @@ end function blockmeta_to_ptr_R45D
 !> \brief real*4 4D array allocator
 function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 4D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2389,7 +2389,7 @@ end function blockmeta_to_ptr_R44D
 !> \brief real*4 3D array allocator
 function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 3D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2496,7 +2496,7 @@ end function blockmeta_to_ptr_R43D
 !> \brief real*4 2D array allocator
 function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 2D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2603,7 +2603,7 @@ end function blockmeta_to_ptr_R42D
 !> \brief real*4 1D array allocator
 function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 1D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2710,7 +2710,7 @@ end function blockmeta_to_ptr_R41D
 !> \brief real*8 5D array allocator
 function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 5D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2817,7 +2817,7 @@ end function blockmeta_to_ptr_R85D
 !> \brief real*8 4D array allocator
 function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 4D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -2924,7 +2924,7 @@ end function blockmeta_to_ptr_R84D
 !> \brief real*8 3D array allocator
 function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 3D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -3031,7 +3031,7 @@ end function blockmeta_to_ptr_R83D
 !> \brief real*8 2D array allocator
 function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 2D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
@@ -3138,7 +3138,7 @@ end function blockmeta_to_ptr_R82D
 !> \brief real*8 1D array allocator
 function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 1D array allocator
   implicit none
-  class(heap), intent(INOUT)        :: this    !< heap object
+  class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc

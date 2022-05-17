@@ -19,11 +19,12 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 program model_integration
-  use heap_module
+  use ioserver_mpi
+
+  use shmem_heap_module
   use ioserver_context_module
   use ioserver_message_module
   use ioserver_run_module
-  use ioserver_mpi
   use jar_module
   use process_command_module
   implicit none
@@ -123,7 +124,7 @@ program model_integration
     !--------------
     ! Send data
     block
-      type(heap) :: data_heap
+      type(shmem_heap)     :: data_heap
       type(subgrid_t)      :: local_grid
       type(grid_t)         :: input_grid, output_grid
       type(block_meta_f08) :: array_info

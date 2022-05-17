@@ -21,8 +21,8 @@
 
 program test_memory_arena
   use ISO_C_BINDING
-  use shmem_arena_mod
   use ioserver_mpi
+  use shmem_arena_module
   implicit none
 
 #define DBLK (20*4)

@@ -21,7 +21,7 @@
 
 !> \file
 !> \brief shared memory heap Fortran module (object oriented)
-module heap_module
+module shmem_heap_module
   use ISO_C_BINDING
   implicit none
 
@@ -82,16 +82,16 @@ module heap_module
   end type block_meta_f08
 
 !   ===========================  heap type and type bound procedures ===========================
-  !> \brief heap user defined type
-  type, public :: heap
+  !> \brief shmem_heap user defined type
+  type, public :: shmem_heap
     private
-    type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by heap \private
+    type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by shmem_heap \private
   contains
 
     procedure :: createb      !< create, initialize, register a heap at specified address (size in uint64_t bytes). \return address of heap
     GENERIC   :: create => createb !, createw
 
-    procedure :: clone_h      !< Clone a heap object using the address of an existing heap. \return The given address
+    procedure :: clone_h      !< Clone a shmem_heap object using the address of an existing heap. \return The given address
     GENERIC   :: clone => clone_h
 
     procedure :: check        !< Check integrity of heap. \return .true. if OK, something else otherwise
@@ -105,15 +105,15 @@ module heap_module
     procedure :: get_ptr => heap_get_ptr  !< \return Internal pointer to heap
 
     procedure :: get_size               !< \return Size of heap, -1 if error
-    procedure :: alloc                  !< Allocate a block from a heap.  \return block address, NULL if allocation fails
+    procedure :: alloc                  !< Allocate a block from a shmem_heap.  \return block address, NULL if allocation fails
 
     GENERIC   :: free => free_by_address, free_by_offset, free_by_meta
     procedure :: free_by_address        !< Free an allocated block by address in memory. \return .true. if O.K., .false. if error
     procedure :: free_by_offset         !< Free space associated to offset into heap. \return .true. if O.K., .false. if error
     procedure :: free_by_meta           !< Free block in heap from its metadata. \return .true. if O.K., .false. if error
 
-    procedure :: get_info               !< Get heap statistics using heap address. \return 0 if O.K., nonzero if error
-    procedure :: dump_info              !< Dump information about this heap
+    procedure :: get_info               !< Get heap statistics using shmem_heap address. \return 0 if O.K., nonzero if error
+    procedure :: dump_info              !< Dump information about this shmem_heap
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
 !   ===========================  interfaces to script generated functions  ===========================
@@ -134,7 +134,7 @@ module heap_module
                               allocate_I8_5D, allocate_I8_4D, allocate_I8_3D, allocate_I8_2D, allocate_I8_1D, &
                               allocate_R4_5D, allocate_R4_4D, allocate_R4_3D, allocate_R4_2D, allocate_R4_1D, &
                               allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D
-  end type heap
+  end type shmem_heap
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
@@ -181,7 +181,7 @@ module heap_module
   !> get heap statistics
   function get_info(h, sz, max, nblk, nbyt) result(status)
     implicit none
-    class(heap), intent(INOUT) :: h                         !< heap object
+    class(shmem_heap),    intent(INOUT) :: h                !< heap object
     integer(C_LONG_LONG), intent(OUT) :: sz                 !< [out] size of heap (bytes)
     integer(C_LONG_LONG), intent(OUT) :: max                !< [out] high water mark in heap  (highest allocation point) (bytes)
     integer(C_LONG_LONG), intent(OUT) :: nblk               !< [out] number of blocks that have been allocated
@@ -193,7 +193,7 @@ module heap_module
   !> dump info about this heap
   subroutine dump_info(this)
     implicit none
-    class(heap), intent(inout) :: this
+    class(shmem_heap), intent(inout) :: this
     call ShmemHeap_dump_info(this % p)
   end subroutine dump_info
 
@@ -311,11 +311,11 @@ module heap_module
   include 'io-server/f_alloc.inc'
 
   !> \brief create, initialize, and register a heap
-  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p, addr<br>integer(C_SIZE_T) :: nbytes<br>
+  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p, addr<br>integer(C_SIZE_T) :: nbytes<br>
   !> p = h\%createb(addr, nbytes)
   function createb(this, addr, nbytes) result(success)
     implicit none
-    class(heap),       intent(INOUT)     :: this            !< heap object
+    class(shmem_heap), intent(INOUT)     :: this            !< shmem_heap instance
     type(C_PTR),       intent(IN), value :: addr            !< memory address
     integer(C_SIZE_T), intent(IN), value :: nbytes          !< size in bytes of the heap
     logical :: success
@@ -323,26 +323,26 @@ module heap_module
     success = c_associated(this % p)
   end function createb
 
-  !> \brief create a new heap object using the address of an existing heap (NO SETUP)
-  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p, addr<br>
+  !> \brief create a new shmem_heap object using the address of an existing heap (NO SETUP)
+  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p, addr<br>
   !> p = h\%clone_h(addr)
   function clone_h(this, addr) result(success)
     implicit none
-    class(heap), intent(INOUT) :: this                         !< heap object
-    type(C_PTR), intent(IN), value :: addr                  !< memory address (must be an existing heap address)
+    class(shmem_heap), intent(INOUT) :: this                  !< shmem_heap instance
+    type(C_PTR), intent(IN), value   :: addr                  !< memory address (must be an existing heap address)
     logical :: success
     this % p = ShmemHeap_clone(addr)
     success = c_associated(this % p)
   end function clone_h
 
   !> \brief allocate a memory block in a heap
-  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p<br>integer(C_SIZE_T) :: nbytes<br>
+  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p<br>integer(C_SIZE_T) :: nbytes<br>
   !> p = h\%alloc(nbytes, 0)
   function alloc(h, nbytes, safe) result(p)
     implicit none
-    class(heap), intent(INOUT) :: h                         !< heap object
+    class(shmem_heap), intent(INOUT)     :: h               !< shmem_heap instance
     integer(C_SIZE_T), intent(IN), value :: nbytes          !< size in bytes of the desired block
-    integer(C_INT), intent(IN), value :: safe               !< if nonzero perform operation under lock (atomic operation)
+    integer(C_INT),    intent(IN), value :: safe            !< if nonzero perform operation under lock (atomic operation)
     type(C_PTR) :: p                                        !< address of created heap
     p = ShmemHeap_alloc_block(h%p, nbytes, safe)
   end function alloc 
@@ -350,8 +350,8 @@ module heap_module
   !> \brief free block by address in memory
   function free_by_address(this, block_address) result(success)
     implicit none
-    class(heap), intent(inout)     :: this          !< Heap to which the block belongs
-    type(C_PTR), intent(IN), value :: block_address !< address of block to free
+    class(shmem_heap), intent(inout) :: this          !< Heap to which the block belongs
+    type(C_PTR), intent(IN), value   :: block_address !< address of block to free
     logical :: success         !< .true. if the operation succeeded, .false. otherwise
     integer(C_INT) :: status   !< 0 if O.K., nonzero if error
     status  = ShmemHeap_free_block(this % p, block_address)
@@ -361,7 +361,7 @@ module heap_module
   !> \brief free block by offset in heap
   function free_by_offset(this, offset) result(success)
     implicit none
-    class(heap),           intent(INOUT)     :: this    !< heap object
+    class(shmem_heap),     intent(INOUT)     :: this    !< shmem_heap instance
     integer(HEAP_ELEMENT), intent(IN), value :: offset  !< offset into heap of block to free
     logical :: success                                  !< .true. if the operation succeeded, .false. otherwise
 
@@ -376,7 +376,7 @@ module heap_module
   !> \brief Free block from heap
   function free_by_meta(this, block_info) result(success)
     implicit none
-    class(heap),           intent(inout) :: this
+    class(shmem_heap),    intent(inout) :: this       !< shmem_heap instance
     type(block_meta_f08), intent(in)    :: block_info !< metadata associated to memory block
     logical :: success                                !< .true. if call to underlying C function had no error
 
@@ -387,12 +387,12 @@ module heap_module
   end function free_by_meta 
   
   !> \brief check integrity of a heap
-  !> <br>example :<br>type(heap) :: h<br>
+  !> <br>example :<br>type(shmem_heap) :: h<br>
   !> <br>integer(C_SIZE_T) :: free_space,used_space<br>integer(C_INT) :: status<br>
   !> status = h\%check(free_blocks, free_space, used_blocks, used_space)
   function check(h, free_blocks_out, free_space_out, used_blocks_out, used_space_out) result(is_ok)
     implicit none
-    class(heap),       intent(INOUT)         :: h                 !< heap object
+    class(shmem_heap), intent(INOUT)         :: h                 !< shmem_heap instance
     integer(C_INT),    intent(OUT), optional :: free_blocks_out   !< [out] number of free blocks in heap
     integer(C_SIZE_T), intent(OUT), optional :: free_space_out    !< [out] available space in heap (bytes)
     integer(C_INT),    intent(OUT), optional :: used_blocks_out   !< [out] number of used blocks in heap
@@ -414,64 +414,64 @@ module heap_module
     if (present(used_space_out))  used_space_out  = used_space
   end function check 
   
-  !> \brief Find if given address belongs to a block from a registered heap
-  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: status<br>
+  !> \brief Find if given address belongs to a block from the given shmem_heap
+  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: status<br>
   !> status = h\%is_valid_block(addr)
   function is_valid_block(this, block_addr) result(is_valid)
     implicit none
-    class(heap), intent(inout) :: this
-    type(C_PTR), intent(IN), value :: block_addr  !< memory address to check
-    logical :: is_valid                           !< Whether the given address points to a valid block in a known heap
-    integer(C_INT) :: status                      !< 0 if valid block, -1 if not
+    class(shmem_heap), intent(inout) :: this        !< shmem_heap instance
+    type(C_PTR), intent(IN), value   :: block_addr  !< memory address to check
+    logical :: is_valid                             !< Whether the given address points to a valid block in the given heap
+    integer(C_INT) :: status                        !< 0 if valid block, -1 if not
     status = ShmemHeap_is_block_valid(this % p, block_addr)
     is_valid = (status == 0)
   end function is_valid_block 
   
   !> \brief get the size of a heap
-  !> <br>example :<br>type(heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
+  !> <br>example :<br>type(shmem_heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
   !> bsz = h\%get_size()
   function get_size(h) result(bsz)
     implicit none
-    class(heap), intent(INOUT) :: h             !< heap object
-    integer(HEAP_ELEMENT)      :: bsz           !< size (in bytes) if heap is OK, -1 otherwise
+    class(shmem_heap), intent(INOUT) :: h             !< shmem_heap instance
+    integer(HEAP_ELEMENT)            :: bsz           !< size (in bytes) if heap is OK, -1 otherwise
     bsz = ShmemHeap_get_size(h%p)
   end function get_size
 
   !> Retrieve the size of a block, given its address
   function get_block_size_from_pointer(this, block) result(num_bytes)
     implicit none
-    class(heap), intent(inout)     :: this
-    type(C_PTR), intent(in), value :: block !< Address of the block we are querying
+    class(shmem_heap), intent(inout) :: this  !< shmem_heap instance
+    type(C_PTR), intent(in), value   :: block !< Address of the block we are querying
     integer(C_SIZE_T) :: num_bytes !< Size of the block in bytes, 0 if there was an error (invalid heap or block offset)
     num_bytes = ShmemHeap_block_size_from_pointer(this % p, block)
   end function get_block_size_from_pointer
 
-  !> Retrieve the size of a block, given its offset in a heap
+  !> Retrieve the size of a block, given its offset in the given heap
   function get_block_size_from_offset(this, offset) result(num_bytes)
     implicit none
-    class(heap),           intent(inout) :: this   !< [in,out] This heap
+    class(shmem_heap),     intent(inout) :: this   !< [in,out] shmem_heap instance
     integer(HEAP_ELEMENT), intent(in)    :: offset !< [in] Offset of the block we're querying
     integer(C_SIZE_T) :: num_bytes !< Size of the block in bytes. 0 if there was an error (invalid heap or block offset)
     num_bytes = ShmemHeap_block_size_from_offset(this % p, offset)
   end function get_block_size_from_offset
   
   !> \brief get internal pointer(address) to heap
-  !> <br>example :<br>type(heap) :: h<br>type(C_PTR) :: p<br>
+  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p<br>
   !> p = h\%get_ptr()
   function heap_get_ptr(h) result(p)
     implicit none
-    class(heap), intent(INOUT) :: h             !< heap object
+    class(shmem_heap), intent(inout) :: h       !< shmem_heap instance
     type(C_PTR) :: p                            !< internal address, NULL if not initialized
     p = h%p
   end function heap_get_ptr 
   
   !> \brief translate offset in heap into address
-  !> <br>example :<br>type(heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br>type(C_PTR) :: p<br>
+  !> <br>example :<br>type(shmem_heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br>type(C_PTR) :: p<br>
   !> p = h\%get_address_from_offset(offset)
   function get_address_from_offset(this, offset) result(p)
     implicit none
-    class(heap),           intent(INOUT)     :: this    !< heap object
-    integer(HEAP_ELEMENT), intent(IN), value :: offset  !< offset into heap
+    class(shmem_heap),     intent(inout)     :: this    !< shmem_heap instance
+    integer(HEAP_ELEMENT), intent(in), value :: offset  !< offset into heap
     type(C_PTR) :: p                            !< address, NULL if invalid offset/heap combination
     p = ShmemHeap_ptr_from_offset(this % p, offset)
   end function get_address_from_offset
@@ -484,4 +484,4 @@ module heap_module
     offset = this % a % offset
   end function block_meta_get_offset
 
-end module heap_module
+end module shmem_heap_module

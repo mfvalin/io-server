@@ -19,7 +19,7 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-module shmem_arena_mod
+module shmem_arena_module
   use ISO_C_BINDING
   implicit none
   include 'io-server/shmem_arena.inc'
@@ -175,4 +175,4 @@ module shmem_arena_mod
     p = this%p                                                !< address of memory arena, NULL if error
   end function addr
 
-end module
+end module shmem_arena_module

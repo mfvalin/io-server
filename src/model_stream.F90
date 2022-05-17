@@ -21,7 +21,7 @@
 
 module model_stream_module
   use circular_buffer_module
-  use heap_module
+  use shmem_heap_module
   use ioserver_message_module
   use jar_module
   use rpn_extra_module
@@ -41,7 +41,7 @@ module model_stream_module
     logical               :: debug = .false.        !< debug mode at the file level (is this even used?)
     integer               :: global_rank = -1       !< Rank of the model PE that created this object, within the world communicator
     integer               :: model_rank = -1        !< Rank of the model PE that created this object, within the model-only communicator
-    type(heap)            :: local_heap             !< Access to the shared memory heap owned by this model PE
+    type(shmem_heap)      :: local_heap             !< Access to the shared memory heap owned by this model PE
     type(circular_buffer) :: server_bound_cb        !< Access to the server-bound buffer owned by this model PE
     type(ioserver_messenger), pointer :: messenger => NULL() !< Messenger used to manage/synchronized data transmission to the server
 
@@ -71,7 +71,7 @@ contains
     integer,                intent(in)  :: global_rank
     integer,                intent(in)  :: model_rank
     integer,                intent(in)  :: stream_rank
-    type(heap),             intent(in)  :: local_heap
+    type(shmem_heap),       intent(in)  :: local_heap
     type(circular_buffer),  intent(in)  :: server_bound_cb
     logical,                intent(in)  :: debug_mode
     type(ioserver_messenger), pointer, intent(in) :: messenger

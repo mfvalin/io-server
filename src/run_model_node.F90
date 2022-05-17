@@ -56,7 +56,7 @@ module run_model_node_module
   type, private :: relay_state
 
     type(circular_buffer), dimension(:), pointer :: model_message_buffers   !< List of CBs where messages are received from model PEs
-    type(heap),            dimension(:), pointer :: model_heaps             !< List of heaps that belong to each model PE
+    type(shmem_heap),      dimension(:), pointer :: model_heaps             !< List of heaps that belong to each model PE
 
     integer(C_INT64_T), dimension(:), allocatable :: message_content   !< Buffer for extracting model PE message content
 
@@ -241,7 +241,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
   logical :: process_success !< Whether we were successful in processing this PE's message
 
   type(circular_buffer), pointer :: model_buffer ! Shortcut for using the model CB
-  type(heap),            pointer :: model_heap   ! Shortcut for using the model heap
+  type(shmem_heap),      pointer :: model_heap   ! Shortcut for using the model heap
 
   type(message_header) :: header  ! header struct for both receiving and sending
   type(message_cap)    :: end_cap ! message cap struct for both receiving and sending
@@ -578,11 +578,6 @@ function default_model_bound_relay(context) result(relay_success)
 end function default_model_bound_relay
 
 function default_model(context) result(model_success)
-  use ioserver_mpi
-
-  use heap_module
-  use ioserver_message_module
-  use rpn_extra_module, only: sleep_us
   implicit none
 
   type(ioserver_context), intent(inout) :: context

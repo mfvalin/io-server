@@ -19,7 +19,7 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-module ioserver_constants
+module ioserver_constants_module
   use ISO_C_BINDING
   use ioserver_mpi
   implicit none
@@ -97,4 +97,4 @@ function is_color_model(color)
   is_color_model = iand(color, MODEL_COLOR) == MODEL_COLOR
 end function is_color_model
 
-end module ioserver_constants
+end module ioserver_constants_module
