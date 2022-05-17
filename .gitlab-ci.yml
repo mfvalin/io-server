@@ -192,14 +192,14 @@ test:U2_gnu-8.3.1_single_node:
       - BUILD_PATH=`pwd`
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
-test:U2_intel-2022.1.2_multi_node:
+test:U2_gnu-8.3.1_multi_node:
    stage: test
    tags:
       - U2
    dependencies:
-      - build:U2_intel-2022.1.2
+      - build:U2_gnu-8.3.1
    variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
       NUM_CPUS: "320"
       NUM_SERVER_CPUS: "80"
       NUM_MODEL_CPUS: "240"
@@ -211,7 +211,7 @@ test:U2_intel-2022.1.2_multi_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
+      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
@@ -296,6 +296,23 @@ package:U2_intel-2022.1.2:
    script:
       - set +e
       - source ci-env/latest/rhel-8-icelake-64/intel-2022.1.2.sh
+      - cd ${build_dir}
+      - make package
+      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
+
+package:U2_gnu-8.3.1:
+   stage: package
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+   only:
+      - tags
+   dependencies:
+      - build:U2_gnu-8.3.1
+   environment:
+      name: testing
+   script:
+      - set +e
+      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
       - cd ${build_dir}
       - make package
       - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
