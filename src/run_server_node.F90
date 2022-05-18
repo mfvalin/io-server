@@ -355,7 +355,7 @@ function default_grid_processor(context) result(server_success)
 
   do while (.not. context % is_time_to_quit() .and. .not. early_stop)
     ! if (context % is_time_to_quit()) finished = .true.
-    do i_stream = 1, MAX_NUM_STREAMS
+    do i_stream = 1, context % get_max_num_streams()
       ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
       call context % get_stream(i_stream, stream_ptr)
       if (stream_ptr % is_owner()) then

@@ -38,7 +38,6 @@ module ioserver_context_module
   public :: no_op_function_template, default_no_op
   public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
 
-  integer, parameter, public :: MAX_NUM_STREAMS   = 32  !< How many streams we can open within a single context
   integer, parameter         :: MAX_PES_PER_NODE  = 128 !< How many PEs per node we can manage
 
   !> Struct to hold information for PEs on a node (_shared memory addresses are valid for the corresponding PE only_)
@@ -82,6 +81,12 @@ module ioserver_context_module
     real :: dcb_model_bound_size_mb  = 2.0      !< Size in MB of each model-bound CB within the DCB
     !> @}
 
+    !> @{ \name Stream control
+    !> How many streams can be open at the same time.
+    !> _This will be the same for every PE, so the common value is determined by the root server PE._
+    integer :: max_num_concurrent_streams = 32
+    !> @}
+
     !> @{ \name Pipeline control
     !> Maximum difference of tags that a relay can transmit before starting to wait for the slower model PEs on the node.
     !> Ideally, should be lower than MAX_ASSEMBLY_LINES
@@ -95,6 +100,7 @@ module ioserver_context_module
 
     !> Determines the level of debugging statements within the code
     !> 0: no debug statements. 1: synchronize model commands to the server, print node-wide debug info. 2: Also print PE-specific debug info
+    !> _Can be different for each PE, but some info is printed only by specific PEs, so be careful with that_
     integer :: debug_level = 0
   end type ioserver_input_parameters
 
@@ -269,6 +275,7 @@ module ioserver_context_module
     procedure, pass, public :: get_stream => IOserver_get_stream
     procedure, pass, public :: get_relay_pipeline_depth
     procedure, pass, public :: get_server_pipeline_depth
+    procedure, pass, public :: get_max_num_streams
 
     procedure, pass, public :: get_server_bound_cb_list
     procedure, pass, public :: get_heap_list
@@ -445,7 +452,7 @@ subroutine open_stream_model(context, new_stream)
     return
   end if
 
-  do i_stream = 1, MAX_NUM_STREAMS
+  do i_stream = 1, context % params % max_num_concurrent_streams
     tmp_stream => context % local_model_streams(i_stream)
     if (.not. tmp_stream % is_open()) then
       if (tmp_stream % open()) then
@@ -734,6 +741,14 @@ function get_server_pipeline_depth(context) result(depth)
   depth = context % params % server_pipeline_depth
 end function get_server_pipeline_depth
 
+!> Get the max number of streams that can be open concurrently
+function get_max_num_streams(context) result(num_streams)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  integer :: num_streams
+  num_streams = context % params % max_num_concurrent_streams
+end function get_max_num_streams
+
 !> Get the list of local accessors to the server-bound CBs created on this node
 subroutine get_server_bound_cb_list(context, cb_list)
   implicit none
@@ -880,12 +895,12 @@ subroutine finalize_server(this)
       ! Grid processor barrier
       call MPI_Barrier(grid_crs % comm, ierr)
 
-      do i = 2, MAX_NUM_STREAMS
+      do i = 2, this % params % max_num_concurrent_streams
         stream => this % local_server_streams(i)
         if (stream % is_owner()) call stream % print_command_stats(i, .false.)
       end do
 
-      do i = 1, MAX_NUM_STREAMS
+      do i = 1, this % params % max_num_concurrent_streams
         stream => this % local_server_streams(i)
         if (stream % is_open()) then
           if (stream % is_owner()) then
@@ -1115,6 +1130,8 @@ function init_communicators(context) result(success)
     end if
 
     block
+      ! Assign a specific role to each server process. Return with error if params are asking for more roles than 
+      ! there are available processes. Any extra process will be designated as "no-op"
       integer, dimension(4) :: bounds
 
       bounds(1) = context % params % num_server_bound_server
@@ -1132,7 +1149,6 @@ function init_communicators(context) result(success)
           print *, '       Channels:        ', context % params % num_channels
         return
       end if
-
 
       if (temp_rank < bounds(1)) then
         context % color = SERVER_COLOR + SERVER_BOUND_COLOR
@@ -1202,6 +1218,16 @@ function init_communicators(context) result(success)
   else
     call MPI_Comm_split(context % active_comm, 1, context % active_rank, context % model_relay_comm, ierr)
   end if
+
+  ! Some parameters should be shared by everyone, so let's make them uniform across all PEs already
+  block
+    integer :: max_num_streams
+    max_num_streams = 0
+    if (context % is_server() .and. context % server_comm_rank == 0) then
+      max_num_streams = context % params % max_num_concurrent_streams
+    end if
+    call MPI_Allreduce(max_num_streams, context % params % max_num_concurrent_streams, 1, MPI_INTEGER, MPI_SUM, context % active_comm, ierr)
+  end block
 
   if (context % is_server()) then
     !-------------------
@@ -1439,7 +1465,7 @@ function init_shared_mem(context) result(success)
     context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm) ! The heap
 
     ! Allocate shared memory to hold server stream instances
-    context % server_file_shmem_size = MAX_NUM_STREAMS * (storage_size(dummy_server_stream) / 8)
+    context % server_file_shmem_size = context % params % max_num_concurrent_streams * (storage_size(dummy_server_stream) / 8)
     context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm) ! The set of files that can be opened/written
 
     if (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
@@ -1458,12 +1484,12 @@ function init_shared_mem(context) result(success)
       end block
     end if
 
-    call c_f_pointer(context % server_file_shmem, context % common_server_streams, [MAX_NUM_STREAMS])
+    call c_f_pointer(context % server_file_shmem, context % common_server_streams, [context % params % max_num_concurrent_streams])
 
     ! Create shared data structures
     if (context % server_comm_rank == 0) then
       heap_create_success = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
-      do i_stream = 1, MAX_NUM_STREAMS
+      do i_stream = 1, context % params % max_num_concurrent_streams
         context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_stream_owners))  ! Initialize stream files
       end do
 
@@ -1484,8 +1510,8 @@ function init_shared_mem(context) result(success)
         else
           call MPI_Comm_rank(context % grid_processor_server_comm, rank, ierr)
         end if
-        allocate(context % local_server_streams(MAX_NUM_STREAMS))
-        do i_stream = 1, MAX_NUM_STREAMS
+        allocate(context % local_server_streams(context % params % max_num_concurrent_streams))
+        do i_stream = 1, context % params % max_num_concurrent_streams
           tmp_ptr => context % common_server_streams(i_stream)
           stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % get_debug_level() >= 1, tmp_ptr, context % node_heap)
           if (.not. stream_create_success) then
@@ -1560,9 +1586,9 @@ function init_shared_mem(context) result(success)
     if (context % is_model()) then
       block
         integer :: model_rank
-        allocate(context % local_model_streams(MAX_NUM_STREAMS))
+        allocate(context % local_model_streams(context % params % max_num_concurrent_streams))
         call MPI_Comm_rank(context % model_comm, model_rank, ierr)
-        do i_stream = 1, MAX_NUM_STREAMS
+        do i_stream = 1, context % params % max_num_concurrent_streams
           context % local_model_streams(i_stream) = model_stream(       &
                               context % global_rank,                    &
                               model_rank,                               &
