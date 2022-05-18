@@ -424,6 +424,10 @@ contains
 
         do i = 1, 6
           success = the_heap % free(offsets(i))
+          if (.not. success) then
+            print *, 'ERROR: heap % free()'
+            error stop 1
+          end if
         end do
       end if
     end subroutine array_tkr_and_values
