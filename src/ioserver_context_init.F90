@@ -1,0 +1,778 @@
+submodule(ioserver_context_module) ioserver_context_init_submodule
+  implicit none
+contains
+
+!> Check whether CB element type is the same as JAR elements
+function check_cb_jar_elem() result(success)
+  use jar_module
+  implicit none
+  logical :: success
+
+  success = CB_DATA_ELEMENT == JAR_ELEMENT
+end function check_cb_jar_elem
+
+!> Initialize the IO server context. *Must be called by every process that wants to participate in the IO server*
+!> \return .true. if the initialization was successful, .false. otherwise
+!> \sa ioserver_context::IOserver_init_communicators, ioserver_context::IOserver_init_shared_mem
+module function ioctx_init(context, params) result(success)
+  implicit none
+  class(ioserver_context),         intent(inout) :: context !< The context we are initialising ("this")
+  type(ioserver_input_parameters), intent(in)    :: params  !< All details about how it should be initialized
+  logical :: success
+
+  integer :: ierr
+
+  success = .false.
+
+  if (.not. check_cb_jar_elem()) then
+    print *, 'ERROR: CB elements are not the same as JAR elements. That is a problem.'
+    return
+  end if
+
+  context % params = params
+  call context % set_debug_level(params % debug_level)  ! Adjust debug level to be within valid bounds
+
+  success = context % init_communicators()
+
+  if (.not. success) then
+    print *, 'ERROR: Could not properly initialize all communicators!'
+    return
+  end if
+
+  if (context % get_debug_level() >= 2) then
+    print '(A, 1X, A)', 'DEBUG: Comm initialized ', context % get_detailed_pe_name()
+  end if
+
+  success = context % init_shared_mem()
+
+  if (.not. success) then
+    print *, 'ERROR: There were errors during shared memory initialization'
+    return
+  end if
+
+  call MPI_Barrier(context % global_comm, ierr)
+
+  if (context % get_debug_level() >= 2) then
+    print '(A, 1X, A)', 'DEBUG: IO-server sucessfully initialized ', context % get_detailed_pe_name()
+  end if
+
+end function ioctx_init
+
+!> Create all MPI communicators that will be used within this IO-server context, based on the given number of each kind of process.
+!> This must be called by every process that want to participate in the IO-server
+module function ioctx_init_communicators(context) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  logical :: success
+
+  integer :: temp_comm
+  integer :: temp_rank, temp_size
+  integer :: ierr
+  logical :: is_mpi_initialized
+
+  success = .false.
+
+  ! Initialize MPI if not already done
+  call MPI_Initialized(is_mpi_initialized, ierr)
+  if(.not. is_mpi_initialized) call MPI_Init(ierr)
+
+  ! Retrieve global MPI comm info
+  call MPI_Comm_rank(context % global_comm, context % global_rank, ierr)
+  call MPI_Comm_size(context % global_comm, context % global_size, ierr)
+
+  ! Determine exact color for server processes, temporary color for processes on model nodes
+  if (context % params % is_on_server) then
+    call MPI_Comm_split(context % global_comm, 0, context % global_rank, temp_comm, ierr)
+    call MPI_Comm_rank(temp_comm, temp_rank, ierr)
+    call MPI_Comm_size(temp_comm, temp_size, ierr)
+
+    ! Server processes should all be on the same node. Let's check that
+    call MPI_Comm_split_type(temp_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % node_comm, ierr)
+    call MPI_Comm_rank(context % node_comm, context % node_rank, ierr)    ! rank on SMP node
+    call MPI_Comm_size(context % node_comm, context % node_size, ierr)    ! population of SMP node
+
+    if (context % node_size .ne. temp_size) then
+      print *, 'ERROR: Server processes appear to be spread on more than one node!'
+      return
+    end if
+
+    block
+      ! Assign a specific role to each server process. Return with error if params are asking for more roles than 
+      ! there are available processes. Any extra process will be designated as "no-op"
+      integer, dimension(4) :: bounds
+
+      bounds(1) = context % params % num_server_bound_server
+      bounds(2) = bounds(1) + context % params % num_model_bound_server
+      bounds(3) = bounds(2) + context % params % num_grid_processors
+      bounds(4) = bounds(3) + context % params % num_channels
+      context % num_server_noop = temp_size - bounds(4)
+
+      if (context % num_server_noop < 0) then
+        if (temp_rank == 0) &
+          print *, 'ERROR: There are not enough processes on the server to fill the requested roles: ', bounds(4)
+          print *, '       Server-bound:    ', context % params % num_server_bound_server
+          print *, '       Model-bound:     ', context % params % num_model_bound_server
+          print *, '       Grid processors: ', context % params % num_grid_processors
+          print *, '       Channels:        ', context % params % num_channels
+        return
+      end if
+
+      if (temp_rank < bounds(1)) then
+        context % color = SERVER_COLOR + SERVER_BOUND_COLOR
+      else if (temp_rank < bounds(2)) then
+        context % color = SERVER_COLOR + MODEL_BOUND_COLOR
+      else if (temp_rank < bounds(3)) then
+        context % color = SERVER_COLOR + GRID_PROCESSOR_COLOR
+      else if (temp_rank < bounds(4)) then
+        context % color = SERVER_COLOR + CHANNEL_COLOR
+      else
+        context % color = NO_OP_COLOR
+      end if
+    end block
+
+  else
+    call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm, ierr)
+    context % color = MODEL_COLOR + RELAY_COLOR
+
+    ! Split all non-server PEs by node
+    call MPI_Comm_split_type(temp_comm, MPI_COMM_TYPE_SHARED, context % global_rank, MPI_INFO_NULL, context % node_comm, ierr)
+  end if
+
+  call MPI_Comm_rank(context % node_comm, context % node_rank, ierr)    ! rank on SMP node
+  call MPI_Comm_size(context % node_comm, context % node_size, ierr)    ! population of SMP node
+
+  ! Assign a node ID to each SMP node (and 0 to the server node)
+  block
+    integer :: key ! To help split between server and non-server nodes
+    if (context % node_rank == 0) then
+      key = 0
+      if (.not. context % params % is_on_server) key = 1000000
+
+      ! Create a communicator that contains all processes with rank 0 on their respective node
+      call MPI_Comm_split(context % global_comm, 0, mod(context % global_rank, 1000000) + key, temp_comm, ierr)
+      call MPI_Comm_rank(temp_comm, context % node_id, ierr)
+      call MPI_Comm_size(temp_comm, context % num_nodes, ierr)
+    else
+      call MPI_Comm_split(context % global_comm, 1, context % global_rank, temp_comm, ierr)
+    end if
+
+    call MPI_Bcast(context % node_id, 1, MPI_INTEGER, 0, context % node_comm, ierr)
+    call MPI_Bcast(context % num_nodes, 1, MPI_INTEGER, 0, context % node_comm, ierr)
+  end block
+
+  ! Split global communicator into : (server+model+relay) and no-op
+  ! there MUST be AT LEAST ONE non NO-OP process on each node (a deadlock will happen if this condition is not respected)
+  ! [temporarily removed] Arrange it so that the overall ranks are grouped by node and that server processes have the lowest ranks
+  if (context % color .ne. NO_OP_COLOR) then
+    ! call MPI_Comm_split(context % global_comm, 0, context % node_id * 100000 + mod(context % global_rank, 100000), context % active_comm, ierr)
+    call MPI_Comm_split(context % global_comm, 0, context % global_rank, context % active_comm, ierr)
+    call MPI_Comm_rank(context % active_comm, context % active_rank, ierr)
+    call MPI_Comm_size(context % active_comm, context % active_size, ierr)
+  else
+    call MPI_Comm_split(context % global_comm, 1, 0, temp_comm, ierr)
+  end if
+
+  ! no-op processes don't need to go any further
+  if (context % is_no_op()) then
+    success = .true.
+    return
+  end if
+
+  ! Split the all active communicator (active_comm) into : server and (model+relay)
+  if (context % is_server()) then
+    call MPI_Comm_split(context % active_comm, 0, context % active_rank, context % server_comm, ierr)
+    call MPI_Comm_rank(context % server_comm, context % server_comm_rank, ierr)
+  else
+    call MPI_Comm_split(context % active_comm, 1, context % active_rank, context % model_relay_comm, ierr)
+  end if
+
+  ! Some parameters should be shared by everyone, so let's make them uniform across all PEs already
+  block
+    integer :: max_num_streams
+    max_num_streams = 0
+    if (context % is_server() .and. context % server_comm_rank == 0) then
+      max_num_streams = context % params % max_num_concurrent_streams
+    end if
+    call MPI_Allreduce(max_num_streams, context % params % max_num_concurrent_streams, 1, MPI_INTEGER, MPI_SUM, context % active_comm, ierr)
+  end block
+
+  if (context % is_server()) then
+    !-------------------
+    ! Server processes
+    !-------------------
+    block ! Verify that all server processes are indeed on the same node
+      integer :: server_comm_tmp
+      integer :: server_comm_size_tmp, server_comm_size
+
+      call MPI_Comm_split_type(context % server_comm, MPI_COMM_TYPE_SHARED, context % active_rank, MPI_INFO_NULL, server_comm_tmp, ierr)
+      call MPI_Comm_size(server_comm_tmp, server_comm_size_tmp, ierr)           ! population of SMP node
+      call MPI_Comm_size(context % server_comm, server_comm_size, ierr)         ! population of SMP node
+
+      if(server_comm_size_tmp .ne. server_comm_size) then
+        ! for now, error if server_comm_size is not equal to server_size
+        print *, 'ERROR: Processes declared as "server" are not all located on the same node'
+        context % color = NO_COLOR
+        return
+      endif
+    end block
+
+    ! Split between active (server- and model-bound) and channel processes (communication channels, or 'ghost' processes)
+    if (context % is_channel()) then
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm, ierr)                                         ! 1. Create server work comm (not part of it)
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR,  &                 ! 2. Create server DCB comm
+          context % server_comm_rank, context % server_dcb_comm, ierr)
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR, 0, temp_comm, ierr)                                         ! 3. Create server specific comm (not necessary for channel)
+    else if (context % is_server_bound()) then
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm, ierr)! 1. Create server work comm
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR,  &                 ! 2. Create server DCB comm
+          context % server_comm_rank, context % server_dcb_comm, ierr)
+      call MPI_Comm_split(context % server_comm, SERVER_BOUND_COLOR, context % server_comm_rank,          &                 ! 3. Create server specific comm
+          context % server_bound_server_comm, ierr)
+    else if (context % is_model_bound()) then
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm, ierr)! 1. Create server work comm
+      call MPI_Comm_split(context % server_comm, CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR,  &                 ! 2. Create server DCB comm
+          context % server_comm_rank, context % server_dcb_comm, ierr)
+      call MPI_Comm_split(context % server_comm, MODEL_BOUND_COLOR, context % server_comm_rank,           &                 ! 3. Create server specific comm
+          context % model_bound_server_comm, ierr)
+    else if (context % is_grid_processor()) then
+      call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm, ierr)! 1. Create server work comm
+      call MPI_Comm_split(context % server_comm, GRID_PROCESSOR_COLOR, context % server_comm_rank, temp_comm, ierr)         ! 2. Create server DCB comm (not part)
+      call MPI_Comm_split(context % server_comm, GRID_PROCESSOR_COLOR, context % server_comm_rank,        &                 ! 3. Create server specific comm
+          context % grid_processor_server_comm, ierr)
+    else
+      print *, 'ERROR: Unhandled server process type'
+      return
+    end if
+
+  else
+    !----------------------------
+    ! Model and relay processes
+    !----------------------------
+
+    ! Split model_relay_comm by node, PEs on same SMP node (compute and IO processes)
+    call MPI_Comm_split_type(context % model_relay_comm, MPI_COMM_TYPE_SHARED, context % active_rank, MPI_INFO_NULL, context % model_relay_smp_comm, ierr)
+    call MPI_Comm_rank(context % model_relay_smp_comm, context % model_relay_smp_rank, ierr)     ! rank on SMP node
+    call MPI_Comm_size(context % model_relay_smp_comm, context % model_relay_smp_size, ierr) ! population of SMP node
+
+    ! Split between model and relay processes
+    ! Spread relay PEs across the node (lowest and highest node ranks)
+    if (context % model_relay_smp_rank >= ((context % params % num_relay_per_node+1)/2) .and. &
+        context % model_relay_smp_rank < (context % model_relay_smp_size - ((context % params % num_relay_per_node)/2))) then   ! model compute process
+      ! Model process
+      context % color = MODEL_COLOR
+
+      call MPI_Comm_split(context % model_relay_smp_comm, MODEL_COLOR, context % model_relay_smp_rank, context % model_smp_comm, ierr) ! Model processes on this node
+      call MPI_Comm_split(context % model_relay_comm, MODEL_COLOR, context % active_rank, context % model_comm, ierr)                  ! Model processes on all nodes
+    else
+      ! Relay process
+      context % color = RELAY_COLOR
+
+      call MPI_Comm_split(context % model_relay_smp_comm, RELAY_COLOR, context % model_relay_smp_rank, context % relay_smp_comm, ierr) ! Relay processes on this node
+      call MPI_Comm_split(context % model_relay_comm, RELAY_COLOR, context % active_rank, context % relay_comm, ierr)                  ! Relay processes on all nodes
+
+      ! Compute number of model processes on this node
+      block
+        integer :: node_size, relay_size
+        call MPI_Comm_size(context % model_relay_smp_comm, node_size, ierr)
+        call MPI_Comm_size(context % relay_smp_comm, relay_size, ierr)
+        context % num_local_model_proc = node_size - relay_size
+        if (context % num_local_model_proc < relay_size) then
+          print '(A, I2, A, I3, A)', 'WARNING: There are more relay processes (', relay_size,                     &
+              ') than model processes (', context % num_local_model_proc, '). Is this really what you want?'
+        end if
+      end block
+
+      ! Determine and split server-bound vs model-bound relays (only use a server-bound communicator for now)
+      call MPI_Comm_rank(context % relay_smp_comm, temp_rank, ierr)
+      if (mod(temp_rank, 2) == 0) then
+        context % color = RELAY_COLOR + SERVER_BOUND_COLOR
+        call MPI_Comm_split(context % relay_smp_comm, SERVER_BOUND_COLOR, temp_rank, context % server_bound_relay_smp_comm, ierr)
+      else
+        context % color = RELAY_COLOR + MODEL_BOUND_COLOR
+        call MPI_Comm_split(context % relay_smp_comm, MODEL_BOUND_COLOR, temp_rank, temp_comm, ierr)
+      end if
+    endif
+  end if
+
+  ! Split active_comm into model and IO (relay+server) processes
+  if (context % is_relay() .or. context % is_server()) then  
+    call MPI_Comm_split(context % active_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_comm, ierr) 
+    if (.not. context % is_grid_processor()) then
+      call MPI_Comm_split(context % io_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_dcb_comm, ierr) 
+    else
+      call MPI_Comm_split(context % io_comm, GRID_PROCESSOR_COLOR, context % active_rank, temp_comm, ierr) 
+    end if
+  else
+    call MPI_Comm_split(context % active_comm, MODEL_COLOR, context % active_rank, temp_comm, ierr)
+  endif
+
+  if (context % is_relay() .or. context % is_server()) then
+    block
+      integer :: relay_smp_rank, io_rank
+      integer :: num_models, num_server_bound, num_model_bound
+
+      context % num_model_nodes = context % num_nodes - 1
+      context % num_model_pes = 0
+      num_models = 0
+      num_server_bound = 0
+      num_model_bound = 0
+
+      if (context % is_relay()) then
+        call MPI_Comm_rank(context % relay_smp_comm, relay_smp_rank, ierr)
+        if (relay_smp_rank == 0) then
+          num_models = context % num_local_model_proc
+        end if
+        if (context % is_server_bound()) then
+          num_server_bound = 1
+        else if (context % is_model_bound()) then
+          num_model_bound = 1
+        else
+          print *, 'ERROR: Relay is neither server- nor model-bound'
+          return
+        end if
+      end if
+
+      call MPI_Allreduce(num_models, context % num_model_pes, 1, MPI_INTEGER, MPI_SUM, context % io_comm, ierr)
+      call MPI_Allreduce(num_server_bound, context % num_server_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm, ierr)
+      call MPI_Allreduce(num_model_bound, context % num_model_bound_relays, 1, MPI_INTEGER, MPI_SUM, context % io_comm, ierr)
+
+      call MPI_Comm_rank(context % io_comm, io_rank, ierr)
+      if (context % get_debug_level() >= 1 .and. context % server_comm_rank == 0) then
+        print '(A, I5, A, I5, A)', 'DEBUG: We have ', context % num_nodes, ' nodes (', context % num_model_nodes, ' model nodes)'
+        print '(A, I5, A)',        '               ', context % num_server_bound_relays, ' server-bound relays'
+        print '(A, I5, A)',        '               ', context % num_model_bound_relays, ' model-bound relays'
+        print '(A, I5, A)',        '               ', context % num_model_pes, ' model processes'
+        print '(A, I5, A)',        '               ', context % params % num_server_bound_server, ' server-bound server processes'
+        print '(A, I5, A)',        '               ', context % params % num_model_bound_server, ' model-bound server processes'
+        print '(A, I5, A)',        '               ', context % params % num_grid_processors, ' grid processors'
+        print '(A, I5, A)',        '               ', context % params % num_channels, ' channel processes'
+        print '(A, I5, A)',        '               ', context % num_server_noop, ' NO-OP server processes'
+      end if
+    end block
+  end if
+
+  success = .true.
+
+end function ioctx_init_communicators
+
+!> Allocate shared memory on the node and create all the structs in it that will be used by the IO server.
+!> Must be called by all processes involved in the IO server
+module function ioctx_init_shared_mem(context) result(success)
+  use shared_mem_alloc_module
+  use simple_mutex_module
+  implicit none
+
+  class(ioserver_context), intent(inout) :: context
+  logical :: success
+
+  integer            :: num_errors
+  integer(C_INT64_T) :: shmem_num_bytes
+
+  integer     :: total_errors
+  integer     :: i_stream
+  type(C_PTR) :: temp_ptr
+  type(shared_server_stream)  :: dummy_server_stream
+  logical :: alloc_success, heap_create_success, stream_create_success
+  integer :: ierr
+
+  success = .false.
+  num_errors = 0              ! none so far
+
+  ! Allocate shared memory segment used for control, communicator = node_comm
+  context % ctrl_shmem_size = storage_size(context % shmem) / 8
+  context % ctrl_shmem_c    = RPN_allocate_shared(context % ctrl_shmem_size, context % node_comm)
+
+  call C_F_POINTER(context % ctrl_shmem_c, context % shmem)             ! main control structure points to shared memory at ctrl_shmem_c
+  context % max_smp_pe = context % node_size - 1
+
+  ! First PE on each node initializes control segment to 0
+  if (context % node_rank == 0) then
+    context % shmem % pe(0:context % max_smp_pe) = pe_info(C_NULL_PTR, 0, 0, 0, 0, 0, [0, 0, 0, 0])
+    context % shmem % time_to_quit = 0   ! initialize quit flag to "DO NOT QUIT"
+  end if
+
+  ! Wait until control area initialization is done everywhere
+  call MPI_barrier(context % global_comm, ierr)
+
+  if (context % is_no_op()) then       ! this is a NO-OP process, enter wait loop for finalize
+    context % shmem % pe(context % node_rank) % color = NO_OP_COLOR
+    success = .true.
+    return
+  endif
+
+  ! ===================================================================================
+  ! at this point we only have "active" PEs (model, relay, server)
+  ! allocate node local shared memory used for intra node communications
+  ! ===================================================================================
+
+  ! Allocate local tables. Size is overkill, but makes it easier
+  allocate(context % node_relay_ranks(0:context % max_smp_pe))
+  allocate(context % node_model_ranks(0:context % max_smp_pe))
+  context % node_relay_ranks(:) = -1
+  context % node_model_ranks(:) = -1
+
+  allocate(context % model_bound_cbs (0:context % max_smp_pe))
+  allocate(context % server_bound_cbs(0:context % max_smp_pe))
+  allocate(context % local_heaps     (0:context % max_smp_pe))
+
+  allocate(context % messenger)
+  call context % messenger % set_model_crs(context % get_crs(MODEL_COLOR))
+  call context % messenger % set_debug(context % get_debug_level() >= 1)
+
+  ! Determine how many server-bound server processes can actually open streams
+  context % num_server_stream_owners = context % params % num_grid_processors
+
+  if (context % is_server()) then
+    ! =========================================================================
+    ! ============================ Server process =============================
+    ! =========================================================================
+
+    ! Allocate shared memory used for intra node communication between PEs on a server node
+    context % server_heap_shmem_size = int(context % params % server_heap_size_mb * MBYTE, kind=8)
+    context % server_heap_shmem = RPN_allocate_shared(context % server_heap_shmem_size, context % server_comm) ! The heap
+
+    ! Allocate shared memory to hold server stream instances
+    context % server_file_shmem_size = context % params % max_num_concurrent_streams * (storage_size(dummy_server_stream) / 8)
+    context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm) ! The set of files that can be opened/written
+
+    if (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
+      print *, 'ERROR: We have a problem! server_heap_shmem/server_file_shmem are not valid!'
+      goto 2
+    end if
+
+    if (context % get_debug_level() >= 1) then
+      block
+        integer :: server_rank
+        call MPI_Comm_rank(context % server_comm, server_rank, ierr)
+        if (server_rank == 0) then
+          print '(A, I12, I8, 1X, A)', 'DEBUG: Successfully allocated server shared memory for heap and stream files',      &
+              context % server_heap_shmem_size, context % server_file_shmem_size, context % get_detailed_pe_name()
+        end if
+      end block
+    end if
+
+    call c_f_pointer(context % server_file_shmem, context % common_server_streams, [context % params % max_num_concurrent_streams])
+
+    ! Create shared data structures
+    if (context % server_comm_rank == 0) then
+      heap_create_success = context % node_heap % create(context % server_heap_shmem, context % server_heap_shmem_size)    ! Initialize heap
+      do i_stream = 1, context % params % max_num_concurrent_streams
+        context % common_server_streams(i_stream) = shared_server_stream(i_stream, mod(i_stream-1, context % num_server_stream_owners))  ! Initialize stream files
+      end do
+
+    else
+      ! Create local accessors to shared structures
+      heap_create_success = context % node_heap % clone(context % server_heap_shmem)
+    end if
+
+    call MPI_Barrier(context % server_comm, ierr)
+
+    ! Create local stream instances on server-bound PEs
+    if (context % is_server_bound() .or. context % is_grid_processor()) then
+      block
+        integer :: rank
+        type(shared_server_stream), pointer :: tmp_ptr
+        if (context % is_server_bound()) then
+          call MPI_Comm_rank(context % server_bound_server_comm, rank, ierr)
+        else
+          call MPI_Comm_rank(context % grid_processor_server_comm, rank, ierr)
+        end if
+        allocate(context % local_server_streams(context % params % max_num_concurrent_streams))
+        do i_stream = 1, context % params % max_num_concurrent_streams
+          tmp_ptr => context % common_server_streams(i_stream)
+          stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % get_debug_level() >= 1, tmp_ptr, context % node_heap)
+          if (.not. stream_create_success) then
+            print *, 'ERROR: initializing local server stream'
+            goto 2
+          end if
+        end do
+      end block
+    end if
+
+  else
+    ! =========================================================================
+    ! ======================= model or relay process ==========================
+    ! =========================================================================
+
+    ! Allocate shared memory used for intra node communication between model and relay PEs
+    block
+      integer(C_INT64_T) :: shmem_size
+      real :: shmem_size_r
+
+      ! Compute size
+      shmem_size_r = context % params % model_heap_size_mb + context % params % server_bound_cb_size_mb + context % params % model_bound_cb_size_mb
+      shmem_size = int(shmem_size_r * MBYTE, kind=8)
+      call MPI_Allreduce(shmem_size, context % model_shmem_size, 1, MPI_INTEGER8, MPI_SUM, context % model_relay_smp_comm, ierr)
+
+      ! Allocate
+      context % model_shmem = RPN_allocate_shared(context % model_shmem_size, context % model_relay_smp_comm)
+
+      if (.not. c_associated(context % model_shmem)) then
+        print '(A, I9, A)', 'ERROR: Unable to allocated shared memory on model node (', context % model_shmem_size , ' MB)'
+        goto 2
+      end if
+
+      if (context % get_debug_level() >= 1 .and. context % model_relay_smp_rank == 0) then
+        write(6,'(A, I10, 1X, A)') 'DEBUG: Successfully allocated shared mem for relay+model, size = ', context % model_shmem_size, context % get_detailed_pe_name()
+        call flush(6)
+      end if
+    end block
+
+    if (context % model_relay_smp_rank == 0) then
+      ! Create the memory arena
+      shmem_num_bytes = context % model_shmem_size
+      temp_ptr = context % arena % create(context % model_shmem, 256, shmem_num_bytes)
+    else
+      ! Create local accessor to shared memory arena (cloning is O.K. even if arena is not initialized)
+      temp_ptr = context % arena % clone(context % model_shmem)
+    endif
+
+    ! Set value in this process' section of the control area
+    context % local_arena_ptr = context % arena % addr()
+    context % shmem % pe(context % node_rank) % arena_ptr = context % local_arena_ptr  ! local address of arena segment
+    context % shmem % pe(context % node_rank) % color = context % color                ! store color of this PE in shared memory table
+
+    ! Get rank on node in my color (model or relay)
+    if (context % is_relay()) then
+      call MPI_Comm_rank(context % relay_smp_comm, context % shmem % pe(context % node_rank) % rank, ierr)
+    else
+      call MPI_Comm_rank(context % model_smp_comm, context % shmem % pe(context % node_rank) % rank, ierr)
+    end if
+
+    ! Wait for memory arena to be initialized by rank 0 before allocating heap and circular buffer(s)
+    call MPI_Barrier(context % model_relay_smp_comm, ierr)
+
+    ! Create PE's own heap, model-bound CB and server-bound CB in the shared memory arena
+    shmem_num_bytes = context % model_shmem_size / context % model_relay_smp_size        ! available size (in bytes) per PE on SMP node
+    alloc_success = context % create_local_heap(int(shmem_num_bytes * 0.85_8, kind=C_SIZE_T))
+    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.04_8, kind=C_SIZE_T), .false.) .and. alloc_success
+    alloc_success = context % create_local_cb(int(shmem_num_bytes * 0.1_8, kind=C_SIZE_T), .true.) .and. alloc_success
+    if (.not. alloc_success) goto 2
+
+    ! Initialize array of model streams
+    if (context % is_model()) then
+      block
+        integer :: model_rank
+        allocate(context % local_model_streams(context % params % max_num_concurrent_streams))
+        call MPI_Comm_rank(context % model_comm, model_rank, ierr)
+        do i_stream = 1, context % params % max_num_concurrent_streams
+          context % local_model_streams(i_stream) = model_stream(       &
+                              context % global_rank,                    &
+                              model_rank,                               &
+                              i_stream,                                 &
+                              context % local_heap,                     &
+                              context % local_server_bound_cb,          &
+                              context % get_debug_level() >= 1,         &
+                              context % messenger)
+        end do
+      end block
+    end if
+
+  endif   ! (server process)
+
+  goto 3       ! no error, bypass
+2 continue     ! go here upon error in memory allocation
+  num_errors = num_errors + 1
+3 continue     ! no error
+
+  !  GLOBAL ERROR CHECK  (and synchronization point)
+  call MPI_Allreduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, context % active_comm, ierr)
+  if(total_errors > 0) then
+    print *,'FATAL:',total_errors,' error(s) detected while allocating memory'
+    call context % set_time_to_quit()      ! tell NO-OP PEs to quit
+    call MPI_Finalize(ierr)
+    stop
+  endif
+
+  if (context % is_relay() .or. context % is_model()) then
+    call context % build_relay_model_index()
+    success = context % fetch_node_shmem_structs()
+    if (.not. success) then
+      print *, 'ERROR: Unable to retrieved share mem structs from other PEs on the node'
+      return
+    end if
+  endif
+
+  ! IO Relay or Server
+  if (context % is_relay() .or. (context % is_server() .and. .not. context % is_grid_processor())) then              ! IO relay or IO server
+
+    ! Create DCB
+    block 
+      integer(C_INT64_T) :: server_bound_size, model_bound_size
+      integer :: type
+      integer :: server_comm
+
+      server_comm       = MPI_COMM_NULL
+      server_bound_size = 0
+      model_bound_size  = 0
+
+      type = DCB_SERVER_BOUND_TYPE
+      if (.not. context % is_server_bound()) type = DCB_CLIENT_BOUND_TYPE
+      if (context % is_channel()) type = DCB_CHANNEL_TYPE
+
+      if (context % is_server()) then
+        server_bound_size = int(context % params % dcb_server_bound_size_mb * MBYTE, kind=8)
+        model_bound_size  = int(context % params % dcb_model_bound_size_mb * MBYTE, kind=8)
+        server_comm = context % server_dcb_comm
+      end if
+
+      success = context % local_dcb % create_bytes(context % io_dcb_comm, server_comm, type, server_bound_size, model_bound_size)
+      if (.not. success) then
+        print *, 'ERROR: Unable to create DCB'
+        return
+      end if
+    end block
+  endif
+
+  if (context % get_debug_level() >= 2 .or. (context % node_rank == 0 .and. context % get_debug_level() >= 1)) then
+    call context % print_shared_mem_sizes()
+  end if
+
+  ! Make sure processes are synchronized on the server
+  if (context % is_server()) call MPI_Barrier(context % server_comm, ierr)
+
+  success = .true.
+end function ioctx_init_shared_mem
+
+!> Translate node color table into relay and model rank tables
+module subroutine ioctx_build_relay_model_index(context)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer :: i
+
+  do i = 0, context % max_smp_pe
+    if (is_color_model(context % shmem % pe(i) % color)) then
+      context % node_model_ranks(context % shmem % pe(i) % rank) = i
+      context % max_model_rank = max(context % max_model_rank, context % shmem % pe(i) % rank)
+    endif
+    if (is_color_relay(context % shmem % pe(i) % color)) then
+      context % node_relay_ranks(context % shmem % pe(i) % rank) = i
+      context % max_relay_rank = max(context % max_relay_rank, context % shmem % pe(i) % rank)
+    endif
+  enddo
+end subroutine ioctx_build_relay_model_index
+
+!> Fetch the shared memory structs created by other model PEs on this node and initialize the
+!> corresponding access to them on this PE. There is a set of heap, model-bound CBs and
+!> server-bound CBs
+module function ioctx_fetch_node_shmem_structs(context) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  logical :: success
+
+  integer             :: i
+  integer(C_INTPTR_T) :: new
+  type(C_PTR)         :: my_base, local_addr
+  integer :: target_rank
+
+  my_base = context % shmem % pe(context % node_rank) % arena_ptr
+
+  success = .true.
+  do i = 0, context % max_smp_pe ! Loop on every PE on this node
+    if (is_color_model(context % shmem % pe(i) % color)) then ! Only work on model PEs
+
+      target_rank = context % shmem % pe(i) % rank
+
+      ! Model-bound CB
+      new        = transfer(my_base, new)                                 ! make large integer from C pointer
+      new        = new + context % shmem % pe(i) % model_bound_cb_offset  ! add offset to my base
+      local_addr = transfer(new, local_addr)                              ! honest C pointer
+      success    = context % model_bound_cbs(target_rank) % create_bytes(local_addr) .and. success ! Initialize the local circular buffer structure
+
+      ! Server-bound CB
+      new        = transfer(my_base, new)                                 ! make large integer from C pointer
+      new        = new + context % shmem % pe(i) % server_bound_cb_offset ! add offset to my base
+      local_addr = transfer(new, local_addr)                              ! honest C pointer
+      success    = context % server_bound_cbs(target_rank) % create_bytes(local_addr) .and. success  ! Initialize the local circular buffer structure
+
+      ! The heap
+      new        = transfer(my_base, new)
+      new        = new + context % shmem % pe(i) % heap_offset
+      local_addr = transfer(new, local_addr)
+      success    = context % local_heaps(target_rank) % clone(local_addr) .and. success
+    end if
+  end do
+end function ioctx_fetch_node_shmem_structs
+
+!> Allocate a block from the node shared memory arena
+module function ioctx_allocate_from_arena(context, num_bytes, name, id) result(ptr)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer(C_SIZE_T),       intent(in)    :: num_bytes !< Size of the block (in bytes)
+  character(len=4),        intent(in)    :: name      !< Short name for the block
+  integer,                 intent(in)    :: id        !< ID of the process that created the block
+  type(C_PTR) :: ptr
+
+  character(len=1) :: prefix
+  character(len=8) :: full_block_name
+
+  ! Choose a prefix for the block, based on the role of the calling process
+  if (context % is_model()) then
+    prefix = 'M'
+  else if (context % is_relay()) then
+    prefix = 'R'
+  else
+    prefix = '_'
+  end if
+
+  ! Prepend prefix, append ID to the name
+  write(full_block_name, '(A1, A4, I3.3)') prefix, name, id
+  ptr = context % arena % newblock(num_bytes, full_block_name)
+end function ioctx_allocate_from_arena
+
+!> Allocate a block from the shared memory arena and create a heap in it
+module function ioctx_create_local_heap(context, num_bytes) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer(C_SIZE_T),       intent(in)    :: num_bytes !< Desired size of the heap (in bytes)
+  logical :: success
+
+  type(C_PTR)    :: heap_ptr
+
+  success = .false.
+
+  heap_ptr = context % allocate_from_arena(num_bytes, 'HEAP', context % shmem % pe(context % node_rank) % rank)
+
+  if (.not. C_ASSOCIATED(heap_ptr)) return
+
+  success  = context % local_heap % create(heap_ptr, num_bytes)    ! allocate local heap
+  context % shmem % pe(context % node_rank) % heap_offset = Pointer_offset(context % arena % addr(), heap_ptr, 1)    ! offset of my heap in memory arena
+
+  if (C_ASSOCIATED(heap_ptr)) success = .true.
+end function ioctx_create_local_heap
+
+!> Allocate a block from the shared memory arena and create a circular buffer in it
+module function ioctx_create_local_cb(context, num_bytes, is_output) result(success)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+  integer(C_SIZE_T),       intent(in)    :: num_bytes !< Desired size of the circular buffer (in bytes)
+  logical,                 intent(in)    :: is_output !< Whether the CB will be used for output (server-bound) or input (model-bound)
+  logical :: success
+
+  type(C_PTR)      :: cb_ptr
+  character(len=4) :: name
+
+  success = .false.
+
+  if (is_output) then
+    name = 'OUTB'
+  else
+    name = 'INPB'
+  end if
+
+  cb_ptr = context % allocate_from_arena(num_bytes, name, context % shmem % pe(context % node_rank) % rank)
+
+  if (.not. C_ASSOCIATED(cb_ptr)) return
+
+  ! Create and compute offset in memory arena
+  if (is_output) then
+    success = context % local_server_bound_cb % create_bytes(cb_ptr, num_bytes)
+    context % shmem % pe(context % node_rank) % server_bound_cb_offset = Pointer_offset(context % arena % addr(), cb_ptr, 1)
+  else
+    success = context % local_cio_in % create_bytes(cb_ptr, num_bytes)
+    context % shmem % pe(context % node_rank) % model_bound_cb_offset = Pointer_offset(context % arena % addr(), cb_ptr, 1)
+  end if
+
+end function ioctx_create_local_cb
+
+end submodule ioserver_context_init_submodule
