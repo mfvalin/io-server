@@ -518,7 +518,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     block
       type(ioserver_stats) :: stats
       if (context % get_debug_level() >= 2) print '(A, I5)', 'DEBUG: Got STATS from model ', header % sender_global_rank
-      success = dcb % get_elems(client_id, stats, ioserver_stats_size_byte(), CB_KIND_CHAR, .true.)
+      success = dcb % get_elems(client_id, stats % c, ioserver_stats_size_byte(), CB_KIND_CHAR, .true.)
       call state % add_stats(stats, client_id)
     end block
 

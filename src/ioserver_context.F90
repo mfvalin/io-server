@@ -801,7 +801,7 @@ subroutine finalize_model(this)
     header % sender_global_rank = this % global_rank
     end_cap % msg_length        = header % content_size_int8
     success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
-    success = this % local_server_bound_cb % put(local_complete_stats, ioserver_stats_size_int8(), CB_KIND_INTEGER_8, .false.)     .and. success
+    success = this % local_server_bound_cb % put(local_complete_stats % c, ioserver_stats_size_int8(), CB_KIND_INTEGER_8, .false.)     .and. success
     success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
 
     ! Send a signal towards the server to indicate that this PE will no longer send anything
