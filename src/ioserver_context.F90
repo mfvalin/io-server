@@ -858,16 +858,21 @@ subroutine finalize_server(this)
   if (this % is_grid_processor()) then
     block
       type(comm_rank_size) :: grid_crs
+      logical :: has_opened_stream
       grid_crs = this % get_crs(GRID_PROCESSOR_COLOR)
 
       ! Grid processor barrier
       call MPI_Barrier(grid_crs % comm, ierr)
 
+      has_opened_stream = .false.
       if (grid_crs % rank == 0) then
         print '(A, /, A)',      &
             '------------------------------------------------------------------',     &
             '  Command buffers for stream processors'
-        call this % local_server_streams(1) % print_command_stats(1, .true.)
+        has_opened_stream = this % local_server_streams(1) % print_command_stats(1, .true.)
+        if (.not. has_opened_stream) then
+          print '(A)', 'No streams were opened within this context.'
+        end if
       end if
 
       ! Grid processor barrier
@@ -875,7 +880,7 @@ subroutine finalize_server(this)
 
       do i = 2, this % params % max_num_concurrent_streams
         stream => this % local_server_streams(i)
-        if (stream % is_owner()) call stream % print_command_stats(i, .false.)
+        if (stream % is_owner()) has_opened_stream = stream % print_command_stats(i, .false.) .or. has_opened_stream
       end do
 
       do i = 1, this % params % max_num_concurrent_streams

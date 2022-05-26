@@ -451,17 +451,20 @@ contains
 
   end function local_server_stream_put_data
 
-  subroutine local_server_stream_print_command_stats(this, id, with_header)
+  function local_server_stream_print_command_stats(this, id, with_header) result(has_opened)
     implicit none
     class(local_server_stream), intent(in) :: this
     integer, intent(in) :: id
     logical, intent(in) :: with_header
+    logical :: has_opened
+    has_opened = .false.
     if (this % is_init()) then
       if (this % shared_instance % num_opens > 0) then
         call this % command_buffer % print_stats(id, with_header)
+        has_opened = .true.
       end if
     end if
-  end subroutine local_server_stream_print_command_stats
+  end function local_server_stream_print_command_stats
 
   function local_server_stream_open(this, stream_id) result(success)
     implicit none

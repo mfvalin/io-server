@@ -19,5 +19,5 @@ ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_init_comms          
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_edge_case_1                     || exit -1
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_unaligned_input                 || exit -1
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_timeout                         || exit -1
-${MPI_COMMAND} -n 20          ${BUILD_PATH}/tests/io_server_put_error
+${MPI_COMMAND} -n 20          ${BUILD_PATH}/tests/io_server_put_error                           || exit -1
 set +x
