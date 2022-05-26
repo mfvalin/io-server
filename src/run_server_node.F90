@@ -27,6 +27,7 @@ module run_server_node_module
   use ioserver_message_module
   use rpn_extra_module
   use server_stream_module
+  use statistics_module
   implicit none
   private
 
@@ -40,10 +41,9 @@ module run_server_node_module
     integer(C_INT64_T), dimension(:), pointer, contiguous :: model_data     => NULL()
     integer(C_INT64_T), dimension(:), pointer, contiguous :: command_buffer => NULL()
 
-    logical,             dimension(:), allocatable :: active_producers
-    type(cb_stats),      dimension(:), allocatable :: stats_min, stats_max
-    type(cb_stats_real), dimension(:), allocatable :: stats_avg, stats_stdev
-    integer,             dimension(:), allocatable :: num_stats
+    logical,              dimension(:), allocatable :: active_producers
+    type(ioserver_stats), dimension(:), allocatable :: stats_min, stats_max, stats_avg, stats_stdev
+    integer,              dimension(:), allocatable :: num_stats
     integer :: num_producers = 0
 
     contains
@@ -219,10 +219,8 @@ function default_server_bound(context) result(server_success)
     integer :: i_rank, receiver_id
     integer :: dummy_integer
     integer, dimension(MPI_STATUS_SIZE) :: status
-    type(cb_stats)      :: global_min, global_max
-    type(cb_stats_real) :: global_mean, global_variance
+    type(ioserver_stats):: global_min, global_max, global_mean, global_variance
     integer :: total_num_pes
-    real :: weight
 
     allocate(ranks(0 : num_consumers - 1))
     allocate(ids(0 : num_consumers - 1))
@@ -262,41 +260,45 @@ function default_server_bound(context) result(server_success)
       end do
 
       ! Combine the data
-      global_min = maxed_cb_stats()
+      global_min = maxed_ioserver_stats()
       total_num_pes = sum(current_state % num_stats(:))
-      do i_producer = 0, num_producers - 1
-        if (current_state % num_stats(i_producer) == 0) cycle
-        global_min = cb_stats_min(global_min, current_state % stats_min(i_producer))
-        global_max = cb_stats_max(global_max, current_state % stats_max(i_producer))
-        weight = real(current_state % num_stats(i_producer)) / total_num_pes
-        call global_mean     % stats_add(current_state % stats_avg(i_producer), real(current_state % num_stats(i_producer)))
-        ! print *, 'time + num for prod', current_state % stats_avg(i_producer) % total_write_time_ms, current_state % num_stats(i_producer), i_producer
-        call global_variance % stats_add(current_state % stats_stdev(i_producer), 1.0)
-      end do
 
-      call global_mean % stats_mult_scalar(1.0 / total_num_pes)
+      if (total_num_pes > 0) then
+        do i_producer = 0, num_producers - 1
+          if (current_state % num_stats(i_producer) == 0) cycle
+          global_min = ioserver_stats_min(global_min, current_state % stats_min(i_producer))
+          global_max = ioserver_stats_max(global_max, current_state % stats_max(i_producer))
+          call global_mean     % stats_add(current_state % stats_avg(i_producer), real(current_state % num_stats(i_producer)))
+          ! print *, 'time + num for prod', current_state % stats_avg(i_producer) % total_write_time_ms, current_state % num_stats(i_producer), i_producer
+          call global_variance % stats_add(current_state % stats_stdev(i_producer), 1.0)
+        end do
 
-      do i_producer = 0, num_producers - 1
-        if (current_state % num_stats(i_producer) == 0) cycle
-        call global_variance % stats_add_diff_sq(global_mean, current_state % stats_avg(i_producer), real(current_state % num_stats(i_producer), kind=8))
-        call current_state % stats_stdev(i_producer) % stats_mult_scalar(real(1.0 / (current_state % num_stats(i_producer) - 1), kind=4))
-        ! print *, 'time + num for prod', current_state % stats_avg(i_producer) % total_write_time_ms, current_state % num_stats(i_producer), i_producer
-      end do
+        call global_mean % stats_mult_scalar(1.0 / total_num_pes)
 
-      call global_variance % stats_mult_scalar(1.0 / (total_num_pes - 1))
+        do i_producer = 0, num_producers - 1
+          if (current_state % num_stats(i_producer) == 0) cycle
+          call global_variance % stats_add_diff_sq(global_mean, current_state % stats_avg(i_producer), real(current_state % num_stats(i_producer), kind=8))
+          call current_state % stats_stdev(i_producer) % stats_mult_scalar(real(1.0 / (current_state % num_stats(i_producer) - 1), kind=4))
+          ! print *, 'time + num for prod', current_state % stats_avg(i_producer) % total_write_time_ms, current_state % num_stats(i_producer), i_producer
+        end do
 
-      print '(A)', '-------------------------------------------------------------------------'
-      print '(A)', '  Model write buffers (cumulative per node)'
-      do i_producer = 0, num_producers - 1
-        call print_cumulated_stats(                                                               &
-                current_state % stats_avg(i_producer), current_state % stats_stdev(i_producer),   &
-                current_state % stats_min(i_producer), current_state % stats_max(i_producer),     &
-                i_producer == 0)
-        ! print *, 'time + num for prod', current_state % stats_avg(i_producer) % total_write_time_ms, current_state % num_stats(i_producer), i_producer
-      end do
-      print '(A)', ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
-      call print_cumulated_stats(global_mean, global_variance, global_min, global_max)
-      print '(A)', '-------------------------------------------------------------------------'
+        call global_variance % stats_mult_scalar(1.0 / (total_num_pes - 1))
+
+        print '(A)', '-------------------------------------------------------------------------'
+        print '(A)', '  Model write buffers (cumulative per node)'
+        do i_producer = 0, num_producers - 1
+          call print_cumulated_stats(                                                               &
+                  current_state % stats_avg(i_producer), current_state % stats_stdev(i_producer),   &
+                  current_state % stats_min(i_producer), current_state % stats_max(i_producer),     &
+                  i_producer == 0)
+          ! print *, 'time + num for prod', current_state % stats_avg(i_producer) % total_write_time_ms, current_state % num_stats(i_producer), i_producer
+        end do
+        print '(A)', ' - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - '
+        call print_cumulated_stats(global_mean, global_variance, global_min, global_max)
+        print '(A)', '-------------------------------------------------------------------------'
+      else
+        print '(A)', 'WARNING: Did not receive stats from any model PE'
+      end if
 
     end if
   end block
@@ -514,9 +516,9 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   ! Statistics from a MODEL PE
   else if (header % command == MSG_COMMAND_MODEL_STATS) then
     block
-      type(cb_stats) :: stats
+      type(ioserver_stats) :: stats
       if (context % get_debug_level() >= 2) print '(A, I5)', 'DEBUG: Got STATS from model ', header % sender_global_rank
-      success = dcb % get_elems(client_id, stats, cb_stats_size_byte(), CB_KIND_CHAR, .true.)
+      success = dcb % get_elems(client_id, stats, ioserver_stats_size_byte(), CB_KIND_CHAR, .true.)
       call state % add_stats(stats, client_id)
     end block
 
@@ -602,7 +604,7 @@ subroutine set_num_producers(state, num_producers)
     allocate(state % stats_stdev(0 : num_producers - 1))
     allocate(state % num_stats(0 : num_producers - 1))
     allocate(state % active_producers(0 : num_producers - 1))
-    state % stats_min(:)        = maxed_cb_stats()
+    state % stats_min(:)        = maxed_ioserver_stats()
     state % num_stats(:)        = 0
     state % active_producers(:) = .true.
   end if
@@ -611,14 +613,14 @@ end subroutine set_num_producers
 subroutine add_stats(this, stats, producer_id)
   implicit none
   class(server_receiver_state), intent(inout) :: this
-  type(cb_stats),               intent(in)    :: stats
+  type(ioserver_stats),         intent(in)    :: stats
   integer,                      intent(in)    :: producer_id
 
-  type(cb_stats_real) :: old_mean
+  type(ioserver_stats) :: old_mean
 
   this % num_stats(producer_id) = this % num_stats(producer_id) + 1
-  this % stats_min(producer_id) = cb_stats_min(this % stats_min(producer_id), stats)
-  this % stats_max(producer_id) = cb_stats_max(this % stats_max(producer_id), stats)
+  this % stats_min(producer_id) = ioserver_stats_min(this % stats_min(producer_id), stats)
+  this % stats_max(producer_id) = ioserver_stats_max(this % stats_max(producer_id), stats)
   old_mean = this % stats_avg(producer_id)
   call this % stats_avg(producer_id) % mean_add_sample(stats, this % num_stats(producer_id))
   call this % stats_stdev(producer_id) % variance_add_sample(stats, old_mean, this % stats_avg(producer_id))

@@ -8,5 +8,7 @@ ${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server  
 ${MPI_COMMAND} -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_launch_pseudo_model : -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        || exit -1
 ${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_model_integration   || exit -1
 ${MPI_COMMAND} -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_model_integration   : -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        || exit -1
-# ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_put_error  # This test currently fails on XC50
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_empty_model         || exit -1
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_many_streams        || exit -1
+${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_put_error 
 set +x

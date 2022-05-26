@@ -33,6 +33,7 @@ set(PROJECT_F_FILES
    shmem_arena.F90
    shmem_heap.F90
    simple_mutex.F90
+   statistics.F90
 )
 
 set(LAUNCH_SERVER_SOURCE

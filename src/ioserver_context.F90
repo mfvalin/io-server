@@ -28,6 +28,7 @@ module ioserver_context_module
   use rpn_extra_module
   use server_stream_module
   use shmem_arena_module
+  use statistics_module
   implicit none
 
   private
@@ -784,21 +785,23 @@ subroutine finalize_model(this)
 
   type(message_header) :: header
   type(message_cap)    :: end_cap
-  type(cb_stats), pointer :: stats
+  type(cb_stats), pointer :: local_cb_stats
+  type(ioserver_stats)    :: local_complete_stats
   logical :: success
 
   success = .false.
   if (this % is_model()) then
     ! Send statistics
-    stats => this % local_server_bound_cb % get_stats()
+    local_cb_stats => this % local_server_bound_cb % get_stats()
+    local_complete_stats = local_cb_stats
     call this % messenger % bump_tag()
-    header % content_size_int8  = cb_stats_size_int8()
+    header % content_size_int8  = ioserver_stats_size_int8()
     header % command            = MSG_COMMAND_MODEL_STATS
     header % message_tag        = this % messenger % get_msg_tag()
     header % sender_global_rank = this % global_rank
     end_cap % msg_length        = header % content_size_int8
     success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
-    success = this % local_server_bound_cb % put(stats, cb_stats_size_int8(), CB_KIND_INTEGER_8, .false.)     .and. success
+    success = this % local_server_bound_cb % put(local_complete_stats, ioserver_stats_size_int8(), CB_KIND_INTEGER_8, .false.)     .and. success
     success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
 
     ! Send a signal towards the server to indicate that this PE will no longer send anything

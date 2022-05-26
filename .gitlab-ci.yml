@@ -1,10 +1,6 @@
 variables:
    GIT_SUBMODULE_STRATEGY: recursive
    ORD_SOUMET_SHELL: /bin/bash
-   # Used to force HOST, remove once sici00 runners are restarted
-   # ECCI_BACKEND: banting
-   # ECCI_FRONTEND: ppp3
-   # U2_FRONTEND: ppp5
    BUILD_BASE_BASE_DIR: /home/sici000/special_builds/
    BUILD_BASE_DIR: /home/sici000/special_builds/just_to_be_safe
 
@@ -29,49 +25,6 @@ cleanup:u2:
       - U2
    script:
       - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
-
-##############
-# U1 GNU
-build:gnu-9.3.0:
-   stage: build
-   variables:
-      ORD_SOUMET_W: "10"
-   script:
-      - set +e
-      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
-      - mkdir build_gnu-9.3.0
-      - cd build_gnu-9.3.0
-      - cmake ../ 
-      - make
-   artifacts:
-      expire_in: 2 hrs
-      paths:
-         - build_gnu-9.3.0
-
-test:gnu-9.3.0_job_regular_single_node:
-   stage: test
-   dependencies:
-      - build:gnu-9.3.0
-   variables:
-      NUM_CPUS: "40"
-      OMPI_MCA_opal_cuda_support: "0"
-
-      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
-      ORD_SOUMET_C: "${NUM_CPUS}"
-      ORD_SOUMET_W: "30"
-      ORD_SOUMET_JN: io-server-regular-single-node
-      ORD_SOUMET_M: "16G"
-      ORD_SOUMET_TMPFS: "1024M"
-      MPI_COMMAND: "mpirun"
-
-   script:
-      - set +e
-      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
-      - cd build_gnu-9.3.0
-      - BUILD_PATH=`pwd`
-      - set -x
-      - source ../tests/script/single_node_tests.sh
-      - set +x
 
 ####################
 # U2 Intel 2022
@@ -217,69 +170,6 @@ test:U2_gnu-8.3.1_multi_node:
       - BUILD_PATH=`pwd`
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
-##################
-# U1 Intel 19
-build:XC50_intel-19.0.5:
-   stage: build
-   dependencies:
-      - cleanup:u1
-   tags:
-      - XC50-login
-   variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
-   script:
-      - set +e
-      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-      - SRC_DIR=$(pwd)
-      - mkdir -pv ${build_dir}
-      - cd ${build_dir}
-      - pwd
-      - cmake ${SRC_DIR}
-      - make
-
-test:XC50_intel-19.0.5_job_single_node:
-   stage: test
-   dependencies:
-      - build:XC50_intel-19.0.5
-   variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
-      NUM_CPUS: "40"
-      ORD_SOUMET_MACH: ${ECCI_BACKEND}
-      ORD_SOUMET_C: "${NUM_CPUS}"
-      ORD_SOUMET_W: "30"
-      ORD_SOUMET_JN: xc50-intel-single-node
-      MPI_COMMAND: "aprun"
-   script:
-      - set +e
-      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-      - SRC_DIR=$(pwd)
-      - cd ${build_dir}
-      - BUILD_PATH=`pwd`
-      - source ${SRC_DIR}/tests/script/single_node_tests.sh
-
-test:XC50_intel-19.0.5_job_multi_node:
-   stage: test
-   dependencies:
-      - build:XC50_intel-19.0.5
-   variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
-      NUM_CPUS: "160"
-      NUM_SERVER_CPUS: "40"
-      NUM_MODEL_CPUS: "120"
-      ORD_SOUMET_MACH: ${ECCI_BACKEND}
-      ORD_SOUMET_C: "${NUM_CPUS}x1"
-      ORD_SOUMET_W: "30"
-      ORD_SOUMET_JN: xc50-intel-multi-node
-      MPI_COMMAND: "aprun"
-   script:
-      - set +e
-      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-      - SRC_DIR=$(pwd)
-      - cd ${build_dir}
-      - BUILD_PATH=`pwd`
-      - set -x
-      - source ${SRC_DIR}/tests/script/multi_node_tests.sh
-      - set +x
 
 ################
 # Packaging
@@ -314,36 +204,5 @@ package:U2_gnu-8.3.1:
       - set +e
       - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
       - cd ${build_dir}
-      - make package
-      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
-
-package:XC50_intel-19.0.5:
-   stage: package
-   variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_XC50_intel-19.0.5
-   only:
-      - tags
-   dependencies:
-      - build:XC50_intel-19.0.5
-   environment:
-      name: testing
-   script:
-      - set +e
-      - source ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-      - cd ${build_dir}
-      - make package
-      - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
-
-package:gnu-9.3.0:
-   stage: package
-   only:
-      - tags
-   dependencies:
-      - build:gnu-9.3.0
-   environment:
-      name: testing
-   script:
-      - source ci-env/latest/ubuntu-18.04-amd-64/gnu-9.3.0.sh
-      - cd build_gnu-9.3.0
       - make package
       - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package

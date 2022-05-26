@@ -103,7 +103,9 @@ endforeach(TEST_SOURCE)
 gen_test_target(SOURCES benchmark_mpi_bandwidth.F90   LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
 gen_test_target(SOURCES benchmark_disk_bandwidth.F90  LIBRARIES ${PROJECT_NAME} ${TEST_HELPER_LIB})
 gen_test_target(SOURCES default_model.F90             LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES empty_model.F90               LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
 gen_test_target(SOURCES init_comms.F90                LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
+gen_test_target(SOURCES many_streams.F90              LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
 gen_test_target(SOURCES model_integration.F90         LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
 gen_test_target(SOURCES model_write.F90               LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
 gen_test_target(SOURCES launch_pseudo_model.F90       LIBRARIES ${PROJECT_NAME} ioserver_pseudo_model)
@@ -197,6 +199,16 @@ add_test(NAME server_model_integration COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSC
 add_test(NAME model_server_integration COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG}
          ${MPIEXEC_NUMPROC_FLAG} 10 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${LAUNCH_MODEL_TARGET} ${MPIEXEC_POSTFLAGS} :
          ${MPIEXEC_NUMPROC_FLAG} 6 ${MPIEXEC_PREFLAGS} ${LAUNCH_SERVER_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(empty_model.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG}
+         ${MPIEXEC_NUMPROC_FLAG} 8 ${MPIEXEC_PREFLAGS} ${LAUNCH_SERVER_TARGET} ${MPIEXEC_POSTFLAGS} :
+         ${MPIEXEC_NUMPROC_FLAG} 8 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
+
+get_test_name(many_streams.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG}
+         ${MPIEXEC_NUMPROC_FLAG} 8 ${MPIEXEC_PREFLAGS} ${LAUNCH_SERVER_TARGET} ${MPIEXEC_POSTFLAGS} :
+         ${MPIEXEC_NUMPROC_FLAG} 8 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
 
 get_test_name(put_error.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${MPIEXEC_EXECUTABLE} ${OVERSUBSCRIBE_FLAG} ${MPIEXEC_NUMPROC_FLAG} 40 ${MPIEXEC_PREFLAGS} ${CMAKE_CURRENT_BINARY_DIR}/${TEST_TARGET} ${MPIEXEC_POSTFLAGS})
