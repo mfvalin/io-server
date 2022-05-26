@@ -103,6 +103,9 @@ module ioserver_context_module
     !> 0: no debug statements. 1: synchronize model commands to the server, print node-wide debug info. 2: Also print PE-specific debug info
     !> _Can be different for each PE, but some info is printed only by specific PEs, so be careful with that_
     integer :: debug_level = 0
+  
+  contains
+    procedure, pass :: print => ioserver_input_parameters_print
   end type ioserver_input_parameters
 
   !> Context that allows to interact with the IO-server library (initialization + the rest of the API)
@@ -883,6 +886,11 @@ subroutine finalize_server(this)
         if (stream % is_owner()) has_opened_stream = stream % print_command_stats(i, .false.) .or. has_opened_stream
       end do
 
+      ! Grid processor barrier
+      call MPI_Barrier(grid_crs % comm, ierr)
+
+      if (grid_crs % rank == 0) print '(A)', '------------------------------------------------------------------'
+
       do i = 1, this % params % max_num_concurrent_streams
         stream => this % local_server_streams(i)
         if (stream % is_open()) then
@@ -965,5 +973,54 @@ subroutine print_shared_mem_sizes(context)
     end if
   end if
 end subroutine print_shared_mem_sizes
+
+subroutine ioserver_input_parameters_print(params)
+  implicit none
+  class(ioserver_input_parameters), intent(in) :: params
+
+  character(len=32) :: name
+
+  print '(A)', '----------- Input parameters ---------------'
+  print '(A, I2)', 'Debug level: ', params % debug_level
+  print '(A, L2)', 'On server:   ', params % is_on_server
+  print '(A)', 'Process counts: '
+  name = '  # relays per node '
+  if (.not. params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_relay_per_node
+  name = '  # grid processors '
+  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_grid_processors
+  name = '  # server-bound server PEs'
+  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_server_bound_server
+  name = '  # model-bound server PEs'
+  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_model_bound_server
+  name = '  # channel PEs'
+  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_channels
+
+  print '(A)', 'Shared memory: '
+  name = '  Model heap size (MB)'
+  if (.not. params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % model_heap_size_mb
+  name = '  Server-bound CB size (MB)'
+  if (.not. params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % server_bound_cb_size_mb
+  name = '  Model-bound CB size (MB)'
+  if (.not. params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % model_bound_cb_size_mb
+  name = '  Server heap size (MB)'
+  if (params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % server_heap_size_mb
+  name = '  Server-bound DCB size (MB)'
+  if (params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % dcb_server_bound_size_mb
+  name = '  Model-bound DCB size (MB)'
+  if (params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % dcb_model_bound_size_mb
+
+  print '(A)', 'Stream control: '
+  name = '  Max # concurrent open streams'
+  print '(A30, A, I4)', name, ' - ', params % max_num_concurrent_streams
+
+  print '(A)', 'Pipeline control: '
+  name = '  Max relay pipeline depth'
+  print '(A30, A, I4)', name, ' - ', params % relay_pipeline_depth
+  name = '  Max server pipeline depth'
+  print '(A30, A, I4)', name, ' - ', params % server_pipeline_depth
+
+  print '(A)', '--------------------------------------------'
+
+end subroutine ioserver_input_parameters_print
 
 end module ioserver_context_module

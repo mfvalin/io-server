@@ -225,9 +225,7 @@ function default_server_bound(context) result(server_success)
     allocate(ranks(0 : num_consumers - 1))
     allocate(ids(0 : num_consumers - 1))
 
-    if (consumer_crs % rank == 0) print '(20I12)', ids
     call MPI_Gather(server_id, 1, MPI_INTEGER, ids, 1, MPI_INTEGER, 0, consumer_crs % comm, ierr)
-    if (consumer_crs % rank == 0) print '(20I12)', ids
 
     ! PE other than root send their stats data to root
     if (consumer_crs % rank .ne. 0) then
@@ -242,7 +240,6 @@ function default_server_bound(context) result(server_success)
 
     ! Root receives data, compiles and prints it
     if (consumer_crs % rank == 0) then
-      print '(20I12)', ids
       do i_rank = 0, consumer_crs % size - 1
         ranks(ids(i_rank)) = i_rank
       end do

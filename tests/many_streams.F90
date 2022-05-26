@@ -20,23 +20,82 @@
 
 module many_streams_module
   use ioserver_context_module
+  use ioserver_run_module
   implicit none
+
+  type :: stream_pointer
+    type(model_stream), pointer :: p
+  end type stream_pointer
 
 contains
   function relay_pe(context) result(success)
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
-    print *, 'I am relay'
-    success = .true.
+
+    success = .false.
+    if (context % is_server_bound()) then
+      success = ioserver_server_bound_relay(context)
+    else if (context % is_model_bound()) then
+      success = ioserver_model_bound_relay(context)
+    end if
   end function relay_pe
 
-  function model_pe(context) result(success)
+  function model_pe(context) result(model_success)
     implicit none
     type(ioserver_context), intent(inout) :: context
+    logical :: model_success
+    
+    integer :: max_num_streams
+    type(stream_pointer), dimension(:), allocatable :: streams
+    type(model_stream), pointer :: additional_stream
+    integer :: i_stream, i_open
     logical :: success
-    print *, 'I am model'
-    success = .true.
+    
+    model_success = .false.
+    
+    max_num_streams = context % get_max_num_streams()
+    allocate(streams(max_num_streams))
+
+    do i_stream = 1, max_num_streams
+      call context % open_stream_model(streams(i_stream) % p)
+      if (.not. associated(streams(i_stream) % p)) then
+        print '(A, I5)', 'ERROR: Unable to open stream ', i_stream
+        return
+      end if
+    end do
+
+    call context % open_stream_model(additional_stream)
+    if (associated(additional_stream)) then
+      print '(A)', 'ERROR: Should not have been able to open another stream!'
+      return
+    end if
+
+    do i_open = 0, 50000 - 1 
+      i_stream = mod(i_open, max_num_streams / 2) + 1
+      success = streams(i_stream) % p % close()
+      if (.not. success) then
+        print '(A, I5, A, I5)', 'ERROR: Unable to close stream ', i_open, ', rank ', i_stream
+        return
+      end if
+
+      call context % open_stream_model(streams(i_stream) % p)
+      if (.not. associated(streams(i_stream) % p)) then
+        print '(A, I5, A, I5)', 'ERROR: Unable to open stream ', i_open, ', rank ', i_stream
+        return
+      end if
+    end do
+
+    do i_stream = 1, max_num_streams
+      success = streams(i_stream) % p % close()
+      if (.not. success) then
+        print '(A, I5)', 'ERROR: Unable to close stream rank ', i_stream
+        return
+      end if
+    end do
+
+    deallocate(streams)
+    model_success = .true.
   end function model_pe
 
 
@@ -56,7 +115,7 @@ program many_streams
 
   params % num_relay_per_node = 2
   params % is_on_server       = .false.
-  params % debug_level        = 1
+  ! params % debug_level        = 1
 
   success = context % init(params)
 
@@ -71,6 +130,11 @@ program many_streams
   else if (context % is_model()) then
     success = model_pe(context)
   end if 
+
+  if (.not. success) then
+    print *, 'ERROR: Running PE'
+    error stop 1
+  end if
 
   call context % finalize()
   call MPI_Finalize(ierr)

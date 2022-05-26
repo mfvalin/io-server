@@ -26,21 +26,68 @@ program launch_server
   type(ioserver_input_parameters) :: params
   logical :: success
   integer :: ierr
+  integer :: rank
 
-  call MPI_Init(ierr)
+  integer            :: iarg, num_args
+  character(len=128) :: arg
+  character(len=:), allocatable :: trimmed_arg
 
   params % is_on_server             = .true.
-  params % num_relay_per_node       = 2 ! Should not be important for the server
   params % num_server_bound_server  = 2
   params % num_grid_processors      = 1
   params % num_channels             = 2
   params % debug_level              = 1
 
+  ! Parse command line inputs and initialize IO-server input parameters
+  num_args = command_argument_count()
+  iarg = 1
+  do while (iarg <= num_args)
+    call get_command_argument(iarg, arg)
+    iarg = iarg + 1
+
+    trimmed_arg = trim(arg)
+
+    if (trimmed_arg == '--num-server-bound') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % num_server_bound_server
+    else if (trimmed_arg == '--num-model-bound') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % num_model_bound_server
+    else if (trimmed_arg == '--num-grid-processors') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % num_grid_processors
+    else if (trimmed_arg == '--num-channels') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % num_channels
+    else if (trimmed_arg == '--max-streams') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % max_num_concurrent_streams
+    else if (trimmed_arg == '--debug-level') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % debug_level
+    else
+      print *, 'got something different: ', trimmed_arg
+    end if
+  end do
+
+  call MPI_Init(ierr)
+
+  call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
+  if (rank == 0) then
+    call params % print()
+  end if
+
   success = ioserver_run_server_node(params)
 
   if (.not. success) then
     print *, 'ERROR while running the IO server'
-    ! error stop 1 
+    error stop 1 
   end if
 
   call MPI_Finalize(ierr)

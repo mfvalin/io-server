@@ -43,6 +43,7 @@ program model_integration
   type(comm_rank_size) :: model_crs
 
   character(len=32) :: file_name
+  character(len=:), allocatable :: file_name_var
 
   integer :: ierr
   integer :: i
@@ -97,7 +98,6 @@ program model_integration
   file_name = ''
   do i = 1, 1
 
-
     !---------------------
     ! Open file command
     call command % reset()
@@ -107,8 +107,9 @@ program model_integration
     header % size_bytes   = len_trim(file_name)
 
     ! print *, 'MODEL into jar'
+    file_name_var = trim(file_name)
     success = JAR_PUT_ITEM(command, header) .and. success
-    success = JAR_PUT_ITEM(command, trim(file_name)) .and. success
+    success = JAR_PUT_ITEM(command, file_name_var) .and. success
     ! print *, 'MODEL into jar done'
     if (.not. success) then 
       print *, 'ERROR: could not put stuff in command jar!'
@@ -133,7 +134,6 @@ program model_integration
       integer(kind=8), dimension(:), pointer :: model_data
 
       data_heap = context % get_local_heap()
-
 
       local_grid % offset(1) = model_crs % rank + 1 ! Model PEs ordered in a a line, ordered by rank
       local_grid % size(:) = 1

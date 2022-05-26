@@ -911,7 +911,7 @@ static inline distributed_circular_buffer_p count_process_types(distributed_circ
     // Do some sanity checks
     if (buffer->server_rank == DCB_SERVER_ROOT_RANK) {
 
-      printf("From DCB root, rank %d\n", buffer->dcb_rank);
+      // printf("From DCB root, rank %d\n", buffer->dcb_rank);
 
       if (buffer->control_metadata.num_channels < 1 || (buffer->control_metadata.num_server_consumers + buffer->control_metadata.num_server_producers < 1)) {
         printf(
