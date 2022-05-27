@@ -274,7 +274,7 @@ contains
   subroutine print_message_header(header)
     implicit none
     type(message_header), intent(in) :: header
-    print '(A, I8, A, I8, A, I3, 1X, A, A, I4, A, I3, A, I8, A, I5, A, I5)', &
+    print '(A, I8, A, I8, A, I3, 1X, A, A, I4, A, I7, A, I8, A, I5, A, I5)', &
       'Header: header tag ', header % header_tag, &
       ', len ', header % content_size_int8, &
       ', cmd ', header % command, get_message_command_string(header % command), &
@@ -288,7 +288,7 @@ contains
   subroutine print_command_record(record)
     implicit none
     type(command_record), intent(in) :: record
-    print '(A, I5, A, A, A, I5, A, I8)',                   &
+    print '(A, I5, A, A, A, I7, A, I8)',                   &
       'Command record: Size (int8) ', record % size_int8,   &
       ', command type ', get_message_command_string(record % command_type),             &
       ', stream ID ', record % stream_id,                   &

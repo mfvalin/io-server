@@ -71,7 +71,7 @@ contains
       return
     end if
 
-    do i_open = 0, 50000 - 1 
+    do i_open = 0, 200000 - 1 
       i_stream = mod(i_open, max_num_streams / 2) + 1
       success = streams(i_stream) % p % close()
       if (.not. success) then

@@ -325,6 +325,7 @@ contains
 
     status = CB_put(this % p, temp, num_elements * type_size, operation, timeout_c, thread_safe_val)
     if (status == 0) success = .true.
+    if (.not. success) print *, 'Failed because ', error_code_to_string(status)
   end function put
 
   !> Delete the buffer by disassociating from the underlying C pointer and, if applicable, releasing the memory

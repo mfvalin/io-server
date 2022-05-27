@@ -290,13 +290,21 @@ contains
     integer(C_INT),                         intent(in)    :: tag
     logical :: success
 
+    integer, parameter :: TIMEOUT_MS = 0
+
     integer(C_INT32_T) :: old_value
     old_value = this % command_counter % read()
     success = .true.
     if (tag > old_value) then
       if (this % command_counter % try_update(old_value, tag)) then
         ! print '(A, I8, A, I8, I8)', 'Enqueuing command, tag ', tag, ', size ', size(command_content), this % command_counter % read()
-        success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true., timeout_ms = 0)
+        success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true., timeout_ms = TIMEOUT_MS)
+        if (.not. success) then
+          print '(A, I5, A, F8.2, A, I4, A)', 'ERROR: Command buffer for stream ID ', this % get_id(),                          &
+                ' is full. You could make it bigger (currently ', this % command_buffer % get_capacity(CB_KIND_CHAR) / 1000.0,  &
+                'kB), wait longer for buffer to be processed (current timeout is ', TIMEOUT_MS,                                 &
+                'ms), or just send less commands.'
+        end if
       end if
     end if
   end function local_server_stream_put_command

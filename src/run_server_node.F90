@@ -194,7 +194,7 @@ function default_server_bound(context) result(server_success)
       ! Get and process the next message
       receive_success = receive_message(context, data_buffer, i_producer, current_state)
       if (.not. receive_success) then
-        print *, 'ERROR: While receiving server message'
+        print '(A)', 'ERROR: While receiving server message'
         current_state % done_receiving = .true.
         exit
       end if
@@ -329,7 +329,7 @@ function default_channel(context) result(channel_success)
   if (dcb % get_channel_id() >= 0) then
     channel_success = dcb % start_listening()
   else
-    print *, 'ERROR: Channel process does not seem to be a channel within the DCB'
+    print '(A)', 'ERROR: Channel process does not seem to be a channel within the DCB'
   end if
 end function default_channel
 
@@ -486,7 +486,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     success = stream_ptr % put_data(record, state % model_data) .and. success   ! Put data in its proper place within a global grid
 
     if (.not. success) then
-      print *, 'ERROR: Could not put data into partial grid! (or maybe something else)'
+      print '(A)', 'ERROR: Could not put data into partial grid! (or maybe something else)'
       return
     end if
 
@@ -497,6 +497,12 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     call state % allocate_command_buffer(header % content_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
+
+    if (.not. success) then
+      print '(A)', 'ERROR: Receiving and assigning server command '
+      call print_message_header(header)
+      return
+    end if
 
   !----------------
   ! Misc. message
@@ -528,7 +534,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !------------
   ! Big no-no
   else
-    print *, 'ERROR: [server] Unhandled message type!', header % command
+    print '(A)', 'ERROR: [server] Unhandled message type!', header % command
     call print_message_header(header)
     return
   end if
@@ -538,7 +544,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   success = dcb % get_elems(client_id, end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)
 
   if ((.not. success) .or. (end_cap % msg_length .ne. header % content_size_int8) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
-    print *, 'Discrepancy between message length and end cap', header % content_size_int8, end_cap % msg_length, end_cap % cap_tag
+    print '(A)', 'Discrepancy between message length and end cap', header % content_size_int8, end_cap % msg_length, end_cap % cap_tag
     call print_message_header(header)
     ! call dcb % print(.true.)
     return

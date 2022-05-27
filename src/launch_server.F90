@@ -86,7 +86,7 @@ program launch_server
   success = ioserver_run_server_node(params)
 
   if (.not. success) then
-    print *, 'ERROR while running the IO server'
+    print '(A)', 'ERROR while running the IO server'
     error stop 1 
   end if
 

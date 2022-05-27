@@ -506,7 +506,7 @@ subroutine open_stream_model(context, new_stream)
   nullify(new_stream)
 
   if (.not. context % is_initialized()) then
-    print *, 'ERROR: Cannot open file, context is *not* initialized.'
+    print '(A)', 'ERROR: Cannot open file, context is *not* initialized.'
     return
   end if
 
@@ -522,7 +522,7 @@ subroutine open_stream_model(context, new_stream)
     end if
   end do
 
-  print *, 'ERROR: No space left in the list of (model) streams to open a new one'
+  print '(A)', 'ERROR: No space left in the list of (model) streams to open a new one'
 end subroutine open_stream_model
 
 !> Set time to quit flag in control area
@@ -895,7 +895,7 @@ subroutine finalize_server(this)
         stream => this % local_server_streams(i)
         if (stream % is_open()) then
           if (stream % is_owner()) then
-            print '(A, I4, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
+            print '(A, I6, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
           end if
         end if
       end do
