@@ -24,7 +24,8 @@ cleanup:u2:
 
 post-test-cleanup:u2:
    stage: post-test-cleanup
-   dependencies: test
+   dependencies:
+      - test
    tags:
       - U2
    script:
