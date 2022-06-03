@@ -18,7 +18,6 @@ set(PROJECT_F_FILES
    grid_assembly.F90
    ioserver_constants.F90
    ioserver_context.F90
-   ioserver_context_init.F90
    ioserver_message.F90
    ioserver_mpi.F90
    ioserver_run.F90

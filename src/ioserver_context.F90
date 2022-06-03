@@ -313,63 +313,9 @@ module ioserver_context_module
     end function no_op_function_template
   end interface
 
-  interface 
-    module function ioctx_init(context, params) result(success)
-      implicit none
-      class(ioserver_context),         intent(inout) :: context !< The context we are initialising ("this")
-      type(ioserver_input_parameters), intent(in)    :: params  !< All details about how it should be initialized
-      logical :: success
-    end function ioctx_init
-
-    module function ioctx_init_communicators(context) result(success)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-      logical :: success
-    end function ioctx_init_communicators
-
-    module function ioctx_init_shared_mem(context) result(success)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-      logical :: success
-    end function ioctx_init_shared_mem
-
-    module subroutine ioctx_build_relay_model_index(context)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-    end subroutine ioctx_build_relay_model_index
-
-    module function ioctx_fetch_node_shmem_structs(context) result(success)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-      logical :: success
-    end function
-
-    module function ioctx_allocate_from_arena(context, num_bytes, name, id) result(ptr)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-      integer(C_SIZE_T),       intent(in)    :: num_bytes !< Size of the block (in bytes)
-      character(len=4),        intent(in)    :: name      !< Short name for the block
-      integer,                 intent(in)    :: id        !< ID of the process that created the block
-      type(C_PTR) :: ptr
-    end function ioctx_allocate_from_arena
-
-    module function ioctx_create_local_heap(context, num_bytes) result(success)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-      integer(C_SIZE_T),       intent(in)    :: num_bytes !< Desired size of the heap (in bytes)
-      logical :: success
-    end function ioctx_create_local_heap
-
-    module function ioctx_create_local_cb(context, num_bytes, is_output) result(success)
-      implicit none
-      class(ioserver_context), intent(inout) :: context
-      integer(C_SIZE_T),       intent(in)    :: num_bytes !< Desired size of the circular buffer (in bytes)
-      logical,                 intent(in)    :: is_output !< Whether the CB will be used for output (server-bound) or input (model-bound)
-      logical :: success
-    end function ioctx_create_local_cb
-  end interface
-
 contains
+
+#include "ioserver_context_init.hf"
 
 function default_no_op(context) result(no_op_success)
   implicit none

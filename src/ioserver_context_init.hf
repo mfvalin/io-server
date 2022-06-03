@@ -1,6 +1,3 @@
-submodule(ioserver_context_module) ioserver_context_init_submodule
-  implicit none
-contains
 
 !> Check whether CB element type is the same as JAR elements
 function check_cb_jar_elem() result(success)
@@ -14,7 +11,7 @@ end function check_cb_jar_elem
 !> Initialize the IO server context. *Must be called by every process that wants to participate in the IO server*
 !> \return .true. if the initialization was successful, .false. otherwise
 !> \sa ioserver_context::IOserver_init_communicators, ioserver_context::IOserver_init_shared_mem
-module function ioctx_init(context, params) result(success)
+function ioctx_init(context, params) result(success)
   implicit none
   class(ioserver_context),         intent(inout) :: context !< The context we are initialising ("this")
   type(ioserver_input_parameters), intent(in)    :: params  !< All details about how it should be initialized
@@ -60,7 +57,7 @@ end function ioctx_init
 
 !> Create all MPI communicators that will be used within this IO-server context, based on the given number of each kind of process.
 !> This must be called by every process that want to participate in the IO-server
-module function ioctx_init_communicators(context) result(success)
+function ioctx_init_communicators(context) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   logical :: success
@@ -357,7 +354,7 @@ end function ioctx_init_communicators
 
 !> Allocate shared memory on the node and create all the structs in it that will be used by the IO server.
 !> Must be called by all processes involved in the IO server
-module function ioctx_init_shared_mem(context) result(success)
+function ioctx_init_shared_mem(context) result(success)
   use shared_mem_alloc_module
   use simple_mutex_module
   implicit none
@@ -635,7 +632,7 @@ module function ioctx_init_shared_mem(context) result(success)
 end function ioctx_init_shared_mem
 
 !> Translate node color table into relay and model rank tables
-module subroutine ioctx_build_relay_model_index(context)
+subroutine ioctx_build_relay_model_index(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer :: i
@@ -655,7 +652,7 @@ end subroutine ioctx_build_relay_model_index
 !> Fetch the shared memory structs created by other model PEs on this node and initialize the
 !> corresponding access to them on this PE. There is a set of heap, model-bound CBs and
 !> server-bound CBs
-module function ioctx_fetch_node_shmem_structs(context) result(success)
+function ioctx_fetch_node_shmem_structs(context) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   logical :: success
@@ -695,7 +692,7 @@ module function ioctx_fetch_node_shmem_structs(context) result(success)
 end function ioctx_fetch_node_shmem_structs
 
 !> Allocate a block from the node shared memory arena
-module function ioctx_allocate_from_arena(context, num_bytes, name, id) result(ptr)
+function ioctx_allocate_from_arena(context, num_bytes, name, id) result(ptr)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer(C_SIZE_T),       intent(in)    :: num_bytes !< Size of the block (in bytes)
@@ -721,7 +718,7 @@ module function ioctx_allocate_from_arena(context, num_bytes, name, id) result(p
 end function ioctx_allocate_from_arena
 
 !> Allocate a block from the shared memory arena and create a heap in it
-module function ioctx_create_local_heap(context, num_bytes) result(success)
+function ioctx_create_local_heap(context, num_bytes) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer(C_SIZE_T),       intent(in)    :: num_bytes !< Desired size of the heap (in bytes)
@@ -742,7 +739,7 @@ module function ioctx_create_local_heap(context, num_bytes) result(success)
 end function ioctx_create_local_heap
 
 !> Allocate a block from the shared memory arena and create a circular buffer in it
-module function ioctx_create_local_cb(context, num_bytes, is_output) result(success)
+function ioctx_create_local_cb(context, num_bytes, is_output) result(success)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer(C_SIZE_T),       intent(in)    :: num_bytes !< Desired size of the circular buffer (in bytes)
@@ -774,5 +771,3 @@ module function ioctx_create_local_cb(context, num_bytes, is_output) result(succ
   end if
 
 end function ioctx_create_local_cb
-
-end submodule ioserver_context_init_submodule
