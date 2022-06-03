@@ -11,11 +11,19 @@ stages:
    - cleanup
    - build
    - test
+   - post-test-cleanup
    - package
 #  - deploy
 
 cleanup:u2:
    stage: cleanup
+   tags:
+      - U2
+   script:
+      - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
+
+post-test-cleanup:u2:
+   stage: post-test-cleanup
    tags:
       - U2
    script:
@@ -134,7 +142,7 @@ test:U2_gnu-9.3.0_single_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
+      - source ci-env/latest/rhel-8-amd-64/gnu-9.3.0.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
@@ -159,7 +167,7 @@ test:U2_gnu-9.3.0_multi_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
+      - source ci-env/latest/rhel-8-amd-64/gnu-9.3.0.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
@@ -197,7 +205,7 @@ package:U2_gnu-9.3.0:
       name: testing
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
+      - source ci-env/latest/rhel-8-amd-64/gnu-9.3.0.sh
       - cd ${build_dir}
       - make package
       - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
