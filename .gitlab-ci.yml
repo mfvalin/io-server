@@ -24,8 +24,11 @@ cleanup:u2:
 
 post-test-cleanup:u2:
    stage: post-test-cleanup
-   dependencies:
-      - test
+   dependencies: 
+      - test:U2_intel-2022.1.2_single_node
+      - test:U2_intel-2022.1.2_multi_node
+      - test:U2_gnu-9.3.0_single_node
+      - test:U2_gnu-9.3.0_multi_node
    tags:
       - U2
    script:
