@@ -924,48 +924,81 @@ subroutine ioserver_input_parameters_print(params)
   implicit none
   class(ioserver_input_parameters), intent(in) :: params
 
-  character(len=32) :: name
+  integer, parameter :: LINE_LENGTH = 50
+  integer, parameter :: COL = 30
+  integer :: pos
 
-  print '(A)', '----------- Input parameters ---------------'
-  print '(A, I2)', 'Debug level: ', params % debug_level
-  print '(A, L2)', 'On server:   ', params % is_on_server
-  print '(A)', 'Process counts: '
-  name = '  # relays per node '
-  if (.not. params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_relay_per_node
-  name = '  # grid processors '
-  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_grid_processors
-  name = '  # server-bound server PEs'
-  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_server_bound_server
-  name = '  # model-bound server PEs'
-  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_model_bound_server
-  name = '  # channel PEs'
-  if (params % is_on_server) print '(A30, A, I4)', name, ' - ', params % num_channels
+  character(len=1) :: NL = new_line('a')
+  character(len=5000) :: output
 
-  print '(A)', 'Shared memory: '
-  name = '  Model heap size (MB)'
-  if (.not. params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % model_heap_size_mb
-  name = '  Server-bound CB size (MB)'
-  if (.not. params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % server_bound_cb_size_mb
-  name = '  Model-bound CB size (MB)'
-  if (.not. params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % model_bound_cb_size_mb
-  name = '  Server heap size (MB)'
-  if (params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % server_heap_size_mb
-  name = '  Server-bound DCB size (MB)'
-  if (params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % dcb_server_bound_size_mb
-  name = '  Model-bound DCB size (MB)'
-  if (params % is_on_server) print '(A30, A, F10.2)', name, ' - ', params % dcb_model_bound_size_mb
+  pos = 1
+  call add_line(output, pos, '----------- Input parameters ---------------')
+  call add_line(output, pos, 'Debug level: ', '(I2)', val_i = params % debug_level)
+  if (params % is_on_server) then
+    call add_line(output, pos, 'Node type: ', val_str = 'Server node')
+  else
+    call add_line(output, pos, 'Node type: ', val_str = 'Model node')
+  end if
 
-  print '(A)', 'Stream control: '
-  name = '  Max # concurrent open streams'
-  print '(A30, A, I4)', name, ' - ', params % max_num_concurrent_streams
+  call add_line(output, pos, 'Process counts: ')
+  if (params % is_on_server) then
+    call add_line(output, pos, '  # grid processors ',        '(I4)', val_i = params % num_grid_processors)
+    call add_line(output, pos, '  # server-bound server PEs', '(I4)', val_i = params % num_server_bound_server)
+    call add_line(output, pos, '  # model-bound server PEs',  '(I4)', val_i = params % num_model_bound_server)
+    call add_line(output, pos, '  # channel PEs',             '(I4)', val_i = params % num_channels)
+  else
+    call add_line(output, pos, '  # relays per node ',        '(I4)', val_i = params % num_relay_per_node)
+  end if
 
-  print '(A)', 'Pipeline control: '
-  name = '  Max relay pipeline depth'
-  print '(A30, A, I4)', name, ' - ', params % relay_pipeline_depth
-  name = '  Max server pipeline depth'
-  print '(A30, A, I4)', name, ' - ', params % server_pipeline_depth
+  call add_line(output, pos, 'Shared memory: ')
+  if (params % is_on_server) then
+    call add_line(output, pos, '  Model heap size (MB)', '(F10.2)', val_r = params % model_heap_size_mb)
+    call add_line(output, pos, '  Server-bound CB size (MB)', '(F10.2)', val_r = params % server_bound_cb_size_mb)
+    call add_line(output, pos, '  Model-bound CB size (MB)', '(F10.2)', val_r = params % model_bound_cb_size_mb)
+  else
+    call add_line(output, pos, '  Server heap size (MB)', '(F10.2)', val_r = params % server_heap_size_mb)
+    call add_line(output, pos, '  Server-bound DCB size (MB)', '(F10.2)', val_r = params % dcb_server_bound_size_mb)
+    call add_line(output, pos, '  Model-bound DCB size (MB)', '(F10.2)', val_r = params % dcb_model_bound_size_mb)
+  end if
 
-  print '(A)', '--------------------------------------------'
+  call add_line(output, pos, 'Stream control: ')
+  call add_line(output, pos, '  Max # concurrent open streams', '(I4)', val_i = params % max_num_concurrent_streams)
+
+  call add_line(output, pos, 'Pipeline control: ')
+  if (params % is_on_server) then
+    call add_line(output, pos, '  Max server pipeline depth', '(I4)', val_i = params % server_pipeline_depth)
+  else
+    call add_line(output, pos, '  Max relay pipeline depth', '(I4)', val_i = params % relay_pipeline_depth)
+  end if
+  call add_line(output, pos, '--------------------------------------------')
+
+  print '(A)', output(:pos-2)
+
+  contains
+
+  subroutine next_line(output, pos)
+    implicit none
+    character(len=*), intent(inout) :: output
+    integer,          intent(inout) :: pos
+    output(pos + LINE_LENGTH - 1: pos + LINE_LENGTH - 1) = NL
+    pos = pos + LINE_LENGTH
+  end subroutine next_line
+
+  subroutine add_line(output, pos, name, fmt, val_r, val_i, val_str)
+    implicit none
+    character(len=*), intent(inout) :: output
+    integer,          intent(inout) :: pos
+    character(len=*), intent(in)    :: name
+    character(len=*), intent(in), optional :: fmt
+    integer,          intent(in), optional :: val_i
+    real,             intent(in), optional :: val_r
+    character(len=*), intent(in), optional :: val_str
+    output(pos:) = name
+    if (present(fmt) .and. present(val_i)) write(output(pos+COL:), fmt) val_i
+    if (present(fmt) .and. present(val_r)) write(output(pos+COL:), fmt) val_r
+    if (present(val_str)) output(pos+COL:) = val_str
+    call next_line(output, pos)
+  end subroutine add_line
 
 end subroutine ioserver_input_parameters_print
 

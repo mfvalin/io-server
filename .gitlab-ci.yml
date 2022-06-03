@@ -94,22 +94,22 @@ test:U2_intel-2022.1.2_multi_node:
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
 ####################
-# U2 GNU 8.3
-build:U2_gnu-8.3.1:
+# U2 GNU 9.3.0
+build:U2_gnu-9.3.0:
    stage: build
    dependencies:
       - cleanup:u2
    tags:
       - U2
    variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_W: "10"
       ORD_SOUMET_C: "20"
       ORD_SOUMET_M: "2G"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
+      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
       - SRC_DIR=$(pwd)
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
@@ -117,14 +117,14 @@ build:U2_gnu-8.3.1:
       - cmake ${SRC_DIR}
       - make
 
-test:U2_gnu-8.3.1_single_node:
+test:U2_gnu-9.3.0_single_node:
    stage: test
    tags:
       - U2
    dependencies:
-      - build:U2_gnu-8.3.1
+      - build:U2_gnu-9.3.0
    variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
@@ -134,20 +134,20 @@ test:U2_gnu-8.3.1_single_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
+      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
-test:U2_gnu-8.3.1_multi_node:
+test:U2_gnu-9.3.0_multi_node:
    stage: test
    tags:
       - U2
    dependencies:
-      - build:U2_gnu-8.3.1
+      - build:U2_gnu-9.3.0
    variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
       NUM_CPUS: "320"
       NUM_SERVER_CPUS: "80"
       NUM_MODEL_CPUS: "240"
@@ -159,7 +159,7 @@ test:U2_gnu-8.3.1_multi_node:
       MPI_COMMAND: "mpirun"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
+      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
@@ -185,19 +185,19 @@ package:U2_intel-2022.1.2:
       - make package
       - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package
 
-package:U2_gnu-8.3.1:
+package:U2_gnu-9.3.0:
    stage: package
    variables:
-      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-8.3.1
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
    only:
       - tags
    dependencies:
-      - build:U2_gnu-8.3.1
+      - build:U2_gnu-9.3.0
    environment:
       name: testing
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-8.3.1.sh
+      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
       - cd ${build_dir}
       - make package
       - ~/ci-admin-bundle/bin/ci-deploy-ssm.sh package

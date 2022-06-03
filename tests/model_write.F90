@@ -573,6 +573,9 @@ program pseudomodelandserver
 
   params % dcb_server_bound_size_mb = 500.0
 
+  if (node_rank == 0) call params % print()
+  if (single_node .and. node_rank == num_server_processes) call params % print()
+
   if (params % is_on_server) then
     success = ioserver_run_server_node(params, context_out = context)
   else
