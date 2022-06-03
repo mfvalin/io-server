@@ -109,7 +109,7 @@ build:U2_gnu-9.3.0:
       ORD_SOUMET_M: "2G"
    script:
       - set +e
-      - source ci-env/latest/rhel-8-icelake-64/gnu-9.3.0.sh
+      - source ci-env/latest/rhel-8-amd-64/gnu-9.3.0.sh
       - SRC_DIR=$(pwd)
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
