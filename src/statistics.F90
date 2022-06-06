@@ -25,6 +25,7 @@ module statistics_module
   use iso_c_binding
 
   use circular_buffer_module
+  use shmem_heap_module
   use rpn_extra_module
   implicit none
   private
@@ -33,6 +34,7 @@ module statistics_module
   public :: ioserver_stats_min, ioserver_stats_max, maxed_ioserver_stats, print_cumulated_stats
 
   type, public, bind(C) :: ioserver_stats_c
+    ! Circular buffer stats
     real(C_DOUBLE) :: num_reads            = 0
     real(C_DOUBLE) :: num_unique_reads     = 0
     real(C_DOUBLE) :: num_read_elems       = 0
@@ -46,6 +48,12 @@ module statistics_module
     real(C_DOUBLE) :: num_fractional_writes = 0
     real(C_DOUBLE) :: total_write_wait_time_ms = 0.0
     real(C_DOUBLE) :: total_write_time_ms      = 0.0
+
+    ! Heap stats
+    real(C_DOUBLE) :: heap_size_byte      = 0.0   !< Total size of heap (bytes)
+    real(C_DOUBLE) :: max_heap_fill_byte  = 0.0   !< High water mark in heap  (highest allocation point) (bytes)
+    real(C_DOUBLE) :: total_alloc_block   = 0.0   !< Total number of blocks that have been allocated over the life of the heap
+    real(C_DOUBLE) :: total_alloc_byte    = 0.0   !< Total number of bytes used by allocated blocks over the life of the heap
   end type ioserver_stats_c
 
   type, public :: ioserver_stats
@@ -64,8 +72,8 @@ module statistics_module
 
     procedure, nopass :: print_cumulated_stats
 
-    procedure :: assign_cb_stats                  !< assignment operator, cb_stats_real = cb_stats
-    GENERIC :: ASSIGNMENT(=) => assign_cb_stats   !< generic assignment operator
+    procedure :: set_cb_stats
+    procedure :: set_heap_stats
   end type ioserver_stats
 
 contains
@@ -101,6 +109,11 @@ contains
     stats_min%c % total_write_wait_time_ms = min(stats_a%c % total_write_wait_time_ms, stats_b%c % total_write_wait_time_ms)
     stats_min%c % total_write_time_ms      = min(stats_a%c % total_write_time_ms,      stats_b%c % total_write_time_ms)
 
+    stats_min%c % heap_size_byte     = min(stats_a%c % heap_size_byte,     stats_b%c % heap_size_byte)
+    stats_min%c % max_heap_fill_byte = min(stats_a%c % max_heap_fill_byte, stats_b%c % max_heap_fill_byte)
+    stats_min%c % total_alloc_block  = min(stats_a%c % total_alloc_block,  stats_b%c % total_alloc_block)
+    stats_min%c % total_alloc_byte   = min(stats_a%c % total_alloc_byte,   stats_b%c % total_alloc_byte)
+
     stats_min % is_valid = .true.
   end function ioserver_stats_min
 
@@ -121,27 +134,43 @@ contains
     stats_max%c % num_fractional_writes    = max(stats_a%c % num_fractional_writes,    stats_b%c % num_fractional_writes)
     stats_max%c % total_write_wait_time_ms = max(stats_a%c % total_write_wait_time_ms, stats_b%c % total_write_wait_time_ms)
     stats_max%c % total_write_time_ms      = max(stats_a%c % total_write_time_ms,      stats_b%c % total_write_time_ms)
+
+    stats_max%c % heap_size_byte     = max(stats_a%c % heap_size_byte,     stats_b%c % heap_size_byte)
+    stats_max%c % max_heap_fill_byte = max(stats_a%c % max_heap_fill_byte, stats_b%c % max_heap_fill_byte)
+    stats_max%c % total_alloc_block  = max(stats_a%c % total_alloc_block,  stats_b%c % total_alloc_block)
+    stats_max%c % total_alloc_byte   = max(stats_a%c % total_alloc_byte,   stats_b%c % total_alloc_byte)
   end function ioserver_stats_max
 
-  subroutine assign_cb_stats(this, other)
+  subroutine set_cb_stats(this, other_stats)
     implicit none
     class(ioserver_stats), intent(inout) :: this
-    type(cb_stats),        intent(in)    :: other
+    type(cb_stats),        intent(in)    :: other_stats
 
-    this%c % num_reads               = other % num_reads
-    this%c % num_unique_reads        = other % num_unique_reads
-    this%c % num_read_elems          = other % num_read_elems
-    this%c % num_fractional_reads    = other % num_fractional_reads
-    this%c % total_read_wait_time_ms = other % total_read_wait_time_ms
-    this%c % total_read_time_ms      = other % total_read_time_ms
-    this%c % max_fill                = other % max_fill
+    this%c % num_reads               = other_stats % num_reads
+    this%c % num_unique_reads        = other_stats % num_unique_reads
+    this%c % num_read_elems          = other_stats % num_read_elems
+    this%c % num_fractional_reads    = other_stats % num_fractional_reads
+    this%c % total_read_wait_time_ms = other_stats % total_read_wait_time_ms
+    this%c % total_read_time_ms      = other_stats % total_read_time_ms
+    this%c % max_fill                = other_stats % max_fill
 
-    this%c % num_writes               = other % num_writes
-    this%c % num_write_elems          = other % num_write_elems
-    this%c % num_fractional_writes    = other % num_fractional_writes
-    this%c % total_write_wait_time_ms = other % total_write_wait_time_ms
-    this%c % total_write_time_ms      = other % total_write_time_ms
-  end subroutine assign_cb_stats
+    this%c % num_writes               = other_stats % num_writes
+    this%c % num_write_elems          = other_stats % num_write_elems
+    this%c % num_fractional_writes    = other_stats % num_fractional_writes
+    this%c % total_write_wait_time_ms = other_stats % total_write_wait_time_ms
+    this%c % total_write_time_ms      = other_stats % total_write_time_ms
+  end subroutine set_cb_stats
+
+  subroutine set_heap_stats(this, other_stats)
+    implicit none
+    class(ioserver_stats), intent(inout) :: this
+    type(heap_stats),      intent(in)    :: other_stats
+
+    this%c % heap_size_byte     = other_stats % size_byte
+    this%c % max_heap_fill_byte = other_stats % max_fill_byte
+    this%c % total_alloc_block  = other_stats % total_alloc_block
+    this%c % total_alloc_byte   = other_stats % total_alloc_byte
+  end subroutine
 
   pure function mean_add_sample_value(val, old_mean, total_num_samples) result(new_mean)
     implicit none
@@ -173,6 +202,11 @@ contains
     this%c % num_fractional_writes    = mean_add_sample_value(s%c % num_fractional_writes, this%c % num_fractional_writes, total_num_samples)
     this%c % total_write_wait_time_ms = mean_add_sample_value(s%c % total_write_wait_time_ms, this%c % total_write_wait_time_ms, total_num_samples)
     this%c % total_write_time_ms      = mean_add_sample_value(s%c % total_write_time_ms, this%c % total_write_time_ms, total_num_samples)
+
+    this%c % heap_size_byte     = mean_add_sample_value(s%c % heap_size_byte, this%c % heap_size_byte, total_num_samples)
+    this%c % max_heap_fill_byte = mean_add_sample_value(s%c % max_heap_fill_byte, this%c % max_heap_fill_byte, total_num_samples)
+    this%c % total_alloc_block  = mean_add_sample_value(s%c % total_alloc_block, this%c % total_alloc_block, total_num_samples)
+    this%c % total_alloc_byte   = mean_add_sample_value(s%c % total_alloc_byte, this%c % total_alloc_byte, total_num_samples)
   end subroutine mean_add_sample
 
   pure function variance_add_sample_value(val, old_variance, old_mean, new_mean) result(new_variance)
@@ -204,6 +238,11 @@ contains
     this%c % num_fractional_writes    = variance_add_sample_value(s%c % num_fractional_writes, this%c % num_fractional_writes, old_mean%c % num_fractional_writes, new_mean%c % num_fractional_writes)
     this%c % total_write_wait_time_ms = variance_add_sample_value(s%c % total_write_wait_time_ms, this%c % total_write_wait_time_ms, old_mean%c % total_write_wait_time_ms, new_mean%c % total_write_wait_time_ms)
     this%c % total_write_time_ms      = variance_add_sample_value(s%c % total_write_time_ms, this%c % total_write_time_ms, old_mean%c % total_write_time_ms, new_mean%c % total_write_time_ms)
+
+    this%c % heap_size_byte     = variance_add_sample_value(s%c % heap_size_byte, this%c % heap_size_byte, old_mean%c % heap_size_byte, new_mean%c % heap_size_byte)
+    this%c % max_heap_fill_byte = variance_add_sample_value(s%c % max_heap_fill_byte, this%c % max_heap_fill_byte, old_mean%c % max_heap_fill_byte, new_mean%c % max_heap_fill_byte)
+    this%c % total_alloc_block  = variance_add_sample_value(s%c % total_alloc_block, this%c % total_alloc_block, old_mean%c % total_alloc_block, new_mean%c % total_alloc_block)
+    this%c % total_alloc_byte   = variance_add_sample_value(s%c % total_alloc_byte, this%c % total_alloc_byte, old_mean%c % total_alloc_byte, new_mean%c % total_alloc_byte)
   end subroutine variance_add_sample
 
   subroutine stats_add(this, other, weight)
@@ -224,6 +263,11 @@ contains
     this%c % num_fractional_writes    = this%c % num_fractional_writes + other%c % num_fractional_writes * weight
     this%c % total_write_wait_time_ms = this%c % total_write_wait_time_ms + other%c % total_write_wait_time_ms * weight
     this%c % total_write_time_ms      = this%c % total_write_time_ms + other%c % total_write_time_ms * weight
+
+    this%c % heap_size_byte     = this%c % heap_size_byte + other%c % heap_size_byte * weight
+    this%c % max_heap_fill_byte = this%c % max_heap_fill_byte + other%c % max_heap_fill_byte * weight
+    this%c % total_alloc_block  = this%c % total_alloc_block + other%c % total_alloc_block * weight
+    this%c % total_alloc_byte   = this%c % total_alloc_byte + other%c % total_alloc_byte * weight
   end subroutine stats_add
 
   pure function add_diff_sq_value(old_val, mean_a, mean_b, weight) result(mean_diff_sq)
@@ -255,6 +299,11 @@ contains
     this%c % num_fractional_writes    = add_diff_sq_value(this%c % num_fractional_writes, mean_a%c % num_fractional_writes, mean_b%c % num_fractional_writes, weight)
     this%c % total_write_wait_time_ms = add_diff_sq_value(this%c % total_write_wait_time_ms, mean_a%c % total_write_wait_time_ms, mean_b%c % total_write_wait_time_ms, weight)
     this%c % total_write_time_ms      = add_diff_sq_value(this%c % total_write_time_ms, mean_a%c % total_write_time_ms, mean_b%c % total_write_time_ms, weight)
+
+    this%c % heap_size_byte     = add_diff_sq_value(this%c % heap_size_byte, mean_a%c % heap_size_byte, mean_b%c % heap_size_byte, weight)
+    this%c % max_heap_fill_byte = add_diff_sq_value(this%c % max_heap_fill_byte, mean_a%c % max_heap_fill_byte, mean_b%c % max_heap_fill_byte, weight)
+    this%c % total_alloc_block  = add_diff_sq_value(this%c % total_alloc_block, mean_a%c % total_alloc_block, mean_b%c % total_alloc_block, weight)
+    this%c % total_alloc_byte   = add_diff_sq_value(this%c % total_alloc_byte, mean_a%c % total_alloc_byte, mean_b%c % total_alloc_byte, weight)
   end subroutine stats_add_diff_sq
 
   subroutine stats_mult_scalar(this, scalar)
@@ -275,6 +324,11 @@ contains
     this%c % num_fractional_writes    = this%c % num_fractional_writes * scalar
     this%c % total_write_wait_time_ms = this%c % total_write_wait_time_ms * scalar
     this%c % total_write_time_ms      = this%c % total_write_time_ms * scalar
+    
+    this%c % heap_size_byte     = this%c % heap_size_byte * scalar
+    this%c % max_heap_fill_byte = this%c % max_heap_fill_byte * scalar
+    this%c % total_alloc_block  = this%c % total_alloc_block * scalar
+    this%c % total_alloc_byte   = this%c % total_alloc_byte * scalar
   end subroutine stats_mult_scalar
 
   function get_proper_size(size_bytes, multiplier, units) result(proper_size)
@@ -349,14 +403,16 @@ contains
     real(kind=8) :: write_time, write_time_multiplier, write_time_dev, write_time_min, write_time_max
     real(kind=8) :: write_wait, write_wait_multiplier, write_wait_dev, write_wait_min, write_wait_max
     real(kind=8) :: max_fill, max_fill_multiplier, max_fill_dev, max_fill_min, max_fill_max
+    real(kind=8) :: max_fill_h, max_fill_multiplier_h, max_fill_dev_h, max_fill_min_h, max_fill_max_h
 
-    character(len=2) :: write_size_units, write_time_units, write_wait_units, max_fill_units
+    character(len=2) :: write_size_units, write_time_units, write_wait_units, max_fill_units, max_fill_units_h
 
     integer, parameter :: COL_LENGTH = 30
     character(len=COL_LENGTH), parameter :: DATA_COL        = 'Total data written'
     character(len=COL_LENGTH), parameter :: WRITE_TIME_COL  = 'Total write time'
     character(len=COL_LENGTH), parameter :: WAIT_TIME_COL   = 'Total write wait time'
-    character(len=COL_LENGTH), parameter :: FILL_COL        = 'Max fill'
+    character(len=COL_LENGTH), parameter :: FILL_COL        = 'Max CB fill'
+    character(len=COL_LENGTH), parameter :: HEAP_FILL_COL   = 'Max heap fill'
 
     integer(CB_DATA_ELEMENT) :: dummy_element
     integer :: elem_size
@@ -368,7 +424,7 @@ contains
     
     if (present(print_stats_header)) then
       if (print_stats_header) then
-        print '(4(A30, A))', DATA_COL, ' : ', WRITE_TIME_COL, ' : ', WAIT_TIME_COL, ' : ', FILL_COL
+        print '(5(A30, A))', DATA_COL, ' : ', WRITE_TIME_COL, ' : ', WAIT_TIME_COL, ' : ', FILL_COL, ' : ', HEAP_FILL_COL
       end if
     end if
     
@@ -394,11 +450,17 @@ contains
     max_fill_min = min_v%c % max_fill * elem_size * max_fill_multiplier
     max_fill_max = max_v%c % max_fill * elem_size * max_fill_multiplier
 
-    print '(4(F6.1, A, A, F4.1, A, F6.1, A, F6.1, A))',                                                                       &
+    max_fill_h     = get_proper_size(mean%c % max_heap_fill_byte, max_fill_multiplier_h, max_fill_units_h)
+    max_fill_dev_h = sqrt(var%c % max_heap_fill_byte) * max_fill_multiplier_h
+    max_fill_min_h = min_v%c % max_heap_fill_byte * max_fill_multiplier_h
+    max_fill_max_h = max_v%c % max_heap_fill_byte * max_fill_multiplier_h
+
+    print '(5(F6.1, A, A, F4.1, A, F6.1, A, F6.1, A))',                                                                       &
           write_size, write_size_units, ' +-', write_size_dev, '(', write_size_min, '-', write_size_max, ') : ',              &
           write_time, write_time_units, ' +-', write_time_dev, '(', write_time_min, '-', write_time_max, ') : ',              &
           write_wait, write_wait_units, ' +-', write_wait_dev, '(', write_wait_min, '-', write_wait_max, ') : ',              &
-          max_fill,   max_fill_units,   ' +-', max_fill_dev,   '(', max_fill_min,   '-', max_fill_max,   ')' 
+          max_fill,   max_fill_units,   ' +-', max_fill_dev,   '(', max_fill_min,   '-', max_fill_max,   ') : ',              &
+          max_fill_h, max_fill_units_h, ' +-', max_fill_dev_h, '(', max_fill_min_h, '-', max_fill_max_h, ')' 
 
   end subroutine print_cumulated_stats
 
@@ -419,6 +481,11 @@ contains
     maxed%c % num_fractional_writes    = huge(maxed%c % num_fractional_writes)
     maxed%c % total_write_wait_time_ms = huge(maxed%c % total_write_wait_time_ms)
     maxed%c % total_write_time_ms      = huge(maxed%c % total_write_time_ms)
+
+    maxed%c % heap_size_byte      = huge(maxed%c % heap_size_byte)
+    maxed%c % max_heap_fill_byte  = huge(maxed%c % max_heap_fill_byte)
+    maxed%c % total_alloc_block   = huge(maxed%c % total_alloc_block)
+    maxed%c % total_alloc_byte    = huge(maxed%c % total_alloc_byte)
   end function maxed_ioserver_stats
 
 end module statistics_module

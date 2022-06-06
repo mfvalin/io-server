@@ -360,15 +360,15 @@ contains
     if (this % is_valid()) call CB_print_stats(this % p, buffer_id, with_header_c)
   end subroutine print_stats
 
-  function get_stats(this) result(stats)
+  subroutine get_stats(this, stats)
     implicit none
-    class(circular_buffer), intent(in) :: this !< CB instance
-    type(cb_stats), pointer :: stats !< A pointer to the stats struct from this CB instance
+    class(circular_buffer),  intent(in)  :: this  !< CB instance
+    type(cb_stats), pointer, intent(out) :: stats !< A pointer to the stats struct from this CB instance
 
     type(C_PTR) :: c_stats
     c_stats = CB_get_stats(this % p)
     call c_f_pointer(c_stats, stats)
-  end function get_stats
+  end subroutine get_stats
 
   function error_code_to_string(error_code) result(error_string)
     implicit none

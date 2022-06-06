@@ -61,13 +61,13 @@ implicit none
 type(C_PTR), intent(in), value :: heap
 end subroutine ShmemHeap_dump_info
 function ShmemHeap_get_info(heap, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeap_get_info')
-import :: C_INT, C_LONG_LONG, C_PTR
+import :: C_INT, C_INT64_T, C_PTR
 implicit none
 type(C_PTR), intent(in), value    :: heap
-integer(C_LONG_LONG), intent(OUT) :: sz
-integer(C_LONG_LONG), intent(OUT) :: max
-integer(C_LONG_LONG), intent(OUT) :: nblk
-integer(C_LONG_LONG), intent(OUT) :: nbyt
+integer(C_INT64_T), intent(OUT) :: sz
+integer(C_INT64_T), intent(OUT) :: max
+integer(C_INT64_T), intent(OUT) :: nblk
+integer(C_INT64_T), intent(OUT) :: nbyt
 integer(C_INT) :: status
 end function ShmemHeap_get_info
 function ShmemHeap_get_size(heap) result(s) bind(C,name='ShmemHeap_get_size')

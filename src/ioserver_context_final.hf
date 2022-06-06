@@ -1,0 +1,175 @@
+
+!> Finalize this context (on model PEs)
+subroutine finalize_model(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  type(message_header) :: header
+  type(message_cap)    :: end_cap
+  type(cb_stats), pointer :: local_cb_stats
+  type(heap_stats)        :: local_heap_stats
+  type(ioserver_stats)    :: local_complete_stats
+  logical :: success
+
+  success = .false.
+  if (this % is_model()) then
+    ! Send statistics
+    call this % local_server_bound_cb % get_stats(local_cb_stats)
+    success = this % local_heap % get_stats(local_heap_stats)
+    call local_complete_stats % set_cb_stats(local_cb_stats)
+    call local_complete_stats % set_heap_stats(local_heap_stats)
+
+    call this % messenger % bump_tag()
+    header % content_size_int8  = ioserver_stats_size_int8()
+    header % command            = MSG_COMMAND_MODEL_STATS
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
+    end_cap % msg_length        = header % content_size_int8
+    success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.) .and. success
+    success = this % local_server_bound_cb % put(local_complete_stats % c, ioserver_stats_size_int8(), CB_KIND_INTEGER_8, .false.)     .and. success
+    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
+
+    ! Send a signal towards the server to indicate that this PE will no longer send anything
+    call this % messenger % bump_tag()
+    header % content_size_int8  = 0
+    header % command            = MSG_COMMAND_MODEL_STOP
+    header % message_tag        = this % messenger % get_msg_tag()
+    header % sender_global_rank = this % global_rank
+    end_cap % msg_length        = header % content_size_int8
+    success = this % local_server_bound_cb % put(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.) .and. success
+    success = this % local_server_bound_cb % put(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.)    .and. success
+  else
+    print '(A)', 'WARNING: Should NOT be calling "finish_model"'
+  end if
+end subroutine finalize_model
+
+!> Finalize this context (on relay PEs)
+subroutine finalize_relay(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  type(message_header) :: header
+  type(message_cap)    :: end_cap
+  logical :: success
+
+  if (this % is_relay() .and. this % is_server_bound()) then
+    ! Send a stop signal to the server
+    if (this % get_debug_level() >= 1) print '(A, I3, A)', 'DEBUG: Relay ', this % local_dcb % get_server_bound_client_id() , ' sending STOP signal'
+    header % content_size_int8  = 0
+    header % command            = MSG_COMMAND_RELAY_STOP
+    header % sender_global_rank = this % global_rank
+    header % relay_global_rank  = this % global_rank
+    end_cap % msg_length        = header % content_size_int8
+
+    success = this % local_dcb % put_elems(header, message_header_size_int8(), CB_KIND_INTEGER_8, .false.)
+    success = this % local_dcb % put_elems(end_cap, message_cap_size_int8(), CB_KIND_INTEGER_8, .true.) .and. success
+
+    if (.not. success) then
+      if (this % get_debug_level() >= 1) print '(A)', 'WARNING: Relay could not send a stop signal!!!'
+      call print_message_header(header)
+    end if
+  end if
+end subroutine finalize_relay
+
+!> Finalize this context (on server PEs)
+subroutine finalize_server(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  type(local_server_stream), pointer :: stream
+  integer :: i, ierr
+
+  ! Print data/stats from grid processors
+  if (this % is_grid_processor()) then
+    block
+      type(comm_rank_size) :: grid_crs
+      logical :: has_opened_stream
+      grid_crs = this % get_crs(GRID_PROCESSOR_COLOR)
+
+      ! Grid processor barrier
+      call MPI_Barrier(grid_crs % comm, ierr)
+
+      has_opened_stream = .false.
+      if (grid_crs % rank == 0) then
+        print '(A, /, A)',      &
+            '------------------------------------------------------------------',     &
+            '  Command buffers for stream processors'
+        has_opened_stream = this % local_server_streams(1) % print_command_stats(1, .true.)
+        if (.not. has_opened_stream) then
+          print '(A)', 'No streams were opened within this context.'
+        end if
+      end if
+
+      ! Grid processor barrier
+      call MPI_Barrier(grid_crs % comm, ierr)
+
+      do i = 2, this % params % max_num_concurrent_streams
+        stream => this % local_server_streams(i)
+        if (stream % is_owner()) has_opened_stream = stream % print_command_stats(i, .false.) .or. has_opened_stream
+      end do
+
+      ! Grid processor barrier
+      call MPI_Barrier(grid_crs % comm, ierr)
+
+      if (grid_crs % rank == 0) print '(A)', '------------------------------------------------------------------'
+
+      do i = 1, this % params % max_num_concurrent_streams
+        stream => this % local_server_streams(i)
+        if (stream % is_open()) then
+          if (stream % is_owner()) then
+            print '(A, I6, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
+          end if
+        end if
+      end do
+
+    end block
+  end if
+
+  if (associated(this % local_server_streams)) then
+    ! Close all owned streams
+    deallocate(this % local_server_streams)
+    nullify(this % local_server_streams)
+  end if
+
+  ! Sync non-channel processes here
+  if (.not. this % is_channel()) call MPI_Barrier(this % server_work_comm, ierr)
+end subroutine finalize_server
+
+!> Finalize function that can be called explicitly
+subroutine ioserver_context_finalize_manually(this)
+  implicit none
+  class(ioserver_context), intent(inout) :: this
+
+  if (this % is_initialized()) then
+    call this % set_time_to_quit()
+
+    if (this % is_server()) then
+      call this % finalize_server()
+    else if (this % is_model()) then
+      call this % finalize_model()
+    else if (this % is_relay()) then
+      call this % finalize_relay()
+    end if
+
+    if (associated(this % messenger)) deallocate(this % messenger)
+
+    if (associated(this % node_relay_ranks)) deallocate(this % node_relay_ranks)
+    if (associated(this % node_model_ranks)) deallocate(this % node_model_ranks)
+
+    if (associated(this % model_bound_cbs)) deallocate(this % model_bound_cbs)
+    if (associated(this % server_bound_cbs)) deallocate(this % server_bound_cbs)
+    if (associated(this % local_heaps)) deallocate(this % local_heaps)
+
+    if (associated(this % local_model_streams)) deallocate(this % local_model_streams)
+
+    call this % local_dcb % delete() ! This will block if not everyone calls it
+
+    this % color = NO_COLOR
+  end if
+end subroutine ioserver_context_finalize_manually
+
+subroutine ioserver_context_finalize(context)
+  implicit none
+  type(ioserver_context), intent(inout) :: context
+  call context % finalize()
+end subroutine ioserver_context_finalize

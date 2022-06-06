@@ -83,19 +83,19 @@ or
 typedef int64_t heap_element ; //!< heap element (should be 64 bits, to be able to contain its own size)
 //!> heap statistics
 typedef struct{
-  uint64_t max_fill;     //!< high water of heap (highest allocation point)
-  uint64_t num_blocks;   //!< number of block allocations
-  uint64_t num_elements; //!< number of elements allocated
+  uint64_t max_fill;              //!< high water of heap (highest allocation point, in number of elements)
+  uint64_t total_num_allocations; //!< number of block allocations in the heap's lifetime
+  uint64_t total_num_alloc_elems; //!< number of elements allocated in the heap's lifetime
 } heap_stats;
 
 typedef struct {
   heap_element marker;            //!< Marker to be able to verify (a little bit) that a heap exists
-  size_t full_size;               //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
-  size_t num_elements;            //!< Number of data elements the heap can hold (maximum possible allocation)
+  size_t       full_size;         //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
+  size_t       capacity;          //!< Number of data elements the heap can hold (maximum possible allocation)
   heap_element stats_index;       //!< Index of the stats struct within the shared memory region (in number of #heap_element)
   heap_element first_block_index; //!< Index of the start of the heap itself within the shared memory region (in number of #heap_element)
   heap_element limit;             //!< Index beyond the last valid index within the heap
-  int32_t lock;                   //!< Variable used to lock/unlock the heap for certain operations
+  int32_t      lock;              //!< Variable used to lock/unlock the heap for certain operations
 } heap_metadata;
 
 /**

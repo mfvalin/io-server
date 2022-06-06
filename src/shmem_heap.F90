@@ -43,7 +43,6 @@ module shmem_heap_module
     integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely) \private
   end type block_meta_c
 
-
   include 'io-server/shmem_heap.inc'
 
   !> \brief C interoperable version of block_meta_f08
@@ -81,6 +80,13 @@ module shmem_heap_module
     GENERIC :: operator(/=) => unequal_meta !< non equality operator
   end type block_meta_f08
 
+  type, public :: heap_stats
+    integer(C_INT64_T) :: size_byte           !< Total size of heap (bytes)
+    integer(C_INT64_T) :: max_fill_byte       !< High water mark in heap  (highest allocation point) (bytes)
+    integer(C_INT64_T) :: total_alloc_block   !< Total number of blocks that have been allocated over the life of the heap
+    integer(C_INT64_T) :: total_alloc_byte    !< Total number of bytes used by allocated blocks over the life of the heap
+  end type heap_stats
+
 !   ===========================  heap type and type bound procedures ===========================
   !> \brief shmem_heap user defined type
   type, public :: shmem_heap
@@ -112,7 +118,7 @@ module shmem_heap_module
     procedure :: free_by_offset         !< Free space associated to offset into heap. \return .true. if O.K., .false. if error
     procedure :: free_by_meta           !< Free block in heap from its metadata. \return .true. if O.K., .false. if error
 
-    procedure :: get_info               !< Get heap statistics using shmem_heap address. \return 0 if O.K., nonzero if error
+    procedure :: get_stats              !< Get heap statistics using shmem_heap address. \return .true. if O.K., .false. if error
     procedure :: dump_info              !< Dump information about this shmem_heap
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
@@ -179,16 +185,15 @@ module shmem_heap_module
   end subroutine block_meta_print
 
   !> get heap statistics
-  function get_info(h, sz, max, nblk, nbyt) result(status)
+  function get_stats(h, stats) result(success)
     implicit none
-    class(shmem_heap),    intent(INOUT) :: h                !< heap object
-    integer(C_LONG_LONG), intent(OUT) :: sz                 !< [out] size of heap (bytes)
-    integer(C_LONG_LONG), intent(OUT) :: max                !< [out] high water mark in heap  (highest allocation point) (bytes)
-    integer(C_LONG_LONG), intent(OUT) :: nblk               !< [out] number of blocks that have been allocated
-    integer(C_LONG_LONG), intent(OUT) :: nbyt               !< [out] total number of bytes used by allocated blocks
+    class(shmem_heap),    intent(INOUT) :: h                !< heap instance
+    type(heap_stats),     intent(OUT)   :: stats            !< [out] The returned stats
+    logical :: success
     integer(C_INT) :: status                                !< 0 if O.K., nonzero if error
-    status = ShmemHeap_get_info(h % p, sz, max, nblk, nbyt)
-  end function get_info
+    status = ShmemHeap_get_info(h % p, stats % size_byte, stats % max_fill_byte, stats % total_alloc_block, stats % total_alloc_byte)
+    success = (status == 0)
+  end function get_stats
 
   !> dump info about this heap
   subroutine dump_info(this)

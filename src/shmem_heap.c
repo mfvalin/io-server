@@ -95,28 +95,24 @@ const heap_element HEAD             = 0xCAFEFADE; //!< HEAD marker below block
 const heap_element TAIL             = 0xBEBEFADA; //!< TAIL marker above block
 
 const heap_element BLOCK_SPLIT_SIZE = 64; //!< Number of extra elements in a potential block to decide to split it
-#if defined(__GNUC__) && __GNUC__ < 8     // Workaround when using GCC 7.x
-const heap_element MIN_HEAP_SIZE = 64 + 4;
-#else
 const heap_element MIN_HEAP_SIZE = BLOCK_SPLIT_SIZE + 4;
-#endif
 
 //C_StArT
 //!> heap statistics
 typedef struct{
-  uint64_t max_fill;     //!< high water of heap (highest allocation point)
-  uint64_t num_blocks;   //!< number of block allocations
-  uint64_t num_elements; //!< number of elements allocated
+  uint64_t max_fill;              //!< high water of heap (highest allocation point, in number of elements)
+  uint64_t total_num_allocations; //!< number of block allocations in the heap's lifetime
+  uint64_t total_num_alloc_elems; //!< number of elements allocated in the heap's lifetime
 } heap_stats;
 
 typedef struct {
   heap_element marker;            //!< Marker to be able to verify (a little bit) that a heap exists
-  size_t full_size;               //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
-  size_t num_elements;            //!< Number of data elements the heap can hold (maximum possible allocation)
+  size_t       full_size;         //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
+  size_t       capacity;          //!< Number of data elements the heap can hold (maximum possible allocation)
   heap_element stats_index;       //!< Index of the stats struct within the shared memory region (in number of #heap_element)
   heap_element first_block_index; //!< Index of the start of the heap itself within the shared memory region (in number of #heap_element)
   heap_element limit;             //!< Index beyond the last valid index within the heap
-  int32_t lock;                   //!< Variable used to lock/unlock the heap for certain operations
+  int32_t      lock;              //!< Variable used to lock/unlock the heap for certain operations
 } heap_metadata;
 
 /**
@@ -248,8 +244,8 @@ void ShmemHeap_dump_info(
   if (ShmemHeap_check_init(heap) != NULL) {
     printf("Heap shared mem at %p\nTotal heap size %ld bytes (can allocate %ld bytes)\n"
            "High point %ld bytes, allocated %ld blocks (%ld bytes)\n",
-           (void*)heap->meta, heap->meta->full_size * sizeof(heap_element), heap->meta->num_elements * (sizeof(heap_element)),
-           heap->stats->max_fill * sizeof(heap_element), heap->stats->num_blocks, heap->stats->num_elements * (sizeof(heap_element)));
+           (void*)heap->meta, heap->meta->full_size * sizeof(heap_element), heap->meta->capacity * (sizeof(heap_element)),
+           heap->stats->max_fill * sizeof(heap_element), heap->stats->total_num_allocations, heap->stats->total_num_alloc_elems * (sizeof(heap_element)));
   }
   else {
     printf("Address %p does not contain a valid heap\n", (void*)heap);
@@ -258,13 +254,13 @@ void ShmemHeap_dump_info(
 
 // F_StArT
 // function ShmemHeap_get_info(heap, sz, max, nblk, nbyt) result(status) bind(C,name='ShmemHeap_get_info')
-//   import :: C_INT, C_LONG_LONG, C_PTR
+//   import :: C_INT, C_INT64_T, C_PTR
 //   implicit none
 //   type(C_PTR), intent(in), value    :: heap
-//   integer(C_LONG_LONG), intent(OUT) :: sz
-//   integer(C_LONG_LONG), intent(OUT) :: max
-//   integer(C_LONG_LONG), intent(OUT) :: nblk
-//   integer(C_LONG_LONG), intent(OUT) :: nbyt
+//   integer(C_INT64_T), intent(OUT) :: sz
+//   integer(C_INT64_T), intent(OUT) :: max
+//   integer(C_INT64_T), intent(OUT) :: nblk
+//   integer(C_INT64_T), intent(OUT) :: nbyt
 //   integer(C_INT) :: status
 // end function ShmemHeap_get_info
 // F_EnD
@@ -286,10 +282,10 @@ int ShmemHeap_get_info(
 
   if (ShmemHeap_check_init(heap) == NULL) return -1;
 
-  *size = heap->meta->num_elements * sizeof(heap_element);
+  *size = heap->meta->capacity * sizeof(heap_element);
   *max  = heap->stats->max_fill * sizeof(heap_element);
-  *nblk = heap->stats->num_blocks;
-  *nbyt = heap->stats->num_elements * sizeof(heap_element);
+  *nblk = heap->stats->total_num_allocations;
+  *nbyt = heap->stats->total_num_alloc_elems * sizeof(heap_element);
 
   return 0 ;
 }
@@ -310,7 +306,7 @@ heap_element ShmemHeap_get_size(
   ){
 //  C_EnD
   if (ShmemHeap_check_init(heap) == NULL) return -1;
-  return heap->meta->num_elements * sizeof(heap_element);
+  return heap->meta->capacity * sizeof(heap_element);
 }
 
 
@@ -470,8 +466,8 @@ shmem_heap *ShmemHeap_init_from_scratch(
   meta->stats_index       = num_elem_from_bytes(sizeof(heap_metadata));
   meta->first_block_index = meta->stats_index + num_elem_from_bytes(sizeof(heap_stats));
   meta->full_size         = num_bytes / sizeof(heap_element);
-  meta->num_elements      = meta->full_size - meta->first_block_index;
-  meta->limit             = meta->num_elements - 2;
+  meta->capacity          = meta->full_size - meta->first_block_index;
+  meta->limit             = meta->capacity - 2;
   meta->lock              = 0;
 
   // Set up the pointers
@@ -481,15 +477,15 @@ shmem_heap *ShmemHeap_init_from_scratch(
 
   // Init stats
   heap_stats* stats = heap->stats;
-  stats->max_fill     = 0;             // high water mark
-  stats->num_blocks   = 0;             // allocated blocks
-  stats->num_elements = 0;             // allocated elements
+  stats->max_fill              = 0;   // high water mark
+  stats->total_num_allocations = 0;   // allocated blocks
+  stats->total_num_alloc_elems = 0;   // allocated elements
 
   // Init first block (empty, entire heap)
-  heap->first_block[0] = meta->num_elements;
+  heap->first_block[0] = meta->capacity;
   heap->first_block[1] = HEAD;
-  heap->first_block[meta->num_elements - 2] = TAIL;
-  heap->first_block[meta->num_elements - 1] = meta->num_elements;
+  heap->first_block[meta->capacity - 2] = TAIL;
+  heap->first_block[meta->capacity - 1] = meta->capacity;
 
   // Indicate heap is initialized. Gotta do this last!
   meta->marker        = HEAP_META_MARKER;
@@ -700,8 +696,8 @@ void *ShmemHeap_alloc_block(
       data[block_index] = -num_current_block_elem;
 
       // Update stats
-      heap->stats->num_blocks++;
-      heap->stats->num_elements += num_current_block_elem;
+      heap->stats->total_num_allocations++;
+      heap->stats->total_num_alloc_elems += num_current_block_elem;
 
       // Update high-water mark if needed
       if ((uint64_t)(block_index + num_current_block_elem) > heap->stats->max_fill) {
