@@ -6,8 +6,8 @@ module init_comms_module
 
   type, private :: all_crs
     type(comm_rank_size) :: global_crs, active_crs, node_crs, io_crs
-    type(comm_rank_size) :: model_relay_crs, model_crs, relay_crs, model_relay_node_crs, model_node_crs, relay_node_crs, sb_relay_node_crs
-    type(comm_rank_size) :: server_crs, server_work_crs, server_dcb_crs, sb_server_crs, mb_server_crs, grid_processor_crs
+    type(comm_rank_size) :: model_relay_crs, model_crs, relay_crs, model_relay_node_crs, model_node_crs, relay_node_crs, sb_relay_node_crs, mb_relay_node_crs
+    type(comm_rank_size) :: server_crs, server_work_crs, server_dcb_crs, sb_server_crs, mb_server_crs, stream_processor_crs
   contains
     procedure, pass :: get_all
     procedure, pass :: check_all
@@ -65,29 +65,30 @@ contains
     this % model_node_crs        = context % get_crs(MODEL_COLOR + NODE_COLOR)
     this % relay_node_crs        = context % get_crs(RELAY_COLOR + NODE_COLOR)
     this % sb_relay_node_crs     = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
+    this % mb_relay_node_crs     = context % get_crs(RELAY_COLOR + NODE_COLOR + MODEL_BOUND_COLOR)
 
     this % server_crs            = context % get_crs(SERVER_COLOR)
     this % server_work_crs       = context % get_crs(SERVER_COLOR - CHANNEL_COLOR)
     this % server_dcb_crs        = context % get_crs(CHANNEL_COLOR + SERVER_BOUND_COLOR + MODEL_BOUND_COLOR)
     this % sb_server_crs         = context % get_crs(SERVER_COLOR + SERVER_BOUND_COLOR)
     this % mb_server_crs         = context % get_crs(SERVER_COLOR + MODEL_BOUND_COLOR)
-    this % grid_processor_crs    = context % get_crs(SERVER_COLOR + GRID_PROCESSOR_COLOR)
+    this % stream_processor_crs  = context % get_crs(SERVER_COLOR + STREAM_PROCESSOR_COLOR)
   end subroutine get_all
 
   function check_all(this, context,                         &
     active,                                                 &
     node, io, model_relay, model, relay, model_relay_node,  &
-    model_node, relay_node, sb_relay_node,                  &
+    model_node, relay_node, sb_relay_node, mb_relay_node,   &
     server, server_work, server_dcb, sb_server, mb_server,  &
-    grid_processor) result(success)
+    stream_processor) result(success)
     implicit none
     class(all_crs),         intent(inout) :: this
     type(ioserver_context), intent(in)    :: context
     logical, intent(in) :: active, node, io, model_relay, model, relay
     logical, intent(in) :: model_relay_node, model_node, relay_node
-    logical, intent(in) :: sb_relay_node
+    logical, intent(in) :: sb_relay_node, mb_relay_node
     logical, intent(in) :: server, server_work, server_dcb
-    logical, intent(in) :: sb_server, mb_server, grid_processor
+    logical, intent(in) :: sb_server, mb_server, stream_processor
     logical :: success
 
     call this % get_all(context)
@@ -103,12 +104,13 @@ contains
     success = check_single_non_null(context, this % model_node_crs, model_node, 'model on node') .and. success
     success = check_single_non_null(context, this % relay_node_crs, relay_node, 'relay on node') .and. success
     success = check_single_non_null(context, this % sb_relay_node_crs, sb_relay_node, 'server-bound relay on node') .and. success
+    success = check_single_non_null(context, this % mb_relay_node_crs, mb_relay_node, 'model-bound relay on node') .and. success
     success = check_single_non_null(context, this % server_crs, server, 'server') .and. success
     success = check_single_non_null(context, this % server_work_crs, server_work, 'server workers') .and. success
     success = check_single_non_null(context, this % server_dcb_crs, server_dcb, 'server DCB') .and. success
     success = check_single_non_null(context, this % sb_server_crs, sb_server, 'server-bound server') .and. success
     success = check_single_non_null(context, this % mb_server_crs, mb_server, 'model-bound server') .and. success
-    success = check_single_non_null(context, this % grid_processor_crs, grid_processor, 'grid processor')  .and. success
+    success = check_single_non_null(context, this % stream_processor_crs, stream_processor, 'stream processor')  .and. success
 
     if (.not. success) return
 
@@ -123,12 +125,13 @@ contains
     call check_single_barrier(context, this % model_node_crs, model_node, 'model on node')
     call check_single_barrier(context, this % relay_node_crs, relay_node, 'relay on node')
     call check_single_barrier(context, this % sb_relay_node_crs, sb_relay_node, 'server-bound relay on node')
+    call check_single_barrier(context, this % mb_relay_node_crs, mb_relay_node, 'model-bound relay on node')
     call check_single_barrier(context, this % server_crs, server, 'server')
     call check_single_barrier(context, this % server_work_crs, server_work, 'server workers')
     call check_single_barrier(context, this % server_dcb_crs, server_dcb, 'server DCB')
     call check_single_barrier(context, this % sb_server_crs, sb_server, 'server-bound server')
     call check_single_barrier(context, this % mb_server_crs, mb_server, 'model-bound server')
-    call check_single_barrier(context, this % grid_processor_crs, grid_processor, 'grid processor') 
+    call check_single_barrier(context, this % stream_processor_crs, stream_processor, 'stream processor') 
 
     call check_single_barrier(context, this % active_crs, active, 'active') ! Once more, to help synchronize output
 
@@ -147,9 +150,9 @@ contains
 
     if (.not. success) then
       if (.not. do_check) then
-        print '(A, A, A)', context % get_detailed_pe_name(), ' has access to a comm it should not! ', name
+        print '(A, A, A)', context % get_short_pe_name(), ' has access to a comm it should not! ', name
       else
-        print '(A, A, A)', context % get_detailed_pe_name(), ' does not have access to a comm it should! ', name
+        print '(A, A, A)', context % get_short_pe_name(), ' does not have access to a comm it should! ', name
       end if
     end if
   end function check_single_non_null
@@ -168,7 +171,7 @@ contains
     if (do_check) then
       call MPI_Barrier(crs % comm, ierr)
       if (crs % rank == 0) then
-        print '(A, A, A, A)', 'Barrier by ', context % get_detailed_pe_name(), ' for ', name
+        print '(A, A, A)', context % get_short_pe_name(), ' Barrier for ', name
       end if
     end if
   end subroutine check_single_barrier
@@ -179,7 +182,7 @@ contains
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom model doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom model doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -191,14 +194,15 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .false.,          &
         server            = .false.,          &
         server_work       = .false.,          &
         server_dcb        = .false.,          &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'MODEL PE HAS FAILED'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' MODEL PE HAS FAILED'
   end function custom_functions_model
 
   function custom_server_bound_relay(context) result(success)
@@ -207,7 +211,7 @@ contains
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom server-bound relay doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom server-bound relay doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -219,14 +223,15 @@ contains
         relay             = .true.,           &
         relay_node        = .true.,           &
         sb_relay_node     = .true.,           &
+        mb_relay_node     = .false.,          &
         server            = .false.,          &
         server_work       = .false.,          &
         server_dcb        = .false.,          &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'Server-bound relay has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' Server-bound relay has failed!'
 
   end function custom_server_bound_relay
 
@@ -236,7 +241,7 @@ contains
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom model-bound relay doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom model-bound relay doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -248,24 +253,25 @@ contains
         relay             = .true.,           &
         relay_node        = .true.,           &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .true.,           &
         server            = .false.,          &
         server_work       = .false.,          &
         server_dcb        = .false.,          &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'Model-bound relay has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' Model-bound relay has failed!'
 
   end function custom_model_bound_relay
 
-  function custom_grid_processor(context) result(success)
+  function custom_stream_processor(context) result(success)
     implicit none
     type(ioserver_context), intent(inout) :: context
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom grid processor doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom stream processor doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -277,16 +283,17 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .false.,          &
         server            = .true.,           &
         server_work       = .true.,           &
         server_dcb        = .false.,          &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
-        grid_processor    = .true.)
+        stream_processor  = .true.)
 
-    if (.not. success) print *, 'Grid processor PE has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' Stream processor PE has failed!'
 
-  end function custom_grid_processor
+  end function custom_stream_processor
 
   function custom_channel(context) result(success)
     implicit none
@@ -296,7 +303,7 @@ contains
     type(all_crs) :: crs
     type(distributed_circular_buffer) :: dcb
 
-    print *, 'Custom channel doing almost nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom channel doing almost nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -308,14 +315,15 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .false.,          &
         server            = .true.,           &
         server_work       = .false.,          &
         server_dcb        = .true.,           &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'Channel PE has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' Channel PE has failed!'
 
     dcb = context % get_dcb()
     success = dcb % start_listening()
@@ -327,7 +335,7 @@ contains
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom server-bound server doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom server-bound server doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -339,14 +347,15 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .false.,          &
         server            = .true.,           &
         server_work       = .true.,           &
         server_dcb        = .true.,           &
         sb_server         = .true.,           &
         mb_server         = .false.,          &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'Server-bound server PE has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' Server-bound server PE has failed!'
 
   end function custom_server_bound_server
 
@@ -356,7 +365,7 @@ contains
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom model-bound server doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom model-bound server doing nothing '
     success = crs % check_all(context,        &
         active            = .true.,           &
         node              = .true.,           &
@@ -368,14 +377,15 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .false.,          &
         server            = .true.,           &
         server_work       = .true.,           &
         server_dcb        = .true.,           &
         sb_server         = .false.,          &
         mb_server         = .true.,           &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'Model-bound server PE has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' Model-bound server PE has failed!'
 
   end function custom_model_bound_server
 
@@ -385,7 +395,7 @@ contains
     logical :: success
     type(all_crs) :: crs
 
-    print *, 'Custom no-op server doing nothing '
+    print '(A, A)', context % get_short_pe_name(), ' Custom no-op server doing nothing '
     success = crs % check_all(context,        &
         active            = .false.,          &
         node              = .true.,           &
@@ -397,14 +407,15 @@ contains
         relay             = .false.,          &
         relay_node        = .false.,          &
         sb_relay_node     = .false.,          &
+        mb_relay_node     = .false.,          &
         server            = .false.,          &
         server_work       = .false.,          &
         server_dcb        = .false.,          &
         sb_server         = .false.,          &
         mb_server         = .false.,          &
-        grid_processor    = .false.)
+        stream_processor  = .false.)
 
-    if (.not. success) print *, 'No-op server PE has failed!'
+    if (.not. success) print '(A, A)', context % get_short_pe_name(), ' No-op server PE has failed!'
 
     call context % no_op()
   end function custom_server_no_op
@@ -422,7 +433,7 @@ program init_comms
   type(ioserver_input_parameters) :: params
   procedure(model_function_template),  pointer :: model_fn_ptr
   procedure(relay_function_template),  pointer :: sb_relay_fn, mb_relay_fn
-  procedure(server_function_template), pointer :: grid_processor_fn, channel_fn, sb_server_fn, mb_server_fn
+  procedure(server_function_template), pointer :: stream_processor_fn, channel_fn, sb_server_fn, mb_server_fn
   procedure(no_op_function_template),  pointer :: server_no_op_fn
 
   integer :: ierr
@@ -443,9 +454,9 @@ program init_comms
   params % num_server_bound_server = 2
   params % num_model_bound_server = 1
   params % num_relay_per_node = 2
-  params % num_grid_processors = 1
+  params % num_stream_processors = 1
 
-  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_grid_processors + params % num_model_bound_server
+  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_stream_processors + params % num_model_bound_server
 
   if (server_node) then
     ! Add 1 NO-OP process on the server
@@ -456,7 +467,7 @@ program init_comms
   sb_relay_fn  => custom_server_bound_relay
   mb_relay_fn  => custom_model_bound_relay
 
-  grid_processor_fn => custom_grid_processor
+  stream_processor_fn => custom_stream_processor
   sb_server_fn      => custom_server_bound_server
   mb_server_fn      => custom_model_bound_server
   channel_fn        => custom_channel
@@ -466,7 +477,7 @@ program init_comms
 
   if (params % is_on_server) then
     success = ioserver_run_server_node(params,        &
-        custom_grid_processor_fn = grid_processor_fn, &
+        custom_stream_processor_fn = stream_processor_fn, &
         custom_server_bound_fn = sb_server_fn,        &
         custom_model_bound_fn = mb_server_fn,         &
         custom_channel_fn = channel_fn,               &

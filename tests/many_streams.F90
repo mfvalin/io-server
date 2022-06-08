@@ -60,7 +60,7 @@ contains
     do i_stream = 1, max_num_streams
       call context % open_stream_model(streams(i_stream) % p)
       if (.not. associated(streams(i_stream) % p)) then
-        print '(A, I5)', 'ERROR: Unable to open stream ', i_stream
+        print '(A, A, I7)', context % get_short_pe_name(), ' ERROR: Unable to open stream ', i_stream
         return
       end if
     end do
@@ -115,6 +115,7 @@ program many_streams
 
   params % num_relay_per_node = 2
   params % is_on_server       = .false.
+  params % model_stream_put_cmd_timeout_ms = 10
   ! params % debug_level        = 1
 
   success = context % init(params)

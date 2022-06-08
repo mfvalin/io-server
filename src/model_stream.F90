@@ -44,6 +44,8 @@ module model_stream_module
     type(shmem_heap)      :: local_heap             !< Access to the shared memory heap owned by this model PE
     type(circular_buffer) :: server_bound_cb        !< Access to the server-bound buffer owned by this model PE
     type(ioserver_messenger), pointer :: messenger => NULL() !< Messenger used to manage/synchronized data transmission to the server
+    integer               :: put_cmd_timeout_ms     !< How many milliseconds to wait before failing when sending a command
+    integer               :: put_data_timeout_ms    !< How many milliseconds to wait before failing when sending data
 
     contains
 
@@ -66,7 +68,7 @@ module model_stream_module
 
 contains
 
-  function new_model_stream(global_rank, model_rank, stream_rank, local_heap, server_bound_cb, debug_mode, messenger)
+  function new_model_stream(global_rank, model_rank, stream_rank, local_heap, server_bound_cb, debug_mode, messenger, put_cmd_timeout_ms, put_data_timeout_ms)
     implicit none
     integer,                intent(in)  :: global_rank
     integer,                intent(in)  :: model_rank
@@ -76,6 +78,8 @@ contains
     logical,                intent(in)  :: debug_mode
     type(ioserver_messenger), pointer, intent(in) :: messenger
     type(model_stream) :: new_model_stream
+    integer,                intent(in) :: put_cmd_timeout_ms
+    integer,                intent(in) :: put_data_timeout_ms
 
     if (server_bound_cb % is_valid()) then
       new_model_stream % global_rank = global_rank
@@ -85,6 +89,8 @@ contains
       new_model_stream % server_bound_cb = server_bound_cb
       new_model_stream % debug = debug_mode
       new_model_stream % messenger => messenger
+      new_model_stream % put_cmd_timeout_ms = put_cmd_timeout_ms
+      new_model_stream % put_data_timeout_ms = put_data_timeout_ms
     else
       print '(A)', 'ERROR: Server-bound CB has not been initialized!'
       return
@@ -169,10 +175,29 @@ contains
     ! call print_command_record(command_header)
     ! print '(A, I8)', 'Sending command with content size ', command_header % size_int8
 
-    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(command_header, command_record_size_byte(), CB_KIND_CHAR, .false.)                    .and. success
-    success = this % server_bound_cb % put(command_content % f_array(), command_header % size_int8, CB_DATA_ELEMENT_KIND, .false.) .and. success
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)                               .and. success
+    ! Header
+    success = this % server_bound_cb % put(                                                                       &
+        header, message_header_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_cmd_timeout_ms)
+
+    ! Command record
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          command_header, command_record_size_byte(), CB_KIND_CHAR, .false.,                                      &
+          timeout_ms = this % put_cmd_timeout_ms)
+    end if
+
+    ! Command parameters
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          command_content % f_array(), command_header % size_int8, CB_DATA_ELEMENT_KIND, .false.,                 &
+          timeout_ms = this % put_cmd_timeout_ms)
+    end if
+
+    ! End cap + commit
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true., timeout_ms = this % put_cmd_timeout_ms)
+    end if
   end function send_command
 
   function model_stream_open(this) result(success)
@@ -216,10 +241,21 @@ contains
 
     end_cap % msg_length = header % content_size_int8
 
-    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(command, command_record_size_byte(), CB_KIND_CHAR, .false.)  .and. success
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)      .and. success   ! Append cap and commit message
+    ! Header
+    success = this % server_bound_cb % put(                                                                       &
+        header, message_header_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_cmd_timeout_ms)
 
+    ! The command
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          command, command_record_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_cmd_timeout_ms)
+    end if
+
+    ! End cap + commit
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true., timeout_ms = this % put_cmd_timeout_ms)
+    end if
   end function model_stream_open
 
   function model_stream_close(this) result(success)
@@ -250,9 +286,21 @@ contains
   
     end_cap % msg_length = header % content_size_int8
     
-    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(command, command_record_size_byte(), CB_KIND_CHAR, .false.)  .and. success
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)      .and. success ! Append cap + commit
+    ! Header
+    success = this % server_bound_cb % put(                                                                     &
+        header, message_header_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_cmd_timeout_ms)
+
+    ! The command
+    if (success) then
+      success = this % server_bound_cb % put(                                                                   &
+          command, command_record_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_cmd_timeout_ms)
+    end if
+
+    ! End cap (+ commit)
+    if (success) then
+      success = this % server_bound_cb % put(                                                                   &
+          end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true., timeout_ms = this % put_cmd_timeout_ms)
+    end if
 
     this % stream_id = -1
 
@@ -325,6 +373,7 @@ contains
       metadata => meta % f_array()
     endif
 
+    ! Prepare accompanying command
     command_meta % size_int8    = 0
     command_meta % command_type = MSG_COMMAND_DATA
     command_meta % stream_id    = this % stream_id
@@ -345,12 +394,9 @@ contains
     rec % heap_offset    = my_data % get_offset()
     rec % data_size_byte = product(rec % subgrid_area % size) * rec % elem_size
 
-    ! print *, rec % ni, rec % nj, rec % nk, rec % nvar, f_block % k()
-
-    ! print *, 'From model'
-    ! print *, 'Area % nv = ', area % nv
     ! call print_data_record(rec)
 
+    ! Prepare header for the entire message
     header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size + command_record_size_int8() + command_meta % size_int8
     header % command            = MSG_COMMAND_DATA
     header % stream_rank        = this % stream_rank
@@ -363,19 +409,48 @@ contains
     !-------------------
     ! Send the message
 
-    ! Put header + data
-    success = this % server_bound_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
-    success = this % server_bound_cb % put(rec, data_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
+    ! Send header
+    success = this % server_bound_cb % put(                                                                       &
+        header, message_header_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_data_timeout_ms)
 
-    success = this % server_bound_cb % put(command_meta, command_record_size_byte(), CB_KIND_CHAR, .false.) .and. success
-    if (present(command)) success = this % server_bound_cb % put(command % f_array(), command_meta % size_int8, CB_DATA_ELEMENT_KIND, .false.) .and. success
+    ! Send data
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          rec, data_record_size_byte(), CB_KIND_CHAR, .false., timeout_ms = this % put_data_timeout_ms)
+    end if
+
+    ! Send the associated command
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          command_meta, command_record_size_byte(), CB_KIND_CHAR, .false.,                                        &
+          timeout_ms = this % put_data_timeout_ms)
+    end if
+
+    ! Send command content (if needed)
+    if (present(command) .and. success) then
+      success = this % server_bound_cb % put(                                                                     &
+          command % f_array(), command_meta % size_int8, CB_DATA_ELEMENT_KIND, .false.,                           &
+          timeout_ms = this % put_data_timeout_ms)
+    end if
 
     ! Optional parts of the message
-    if(present(cprs)) success = this % server_bound_cb % put(cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
-    if(present(meta)) success = this % server_bound_cb % put(metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_8, .false.) .and. success
+    if(present(cprs) .and. success) then
+      success = this % server_bound_cb % put(                                                                     &
+          cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.,                                        &
+          timeout_ms = this % put_data_timeout_ms)
+    end if
+
+    if(present(meta) .and. success) then
+      success = this % server_bound_cb % put(                                                                     &
+          metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_8, .false.,                     &
+          timeout_ms = this % put_data_timeout_ms)
+    end if
 
     ! Add the end cap and commit the message
-    success = this % server_bound_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.) .and. success
+    if (success) then
+      success = this % server_bound_cb % put(                                                                     &
+          end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true., timeout_ms = this % put_data_timeout_ms)
+    end if
 
   end function send_data
 

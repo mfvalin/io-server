@@ -37,7 +37,8 @@ module ioserver_context_module
   ! Publish some types and constants that are useful
   public :: shmem_heap, circular_buffer, distributed_circular_buffer, comm_rank_size, model_stream, local_server_stream
   public :: no_op_function_template, default_no_op
-  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR, GRID_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
+  public :: MODEL_COLOR, SERVER_COLOR, RELAY_COLOR, SERVER_BOUND_COLOR, MODEL_BOUND_COLOR, NODE_COLOR
+  public :: STREAM_PROCESSOR_COLOR, NO_COLOR, CHANNEL_COLOR
 
   integer, parameter         :: MAX_PES_PER_NODE  = 128 !< How many PEs per node we can manage
 
@@ -64,7 +65,7 @@ module ioserver_context_module
   type, public :: ioserver_input_parameters
     !> @{ \name Process counts and types
     integer :: num_relay_per_node       = 0 !< How many relay processes there are on each model node (server- and model-bound)
-    integer :: num_grid_processors      = 0 !< How many server processes are used to process grids and write files
+    integer :: num_stream_processors    = 0 !< How many server processes are used to process streams (open/close, write, do stuff to grids, etc.)
     integer :: num_server_bound_server  = 0 !< How many server-bound server processes there are
     integer :: num_model_bound_server   = 0 !< How many model-bound server processes there are
     integer :: num_channels             = 0 !< How many communication channels (processes) there are on the server
@@ -86,6 +87,18 @@ module ioserver_context_module
     !> How many streams can be open at the same time.
     !> _This will be the same for every PE, so the common value is determined by the root server PE._
     integer :: max_num_concurrent_streams = 32
+
+    !> How many milliseconds to wait when inserting a command into a stream's buffer (server-side).
+    !> 0 means no waiting, a negative number means wait practically forever
+    integer :: server_stream_put_cmd_timeout_ms = 0
+
+    !> How many milliseconds to wait when putting a command to send to the server
+    !> 0 means no waiting, a negative number means wait practically forever
+    integer :: model_stream_put_cmd_timeout_ms = 0
+
+    !> How many milliseconds to wait when putting data to send to the server 
+    !> 0 means no waiting, a negative number means wait practically forever
+    integer :: model_stream_put_data_timeout_ms = 0
     !> @}
 
     !> @{ \name Pipeline control
@@ -152,24 +165,25 @@ module ioserver_context_module
     integer :: active_rank = -1              !< Rank on active_comm
     integer :: active_size =  0              !< Size of active_comm (number of active PEs)
 
-    integer :: io_comm                     = MPI_COMM_NULL  !< all IO PEs     (relay + server) (subset of active_comm)
-    integer :: io_dcb_comm                 = MPI_COMM_NULL  !< all IO PEs that participate in the DCB (relay + server, without grid processors) (subset of active_comm)
+    integer :: io_comm                      = MPI_COMM_NULL  !< all IO PEs     (relay + server) (subset of active_comm)
+    integer :: io_dcb_comm                  = MPI_COMM_NULL  !< all IO PEs that participate in the DCB (relay + server, *without stream processors*) (subset of active_comm)
 
-    integer :: model_relay_comm            = MPI_COMM_NULL  !< model and relay PEs (all nodes) (subset of active_comm)
-    integer :: model_comm                  = MPI_COMM_NULL  !< model PEs           (all nodes) (subset of model_relay_comm)
-    integer :: relay_comm                  = MPI_COMM_NULL  !< relay PEs           (all nodes) (subset of model_relay_comm)
+    integer :: model_relay_comm             = MPI_COMM_NULL  !< model and relay PEs (all nodes) (subset of active_comm)
+    integer :: model_comm                   = MPI_COMM_NULL  !< model PEs           (all nodes) (subset of model_relay_comm)
+    integer :: relay_comm                   = MPI_COMM_NULL  !< relay PEs           (all nodes) (subset of model_relay_comm)
 
-    integer :: server_comm                 = MPI_COMM_NULL  !< IO server PEs (subset of active_comm)
-    integer :: server_work_comm            = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm, excludes channel PEs)
-    integer :: server_dcb_comm             = MPI_COMM_NULL  !< Server PEs that participate in the DCB (subset of server_comm, excludes grid processors)
-    integer :: server_bound_server_comm    = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_dcb_comm)
-    integer :: model_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_dcb_comm)
-    integer :: grid_processor_server_comm  = MPI_COMM_NULL  !< Server PEs that process assembled grid data (subset of server_work_comm)
+    integer :: server_comm                  = MPI_COMM_NULL  !< IO server PEs (subset of active_comm)
+    integer :: server_work_comm             = MPI_COMM_NULL  !< Server PEs that process data (subset of server_comm, excludes channel PEs)
+    integer :: server_dcb_comm              = MPI_COMM_NULL  !< Server PEs that participate in the DCB (subset of server_comm, *excludes stream processors*)
+    integer :: server_bound_server_comm     = MPI_COMM_NULL  !< Server PEs that process server-bound relay data (subset of server_dcb_comm)
+    integer :: model_bound_server_comm      = MPI_COMM_NULL  !< Server PEs that process model-bound relay data (subset of server_dcb_comm)
+    integer :: stream_processor_server_comm = MPI_COMM_NULL  !< Server PEs that process streams, assembled grid data (subset of server_work_comm)
 
-    integer :: model_relay_smp_comm        = MPI_COMM_NULL  !< model+relays on current node
-    integer :: model_smp_comm              = MPI_COMM_NULL  !< model PEs on current SMP node
-    integer :: relay_smp_comm              = MPI_COMM_NULL  !< relay PEs on current SMP node
-    integer :: server_bound_relay_smp_comm = MPI_COMM_NULL  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
+    integer :: model_relay_smp_comm         = MPI_COMM_NULL  !< model+relays on current node
+    integer :: model_smp_comm               = MPI_COMM_NULL  !< model PEs on current SMP node
+    integer :: relay_smp_comm               = MPI_COMM_NULL  !< relay PEs on current SMP node
+    integer :: server_bound_relay_smp_comm  = MPI_COMM_NULL  !< server-bound relay PEs on current SMP node, subset of relay_smp_comm
+    integer :: model_bound_relay_smp_comm   = MPI_COMM_NULL  !< model-bound relay PEs on current SMP node, subset of relay_smp_comm
     !> @}
 
     !----------------------------------------------------
@@ -190,11 +204,15 @@ module ioserver_context_module
     !---------------------------------------------------
     !> @{ \name Direct (Fortran) pointers to actual shared memory
     type(control_shared_memory),              pointer :: shmem                 => NULL() !< Will point to start of control shared memory
-    type(shared_server_stream), dimension(:), pointer :: common_server_streams => NULL() !< Stream files used to assemble grids and write them (in shared memory)
+    type(shared_server_stream), dimension(:), pointer :: common_server_streams => NULL() !< Streams used to assemble grids and write them (in shared memory)
     !> @}
 
     !-------------------
     !> @{ \name Stuff
+
+    character(len=:), allocatable :: detailed_pe_name !< A (detailed) string containing PE role and various ranks
+    character(len=:), allocatable :: short_pe_name    !< A (short) string containing PE role, node ID, node rank, and rank within the "role"
+
     integer :: model_relay_smp_rank = -1    !< rank in model_relay_smp_comm
     integer :: model_relay_smp_size =  0    !< population of model_relay_smp_comm
     integer :: server_comm_rank     = -1    !< rank in server_comm
@@ -239,6 +257,7 @@ module ioserver_context_module
     procedure, pass         :: allocate_from_arena      => ioctx_allocate_from_arena
     procedure, pass         :: create_local_heap        => ioctx_create_local_heap
     procedure, pass         :: create_local_cb          => ioctx_create_local_cb
+    procedure, pass         :: make_pe_name             => ioctx_make_pe_name
     !> @}
 
     !> @{ \name Process type query
@@ -248,7 +267,7 @@ module ioserver_context_module
     procedure, pass, public :: is_server_bound
     procedure, pass, public :: is_model_bound
     procedure, pass, public :: is_channel
-    procedure, pass, public :: is_grid_processor
+    procedure, pass, public :: is_stream_processor
     procedure, pass, public :: is_no_op
     !> @}
 
@@ -298,6 +317,7 @@ module ioserver_context_module
     procedure, pass, public :: set_debug_level  !< Debug level setter. \sa ioserver_input_parameters::debug_level
     procedure, pass, public :: get_debug_level  !< Debug level getter. \sa ioserver_input_parameters::debug_level
     procedure, pass, public :: get_detailed_pe_name
+    procedure, pass, public :: get_short_pe_name
 
     procedure, pass :: print_io_colors
     procedure, pass :: print_shared_mem_sizes
@@ -340,7 +360,7 @@ subroutine open_stream_model(context, new_stream)
   nullify(new_stream)
 
   if (.not. context % is_initialized()) then
-    print '(A)', 'ERROR: Cannot open file, context is *not* initialized.'
+    print '(A, A)', context % short_pe_name, ' ERROR: Cannot open file, context is *not* initialized.'
     return
   end if
 
@@ -350,13 +370,13 @@ subroutine open_stream_model(context, new_stream)
       if (tmp_stream % open()) then
         new_stream => tmp_stream
       else
-        print '(A, I3)', 'ERROR: Unable to open new model stream with rank ', i_stream
+        print '(A, A, I3)', context % short_pe_name, ' ERROR: Unable to open new model stream with rank ', i_stream
       end if
       return
     end if
   end do
 
-  print '(A)', 'ERROR: No space left in the list of (model) streams to open a new one'
+  print '(A, A)', context % short_pe_name, ' ERROR: No space left in the list of (model) streams to open a new one'
 end subroutine open_stream_model
 
 !> Set time to quit flag in control area
@@ -364,13 +384,13 @@ subroutine set_time_to_quit(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
   context % shmem % time_to_quit = 1
-  if (context % get_debug_level() >= 2) print '(A, A)', 'DEBUG: time to quit ', context % get_detailed_pe_name()
+  if (context % get_debug_level() >= 2) print '(A, A)', context % short_pe_name, ' DEBUG: time to quit '
 end subroutine set_time_to_quit
 
 subroutine print_io_colors(context)
     implicit none
     class(ioserver_context), intent(in) :: context
-    write(6,'(A,(15I5))')' DEBUG: colors =', context % shmem % pe(0:context % max_smp_pe) % color
+    write(6,'(A, A,(15I5))') context % short_pe_name, ' DEBUG: colors =', context % shmem % pe(0:context % max_smp_pe) % color
 end subroutine print_io_colors
 
 !> Set the debug flag for this context
@@ -379,7 +399,7 @@ subroutine set_debug_level(context, level)
   class(ioserver_context), intent(inout) :: context
   integer, intent(in) :: level
   context % params % debug_level = min(max(level, 0), 2)
-  if (context % get_debug_level() > 0) print '(A, 1X, I2)', 'INFO: debug level =', context % get_debug_level()
+  if (context % get_debug_level() > 0) print '(A, A, 1X, I2)', context % short_pe_name, ' INFO: debug level =', context % get_debug_level()
 end subroutine set_debug_level
 
 !> NO OP loop to park processes with minimal CPU consumption
@@ -406,19 +426,21 @@ subroutine print_shared_mem_sizes(context)
   implicit none
   class(ioserver_context), intent(in) :: context
   if (context % is_server()) then
-    print '(A,F8.1,A)', '(Server node) Shared memory heap: ', context % params % server_heap_size_mb, ' MB'
-    if (.not. context % is_grid_processor()) then
+    print '(A, A, F8.1, A)', context % short_pe_name, ' Shared memory heap: ', context % params % server_heap_size_mb, ' MB'
+    if (.not. context % is_stream_processor()) then
       if (context % local_dcb % is_valid()) then
-        print '(A,F8.1,A)', '(Server node) Server-bound DCB:   ', context % params % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(), ' MB (total)'
-        print '(A,F8.1,A)', '(Server node) Model-bound DCB:    ', context % params % dcb_model_bound_size_mb, ' MB (per client)'
+        print '(A,A,F8.1,A)', context % short_pe_name, ' Server-bound DCB:   ',                                   &
+            context % params % dcb_server_bound_size_mb * context % local_dcb % get_num_server_bound_clients(),   &
+            ' MB (total)'
+        print '(A,A,F8.1,A)', context % short_pe_name, ' Model-bound DCB:    ', context % params % dcb_model_bound_size_mb, ' MB (per client)'
       end if
     end if
   else
-    print '(A,F8.1,A)', '(Model node)  Shared memory heap: ', context % params % model_heap_size_mb, ' MB'
-    print '(A,F8.1,A)', '(Model node)  Server-bound CB:    ', context % params % server_bound_cb_size_mb, ' MB'
-    print '(A,F8.1,A)', '(Model node)  Model-bound CB:     ', context % params % model_bound_cb_size_mb, ' MB'
+    print '(A,A,F8.1,A)', context % short_pe_name, ' Shared memory heap: ', context % params % model_heap_size_mb, ' MB'
+    print '(A,A,F8.1,A)', context % short_pe_name, ' Server-bound CB:    ', context % params % server_bound_cb_size_mb, ' MB'
+    print '(A,A,F8.1,A)', context % short_pe_name, ' Model-bound CB:     ', context % params % model_bound_cb_size_mb, ' MB'
     if (context % is_relay()) then
-      print '(A,F8.1,A)', '(Relay)       Server-bound DCB:   ', &
+      print '(A,A,F8.1,A)', context % short_pe_name, ' Server-bound DCB:   ', &
         real(context % local_dcb % get_capacity_local(CB_KIND_CHAR), kind=4) / MBYTE, ' MB'
     end if
   end if
@@ -446,7 +468,7 @@ subroutine ioserver_input_parameters_print(params)
 
   call add_line(output, pos, 'Process counts: ')
   if (params % is_on_server) then
-    call add_line(output, pos, '  # grid processors ',        '(I4)', val_i = params % num_grid_processors)
+    call add_line(output, pos, '  # stream processors ',      '(I4)', val_i = params % num_stream_processors)
     call add_line(output, pos, '  # server-bound server PEs', '(I4)', val_i = params % num_server_bound_server)
     call add_line(output, pos, '  # model-bound server PEs',  '(I4)', val_i = params % num_model_bound_server)
     call add_line(output, pos, '  # channel PEs',             '(I4)', val_i = params % num_channels)
@@ -467,6 +489,12 @@ subroutine ioserver_input_parameters_print(params)
 
   call add_line(output, pos, 'Stream control: ')
   call add_line(output, pos, '  Max # concurrent open streams', '(I4)', val_i = params % max_num_concurrent_streams)
+  if (params % is_on_server) then
+    call add_line(output, pos, '  Put command timeout (ms)', '(I4)', val_i = params % server_stream_put_cmd_timeout_ms)
+  else
+    call add_line(output, pos, '  Put command timeout (ms)', '(I4)', val_i = params % model_stream_put_cmd_timeout_ms)
+    call add_line(output, pos, '  Put data timeout (ms)', '(I4)', val_i = params % model_stream_put_data_timeout_ms)
+  end if
 
   call add_line(output, pos, 'Pipeline control: ')
   if (params % is_on_server) then

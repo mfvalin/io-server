@@ -91,15 +91,17 @@ module server_stream_module
   !> interface to the underlying shared object, with extra data, that ensures proper synchronization.
   type, public :: local_server_stream
     private
-    integer             :: server_id  = -2      !< On which process this local instance is located (might have duplicates, depending on server process types)
-    logical             :: is_writer  = .false. !< Whether this local instance is allowed to write to the underlying file
-    integer             :: unit       = -1      !< Fortran file unit, when/if open
-    logical             :: debug_mode = .false. !< Whether to print some debug messages
-    type(simple_mutex)  :: mutex                !< Used to protect access to the underlying 
-    type(shmem_heap)    :: data_heap            !< Heap where we can get space in shared memory
+    integer             :: server_id    = -2      !< On which process this local instance is located (might have duplicates, depending on server process types)
+    logical             :: is_writer    = .false. !< Whether this local instance is allowed to write to the underlying file
+    integer             :: unit         = -1      !< Fortran file unit, when/if open
+    integer             :: debug_level  =  0      !< Whether to print some debug messages
+    type(simple_mutex)  :: mutex                  !< Used to protect access to the underlying 
+    type(shmem_heap)    :: data_heap              !< Heap where we can get space in shared memory
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
     type(circular_buffer) :: command_buffer
     type(atomic_int32)  :: command_counter
+    integer             :: put_cmd_timeout = 0    !< How long to wait before failing, when inserting a command into the buffer
+    character(len=:), allocatable :: pe_name
 
     contains
 
@@ -233,27 +235,30 @@ contains
   !> Initialize this local instance (but *not* the underlying shared memory stream), associate this local instance with its underlying shared stream,
   !> initialize the mutex to point to the shared instance mutex value, associate this local instance with a shared memory heap where the grids will
   !> actually be assembled
-  function local_server_stream_init(this, server_id, is_writer, debug_mode, shared_instance, data_heap) result(success)
+  function local_server_stream_init(this, server_id, is_writer, debug_level, shared_instance, data_heap, pe_name, put_cmd_timeout) result(success)
     implicit none
     class(local_server_stream),          intent(inout) :: this
     integer,                             intent(in)    :: server_id         !< [in] ID of the stream this local instance will access
     logical,                             intent(in)    :: is_writer         !< [in] Whether the caller is allowed to write to the underlying file
-    logical,                             intent(in)    :: debug_mode        !< [in] Whether to print debug messages
+    integer,                             intent(in)    :: debug_level       !< [in] (up to) What level of debug messages to print
     type(shared_server_stream), pointer, intent(inout) :: shared_instance   !< [in,out] Pointer to the underlying shared instance
     type(shmem_heap),                    intent(inout) :: data_heap         !< [in,out] Heap from which to allocate/access shared memory
+    character(len=*),                    intent(in)    :: pe_name           !< [in] Human-readable name for the PE that uses this local stream
+    integer,                             intent(in)    :: put_cmd_timeout   !< [in] How long to wait before failing when inserting a command into the buffer
 
     logical :: success
 
     this % server_id        =  server_id
     this % is_writer        =  is_writer
-    this % debug_mode       =  debug_mode
+    this % debug_level      =  debug_level
     this % shared_instance  => shared_instance
     this % data_heap        =  data_heap
     call this % mutex % init_from_int(this % shared_instance % mutex_value, this % server_id)
     this % command_counter = this % shared_instance % get_tag_counter()
 
     success = this % command_buffer % create_bytes(c_loc(this % shared_instance % command_buffer_data))
-
+    this % pe_name         = pe_name
+    this % put_cmd_timeout = put_cmd_timeout
   end function local_server_stream_init
 
   !> Check whether this local stream has been initialized (i.e. it has an ID and is associated with a shared instance)
@@ -290,21 +295,20 @@ contains
     integer(C_INT),                         intent(in)    :: tag
     logical :: success
 
-    integer, parameter :: TIMEOUT_MS = 0
-
     integer(C_INT32_T) :: old_value
     old_value = this % command_counter % read()
     success = .true.
     if (tag > old_value) then
       if (this % command_counter % try_update(old_value, tag)) then
         ! print '(A, I8, A, I8, I8)', 'Enqueuing command, tag ', tag, ', size ', size(command_content), this % command_counter % read()
-        success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true., timeout_ms = TIMEOUT_MS)
+        success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true., timeout_ms = this % put_cmd_timeout)
         if (.not. success) then
-          print '(A, I5, A, F8.2, A, I4, A)', 'ERROR: Command buffer for stream ID ', this % get_id(),  &
+          print '(A, A, I7, A, F8.2, A, I4, A)', this % pe_name, ' ERROR: Command buffer for stream ID ', this % get_id(),  &
                 ' is full. You could make it bigger (currently ',                                       &
                 real(this % command_buffer % get_capacity(CB_KIND_CHAR), kind=8) / 1000.0,              &
-                'kB), wait longer for buffer to be processed (current timeout is ', TIMEOUT_MS,         &
-                'ms), or just send less commands.'
+                'kB), wait longer for buffer to be processed (current timeout is ',                     &
+                this % put_cmd_timeout,                                                                 &
+                ' ms), or just send less commands.'
         end if
       end if
     end if
@@ -330,7 +334,7 @@ contains
     ! end if
 
     if (.not. this % is_owner()) then
-      print '(A)', 'ERROR: I am not the owner of that stream'
+      print '(A, A)', this % pe_name, ' ERROR: I am not the owner of that stream'
       return
     end if
     ! if (this % shared_instance % status == 0) return
@@ -347,12 +351,13 @@ contains
         ! call print_command_record(record)
 
         if (record % command_type == MSG_COMMAND_OPEN_STREAM) then
+          if (this % debug_level >= 2) print '(A, A)', this % pe_name, ' DEBUG: Processing MSG_COMMAND_OPEN_STREAM'
           success = this % open(record % stream_id) .and. success
-          if (.not. success) print '(A, I4)', 'ERROR: Failed to open stream, ID ', record % stream_id
+          if (.not. success) print '(A, A, I4)', this % pe_name, ' ERROR: Failed to open stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_CLOSE_STREAM) then
           success = this % close() .and. success
-          if (.not. success) print '(A, I4)', 'ERROR: Failed to close stream, ID ', record % stream_id
+          if (.not. success) print '(A, A, I4)', this % pe_name, ' ERROR: Failed to close stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_SERVER_CMD .or. record % command_type == MSG_COMMAND_DATA) then
 
@@ -368,7 +373,7 @@ contains
             ! call command_content % reset()
             success = command_content % shape_with(data_buffer, int(record % size_int8, kind=4)) .and. success
             if (.not. success) then
-              print '(A, I4)', 'ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
+              print '(A, A, I4)', this % pe_name, ' ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
               call print_command_record(record)
               success = .false.
               return
@@ -384,7 +389,7 @@ contains
               grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(record % message_tag, this % data_heap)
               call timer % stop()
               if (.not. c_associated(grid_data)) then
-                print '(A)', 'ERROR: Could not get completed line data!!!'
+                print '(A, A)', this % pe_name, ' ERROR: Could not get completed line data!!!'
                 success = .false.
                 return 
               end if
@@ -402,7 +407,7 @@ contains
           end block
 
         else
-          print '(A, I3, A)', 'ERROR: Unknown message command ', record % command_type, '. Will just stop processing this stream.'
+          print '(A, A, I3, A)', this % pe_name, ' ERROR: Unknown message command ', record % command_type, '. Will just stop processing this stream.'
           call print_command_record(record)
           success = .false.
         end if

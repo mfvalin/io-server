@@ -82,9 +82,9 @@ program default_model
   params % num_channels = 2
   params % num_server_bound_server = 2
   params % num_relay_per_node = 2
-  params % num_grid_processors = 1
+  params % num_stream_processors = 1
 
-  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_grid_processors
+  num_server_processes = params % num_channels + params % num_server_bound_server + params % num_stream_processors
 
   if (server_node) then
     if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.

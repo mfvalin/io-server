@@ -79,6 +79,8 @@ module run_model_node_module
     integer :: num_msg_in_pass = 0 !< After a pass, how many model PE messages were processed during it
 
     logical :: done_transmitting = .false. !< After a pass, whether we can exit the loop (because all model PEs are done)
+
+    character(len=:), allocatable :: name
   contains
     procedure, pass :: init       => relay_state_init
     procedure, pass :: pre_pass   => relay_state_pre_pass
@@ -108,7 +110,7 @@ function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound
 
   ! Basic input check
   if (params % is_on_server) then 
-    print *, 'ERROR: Trying to initialize a model node, but setting "is_on_server = .true."'
+    print '(A)', 'ERROR: Trying to initialize a model node, but setting "is_on_server = .true."'
     return
   end if
 
@@ -139,7 +141,7 @@ function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound
   success = context % init(params)
 
   if (.not. success) then
-    print *, 'ERROR: could not initialize IO-server context for a model node!'
+    print '(A)', 'ERROR: could not initialize IO-server context for a model node!'
     return
   end if
 
@@ -155,16 +157,16 @@ function run_model_node(params, custom_server_bound_relay_fn, custom_model_bound
     else if (context % is_model_bound()) then
       success = model_bound_relay_fn(context)
     else
-      print *, 'ERROR: Relay is neither server-bound nor model-bound'
+      print '(A)', 'ERROR: Relay is neither server-bound nor model-bound'
       return
     end if
   else
-    print *, 'ERROR: Process on model node is neither a model nor a relay process'
+    print '(A)', 'ERROR: Process on model node is neither a model nor a relay process'
     return
   end if
 
   if (.not. success) then
-    print *, 'ERROR: Running process on model node'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Running process on model node'
     return
   end if
 
@@ -199,12 +201,12 @@ function default_server_bound_relay(context) result(relay_success)
   if (success) success = state % flush_dcb_message_buffer()
 
   if (.not. success) then
-    print '(A)', 'ERROR: Relay did not complete its passes successfully'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Did not complete passes successfully'
     !TODO Send an error message to the server
     return
   end if
 
-  if (context % get_debug_level() >= 1) print '(A, I3)', 'DEBUG: Largest diff b/w tags in one pass: ', state % largest_tag_diff
+  if (context % get_debug_level() >= 1) print '(A, A, I3)', context % get_short_pe_name(), ' DEBUG: Largest diff b/w tags in one pass: ', state % largest_tag_diff
 
   relay_success = .true.
 
@@ -225,7 +227,7 @@ function check_and_process_model_messages(context, state) result(pass_success)
   do i_model = state % local_relay_id, state % num_local_compute - 1, state % num_local_relays
     success = check_and_process_single_message(context, state, i_model)
     if (.not. success) then
-      print '(A)', 'ERROR: [relay] Processing model PE message failed...'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Processing model PE message failed...'
       state % done_transmitting = .true.
       return
     end if
@@ -287,8 +289,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
   success = model_buffer % peek(header, message_header_size_byte(), CB_KIND_CHAR)
 
   if (.not. success .or. header % header_tag .ne. MSG_HEADER_TAG) then
-    print '(A, I8, I8, A, I4)', 'ERROR: Message does not start with the message header tag', header % message_tag, MSG_HEADER_TAG, &
-          ', relay id ', state % local_relay_id
+    print '(A, A, I8, I8)', context % get_short_pe_name(), ' ERROR: Message does not start with the message header tag', header % message_tag, MSG_HEADER_TAG
     return
   end if
 
@@ -326,14 +327,14 @@ function check_and_process_single_message(context, state, model_id) result(proce
     success = model_buffer % get(state % message_content, param_size_int8, CB_KIND_INTEGER_8, .false.) .and. success
 
     if (.not. success) then
-      print *, 'ERROR Could not get record from data message'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR Could not get record from data message'
       return
     end if
 
     c_data = model_heap % get_address_from_offset(record % heap_offset) ! Get proper pointer to data in shared memory
 
     if (.not. c_associated(c_data)) then
-      print '(A)', 'ERROR: [relay] Unable to retrieve the data from the heap'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Unable to retrieve the data from the heap'
       return
     end if
 
@@ -348,9 +349,8 @@ function check_and_process_single_message(context, state, model_id) result(proce
     state % latest_tags(model_id) = -1  ! Indicate this model won't be active anymore
 
     if (context % get_debug_level() >= 2) then
-      print '(A, I3, A, I2, A, I4)',                &
-          'DEBUG: Model ', model_id, ' is finished, relay ', state % local_relay_id, &
-          ' (local), DCB client ', state % server_bound_sender % get_server_bound_client_id()
+      print '(A, A, I2, A, I4)',                &
+          context % get_short_pe_name(), ' DEBUG: Model ', model_id, ' is finished. DCB client ', state % server_bound_sender % get_server_bound_client_id()
     end if
 
     total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
@@ -366,7 +366,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
 
   ! -- We should not ever receive anything else
   else
-    print '(A)', 'ERROR: [relay] Unexpected message type'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Unexpected message type'
     call print_message_header(header)
     return
   end if
@@ -375,7 +375,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
   ! Check the end cap at this point
   success = model_buffer % get(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)
   if ((.not. success) .or. (content_size .ne. end_cap % msg_length) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
-    print '(A)', 'ERROR We have a problem with message size (end cap does not match)'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR We have a problem with message size (end cap does not match)'
     call print_message_header(header)
     print '(I10, 1X, I10, 1X, L2, I11)', end_cap % cap_tag, end_cap % msg_length, success, content_size
     return
@@ -397,12 +397,12 @@ function check_and_process_single_message(context, state, model_id) result(proce
     success = state % flush_dcb_message_buffer()
 
     if (.not. success) then
-      print *, 'ERROR sending message from relay to server!'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR sending message from relay to server!'
       return
     end if
 
     if (total_message_size_int8 > state % server_bound_data % get_size()) then
-      print *, 'ERROR: Too much data to fit in jar...', total_message_size_int8, state % server_bound_data % get_size()
+      print '(A, A, I9, I9)', context % get_short_pe_name(), ' ERROR: Too much data to fit in jar...', total_message_size_int8, state % server_bound_data % get_size()
       return
     end if
   end if
@@ -425,7 +425,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
     ! Free the shared memory
     success = model_heap % free(c_data) .and. success
     if (.not. success) then
-      print*, 'ERROR: [relay] Unable to free heap data or maybe put stuff in the jar'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Unable to free heap data or maybe put stuff in the jar'
       return
     end if
 
@@ -437,7 +437,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
     ! No arguments to send
 
   else
-    print *, 'ERROR: [relay] Unexpected message type! '
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Unexpected message type! '
     call print_message_header(header)
     return
 
@@ -485,13 +485,14 @@ subroutine relay_state_init(this, context)
   ! Create buffer for outbound data
   success = this % server_bound_data % new(this % server_bound_data_size_int8)
   if (.not. success) then
-    print '(A)', 'ERROR: Could not create jar to contain DCB message...'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not create jar to contain DCB message...'
     error stop 1
   end if
 
   allocate(this % latest_tags(0:this % num_local_compute - 1))
   this % latest_tags(:) = 0
 
+  this % name = context % get_short_pe_name()
 end subroutine relay_state_init
 
 subroutine relay_state_pre_pass(this)
@@ -551,7 +552,7 @@ function flush_dcb_message_buffer(this) result(success)
   if (num_data > 0) then
     success = this % server_bound_sender % put_elems(data_ptr, num_data, CB_DATA_ELEMENT_KIND, .true.)
     call this % server_bound_data % reset()
-    if (.not. success) print '(A)', 'ERROR: [relay] Flushing message buffer into DCB!'
+    if (.not. success) print '(A, A)', this % name, ' ERROR: Flushing message buffer into DCB!'
   end if
 end function flush_dcb_message_buffer
 
@@ -572,7 +573,7 @@ function default_model_bound_relay(context) result(relay_success)
 
   relay_success = .false.
 
-  if (context % get_debug_level() >= 2) print '(A, A)', 'DEBUG: Doing its work - ', context % get_detailed_pe_name()
+  if (context % get_debug_level() >= 2) print '(A, A)', context % get_short_pe_name(), ' DEBUG: Doing its work'
 
   relay_success = .true.
 end function default_model_bound_relay
@@ -594,19 +595,19 @@ function default_model(context) result(model_success)
   call context % open_stream_model(output_stream_1)
 
   if (.not. associated(output_stream_1)) then
-    print *,'ERROR: Could not open a stream!!!'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not open a stream!!!'
     return
   end if
 
   data_buffer = context % get_server_bound_cb()
   if (.not. data_buffer % is_valid()) then
-    print *, 'ERROR: CB received from context is not valid!'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: CB received from context is not valid!'
     return
   end if
 
   success = output_stream_1 % close()
   if (.not. success) then
-    print *, 'Unable to close model file!!!!'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Unable to close model file!!!!'
     return
   end if
 

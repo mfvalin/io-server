@@ -47,13 +47,13 @@ function is_channel(context)
   is_channel = iand(context % color, CHANNEL_COLOR) == CHANNEL_COLOR
 end function is_channel
 
-!> Whether this context belongs to a process that processes completed grids on the server
-function is_grid_processor(context)
+!> Whether this context belongs to a process that processes streams (command and data) on the server
+function is_stream_processor(context)
   implicit none
   class(ioserver_context), intent(in) :: context
-  logical :: is_grid_processor
-  is_grid_processor = iand(context % color, GRID_PROCESSOR_COLOR) == GRID_PROCESSOR_COLOR
-end function is_grid_processor
+  logical :: is_stream_processor
+  is_stream_processor = iand(context % color, STREAM_PROCESSOR_COLOR) == STREAM_PROCESSOR_COLOR
+end function is_stream_processor
 
 !> Whether this context belongs to a NO-OP process
 function is_no_op(context)
@@ -84,43 +84,15 @@ function get_detailed_pe_name(context) result(detailed_name)
   implicit none
   class(ioserver_context), intent(in) :: context
   character(len=:), allocatable :: detailed_name
-  character(len=20)  :: short_name
-  character(len=256) :: temp_name
-
-  if (context % is_server()) then
-    if (context % is_server_bound()) then
-      short_name = 'Server/server-bound'
-    else if (context % is_model_bound()) then
-      short_name = 'Server/model-bound'
-    else if (context % is_channel()) then
-      short_name = 'Server/channel'
-    else if (context % is_grid_processor()) then
-      short_name = 'Server/grid worker'
-    else
-      short_name = 'Server/[unknown]'
-    end if
-  else if (context % is_relay()) then
-    if (context % is_server_bound()) then
-      short_name = 'Relay/server-bound'
-    else if (context % is_model_bound()) then
-      short_name = 'Relay/model-bound'
-    else
-      short_name = 'Relay/[unknown]'
-    end if
-  else if (context % is_model()) then
-    short_name = 'Model'
-  else if (context % is_no_op()) then
-    short_name = 'No-op'
-  else
-    short_name = '[unknown]'
-  end if
-
-  write(temp_name, '(A, A, I6, A, I6, A, I5, A, I5, A, I6)')         &
-      short_name, ' | active rank ', context % active_rank, '/', context % active_size, ' | node ', context % node_id, '/', context % num_nodes, &
-      ' | global rank ', context % get_global_rank()
-
-  detailed_name = trim(temp_name)
+  detailed_name = context % detailed_pe_name
 end function get_detailed_pe_name
+
+function get_short_pe_name(context) result(name)
+  implicit none
+  class(ioserver_context), intent(in) :: context
+  character(len=:), allocatable :: name
+  name = context % short_pe_name
+end function get_short_pe_name
 
 !> Check whether the "time-to-quit" flag has been set on this node
 function is_time_to_quit(context)
@@ -199,17 +171,20 @@ function IOserver_get_crs(context, color) result(crs)
     case(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR) ! server-bound relay PEs on SMP node (subset of relay_smp_comm)
       crs % comm = context % server_bound_relay_smp_comm
 
+    case(RELAY_COLOR + NODE_COLOR + MODEL_BOUND_COLOR)  ! model-bound relay PEs on SMP node (subset of relay_smp_comm)
+      crs % comm = context % model_bound_relay_smp_comm
+
     case(RELAY_COLOR + SERVER_COLOR)              ! relay and server PEs            (subset of active_comm)
       crs % comm = context % io_comm
 
     case(SERVER_COLOR)                            ! Active server PEs
       crs % comm = context % server_comm
 
-    case(GRID_PROCESSOR_COLOR)
-      crs % comm = context % grid_processor_server_comm
+    case(STREAM_PROCESSOR_COLOR)
+      crs % comm = context % stream_processor_server_comm
 
-    case(GRID_PROCESSOR_COLOR + SERVER_COLOR)    ! Same as just "GRID_PROCESSOR_COLOR"
-      crs % comm = context % grid_processor_server_comm
+    case(STREAM_PROCESSOR_COLOR + SERVER_COLOR)    ! Same as just "STREAM_PROCESSOR_COLOR"
+      crs % comm = context % stream_processor_server_comm
 
     case(SERVER_COLOR + SERVER_BOUND_COLOR)
       crs % comm = context % server_bound_server_comm

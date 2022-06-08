@@ -34,7 +34,7 @@ program launch_server
 
   params % is_on_server             = .true.
   params % num_server_bound_server  = 2
-  params % num_grid_processors      = 1
+  params % num_stream_processors    = 1
   params % num_channels             = 2
   params % debug_level              = 1
 
@@ -55,10 +55,10 @@ program launch_server
       call get_command_argument(iarg, arg)
       iarg = iarg + 1
       read(arg, *) params % num_model_bound_server
-    else if (trimmed_arg == '--num-grid-processors') then
+    else if (trimmed_arg == '--num-stream-processors') then
       call get_command_argument(iarg, arg)
       iarg = iarg + 1
-      read(arg, *) params % num_grid_processors
+      read(arg, *) params % num_stream_processors
     else if (trimmed_arg == '--num-channels') then
       call get_command_argument(iarg, arg)
       iarg = iarg + 1
@@ -71,6 +71,10 @@ program launch_server
       call get_command_argument(iarg, arg)
       iarg = iarg + 1
       read(arg, *) params % debug_level
+    else if (trimmed_arg == '--put-cmd-timeout') then
+      call get_command_argument(iarg, arg)
+      iarg = iarg + 1
+      read(arg, *) params % server_stream_put_cmd_timeout_ms
     else
       print *, 'got something different: ', trimmed_arg
     end if

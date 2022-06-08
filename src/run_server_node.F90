@@ -68,13 +68,13 @@ module run_server_node_module
 contains
 
 function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn,    &
-  custom_grid_processor_fn, custom_no_op_fn, context_out) result(success)
+  custom_stream_processor_fn, custom_no_op_fn, context_out) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
   procedure(server_function_template),  intent(in), pointer, optional :: custom_channel_fn
   procedure(server_function_template),  intent(in), pointer, optional :: custom_server_bound_fn
   procedure(server_function_template),  intent(in), pointer, optional :: custom_model_bound_fn
-  procedure(server_function_template),  intent(in), pointer, optional :: custom_grid_processor_fn
+  procedure(server_function_template),  intent(in), pointer, optional :: custom_stream_processor_fn
   procedure(no_op_function_template),   intent(in), pointer, optional :: custom_no_op_fn
   type(ioserver_context),               intent(out),         optional :: context_out
   logical :: success
@@ -83,18 +83,18 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   procedure(server_function_template), pointer :: channel_fn
   procedure(server_function_template), pointer :: receiver_fn
   procedure(server_function_template), pointer :: producer_fn
-  procedure(server_function_template), pointer :: grid_processor_fn
+  procedure(server_function_template), pointer :: stream_processor_fn
   procedure(no_op_function_template),  pointer :: no_op_fn
 
   success = .false.
 
   !-------------------------------------
   ! Set up functions to call
-  channel_fn        => default_channel
-  receiver_fn       => default_server_bound
-  producer_fn       => default_model_bound
-  grid_processor_fn => default_grid_processor
-  no_op_fn          => default_no_op
+  channel_fn          => default_channel
+  receiver_fn         => default_server_bound
+  producer_fn         => default_model_bound
+  stream_processor_fn => default_stream_processor
+  no_op_fn            => default_no_op
 
   if (present(custom_channel_fn)) then
     if (associated(custom_channel_fn)) channel_fn => custom_channel_fn
@@ -105,8 +105,8 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   if (present(custom_model_bound_fn)) then
     if (associated(custom_model_bound_fn)) producer_fn => custom_model_bound_fn
   end if
-  if (present(custom_grid_processor_fn)) then
-    if (associated(custom_grid_processor_fn)) grid_processor_fn => custom_grid_processor_fn
+  if (present(custom_stream_processor_fn)) then
+    if (associated(custom_stream_processor_fn)) stream_processor_fn => custom_stream_processor_fn
   end if
   if (present(custom_no_op_fn)) then
     if (associated(custom_no_op_fn)) no_op_fn => custom_no_op_fn
@@ -137,15 +137,15 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
     success = receiver_fn(context)
   else if (context % is_model_bound()) then
     success = producer_fn(context)
-  else if (context % is_grid_processor()) then
-    success = grid_processor_fn(context)
+  else if (context % is_stream_processor()) then
+    success = stream_processor_fn(context)
   else
-    print '(A)', 'ERROR: Server process is not of a known type.'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Server process is not of a known type.'
     return
   end if
 
   if (.not. success) then
-    print '(A)', 'ERROR: Running server process'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Running server process'
     return
   end if
 
@@ -175,7 +175,7 @@ function default_server_bound(context) result(server_success)
   consumer_crs = context % get_crs(SERVER_COLOR + SERVER_BOUND_COLOR)
 
   if (data_buffer % get_server_bound_server_id() < 0) then
-    print *, 'ERROR, server process does not seem to be a server within the DCB...'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR, server process does not seem to be a server within the DCB...'
     error stop 1
   end if
 
@@ -194,7 +194,7 @@ function default_server_bound(context) result(server_success)
       ! Get and process the next message
       receive_success = receive_message(context, data_buffer, i_producer, current_state)
       if (.not. receive_success) then
-        print '(A)', 'ERROR: While receiving server message'
+        print '(A, A)', context % get_short_pe_name(), ' ERROR: While receiving server message'
         current_state % done_receiving = .true.
         exit
       end if
@@ -202,13 +202,17 @@ function default_server_bound(context) result(server_success)
   end do
 
   if (context % get_debug_level() >= 1) then
-    print '(A, I3, A)', 'DEBUG: Server ', server_id, ' done receiving.'
+    print '(A, A)', context % get_short_pe_name(), ' DEBUG: Done receiving.'
 
     ! Final check on the buffers' content
     do i_producer = server_id, num_producers - 1, num_consumers
       if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 0) then
-        print '(A, I8, I3, I3)', 'ERROR: buffer should be empty when server is done!', data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4), i_producer, server_id
-        call data_buffer % print(.true.)
+        print '(A, A, I8, I3)', context % get_short_pe_name(), ' ERROR: buffer should be empty when server is done!', data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4), i_producer
+        if (context % get_debug_level() < 2) then
+          call data_buffer % print(.false.)
+        else
+          call data_buffer % print(.true.)
+        end if
       end if
     end do
   end if
@@ -312,7 +316,7 @@ function  default_model_bound(context) result(server_success)
   logical :: server_success
 
   server_success = .false.
-  if (context % get_debug_level() >= 2) print '(A, A)', 'DEBUG: Doing the work - ', context % get_detailed_pe_name()
+  if (context % get_debug_level() >= 2) print '(A, A)', context % get_short_pe_name(), ' DEBUG: Doing the work'
   server_success = .true.
 end function default_model_bound
 
@@ -329,37 +333,37 @@ function default_channel(context) result(channel_success)
   if (dcb % get_channel_id() >= 0) then
     channel_success = dcb % start_listening()
   else
-    print '(A)', 'ERROR: Channel process does not seem to be a channel within the DCB'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Channel process does not seem to be a channel within the DCB'
   end if
 end function default_channel
 
-function default_grid_processor(context) result(server_success)
+function default_stream_processor(context) result(server_success)
   implicit none
   type(ioserver_context), intent(inout) :: context
   logical :: server_success
 
   type(local_server_stream), pointer  :: stream_ptr
-  type(comm_rank_size) :: grid_proc_crs
+  type(comm_rank_size) :: stream_proc_crs
   logical :: early_stop
   integer :: i_stream
 
   server_success = .false.
   early_stop     = .false.
 
-  grid_proc_crs = context % get_crs(GRID_PROCESSOR_COLOR)
+  stream_proc_crs = context % get_crs(STREAM_PROCESSOR_COLOR)
 
   if (context % get_debug_level() >= 2) then
-    print '(A, I2, A, I2)', 'DEBUG: Grid processor process rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
+    print '(A, A)', context % get_short_pe_name(), ' DEBUG: Will now process streams '
   end if
 
   do while (.not. context % is_time_to_quit() .and. .not. early_stop)
     ! if (context % is_time_to_quit()) finished = .true.
     do i_stream = 1, context % get_max_num_streams()
-      ! print *, 'Stream, grid proc ', i_stream, grid_proc_crs % rank
+      ! print *, 'Stream, stream proc ', i_stream, stream_proc_crs % rank
       call context % get_stream(i_stream, stream_ptr)
       if (stream_ptr % is_owner()) then
         if (.not. stream_ptr % process_stream()) then
-          print '(A, I3, A, I4)', 'ERROR: when processing stream rank ', i_stream, ', ID ', stream_ptr % get_id()
+          print '(A, A, I3, A, I4)', context % get_short_pe_name(), ' ERROR: when processing stream rank ', i_stream, ', ID ', stream_ptr % get_id()
           early_stop = .true.
           exit
         end if
@@ -368,11 +372,11 @@ function default_grid_processor(context) result(server_success)
   end do
 
   if (context % get_debug_level() >= 1) then
-    print '(A, I2, A, I2)', 'DEBUG: Grid processor process DONE. Rank ', grid_proc_crs % rank, ' of ', grid_proc_crs % size
+    print '(A, A)', context % get_short_pe_name(), ' DEBUG: Done processing streams.'
   end if
 
   server_success = .not. early_stop
-end function default_grid_processor
+end function default_stream_processor
 
 function receive_message(context, dcb, client_id, state) result(receive_success)
   implicit none
@@ -416,12 +420,12 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   success = dcb % peek_elems(client_id, header, message_header_size_byte(), CB_KIND_CHAR)
 
   if (.not. success) then
-    print '(A)', 'ERROR: after peeking into DCB'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: after peeking into DCB'
     return
   end if
 
   if (header % header_tag .ne. MSG_HEADER_TAG) then
-    print '(A, I8, I8)', 'ERROR: Message header tag is wrong', header % header_tag, MSG_HEADER_TAG
+    print '(A, A, I8, I8)', context % get_short_pe_name(), 'ERROR: Message header tag is wrong', header % header_tag, MSG_HEADER_TAG
     return
   end if
 
@@ -444,7 +448,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   ! call print_message_header(header)
 
   if (header % content_size_int8 > capacity) then
-    print *, 'ERROR: Message is larger than what we can deal with. That is problematic. (server)'
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Message is larger than what we can deal with. That is problematic.'
     print *, '   Message size:  ', header % content_size_int8
     print *, '   capacity     = ', capacity
     print *, '   client id    = ', client_id
@@ -457,17 +461,17 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     ! print *, 'Got DATA message', consumer_id
     success = dcb % get_elems(client_id, record, data_record_size_byte(), CB_KIND_CHAR, .true.)
     if (.not. success) then
-      print '(A)', 'ERROR: reading record'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: reading record'
       return
     end if
 
     if (record % cmeta_size > 0) then
-      print '(A)', 'ERROR: Cannot handle compression metadata'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Cannot handle compression metadata'
       return
     end if
 
     if (record % meta_size > 0) then
-      print '(A)', 'ERROR: Cannot handle other metadata'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Cannot handle other metadata'
       return
     end if
 
@@ -476,7 +480,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     success = stream_ptr % put_command(state % command_buffer(1:record % command_size_int8), header % message_tag)      .and. success ! Send command for later processing
 
     if (.not. success) then
-      print '(A)', 'ERROR: Unable to enqueue the command accompanying a data packet. The queue is probably full, this could have created a deadlock.'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Unable to enqueue the command accompanying a data packet. The queue is probably full, this could have created a deadlock.'
       return
     end if
  
@@ -486,20 +490,20 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     success = stream_ptr % put_data(record, state % model_data) .and. success   ! Put data in its proper place within a global grid
 
     if (.not. success) then
-      print '(A)', 'ERROR: Could not put data into partial grid! (or maybe something else)'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not put data into partial grid! (or maybe something else)'
       return
     end if
 
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
-    if (context % get_debug_level() >= 2) print '(A, I4)', 'Got a SERVER_CMD message! From model ', header % sender_global_rank
+    if (context % get_debug_level() >= 2) print '(A, A, I4)', context % get_short_pe_name(), ' DEBUG: Got a SERVER_CMD message! From model ', header % sender_global_rank
     call state % allocate_command_buffer(header % content_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
 
     if (.not. success) then
-      print '(A)', 'ERROR: Receiving and assigning server command '
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Receiving and assigning server command '
       call print_message_header(header)
       return
     end if
@@ -507,12 +511,12 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !----------------
   ! Misc. message
   else if (header % command == MSG_COMMAND_DUMMY) then
-    if (context % get_debug_level() >= 2) print '(A, I3)', 'DEBUG: Got a DUMMY message!', consumer_id
+    if (context % get_debug_level() >= 2) print '(A, A)', context % get_short_pe_name(), ' DEBUG: Got a DUMMY message!'
 
   !---------------------------------
   ! Stop receiving from this relay
   else if (header % command == MSG_COMMAND_RELAY_STOP) then
-    if (context % get_debug_level() >= 1) print '(A, I3, I4)', 'DEBUG: Got a RELAY STOP message from relay ', consumer_id, header % relay_global_rank
+    if (context % get_debug_level() >= 1) print '(A, A, I4)', context % get_short_pe_name(), ' DEBUG: Got a RELAY STOP message from relay ', header % relay_global_rank
     state % active_producers(client_id) = .false.
   
   !----------------------------
@@ -520,7 +524,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   else if (header % command == MSG_COMMAND_MODEL_STATS) then
     block
       type(ioserver_stats) :: stats
-      if (context % get_debug_level() >= 2) print '(A, I5)', 'DEBUG: Got STATS from model ', header % sender_global_rank
+      if (context % get_debug_level() >= 2) print '(A, A, I5)', context % get_short_pe_name(), ' DEBUG: Got STATS from model ', header % sender_global_rank
       success = dcb % get_elems(client_id, stats % c, ioserver_stats_size_byte(), CB_KIND_CHAR, .true.)
       call state % add_stats(stats, client_id)
     end block
@@ -528,13 +532,13 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !------------------------------------------------
   ! MODEL_STOP command, don't do anything for that
   else if (header % command == MSG_COMMAND_MODEL_STOP) then
-    if (context % get_debug_level() >= 2) print '(A, I4)', 'DEBUG: Got a MODEL STOP message from ', header % sender_global_rank
+    if (context % get_debug_level() >= 2) print '(A, A, I4)', context % get_short_pe_name(), ' DEBUG: Got a MODEL STOP message from ', header % sender_global_rank
     ! Do nothing for that
 
   !------------
   ! Big no-no
   else
-    print '(A)', 'ERROR: [server] Unhandled message type!', header % command
+    print '(A, A)', context % get_short_pe_name(), ' ERROR: Unhandled message type!', header % command
     call print_message_header(header)
     return
   end if
@@ -544,7 +548,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   success = dcb % get_elems(client_id, end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true.)
 
   if ((.not. success) .or. (end_cap % msg_length .ne. header % content_size_int8) .or. (end_cap % cap_tag .ne. MSG_CAP_TAG)) then
-    print '(A)', 'Discrepancy between message length and end cap', header % content_size_int8, end_cap % msg_length, end_cap % cap_tag
+    print '(A, A, I5, I5, I10)', context % get_short_pe_name(), ' ERROR: Discrepancy between message length and end cap', header % content_size_int8, end_cap % msg_length, end_cap % cap_tag
     call print_message_header(header)
     ! call dcb % print(.true.)
     return

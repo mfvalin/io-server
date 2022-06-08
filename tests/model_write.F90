@@ -149,7 +149,7 @@ contains
     ! Open and check stream 1
     call context % open_stream_model(output_stream_1)
     if (.not. success .or. .not. associated(output_stream_1)) then
-      print *, 'ERROR: Could not open model stream'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not open model stream'
       return
     end if 
 
@@ -160,14 +160,14 @@ contains
     success = JAR_PUT_ITEM(command_jar, trim(filename1)) .and. success
     success = output_stream_1 % send_command(command_jar)
     if (.not. success) then
-      print *, 'Unable to send command to model stream 1 !!!!'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Unable to send command to model stream 1 !!!!'
       return
     end if
 
     ! Open and check stream 2
     call context % open_stream_model(output_stream_2)
     if (.not. associated(output_stream_2)) then
-      print *, 'ERROR: Could not open second model stream'
+      print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not open second model stream'
       return
     end if
 
@@ -510,7 +510,7 @@ program pseudomodelandserver
 
   integer :: num_server_processes     ! excluding no_op processes
   integer :: num_receiver_processes
-  integer :: num_grid_processors
+  integer :: num_stream_processors
   integer :: num_channels
   integer :: num_relay_per_node, num_noop
 
@@ -531,7 +531,7 @@ program pseudomodelandserver
     if (global_rank == 0) then
       print *, 'ERROR: Need more arguments when launching this program:'
       print *, '1. Whether to activate debug mode (0 or 1)'
-      print *, '2. How many "grid processor" server processes you want'
+      print *, '2. How many "stream processor" server processes you want'
       print *, '3. How many receiver server processes you want'
       print *, '4. How many channel processes you want'
       print *, '5. How many relay processes there should be on each model node'
@@ -543,7 +543,7 @@ program pseudomodelandserver
   read(arg, *) debug_level
 
   call GET_COMMAND_ARGUMENT(2, arg)
-  read(arg, *) num_grid_processors
+  read(arg, *) num_stream_processors
 
   call GET_COMMAND_ARGUMENT(3, arg)
   read(arg,*) num_receiver_processes
@@ -555,7 +555,7 @@ program pseudomodelandserver
   read(arg,*) num_relay_per_node
 
   server_node          = am_server_node(node_rank, node_size, single_node, num_nodes)
-  num_server_processes = num_receiver_processes + num_channels + num_grid_processors
+  num_server_processes = num_receiver_processes + num_channels + num_stream_processors
   num_noop             = 0
 
   model_fn_ptr => pseudo_model_process
@@ -567,7 +567,7 @@ program pseudomodelandserver
 
   params % num_relay_per_node      = num_relay_per_node
   params % num_server_bound_server = num_receiver_processes
-  params % num_grid_processors     = num_grid_processors
+  params % num_stream_processors   = num_stream_processors
   params % num_channels            = num_channels
   params % debug_level             = debug_level
 

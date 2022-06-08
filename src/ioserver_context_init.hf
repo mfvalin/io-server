@@ -22,7 +22,7 @@ function ioctx_init(context, params) result(success)
   success = .false.
 
   if (.not. check_cb_jar_elem()) then
-    print *, 'ERROR: CB elements are not the same as JAR elements. That is a problem.'
+    print '(A)', 'ERROR: CB elements are not the same as JAR elements. That is a problem.'
     return
   end if
 
@@ -32,25 +32,25 @@ function ioctx_init(context, params) result(success)
   success = context % init_communicators()
 
   if (.not. success) then
-    print *, 'ERROR: Could not properly initialize all communicators!'
+    print '(A)', 'ERROR: Could not properly initialize all communicators!'
     return
   end if
 
   if (context % get_debug_level() >= 2) then
-    print '(A, 1X, A)', 'DEBUG: Comm initialized ', context % get_detailed_pe_name()
+    print '(A, A)', context % get_short_pe_name(), ' DEBUG: Comm initialized '
   end if
 
   success = context % init_shared_mem()
 
   if (.not. success) then
-    print *, 'ERROR: There were errors during shared memory initialization'
+    print '(A, A)', context % short_pe_name, ' ERROR: There were errors during shared memory initialization'
     return
   end if
 
   call MPI_Barrier(context % global_comm, ierr)
 
   if (context % get_debug_level() >= 2) then
-    print '(A, 1X, A)', 'DEBUG: IO-server sucessfully initialized ', context % get_detailed_pe_name()
+    print '(A, A)', context % short_pe_name, ' DEBUG: IO-server sucessfully initialized '
   end if
 
 end function ioctx_init
@@ -89,7 +89,7 @@ function ioctx_init_communicators(context) result(success)
     call MPI_Comm_size(context % node_comm, context % node_size, ierr)    ! population of SMP node
 
     if (context % node_size .ne. temp_size) then
-      print *, 'ERROR: Server processes appear to be spread on more than one node!'
+      print '(A)', 'ERROR: Server processes appear to be spread on more than one node!'
       return
     end if
 
@@ -100,17 +100,17 @@ function ioctx_init_communicators(context) result(success)
 
       bounds(1) = context % params % num_server_bound_server
       bounds(2) = bounds(1) + context % params % num_model_bound_server
-      bounds(3) = bounds(2) + context % params % num_grid_processors
+      bounds(3) = bounds(2) + context % params % num_stream_processors
       bounds(4) = bounds(3) + context % params % num_channels
       context % num_server_noop = temp_size - bounds(4)
 
       if (context % num_server_noop < 0) then
         if (temp_rank == 0) &
           print *, 'ERROR: There are not enough processes on the server to fill the requested roles: ', bounds(4)
-          print *, '       Server-bound:    ', context % params % num_server_bound_server
-          print *, '       Model-bound:     ', context % params % num_model_bound_server
-          print *, '       Grid processors: ', context % params % num_grid_processors
-          print *, '       Channels:        ', context % params % num_channels
+          print *, '       Server-bound:      ', context % params % num_server_bound_server
+          print *, '       Model-bound:       ', context % params % num_model_bound_server
+          print *, '       Stream processors: ', context % params % num_stream_processors
+          print *, '       Channels:          ', context % params % num_channels
         return
       end if
 
@@ -119,7 +119,7 @@ function ioctx_init_communicators(context) result(success)
       else if (temp_rank < bounds(2)) then
         context % color = SERVER_COLOR + MODEL_BOUND_COLOR
       else if (temp_rank < bounds(3)) then
-        context % color = SERVER_COLOR + GRID_PROCESSOR_COLOR
+        context % color = SERVER_COLOR + STREAM_PROCESSOR_COLOR
       else if (temp_rank < bounds(4)) then
         context % color = SERVER_COLOR + CHANNEL_COLOR
       else
@@ -207,7 +207,7 @@ function ioctx_init_communicators(context) result(success)
 
       if(server_comm_size_tmp .ne. server_comm_size) then
         ! for now, error if server_comm_size is not equal to server_size
-        print *, 'ERROR: Processes declared as "server" are not all located on the same node'
+        print '(A)', 'ERROR: Processes declared as "server" are not all located on the same node'
         context % color = NO_COLOR
         return
       endif
@@ -231,13 +231,13 @@ function ioctx_init_communicators(context) result(success)
           context % server_comm_rank, context % server_dcb_comm, ierr)
       call MPI_Comm_split(context % server_comm, MODEL_BOUND_COLOR, context % server_comm_rank,           &                 ! 3. Create server specific comm
           context % model_bound_server_comm, ierr)
-    else if (context % is_grid_processor()) then
+    else if (context % is_stream_processor()) then
       call MPI_Comm_split(context % server_comm, SERVER_COLOR, context % server_comm_rank, context % server_work_comm, ierr)! 1. Create server work comm
-      call MPI_Comm_split(context % server_comm, GRID_PROCESSOR_COLOR, context % server_comm_rank, temp_comm, ierr)         ! 2. Create server DCB comm (not part)
-      call MPI_Comm_split(context % server_comm, GRID_PROCESSOR_COLOR, context % server_comm_rank,        &                 ! 3. Create server specific comm
-          context % grid_processor_server_comm, ierr)
+      call MPI_Comm_split(context % server_comm, STREAM_PROCESSOR_COLOR, context % server_comm_rank, temp_comm, ierr)         ! 2. Create server DCB comm (not part)
+      call MPI_Comm_split(context % server_comm, STREAM_PROCESSOR_COLOR, context % server_comm_rank,        &                 ! 3. Create server specific comm
+          context % stream_processor_server_comm, ierr)
     else
-      print *, 'ERROR: Unhandled server process type'
+      print '(A)', 'ERROR: Unhandled server process type'
       return
     end if
 
@@ -279,14 +279,14 @@ function ioctx_init_communicators(context) result(success)
         end if
       end block
 
-      ! Determine and split server-bound vs model-bound relays (only use a server-bound communicator for now)
+      ! Determine and split server-bound vs model-bound relays
       call MPI_Comm_rank(context % relay_smp_comm, temp_rank, ierr)
       if (mod(temp_rank, 2) == 0) then
         context % color = RELAY_COLOR + SERVER_BOUND_COLOR
         call MPI_Comm_split(context % relay_smp_comm, SERVER_BOUND_COLOR, temp_rank, context % server_bound_relay_smp_comm, ierr)
       else
         context % color = RELAY_COLOR + MODEL_BOUND_COLOR
-        call MPI_Comm_split(context % relay_smp_comm, MODEL_BOUND_COLOR, temp_rank, temp_comm, ierr)
+        call MPI_Comm_split(context % relay_smp_comm, MODEL_BOUND_COLOR, temp_rank, context % model_bound_relay_smp_comm, ierr)
       end if
     endif
   end if
@@ -294,10 +294,10 @@ function ioctx_init_communicators(context) result(success)
   ! Split active_comm into model and IO (relay+server) processes
   if (context % is_relay() .or. context % is_server()) then  
     call MPI_Comm_split(context % active_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_comm, ierr) 
-    if (.not. context % is_grid_processor()) then
+    if (.not. context % is_stream_processor()) then
       call MPI_Comm_split(context % io_comm, RELAY_COLOR + SERVER_COLOR, context % active_rank, context % io_dcb_comm, ierr) 
     else
-      call MPI_Comm_split(context % io_comm, GRID_PROCESSOR_COLOR, context % active_rank, temp_comm, ierr) 
+      call MPI_Comm_split(context % io_comm, STREAM_PROCESSOR_COLOR, context % active_rank, temp_comm, ierr) 
     end if
   else
     call MPI_Comm_split(context % active_comm, MODEL_COLOR, context % active_rank, temp_comm, ierr)
@@ -324,7 +324,7 @@ function ioctx_init_communicators(context) result(success)
         else if (context % is_model_bound()) then
           num_model_bound = 1
         else
-          print *, 'ERROR: Relay is neither server- nor model-bound'
+          print '(A)', 'ERROR: Relay is neither server- nor model-bound'
           return
         end if
       end if
@@ -341,12 +341,14 @@ function ioctx_init_communicators(context) result(success)
         print '(A, I5, A)',        '               ', context % num_model_pes, ' model processes'
         print '(A, I5, A)',        '               ', context % params % num_server_bound_server, ' server-bound server processes'
         print '(A, I5, A)',        '               ', context % params % num_model_bound_server, ' model-bound server processes'
-        print '(A, I5, A)',        '               ', context % params % num_grid_processors, ' grid processors'
+        print '(A, I5, A)',        '               ', context % params % num_stream_processors, ' stream processors'
         print '(A, I5, A)',        '               ', context % params % num_channels, ' channel processes'
         print '(A, I5, A)',        '               ', context % num_server_noop, ' NO-OP server processes'
       end if
     end block
   end if
+
+  call context % make_pe_name()
 
   success = .true.
 
@@ -417,7 +419,7 @@ function ioctx_init_shared_mem(context) result(success)
   call context % messenger % set_debug(context % get_debug_level() >= 1)
 
   ! Determine how many server-bound server processes can actually open streams
-  context % num_server_stream_owners = context % params % num_grid_processors
+  context % num_server_stream_owners = context % params % num_stream_processors
 
   if (context % is_server()) then
     ! =========================================================================
@@ -433,7 +435,7 @@ function ioctx_init_shared_mem(context) result(success)
     context % server_file_shmem = RPN_allocate_shared(context % server_file_shmem_size, context % server_comm) ! The set of files that can be opened/written
 
     if (.not. c_associated(context % server_heap_shmem) .or. .not. c_associated(context % server_file_shmem)) then
-      print *, 'ERROR: We have a problem! server_heap_shmem/server_file_shmem are not valid!'
+      print '(A, A)', context % short_pe_name, ' ERROR: We have a problem! server_heap_shmem/server_file_shmem are not valid!'
       goto 2
     end if
 
@@ -442,8 +444,9 @@ function ioctx_init_shared_mem(context) result(success)
         integer :: server_rank
         call MPI_Comm_rank(context % server_comm, server_rank, ierr)
         if (server_rank == 0) then
-          print '(A, I12, I8, 1X, A)', 'DEBUG: Successfully allocated server shared memory for heap and stream files',      &
-              context % server_heap_shmem_size, context % server_file_shmem_size, context % get_detailed_pe_name()
+          print '(A, A, I12, I8)', context % short_pe_name,                                       &
+              ' DEBUG: Successfully allocated server shared memory for heap and stream files',    &
+              context % server_heap_shmem_size, context % server_file_shmem_size
         end if
       end block
     end if
@@ -465,21 +468,24 @@ function ioctx_init_shared_mem(context) result(success)
     call MPI_Barrier(context % server_comm, ierr)
 
     ! Create local stream instances on server-bound PEs
-    if (context % is_server_bound() .or. context % is_grid_processor()) then
+    if (context % is_server_bound() .or. context % is_stream_processor()) then
       block
         integer :: rank
         type(shared_server_stream), pointer :: tmp_ptr
         if (context % is_server_bound()) then
           call MPI_Comm_rank(context % server_bound_server_comm, rank, ierr)
         else
-          call MPI_Comm_rank(context % grid_processor_server_comm, rank, ierr)
+          call MPI_Comm_rank(context % stream_processor_server_comm, rank, ierr)
         end if
         allocate(context % local_server_streams(context % params % max_num_concurrent_streams))
         do i_stream = 1, context % params % max_num_concurrent_streams
           tmp_ptr => context % common_server_streams(i_stream)
-          stream_create_success = context % local_server_streams(i_stream) % init(rank, context % is_grid_processor(), context % get_debug_level() >= 1, tmp_ptr, context % node_heap)
+          stream_create_success = context % local_server_streams(i_stream) % init(              &
+              rank, context % is_stream_processor(), context % get_debug_level(), tmp_ptr,      &
+              context % node_heap, context % short_pe_name,                                     &
+              context % params % server_stream_put_cmd_timeout_ms)
           if (.not. stream_create_success) then
-            print *, 'ERROR: initializing local server stream'
+            print '(A, A)', context % short_pe_name, ' ERROR: initializing local server stream'
             goto 2
           end if
         end do
@@ -505,12 +511,12 @@ function ioctx_init_shared_mem(context) result(success)
       context % model_shmem = RPN_allocate_shared(context % model_shmem_size, context % model_relay_smp_comm)
 
       if (.not. c_associated(context % model_shmem)) then
-        print '(A, I9, A)', 'ERROR: Unable to allocated shared memory on model node (', context % model_shmem_size , ' MB)'
+        print '(A, A, I9, A)', context % short_pe_name, ' ERROR: Unable to allocated shared memory on model node (', context % model_shmem_size , ' MB)'
         goto 2
       end if
 
       if (context % get_debug_level() >= 1 .and. context % model_relay_smp_rank == 0) then
-        write(6,'(A, I10, 1X, A)') 'DEBUG: Successfully allocated shared mem for relay+model, size = ', context % model_shmem_size, context % get_detailed_pe_name()
+        write(6,'(A, A, I10, 1X, A)') context % short_pe_name, ' DEBUG: Successfully allocated shared mem for relay+model, size = ', context % model_shmem_size
         call flush(6)
       end if
     end block
@@ -553,14 +559,16 @@ function ioctx_init_shared_mem(context) result(success)
         allocate(context % local_model_streams(context % params % max_num_concurrent_streams))
         call MPI_Comm_rank(context % model_comm, model_rank, ierr)
         do i_stream = 1, context % params % max_num_concurrent_streams
-          context % local_model_streams(i_stream) = model_stream(       &
-                              context % global_rank,                    &
-                              model_rank,                               &
-                              i_stream,                                 &
-                              context % local_heap,                     &
-                              context % local_server_bound_cb,          &
-                              context % get_debug_level() >= 1,         &
-                              context % messenger)
+          context % local_model_streams(i_stream) = model_stream(                     &
+                              context % global_rank,                                  &
+                              model_rank,                                             &
+                              i_stream,                                               &
+                              context % local_heap,                                   &
+                              context % local_server_bound_cb,                        &
+                              context % get_debug_level() >= 1,                       &
+                              context % messenger,                                    &
+                              context % params % model_stream_put_cmd_timeout_ms,     &
+                              context % params % model_stream_put_data_timeout_ms)
         end do
       end block
     end if
@@ -574,8 +582,8 @@ function ioctx_init_shared_mem(context) result(success)
 
   !  GLOBAL ERROR CHECK  (and synchronization point)
   call MPI_Allreduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, context % active_comm, ierr)
-  if(total_errors > 0) then
-    print *,'FATAL:',total_errors,' error(s) detected while allocating memory'
+  if (total_errors > 0) then
+    print *,'FATAL:', total_errors,' error(s) detected while allocating memory'
     call context % set_time_to_quit()      ! tell NO-OP PEs to quit
     call MPI_Finalize(ierr)
     stop
@@ -585,13 +593,13 @@ function ioctx_init_shared_mem(context) result(success)
     call context % build_relay_model_index()
     success = context % fetch_node_shmem_structs()
     if (.not. success) then
-      print *, 'ERROR: Unable to retrieved share mem structs from other PEs on the node'
+      print '(A, A)', context % short_pe_name, ' ERROR: Unable to retrieved share mem structs from other PEs on the node'
       return
     end if
   endif
 
   ! IO Relay or Server
-  if (context % is_relay() .or. (context % is_server() .and. .not. context % is_grid_processor())) then              ! IO relay or IO server
+  if (context % is_relay() .or. (context % is_server() .and. .not. context % is_stream_processor())) then              ! IO relay or IO server
 
     ! Create DCB
     block 
@@ -615,7 +623,7 @@ function ioctx_init_shared_mem(context) result(success)
 
       success = context % local_dcb % create_bytes(context % io_dcb_comm, server_comm, type, server_bound_size, model_bound_size)
       if (.not. success) then
-        print *, 'ERROR: Unable to create DCB'
+        print '(A, A)', context % short_pe_name, ' ERROR: Unable to create DCB'
         return
       end if
     end block
@@ -771,3 +779,74 @@ function ioctx_create_local_cb(context, num_bytes, is_output) result(success)
   end if
 
 end function ioctx_create_local_cb
+
+subroutine ioctx_make_pe_name(context)
+  implicit none
+  class(ioserver_context), intent(inout) :: context
+
+  character(len=20)  :: long_role
+  character(len=256) :: temp_long_name
+  character(len=32)  :: temp_short_name
+  type(comm_rank_size) :: temp_crs
+
+  temp_short_name=''
+  temp_short_name(1:1) = '['
+  temp_short_name(14:14) = '-'
+  temp_short_name(27:27) = ']'
+  if (context % is_server()) then
+    temp_short_name(2:6) = 'serv-'
+    if (context % is_server_bound()) then
+      long_role = 'Server/server-bound'
+      temp_short_name(7:13) = 's-bound'
+      temp_crs = context % get_crs(SERVER_COLOR + SERVER_BOUND_COLOR)
+    else if (context % is_model_bound()) then
+      long_role = 'Server/model-bound'
+      temp_short_name(7:13) = 'm-bound'
+      temp_crs = context % get_crs(SERVER_COLOR + MODEL_BOUND_COLOR)
+    else if (context % is_channel()) then
+      long_role = 'Server/channel'
+      temp_short_name(7:13) = 'channel'
+      ! temp_crs % rank = context % local_dcb % get_channel_id()
+    else if (context % is_stream_processor()) then
+      long_role = 'Server/stream processor'
+      temp_short_name(7:13) = 'strproc'
+      temp_crs = context % get_crs(SERVER_COLOR + STREAM_PROCESSOR_COLOR)
+    else
+      long_role = 'Server/[unknown]'
+      temp_short_name(7:13) = '*******'
+    end if
+  else if (context % is_relay()) then
+    temp_short_name(2:6) = 'rela-'
+    if (context % is_server_bound()) then
+      long_role = 'Relay/server-bound'
+      temp_short_name(7:13) = 's-bound'
+      temp_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + SERVER_BOUND_COLOR)
+    else if (context % is_model_bound()) then
+      long_role = 'Relay/model-bound'
+      temp_short_name(7:13) = 'm-bound'
+      temp_crs = context % get_crs(RELAY_COLOR + NODE_COLOR + MODEL_BOUND_COLOR)
+    else
+      long_role = 'Relay/[unknown]'
+      temp_short_name(7:13) = '*******'
+    end if
+  else if (context % is_model()) then
+    long_role = 'Model'
+    temp_short_name(2:13) = 'model-------'
+    temp_crs = context % get_crs(MODEL_COLOR + NODE_COLOR)
+  else if (context % is_no_op()) then
+    long_role = 'No-op'
+    temp_short_name(2:13) = 'no-op-------'
+  else
+    long_role = '[unknown]'
+    temp_short_name(2:13) = '************'
+  end if
+  write(temp_short_name(15:26), '(I4.4, A1, I3.3, A1, I3.3)') context % node_id, '-', context % node_rank, '-', temp_crs % rank
+
+  write(temp_long_name, '(A, A, I6, A, I6, A, I5, A, I5, A, I6)')         &
+      long_role, ' | active rank ', context % active_rank, '/', context % active_size, ' | node ', context % node_id, '/', context % num_nodes, &
+      ' | global rank ', context % get_global_rank()
+
+  context % detailed_pe_name = trim(temp_long_name)
+  context % short_pe_name = trim(temp_short_name)
+
+end subroutine ioctx_make_pe_name
