@@ -784,7 +784,7 @@ subroutine ioctx_make_pe_name(context)
   implicit none
   class(ioserver_context), intent(inout) :: context
 
-  character(len=20)  :: long_role
+  character(len=24)  :: long_role
   character(len=256) :: temp_long_name
   character(len=32)  :: temp_short_name
   type(comm_rank_size) :: temp_crs
