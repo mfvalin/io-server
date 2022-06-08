@@ -17,6 +17,7 @@ set(TEST_SOURCES
    simple_mutex.F90
    test_memory_arena.F90
    test_serializer.F90
+   test_string.F90
    )
 
 set(TEST_HELPER_FILES
