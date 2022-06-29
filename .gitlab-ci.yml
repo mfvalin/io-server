@@ -29,7 +29,7 @@ post-test-cleanup:u2:
       - test:U2_intel-2022.1.2_multi_node
       - test:U2_gnu-9.3.0_single_node
       - test:U2_gnu-9.3.0_multi_node
-      - test:U2_aocc_single_node
+      - test:U2_aocc
    tags:
       - U2
    script:
