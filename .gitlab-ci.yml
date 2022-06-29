@@ -196,6 +196,7 @@ build:U2_aocc:
       - set +e
       - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
       - module load aocc
+      - source r.load.dot main/opt/cmake/cmake-3.21.1
       - SRC_DIR=$(pwd)
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
