@@ -440,20 +440,23 @@ contains
     integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 
-    integer, parameter :: MAX_NUM_ATTEMPTS = 300
+    integer, parameter :: MAX_WAIT_TIME_S  = 30
     integer, parameter :: WAIT_TIME_US     = 50000
+    integer :: max_num_attempts
     integer :: i
 
     ! First attempt
     success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex)
 
+    max_num_attempts = MAX_WAIT_TIME_S * 1000000 / WAIT_TIME_US
+
     ! Try again a few times, after waiting a bit, instead of just crashing right away
-    do i = 1, MAX_NUM_ATTEMPTS
+    do i = 1, max_num_attempts
       if (.not. success) then
         if (mod(i, 10) == 0) then
           print '(I2, A, I2, A, F5.2, A)', this % server_id, ' WARNING: Could not put the data into the grid for owner ', &
               this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
-              (MAX_NUM_ATTEMPTS - i) * WAIT_TIME_US / 1000000.0, 's'
+              (max_num_attempts - i) * WAIT_TIME_US / 1000000.0, 's'
         end if
 
         call sleep_us(WAIT_TIME_US)
