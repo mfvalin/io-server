@@ -178,6 +178,54 @@ test:U2_gnu-9.3.0_multi_node:
       - BUILD_PATH=`pwd`
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
+################
+# U2 AOCC
+build:U2_aocc:
+   stage: build
+   dependencies:
+      - cleanup:u2
+   tags:
+      - U2
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_aocc
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_W: "10"
+      ORD_SOUMET_C: "20"
+      ORD_SOUMET_M: "2G"
+   script:
+      - set +e
+      - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
+      - module load aocc
+      - SRC_DIR=$(pwd)
+      - mkdir -pv ${build_dir}
+      - cd ${build_dir}
+      - pwd
+      - cmake ${SRC_DIR} -DUSE_ECCC_ENV_IF_AVAIL=0 -DCOMPILER_SUITE=aocc
+      - make
+
+test:U2_aocc:
+   stage: test
+   tags:
+      - U2
+   dependencies:
+      - build:U2_aocc
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_aocc
+      NUM_CPUS: "80"
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_C: "${NUM_CPUS}"
+      ORD_SOUMET_M: "16G"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: u2-aocc-single-node
+      MPI_COMMAND: "mpirun"
+   script:
+      - set +e
+      - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
+      - module load aocc
+      - SRC_DIR=$(pwd)
+      - cd ${build_dir}
+      - BUILD_PATH=`pwd`
+      - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
 ################
 # Packaging
