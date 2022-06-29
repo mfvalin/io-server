@@ -29,6 +29,7 @@ post-test-cleanup:u2:
       - test:U2_intel-2022.1.2_multi_node
       - test:U2_gnu-9.3.0_single_node
       - test:U2_gnu-9.3.0_multi_node
+      - test:U2_aocc_single_node
    tags:
       - U2
    script:
@@ -194,9 +195,9 @@ build:U2_aocc:
       ORD_SOUMET_M: "2G"
    script:
       - set +e
+      - source ci-env/latest/profile.sh
       - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
       - module load aocc
-      - source r.load.dot main/opt/cmake/cmake-3.21.1
       - SRC_DIR=$(pwd)
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
