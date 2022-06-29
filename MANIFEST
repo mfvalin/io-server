@@ -10,4 +10,4 @@ URL        : https://gitlab.science.gc.ca/RPN-SI/io-server
 #    =,<,<=,>,>= : Version rules
 #    ~           : Optional
 
-RMN    >= 20.0.0
+rmn    >=20.0.0

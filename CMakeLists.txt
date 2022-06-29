@@ -29,12 +29,11 @@ if (MPI_FOUND)
    set(CMAKE_C_COMPILER ${MPI_C_COMPILER})
 endif()
 
-
-if (NOT RMN_FOUND)
-   find_package(rmn ${RMN_REQ_VERSION})
+if (NOT rmn_FOUND)
+   find_package(rmn ${rmn_REQ_VERSION})
 endif()
 
-if (NOT RMN_FOUND)
+if (NOT rmn_FOUND)
     message(WARNING "Did not find a suitable RMN version, so we will use the tiny one bundled with this code")
     add_subdirectory(pseudo-rmn)
 endif()
