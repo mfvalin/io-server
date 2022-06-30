@@ -331,12 +331,12 @@ void CB_dump_data(
 //C_EnD
 {
   const int LINE_LENGTH = 10;
-  const uint64_t num_elements = num_bytes >= 0 && num_bytes <= buffer->m.limit * sizeof(data_element) ?
+  const uint64_t num_elements = num_bytes >= 0 && (uint64_t)num_bytes <= buffer->m.limit * sizeof(data_element) ?
       num_bytes_to_num_elem_64(num_bytes) :
       buffer->m.limit;
   
   printf("Buffer data:");
-  for (uint64_t i = 0; i < num_bytes; ++i)
+  for (uint64_t i = 0; i < num_elements; ++i)
   {
     if (i % LINE_LENGTH == 0) printf("\n[%5ld] ", i / LINE_LENGTH);
 
