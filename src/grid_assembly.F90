@@ -314,9 +314,22 @@ contains
 
     data_ptr = C_NULL_PTR
 
-    line_id = this % get_line_id_from_tag(tag)
-    if (line_id < 1) return
+    ! First get the corresponding assembly line. It might not have been created yet, so we might have to wait a bit.
+    do i_wait_assembly = 1, TOTAL_ASSEMBLY_WAIT_TIME_MS / SINGLE_ASSEMBLY_WAIT_TIME_MS
+      line_id = this % get_line_id_from_tag(tag)
+      if (line_id >= 1) then
+        exit
+      end if
+      call sleep_us(SINGLE_ASSEMBLY_WAIT_TIME_MS * 1000)
+    end do
 
+    ! Even after waiting, still no line...
+    if (line_id < 1) then
+      print '(A, I8)', 'ERROR: There is no assembly line corresponding to tag ', tag
+      return
+    end if
+
+    ! Now that we have found the correct assembly line, we wait until it is complete (timer is reset)
     do i_wait_assembly = 1, TOTAL_ASSEMBLY_WAIT_TIME_MS / SINGLE_ASSEMBLY_WAIT_TIME_MS
       if (this % is_line_full(line_id)) then
         data_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
