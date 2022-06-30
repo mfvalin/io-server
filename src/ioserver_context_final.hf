@@ -96,7 +96,7 @@ subroutine finalize_server(this)
             '  Command buffers for stream processors'
         has_opened_stream = this % local_server_streams(1) % print_command_stats(1, .true.)
         if (.not. has_opened_stream) then
-          print '(A)', 'No streams were opened within this context.'
+          print '(A, 1X, A)', this % short_pe_name, 'No streams were opened within this context.'
         end if
       end if
 
@@ -117,7 +117,7 @@ subroutine finalize_server(this)
         stream => this % local_server_streams(i)
         if (stream % is_open()) then
           if (stream % is_owner()) then
-            print '(A, I6, A, A)', 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself ', this % get_detailed_pe_name()
+            print '(A, 1X, A, I6, A, A)', this % short_pe_name, 'WARNING: Heeeeeyyyy forgot to close stream #', stream % get_id(), ', owned by myself'
           end if
         end if
       end do

@@ -191,7 +191,7 @@ static inline void print_instance(const circular_buffer_instance_p instance);
 static inline void print_control_metadata(const control_header_p header, const data_element* data);
 //C_StArT
 void DCB_delete(distributed_circular_buffer_p);
-void DCB_print(distributed_circular_buffer_p, int32_t);
+void DCB_print(distributed_circular_buffer_p, const int64_t);
 void DCB_full_barrier(distributed_circular_buffer_p buffer);
 int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
 //C_EnD
@@ -1210,17 +1210,17 @@ distributed_circular_buffer_p DCB_create_f(
 }
 
 //F_StArT
-//  subroutine DCB_print(buffer, dump_data) BIND(C, name = 'DCB_print')
-//    import :: C_PTR, C_INT
+//  subroutine DCB_print(buffer, num_data_to_print_byte) BIND(C, name = 'DCB_print')
+//    import :: C_PTR, C_INT64_T
 //    implicit none
-//    type(C_PTR),    INTENT(IN), value :: buffer    !< Buffer for which to print data
-//    integer(C_INT), INTENT(IN), value :: dump_data !< Whether to print buffer content
+//    type(C_PTR),        INTENT(IN), value :: buffer                 !< Buffer for which to print data
+//    integer(C_INT64_T), INTENT(IN), value :: num_data_to_print_byte !< How much of the content to print (in bytes). Negative means all content
 //  end subroutine DCB_print
 //F_EnD
 //! Print some debug info
 void DCB_print(
   distributed_circular_buffer_p buffer, //!< [in] Buffer for which to print data
-  int32_t dump_data                     //!< [in] Whether to print content too
+  const int64_t num_data_to_print_byte  //!< [in] How much of the content to print (in bytes). Negative means all of it
 ) {
   printf(
       "--------------------------------\n"
@@ -1237,8 +1237,8 @@ void DCB_print(
       buffer->server_rank, IO_time_since_start(&buffer->existence_timer), (long int)buffer->window_offset);
   if (is_client(buffer)) {
     print_instance(&buffer->local_header);
-    if (dump_data == 1) {
-      CB_dump_data(&buffer->local_header.circ_buffer);
+    if (num_data_to_print_byte != 0) {
+      CB_dump_data(&buffer->local_header.circ_buffer, num_data_to_print_byte);
     }
   }
   else if (is_root(buffer)) {
@@ -1246,17 +1246,17 @@ void DCB_print(
     for (int i = 0; i < buffer->control_metadata.num_server_bound_instances; ++i) {
       const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i, DCB_SERVER_BOUND_TYPE);
       printf("From root: buffer %d has %ld data in it\n", i, get_available_data_bytes(instance));
-      if (dump_data == 1) {
+      if (num_data_to_print_byte != 0) {
         print_instance(instance);
-        CB_dump_data(&instance->circ_buffer);
+        CB_dump_data(&instance->circ_buffer, num_data_to_print_byte);
       }
     }
     for (int i = 0; i < buffer->control_metadata.num_client_bound_instances; ++i) {
       const circular_buffer_instance_p instance = get_circular_buffer_instance(buffer, i, DCB_CLIENT_BOUND_TYPE);
       printf("From root: buffer %d has %ld data in it\n", i, get_available_data_bytes(instance));
-      if (dump_data == 1) {
+      if (num_data_to_print_byte != 0) {
         print_instance(instance);
-        CB_dump_data(&instance->circ_buffer);
+        CB_dump_data(&instance->circ_buffer, num_data_to_print_byte);
       }
     }
   }

@@ -294,7 +294,9 @@ int CB_get_elem_size(
 //! Print buffer header (to help debugging)
 void CB_print_header(circular_buffer_p b //!< [in] Pointer to the buffer to print
 );
-void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to print
+void CB_dump_data(
+    circular_buffer_p buffer,   //!< [in] Pointer to the buffer to print
+    const int64_t     num_bytes //!< [in] How many bytes of data to print
 );
 //! initialize a circular buffer
 //! <br> = CB_init_bytes(p, num_bytes)

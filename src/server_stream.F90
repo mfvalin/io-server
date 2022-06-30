@@ -389,7 +389,7 @@ contains
               grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(record % message_tag, this % data_heap)
               call timer % stop()
               if (.not. c_associated(grid_data)) then
-                print '(A, A)', this % pe_name, ' ERROR: Could not get completed line data!!!'
+                print '(A, 1X, A, F5.2, A)', this % pe_name, 'ERROR: Could not get completed line data!!! In ', timer % get_time_ms() / 1000.0, 's'
                 success = .false.
                 return 
               end if
@@ -440,7 +440,7 @@ contains
     integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 
-    integer, parameter :: MAX_WAIT_TIME_S  = 30
+    integer, parameter :: MAX_WAIT_TIME_S  = 15
     integer, parameter :: WAIT_TIME_US     = 50000
     integer :: max_num_attempts
     integer :: i
@@ -454,7 +454,7 @@ contains
     do i = 1, max_num_attempts
       if (.not. success) then
         if (mod(i, 10) == 0) then
-          print '(I2, A, I2, A, F5.2, A)', this % server_id, ' WARNING: Could not put the data into the grid for owner ', &
+          print '(A, A, I2, A, F5.2, A)', this % pe_name, ' WARNING: Could not put the data into the grid for owner ', &
               this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
               (max_num_attempts - i) * WAIT_TIME_US / 1000000.0, 's'
         end if

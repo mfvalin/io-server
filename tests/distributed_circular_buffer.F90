@@ -421,7 +421,7 @@ function test_dcb_consumer_producer(buffer, rank) result(num_errors)
         success = buffer % get_elems(i_prod, data_large(i_data), STEP_SIZE, CB_KIND_INTEGER_4, .true.)
         if (.not. success) then
           print '(A, I4, A, I10)', 'ERROR, buffer%get_elems failed! (1). i_prod/i_data ', i_prod, ' / ', i_data
-          if (server_bound_server_id == 0) call buffer % print(.true.)
+          if (server_bound_server_id == 0) call buffer % print(-1_8)
           call sleep_us(500000)
           error stop 1
         end if

@@ -468,12 +468,12 @@ subroutine ioserver_input_parameters_print(params)
 
   call add_line(output, pos, 'Process counts: ')
   if (params % is_on_server) then
-    call add_line(output, pos, '  # stream processors ',      '(I4)', val_i = params % num_stream_processors)
-    call add_line(output, pos, '  # server-bound server PEs', '(I4)', val_i = params % num_server_bound_server)
-    call add_line(output, pos, '  # model-bound server PEs',  '(I4)', val_i = params % num_model_bound_server)
-    call add_line(output, pos, '  # channel PEs',             '(I4)', val_i = params % num_channels)
+    call add_line(output, pos, '  # stream processors ',      '(I10)', val_i = params % num_stream_processors)
+    call add_line(output, pos, '  # server-bound server PEs', '(I10)', val_i = params % num_server_bound_server)
+    call add_line(output, pos, '  # model-bound server PEs',  '(I10)', val_i = params % num_model_bound_server)
+    call add_line(output, pos, '  # channel PEs',             '(I10)', val_i = params % num_channels)
   else
-    call add_line(output, pos, '  # relays per node ',        '(I4)', val_i = params % num_relay_per_node)
+    call add_line(output, pos, '  # relays per node ',        '(I10)', val_i = params % num_relay_per_node)
   end if
 
   call add_line(output, pos, 'Shared memory: ')
@@ -488,19 +488,19 @@ subroutine ioserver_input_parameters_print(params)
   end if
 
   call add_line(output, pos, 'Stream control: ')
-  call add_line(output, pos, '  Max # concurrent open streams', '(I4)', val_i = params % max_num_concurrent_streams)
+  call add_line(output, pos, '  Max # concurrent open streams', '(I10)', val_i = params % max_num_concurrent_streams)
   if (params % is_on_server) then
-    call add_line(output, pos, '  Put command timeout (ms)', '(I4)', val_i = params % server_stream_put_cmd_timeout_ms)
+    call add_line(output, pos, '  Put command timeout (ms)', '(I10)', val_i = params % server_stream_put_cmd_timeout_ms)
   else
-    call add_line(output, pos, '  Put command timeout (ms)', '(I4)', val_i = params % model_stream_put_cmd_timeout_ms)
-    call add_line(output, pos, '  Put data timeout (ms)', '(I4)', val_i = params % model_stream_put_data_timeout_ms)
+    call add_line(output, pos, '  Put command timeout (ms)', '(I10)', val_i = params % model_stream_put_cmd_timeout_ms)
+    call add_line(output, pos, '  Put data timeout (ms)', '(I10)', val_i = params % model_stream_put_data_timeout_ms)
   end if
 
   call add_line(output, pos, 'Pipeline control: ')
   if (params % is_on_server) then
-    call add_line(output, pos, '  Max server pipeline depth', '(I4)', val_i = params % server_pipeline_depth)
+    call add_line(output, pos, '  Max server pipeline depth', '(I10)', val_i = params % server_pipeline_depth)
   else
-    call add_line(output, pos, '  Max relay pipeline depth', '(I4)', val_i = params % relay_pipeline_depth)
+    call add_line(output, pos, '  Max relay pipeline depth', '(I10)', val_i = params % relay_pipeline_depth)
   end if
   call add_line(output, pos, '--------------------------------------------')
 

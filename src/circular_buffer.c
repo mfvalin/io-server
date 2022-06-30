@@ -316,20 +316,27 @@ int might_contain_chars(const int num)
 }
 
 //F_StArT
-//  subroutine CB_dump_data(buffer) bind(C, name = 'CB_dump_data')
-//    import :: C_PTR
+//  subroutine CB_dump_data(buffer, num_bytes) bind(C, name = 'CB_dump_data')
+//    import :: C_PTR, C_INT64_T
 //    implicit none
 //    type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
+//    integer(C_INT64_T), intent(IN), value :: num_bytes !< How many bytes of data to print
 //  end subroutine CB_dump_data
 //F_EnD
 //C_StArT
-void CB_dump_data(circular_buffer_p buffer //!< [in] Pointer to the buffer to print
-                 )
+void CB_dump_data(
+    circular_buffer_p buffer,   //!< [in] Pointer to the buffer to print
+    const int64_t     num_bytes //!< [in] How many bytes of data to print
+)
 //C_EnD
 {
   const int LINE_LENGTH = 10;
+  const uint64_t num_elements = num_bytes >= 0 && num_bytes <= buffer->m.limit * sizeof(data_element) ?
+      num_bytes_to_num_elem_64(num_bytes) :
+      buffer->m.limit;
+  
   printf("Buffer data:");
-  for (uint64_t i = 0; i < buffer->m.limit; ++i)
+  for (uint64_t i = 0; i < num_bytes; ++i)
   {
     if (i % LINE_LENGTH == 0) printf("\n[%5ld] ", i / LINE_LENGTH);
 

@@ -139,10 +139,11 @@ import :: C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
 end subroutine CB_print_header
-subroutine CB_dump_data(buffer) bind(C, name = 'CB_dump_data')
-import :: C_PTR
+subroutine CB_dump_data(buffer, num_bytes) bind(C, name = 'CB_dump_data')
+import :: C_PTR, C_INT64_T
 implicit none
 type(C_PTR), intent(IN), value :: buffer !< C pointer to the buffer we want to print
+integer(C_INT64_T), intent(IN), value :: num_bytes !< How many bytes of data to print
 end subroutine CB_dump_data
 !> initialize a circular buffer<br>
 !> buffer = CB_init_bytes(p, num_bytes)

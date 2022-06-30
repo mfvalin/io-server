@@ -210,7 +210,7 @@ typedef struct {
 
 typedef distributed_circular_buffer* distributed_circular_buffer_p;
 void DCB_delete(distributed_circular_buffer_p);
-void DCB_print(distributed_circular_buffer_p, int32_t);
+void DCB_print(distributed_circular_buffer_p, const int64_t);
 void DCB_full_barrier(distributed_circular_buffer_p buffer);
 int  DCB_check_integrity(const distributed_circular_buffer_p buffer, int verbose);
 distributed_circular_buffer_p DCB_create(

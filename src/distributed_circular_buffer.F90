@@ -123,17 +123,12 @@ contains
   end subroutine delete
 
   !> Print info about a distributed circular buffer. See DCB_print
-  subroutine print(this, dump_data)
+  subroutine print(this, num_data_to_print_byte)
     implicit none
-    class(distributed_circular_buffer), intent(in)  :: this
-    logical, intent(in) :: dump_data !< Whether to print buffer content as well
+    class(distributed_circular_buffer), intent(in)  :: this !< DCB instance
+    integer(C_INT64_T), intent(in) :: num_data_to_print_byte !< How much of the buffer content to print (in number of bytes). Negative means all content
 
-    integer(C_INT) :: c_dump_data
-
-    c_dump_data = 0
-    if (dump_data) c_dump_data = 1
-
-    call DCB_print(this % c_buffer, c_dump_data)
+    call DCB_print(this % c_buffer, num_data_to_print_byte)
   end subroutine print
 
   !> Insert elements into a distributed circular buffer. See DCB_put_client

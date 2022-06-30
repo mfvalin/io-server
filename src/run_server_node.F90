@@ -209,9 +209,11 @@ function default_server_bound(context) result(server_success)
       if (data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4) .ne. 0) then
         print '(A, A, I8, I3)', context % get_short_pe_name(), ' ERROR: buffer should be empty when server is done!', data_buffer % get_num_elements(i_producer, CB_KIND_INTEGER_4), i_producer
         if (context % get_debug_level() < 2) then
-          call data_buffer % print(.false.)
+          call data_buffer % print(0_8)     ! Print, but 0 bytes content
+        else if (context % get_debug_level() == 2) then
+          call data_buffer % print(1000_8)  ! Print, with 1000 bytes of content
         else
-          call data_buffer % print(.true.)
+          call data_buffer % print(-1_8)    ! Print, including the entier content
         end if
       end if
     end do
@@ -298,7 +300,7 @@ function default_server_bound(context) result(server_success)
         call print_cumulated_stats(global_mean, global_variance, global_min, global_max)
         print '(A)', '-------------------------------------------------------------------------'
       else
-        print '(A)', 'WARNING: Did not receive stats from any model PE'
+        print '(A, 1X, A)', context % get_short_pe_name(), 'WARNING: Did not receive stats from any model PE'
       end if
 
     end if

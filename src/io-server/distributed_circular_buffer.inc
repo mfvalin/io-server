@@ -53,11 +53,11 @@ integer(C_SIZE_T), intent(IN), value :: num_bytes_client_bound !< Number of byte
 integer(C_INT),    intent(IN), value :: verbose                !< Print some info when == 1
 type(C_PTR) :: p                                       !< Pointer to created distributed circular buffer
 end function DCB_create
-subroutine DCB_print(buffer, dump_data) BIND(C, name = 'DCB_print')
-import :: C_PTR, C_INT
+subroutine DCB_print(buffer, num_data_to_print_byte) BIND(C, name = 'DCB_print')
+import :: C_PTR, C_INT64_T
 implicit none
-type(C_PTR),    INTENT(IN), value :: buffer    !< Buffer for which to print data
-integer(C_INT), INTENT(IN), value :: dump_data !< Whether to print buffer content
+type(C_PTR),        INTENT(IN), value :: buffer                 !< Buffer for which to print data
+integer(C_INT64_T), INTENT(IN), value :: num_data_to_print_byte !< How much of the content to print (in bytes). Negative means all content
 end subroutine DCB_print
 subroutine DCB_delete(buffer) BIND(C, name = 'DCB_delete')
 import :: C_PTR

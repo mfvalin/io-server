@@ -105,7 +105,7 @@ contains
       num_spaces = dcb % get_num_spaces(CB_KIND_INTEGER_8, .false.)
       if (num_spaces .ne. capacity - i) then
         print *, 'Wrong number of spaces left...', num_spaces, capacity - i
-        call dcb % print(.false.)
+        call dcb % print(0_8)
         error stop 1
       end if
     end do
