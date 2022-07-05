@@ -353,11 +353,11 @@ contains
         if (record % command_type == MSG_COMMAND_OPEN_STREAM) then
           if (this % debug_level >= 2) print '(A, A)', this % pe_name, ' DEBUG: Processing MSG_COMMAND_OPEN_STREAM'
           success = this % open(record % stream_id) .and. success
-          if (.not. success) print '(A, A, I4)', this % pe_name, ' ERROR: Failed to open stream, ID ', record % stream_id
+          if (.not. success) print '(A, A, I6)', this % pe_name, ' ERROR: Failed to open stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_CLOSE_STREAM) then
           success = this % close() .and. success
-          if (.not. success) print '(A, A, I4)', this % pe_name, ' ERROR: Failed to close stream, ID ', record % stream_id
+          if (.not. success) print '(A, A, I6)', this % pe_name, ' ERROR: Failed to close stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_SERVER_CMD .or. record % command_type == MSG_COMMAND_DATA) then
 
