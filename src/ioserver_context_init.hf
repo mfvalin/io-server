@@ -171,6 +171,7 @@ function ioctx_init_communicators(context) result(success)
 
   ! no-op processes don't need to go any further
   if (context % is_no_op()) then
+    call context % make_pe_name()
     success = .true.
     return
   end if
