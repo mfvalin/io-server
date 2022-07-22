@@ -20,7 +20,7 @@
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
 module ioserver_mpi
+  use mpi
   implicit none
-  include 'mpif.h'
 contains
 end module ioserver_mpi
