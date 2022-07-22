@@ -36,7 +36,7 @@ program launch_server
   params % num_server_bound_server  = 2
   params % num_stream_processors    = 1
   params % num_channels             = 2
-  params % debug_level              = 1
+  params % debug_level              = 2
 
   ! Parse command line inputs and initialize IO-server input parameters
   num_args = command_argument_count()
@@ -81,11 +81,6 @@ program launch_server
   end do
 
   call MPI_Init(ierr)
-
-  call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
-  if (rank == 0) then
-    call params % print()
-  end if
 
   success = ioserver_run_server_node(params)
 

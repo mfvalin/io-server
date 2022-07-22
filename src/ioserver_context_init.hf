@@ -194,6 +194,16 @@ function ioctx_init_communicators(context) result(success)
     call MPI_Allreduce(max_num_streams, context % params % max_num_concurrent_streams, 1, MPI_INTEGER, MPI_SUM, context % active_comm, ierr)
   end block
 
+  if (context % get_debug_level() >= 1) then
+    if (context % node_id == 0 .and. context % node_rank == 0) then
+      print '(A)', 'DEBUG: Initializing server with '
+      call context % params % print()
+    else if (context % node_id == 1 .and. context % node_rank == 0) then
+      print '(A)', 'DEBUG: Initializing model/relay with '
+      call context % params % print()
+    end if
+  end if
+
   if (context % is_server()) then
     !-------------------
     ! Server processes
