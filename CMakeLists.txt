@@ -34,13 +34,20 @@ if (NOT rmn_FOUND)
 endif()
 
 if (NOT rmn_FOUND)
-    message(WARNING "Did not find a suitable RMN version, so we will use the tiny one bundled with this code")
-    add_subdirectory(pseudo-rmn)
+   message(WARNING "Did not find a suitable RMN version, so we will use the tiny one bundled with this code")
+   add_subdirectory(pseudo-rmn)
+endif()
+
+if (IOSERVER_BUILD_PSEUDO_MODEL)
+   message(WARNING "Using included processing functions. They should be provided by the program using IO-server")
+   add_subdirectory(pseudo-model)
 endif()
 
 add_subdirectory(src)
-add_subdirectory(pseudo-model)
-add_subdirectory(tests)
+
+if (IOSERVER_BUILD_TESTS)
+   add_subdirectory(tests)
+endif()
 
 #----- Generate the config file for the project to be usable via cmake's find_package command
 set(INCLUDE_INSTALL_DIR include)
