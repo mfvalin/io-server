@@ -8,7 +8,7 @@
 set_and_check(${CMAKE_FIND_PACKAGE_NAME}_INCLUDE_DIRS "@PACKAGE_INCLUDE_INSTALL_DIR@")
 
 #----- Set the library
-set_and_check(${CMAKE_FIND_PACKAGE_NAME}_LIBRARIES "@PACKAGE_LIB_INSTALL_DIR@/libio_server.a")
+set_and_check(${CMAKE_FIND_PACKAGE_NAME}_LIBRARIES "@PACKAGE_LIB_INSTALL_DIR@/lib${CMAKE_FIND_PACKAGE_NAME}.a")
 
 #----- Create the imported target
 string(TOUPPER ${CMAKE_FIND_PACKAGE_NAME} up)
