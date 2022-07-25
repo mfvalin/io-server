@@ -56,7 +56,7 @@ build:U2_intel-2022.1.2:
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
       - pwd
-      - cmake ${SRC_DIR}
+      - cmake ${SRC_DIR} -DIOSERVER_BUILD_PSEUDO_MODEL=ON -DIOSERVER_BUILD_TESTS=ON
       - make
 
 test:U2_intel-2022.1.2_single_node:
@@ -128,7 +128,7 @@ build:U2_gnu-9.3.0:
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
       - pwd
-      - cmake ${SRC_DIR}
+      - cmake ${SRC_DIR} -DIOSERVER_BUILD_PSEUDO_MODEL=ON -DIOSERVER_BUILD_TESTS=ON
       - make
 
 test:U2_gnu-9.3.0_single_node:
@@ -202,7 +202,7 @@ build:U2_aocc:
       - mkdir -pv ${build_dir}
       - cd ${build_dir}
       - pwd
-      - cmake ${SRC_DIR} -DUSE_ECCC_ENV_IF_AVAIL=0 -DCOMPILER_SUITE=aocc
+      - cmake ${SRC_DIR} -DUSE_ECCC_ENV_IF_AVAIL=0 -DCOMPILER_SUITE=aocc -DIOSERVER_BUILD_PSEUDO_MODEL=ON -DIOSERVER_BUILD_TESTS=ON
       - make
 
 test:U2_aocc:
