@@ -95,8 +95,8 @@ list(APPEND PROJECT_INCLUDE_FILES ${F_ALLOC_FILE})
 
 # The library itself
 add_library(${PROJECT_NAME} ${PROJECT_C_FILES} ${PROJECT_F_FILES} ${PROJECT_INCLUDE_FILES})
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(${PROJECT_NAME} PUBLIC rmn ioserver_pseudo_model)
+target_link_libraries(${PROJECT_NAME} PUBLIC rmn)
+target_link_libraries(${PROJECT_NAME} PRIVATE ioserver_command_external)
 
 # Where to put modules
 get_target_property(LIBRARY_DIR ${PROJECT_NAME} BINARY_DIR)
@@ -131,7 +131,8 @@ target_compile_options(
 # Server launcher
 set(LAUNCH_SERVER_TARGET ${PROJECT_NAME}_launch_server)
 add_executable(${LAUNCH_SERVER_TARGET} ${LAUNCH_SERVER_SOURCE})
-target_link_libraries(${LAUNCH_SERVER_TARGET} PUBLIC ${PROJECT_NAME} ioserver_pseudo_model)
+target_link_libraries(${LAUNCH_SERVER_TARGET} PUBLIC ${PROJECT_NAME})
+target_link_libraries(${LAUNCH_SERVER_TARGET} PRIVATE ioserver_command_external)
 
 install(TARGETS ${PROJECT_NAME} ${LAUNCH_SERVER_TARGET}
    RUNTIME       DESTINATION bin
