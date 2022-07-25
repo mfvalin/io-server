@@ -23,6 +23,9 @@ enable_language(C)
 include(ec_compiler_presets)
 ec_build_info()            # Generate build include file (optional)
 
+option(IOSERVER_BUILD_PSEUDO_MODEL "Whether to build the small library that provides the 'process_command' functionality" OFF)
+option(IOSERVER_BUILD_TESTS "Whether to build the tests for IO-server" OFF)
+
 find_package(MPI)
 if (MPI_FOUND)
    set(CMAKE_Fortran_COMPILER ${MPI_Fortran_COMPILER})
@@ -39,7 +42,7 @@ if (NOT rmn_FOUND)
 endif()
 
 if (IOSERVER_BUILD_PSEUDO_MODEL)
-   message(WARNING "Using included processing functions. They should be provided by the program using IO-server")
+   message(WARNING "Using included processing functions. They should normally be provided by the program using IO-server")
    add_subdirectory(pseudo-model)
 endif()
 
