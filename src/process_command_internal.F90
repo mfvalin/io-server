@@ -23,5 +23,5 @@ module process_command_internal_module
   use iso_c_binding
   use jar_module
   implicit none
-  include 'io-server/process_command.inc'
+  include 'process_command.inc'
 end module process_command_internal_module

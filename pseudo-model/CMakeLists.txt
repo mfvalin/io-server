@@ -15,6 +15,7 @@ set(PROJECT_INCLUDE_FILES
 # The library itself
 add_library(${PSEUDO_MODEL_LIB} STATIC ${PROJECT_C_FILES} ${PROJECT_F_FILES} ${PROJECT_INCLUDE_FILES})
 target_link_libraries(${PSEUDO_MODEL_LIB} PUBLIC rmn)
+target_include_directories(${PSEUDO_MODEL_LIB} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Where to put modules
 get_target_property(LIBRARY_DIR ${PSEUDO_MODEL_LIB} BINARY_DIR)
