@@ -42,9 +42,10 @@ module server_stream_module
 
   integer, parameter :: STREAM_STATUS_UNINITIALIZED = -1 !< Not even initialized
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open
-  ! integer, parameter :: STREAM_STATUS_OPEN_NEEDED   =  1 !< Opening has been requested, but not completed yet
-  integer, parameter :: STREAM_STATUS_OPEN          =  2 !< Stream is open
-  ! integer, parameter :: STREAM_STATUS_CLOSED        =  4 !< Stream is closed (implying it has been opened before)
+  integer, parameter :: STREAM_STATUS_OPEN          =  1 !< Stream is open
+
+  integer, parameter :: STREAM_ID_SHARED_INITIAL = -1
+  integer, parameter :: STREAM_ID_SHARED_CLOSED  = -3
 
   integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 5000 !< Size of the buffer used to send commands to the stream owner
 
@@ -54,7 +55,7 @@ module server_stream_module
   type, public :: shared_server_stream
     private
     integer :: stream_rank        = -1  !< Rank of this stream in the list of streams. Can be reused after a stream is closed
-    integer :: stream_id          = -1  !< Stream ID, for internal use. Assigned at object creation, associated with a model stream when opening it
+    integer :: stream_id          = STREAM_ID_SHARED_INITIAL  !< Stream ID, for internal use. Assigned at object creation, associated with a model stream when opening it
     integer :: owner_id           = -1  !< Who owns (will read/write/process) this stream and its physical file
     integer :: mutex_value        =  0  !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
     integer :: status             = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
@@ -186,8 +187,8 @@ contains
         return
       end if
       ! Close the stream
-      this % status = STREAM_STATUS_INITIALIZED
-      this % stream_id = -1
+      this % status    = STREAM_STATUS_INITIALIZED
+      this % stream_id = STREAM_ID_SHARED_CLOSED
       success = .true.
     end if
   end function shared_server_stream_close
