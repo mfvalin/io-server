@@ -308,20 +308,19 @@ contains
 
   end function model_stream_close
 
-  ! cprs and meta only need to be supplied by one of the writing PEs
-  function send_data(this, my_data, subgrid_area, global_grid, grid_out, command, cprs, meta) result(success)
+  !> Send a bunch of data (a "tile") towards the server
+  function send_data(this, my_data, local_grid_bounds_with_halo, local_grid_global_bounds, global_grid_bounds, reduced_global_grid_bounds, command) result(success)
     use iso_c_binding
     use jar_module
     implicit none
-    class(model_stream),  intent(INOUT) :: this
-    type(block_meta_f08), intent(IN)    :: my_data          !< array descriptor from h % allocate
-    type(subgrid_t),      intent(IN)    :: subgrid_area     !< area of this subgrid in global grid
-    type(grid_t),         intent(IN)    :: global_grid      !< global grid info
-    type(grid_t),         intent(IN)    :: grid_out         !< output grid
+    class(model_stream),  intent(inout) :: this
+    type(block_meta_f08), intent(in)    :: my_data          !< array descriptor from h % allocate
+    type(grid_bounds_t),  intent(in)    :: local_grid_bounds_with_halo !< Bounds of the local grid, including halo
+    type(grid_bounds_t),  intent(in)    :: local_grid_global_bounds    !< Bounds of the local grid, excluding halo, in global coordinates
+    type(grid_bounds_t),  intent(in)    :: global_grid_bounds          !< Bounds of the global grid, global coordinates
+    type(grid_bounds_t),  intent(in)    :: reduced_global_grid_bounds  !< Bounds of the reduced global grid, global coordinates
 
     type(jar),   intent(IN), optional :: command          !< Command to apply to the data by the model once assembled
-    type(cmeta), intent(IN), optional :: cprs             !< compression related metadata (carried serialized)
-    type(jar),   intent(IN), optional :: meta             !< metadata associated with data (carried serialized and blindly)
 
     logical :: success  !< Whether this function call succeeded
 
@@ -329,49 +328,34 @@ contains
     type(message_header)  :: header
     type(message_cap)     :: end_cap
     type(command_record)  :: command_meta
-    integer(JAR_ELEMENT)  :: low, high
-    integer(JAR_ELEMENT), dimension(:), pointer :: metadata
 
     success = .false.
     if(this % stream_id <= 0) return
 
     ! Perform a short series of checks on the inputs
-    block
-      ! Check that dimensions in area are consistent with metadata
-      if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
-        print '(A, 5I4, 1X, 5I4)', 'ERROR: Trying to send data array that does not match subgrid dimensions', my_data % get_dimensions(), subgrid_area % size
-        return
-      end if
+    ! block
+    !   ! Check that dimensions in area are consistent with metadata
+    !   if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
+    !     print '(A, 5I4, 1X, 5I4)', 'ERROR: Trying to send data array that does not match subgrid dimensions', my_data % get_dimensions(), subgrid_area % size
+    !     return
+    !   end if
 
-      ! Check that the given offset of the subgrid can fit within the global grid
-      if (any(subgrid_area % offset < 1) .or. any(subgrid_area % offset > global_grid % size)) then
-        print '(A, 5I4)', 'ERROR: Subgrid offset is invalid!', subgrid_area % offset
-        return
-      end if
-    end block
+    !   ! Check that the given offset of the subgrid can fit within the global grid
+    !   if (any(subgrid_area % offset < 1) .or. any(subgrid_area % offset > global_grid % size)) then
+    !     print '(A, 5I4)', 'ERROR: Subgrid offset is invalid!', subgrid_area % offset
+    !     return
+    !   end if
+    ! end block
 
     ! Check that given element size is the same as in the global grid
-    if (my_data % get_kind() .ne. global_grid % elem_size) then
-      print '(A, 1X, I2, 1X, I2)', 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, my_data % get_kind()
-    end if
+    ! if (my_data % get_kind() .ne. global_grid % elem_size) then
+    !   print '(A, 1X, I2, 1X, I2)', 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, my_data % get_kind()
+    ! end if
 
     call this % messenger % bump_tag()
 
     !----------------------
     ! Prepare the message
-
-    ! Size of the various metadata objects included
-    rec % cmeta_size = 0
-    rec % meta_size  = 0
-    if(present(cprs)) then
-      rec % cmeta_size = int(cmeta_size_int8(), kind=4)
-    endif
-    if(present(meta)) then
-      low  = meta % get_bot()
-      high = meta % get_top()
-      rec % meta_size = high - low       ! useful number of elements
-      metadata => meta % f_array()
-    endif
 
     ! Prepare accompanying command
     command_meta % size_int8    = 0
@@ -379,25 +363,26 @@ contains
     command_meta % stream_id    = this % stream_id
     command_meta % message_tag  = this % messenger % get_msg_tag()
     if (present(command)) command_meta % size_int8 = command % get_top()
+
+    ! Prepare record that describes the data
     rec % command_size_int8 = command_meta % size_int8 + command_record_size_int8()
 
     rec % tag            = this % messenger % get_msg_tag()
     rec % stream         = this % stream_id
 
-    rec % subgrid_area   = subgrid_area
-    rec % global_grid    = global_grid
-    rec % global_grid % elem_size = my_data % get_kind()
-
-    rec % output_grid_id = grid_out % id
+    rec % local_grid_with_halo        = local_grid_bounds_with_halo
+    rec % local_grid_global_id        = local_grid_global_bounds
+    rec % global_grid                 = global_grid_bounds
+    rec % reduced_global_grid         = reduced_global_grid_bounds
 
     rec % elem_size      = my_data % get_kind()
     rec % heap_offset    = my_data % get_offset()
-    rec % data_size_byte = product(rec % subgrid_area % size) * rec % elem_size
+    rec % data_size_byte = rec % local_grid_with_halo % compute_num_elements() * rec % elem_size
 
     ! call print_data_record(rec)
 
     ! Prepare header for the entire message
-    header % content_size_int8  = data_record_size_int8() + rec % cmeta_size + rec % meta_size + command_record_size_int8() + command_meta % size_int8
+    header % content_size_int8  = data_record_size_int8() + command_record_size_int8() + command_meta % size_int8
     header % command            = MSG_COMMAND_DATA
     header % stream_rank        = this % stream_rank
     header % stream_id          = this % stream_id
@@ -430,19 +415,6 @@ contains
     if (present(command) .and. success) then
       success = this % server_bound_cb % put(                                                                     &
           command % f_array(), command_meta % size_int8, CB_DATA_ELEMENT_KIND, .false.,                           &
-          timeout_ms = this % put_data_timeout_ms)
-    end if
-
-    ! Optional parts of the message
-    if(present(cprs) .and. success) then
-      success = this % server_bound_cb % put(                                                                     &
-          cprs, int(rec % cmeta_size, kind=8), CB_KIND_INTEGER_8, .false.,                                        &
-          timeout_ms = this % put_data_timeout_ms)
-    end if
-
-    if(present(meta) .and. success) then
-      success = this % server_bound_cb % put(                                                                     &
-          metadata(low + 1 : high), int(rec % meta_size, kind=8), CB_KIND_INTEGER_8, .false.,                     &
           timeout_ms = this % put_data_timeout_ms)
     end if
 

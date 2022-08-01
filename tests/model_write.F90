@@ -125,8 +125,8 @@ contains
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs
 
-    type(subgrid_t)      :: local_grid, big_local_grid
-    type(grid_t)         :: input_grid_4, input_grid_8, output_grid, big_grid
+    type(grid_bounds_t)  :: local_grid, big_local_grid
+    type(grid_bounds_t)  :: global_grid, big_global_grid
     type(block_meta_f08) :: data_array_info_1, data_array_info_2, big_array_info
     integer(kind=4), dimension(:,:), pointer :: data_array_4
     integer(kind=8), dimension(:,:), pointer :: data_array_8
@@ -214,52 +214,30 @@ contains
     num_compute_x = compute_width
     num_compute_y = compute_height
 
-    local_grid % offset(1) = mod(global_model_id, compute_width) * block_width + 1
-    local_grid % offset(2) = (global_model_id / compute_width) * block_height + 1
-    local_grid % size(1)   = block_width
-    local_grid % size(2)   = block_height
+    success = local_grid % set(       &
+        min_bound = grid_index_t(mod(global_model_id, compute_width) * block_width + 1, (global_model_id / compute_width) * block_height + 1),    &
+        size      = grid_index_t(block_width, block_height))
 
-    input_grid_4 % id = 1
-    input_grid_4 % size(1) = block_width * compute_width
-    input_grid_4 % size(2) = block_height * compute_height
-    input_grid_4 % elem_size = 4
+    success = global_grid % set(      &
+        min_bound = grid_index_t(),   &
+        size      = grid_index_t(block_width * compute_width, block_height * compute_height))
 
-    input_grid_8 % id = 1
-    input_grid_8 % size(1) = block_width * compute_width
-    input_grid_8 % size(2) = block_height * compute_height
-    input_grid_8 % elem_size = 8
+    success = big_local_grid % set(   &
+        min_bound = grid_index_t(mod(global_model_id, compute_width) * dim_x + 1, (global_model_id / compute_width) * dim_y + 1),     &
+        size      = grid_index_t(dim_x, dim_y, dim_z, num_vars, num_time_steps))
 
-    output_grid % id = 1
-
-    big_local_grid % offset(1) = mod(global_model_id, compute_width) * dim_x + 1
-    big_local_grid % offset(2) = (global_model_id / compute_width) * dim_y + 1
-    big_local_grid % offset(3) = 1
-    big_local_grid % offset(4) = 1
-    big_local_grid % offset(5) = 1
-
-    big_local_grid % size(1) = dim_x
-    big_local_grid % size(2) = dim_y
-    big_local_grid % size(3) = dim_z
-    big_local_grid % size(4) = num_vars
-    big_local_grid % size(5) = num_time_steps
-
-    big_grid % id = 2
-    big_grid % size(1) = dim_x * compute_width
-    big_grid % size(2) = dim_y * compute_height
-    big_grid % size(3) = dim_z
-    big_grid % size(4) = num_vars
-    big_grid % size(5) = num_time_steps
-    big_grid % elem_size = 8
-
-    ! print *, 'Created local grid', local_grid % i0, local_grid % i0 + local_grid % ni
+    success = big_global_grid % set(  &
+        min_bound = grid_index_t(),   &
+        size      = grid_index_t(dim_x * compute_width, dim_y * compute_height, dim_z, num_vars, num_time_steps))
 
     if (model_crs % rank == 0) then
       print '(A, I7, A, I3)', 'Blocks:  ', block_width, 'x', block_height
       print '(A, I7, A, I3)', 'Compute: ', compute_width, 'x', compute_height
       print '(A, I3, A)', 'Using grids for ', model_crs % size, ' PEs'
-      print '(5I7, I2, I9, I9)', input_grid_4 % size, input_grid_4 % elem_size, product(input_grid_4 % size), product(local_grid % size)
-      print '(5I7, I2, I9, I9)', input_grid_8 % size, input_grid_8 % elem_size, product(input_grid_8 % size), product(local_grid % size)
-      print '(5I7, I2, I9, I9)', big_grid % size, big_grid % elem_size, product(big_grid % size), product(big_local_grid % size)
+      call local_grid % print()
+      call global_grid % print()
+      call big_local_grid % print()
+      call big_global_grid % print()
     end if
 
     ! call sleep_us(5000)
@@ -299,12 +277,12 @@ contains
         success = JAR_PUT_ITEM(command_jar, c_header)
 
         ! Grid metadata (for model processing)
-        m_grid % dims      = input_grid_4 % size
-        m_grid % elem_size = input_grid_4 % elem_size
+        m_grid % dims      = global_grid % size % val
+        m_grid % elem_size = data_array_info_1 % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
         ! Write the data to a file (i.e. send it to the server to do that for us)
-        success = output_stream_1 % send_data(data_array_info_1, local_grid, input_grid_4, output_grid, command = command_jar) .and. success
+        success = output_stream_1 % send_data(data_array_info_1, local_grid, local_grid, global_grid, global_grid, command = command_jar) .and. success
 
         if (.not. success) then
           print *, 'ERROR: Send data into model stream failed'
@@ -351,11 +329,11 @@ contains
         success = JAR_PUT_ITEM(command_jar, c_header)
 
         ! Grid metadata (for model processing)
-        m_grid % dims      = input_grid_8 % size
-        m_grid % elem_size = input_grid_8 % elem_size
+        m_grid % dims      = global_grid % size % val
+        m_grid % elem_size = data_array_info_2 % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
-        success = output_stream_2 % send_data(data_array_info_2, local_grid, input_grid_8, output_grid, command = command_jar) .and. success
+        success = output_stream_2 % send_data(data_array_info_2, local_grid, local_grid, global_grid, global_grid, command = command_jar) .and. success
 
         ! Command header
         call command_jar % reset()
@@ -364,11 +342,11 @@ contains
         success = JAR_PUT_ITEM(command_jar, c_header) .and. success
 
         ! Grid metadata (for model processing)
-        m_grid % dims      = big_grid % size
-        m_grid % elem_size = big_grid % elem_size
+        m_grid % dims      = big_global_grid % size % val
+        m_grid % elem_size = big_array_info % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
-        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_grid, output_grid, command = command_jar)    .and. success
+        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_local_grid, big_global_grid, big_global_grid, command = command_jar)    .and. success
         if (.not. success) then
           print *, 'ERROR while trying to do a SEND DATA'
           return

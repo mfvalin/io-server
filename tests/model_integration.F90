@@ -126,8 +126,7 @@ program model_integration
     ! Send data
     block
       type(shmem_heap)     :: data_heap
-      type(subgrid_t)      :: local_grid
-      type(grid_t)         :: input_grid, output_grid
+      type(grid_bounds_t)  :: local_grid, global_grid
       type(block_meta_f08) :: array_info
       type(model_grid)     :: m_grid
 
@@ -135,14 +134,12 @@ program model_integration
 
       data_heap = context % get_local_heap()
 
-      local_grid % offset(1) = model_crs % rank + 1 ! Model PEs ordered in a a line, ordered by rank
-      local_grid % size(:) = 1
+      success = local_grid % set(min_bound = grid_index_t(model_crs % rank + 1), size = grid_index_t(1))
+      success = global_grid % set(min_bound = grid_index_t(1), size = grid_index_t(model_crs % size))
 
-      input_grid % id = 1
-      input_grid % size(1) = model_crs % size  ! Line, along first dimension
-      input_grid % elem_size = 8
+      ! input_grid % elem_size = 8
 
-      output_grid % id = 1
+      ! output_grid % id = 1
 
       ! Generate data to send
       array_info = data_heap % allocate(model_data, [1_8])
@@ -161,12 +158,20 @@ program model_integration
       success = JAR_PUT_ITEM(command, header)
 
       ! Grid metadata
-      m_grid % dims      = input_grid % size
-      m_grid % elem_size = input_grid % elem_size
+      m_grid % dims      = global_grid % size % val
+      m_grid % elem_size = array_info % get_kind()
       success = JAR_PUT_ITEM(command, m_grid) .and. success
 
       ! Send the data + command
-      success = stream % send_data(array_info, local_grid, input_grid, output_grid, command = command) .and. success
+      ! There is no halo, so we specify the same local grids for both inputs
+      ! The global grid is not reduced, so we specify the same global grid for both inputs
+      success = stream % send_data(     &
+                    array_info,         &   ! Info about the size of allocated data
+                    local_grid,         &   ! Local grid bounds, including the halo (which is zero, since no halo). Also, is that the same info as in array_info?
+                    local_grid,         &   ! Local grid bounds, excluding the halo, in global coordinates
+                    global_grid,        &   ! Full global grid bounds, in global coords (of course)
+                    global_grid,        &   ! Reduced global grid bounds, in global coords
+                    command = command) .and. success
       if (.not. success) then
         print *, 'Unable to send data!!!'
         error stop 1
@@ -179,7 +184,7 @@ program model_integration
       call command % reset()
       success = JAR_PUT_ITEM(command, header)
       success = JAR_PUT_ITEM(command, m_grid) .and. success
-      success = stream % send_data(array_info, local_grid, input_grid, output_grid, command = command) .and. success
+      success = stream % send_data(array_info, local_grid, local_grid, global_grid, global_grid, command = command) .and. success
 
       if (.not. success) then
         print *, 'ERROR: Unable to send second set of data'

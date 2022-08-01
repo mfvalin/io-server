@@ -38,7 +38,7 @@ module server_stream_module
 
   private
 
-  public :: block_meta_f08, subgrid_t, grid_t, cmeta
+  public :: block_meta_f08, grid_bounds_t
 
   integer, parameter :: STREAM_STATUS_UNINITIALIZED = -1 !< Not even initialized
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open
@@ -66,17 +66,17 @@ module server_stream_module
     integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
 
     !> Object where grids sent to this stream are assembled
-    type(grid_assembly) :: partial_grid_data = grid_assembly(grid_assembly_line())
+    type(grid_assembly) :: partial_grid_data
 
     contains
     private
-    procedure, pass :: open           => shared_server_stream_open
-    procedure, pass :: close          => shared_server_stream_close
-    procedure, pass :: get_id         => shared_server_stream_get_id
+    procedure, pass :: open     => shared_server_stream_open
+    procedure, pass :: close    => shared_server_stream_close
+    procedure, pass :: get_id   => shared_server_stream_get_id
 
-    procedure, pass :: is_open      => shared_server_stream_is_open
-    procedure, pass :: is_valid     => shared_server_stream_is_valid
-    procedure, pass :: print        => shared_server_stream_print
+    procedure, pass :: is_open  => shared_server_stream_is_open
+    procedure, pass :: is_valid => shared_server_stream_is_valid
+    procedure, pass :: print    => shared_server_stream_print
     procedure, pass, private :: get_owner_id => shared_server_stream_get_owner_id
 
     procedure, pass :: get_tag_counter => shared_server_stream_get_tag_counter

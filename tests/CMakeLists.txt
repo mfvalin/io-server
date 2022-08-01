@@ -12,6 +12,7 @@ set(TEST_SOURCES
    dcb_timeout.F90
    dcb_unaligned_input.c
    distributed_circular_buffer.F90
+   grid_meta.F90
    put_error.F90
    shmem_heap_basic.F90
    simple_mutex.F90
@@ -70,7 +71,7 @@ function(gen_test_target)
       ${TEST_TARGET}
       PRIVATE
       $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wno-integer-division>
-      $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-diag-disable 5268>
+      $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-diag-disable 5268 -error-limit 8>
       )
 
    # Modules
@@ -135,6 +136,9 @@ get_test_name(cb_unaligned_input.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
 
 get_test_name(test_serializer.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
+
+get_test_name(grid_meta.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
 
 get_test_name(circular_buffer.F90 TEST_TARGET)

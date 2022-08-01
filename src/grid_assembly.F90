@@ -22,6 +22,7 @@
 module grid_assembly_module
   use iso_c_binding
   
+  use grid_meta_module
   use ioserver_message_module
   use shmem_heap_module
   use rpn_extra_module
@@ -35,7 +36,8 @@ module grid_assembly_module
   !> Located in shared memory
   type, public :: grid_assembly_line
     integer               :: tag = -1               !< Message tag associated with this specific grid to assemble
-    type(grid_t)          :: global_grid = grid_t() !< Grid info
+    type(grid_bounds_t)   :: reduced_global_grid    !< Grid dimensions info
+    integer               :: element_size = 0       !< Grid element size in number of bytes
     integer(HEAP_ELEMENT) :: data_offset = -1       !< Offset of the data region where the grid is being assembled in the shared memory heap
     integer(kind=8)       :: missing_data = -1      !< Number of elements left to insert into the grid being assembled
 
@@ -46,7 +48,7 @@ module grid_assembly_module
   !> Object used to coordinate the assembly of multiple grids received through a single stream
   !> Located in shared memory
   type, public :: grid_assembly
-    type(grid_assembly_line), dimension(MAX_ASSEMBLY_LINES) :: lines = grid_assembly_line() !< Array of individual grids being assembled
+    type(grid_assembly_line), dimension(MAX_ASSEMBLY_LINES) :: lines !< Array of individual grids being assembled
 
   contains
     private
@@ -63,8 +65,19 @@ module grid_assembly_module
     procedure, pass :: get_line_id  => grid_assembly_get_line_id
     procedure, pass :: create_line  => grid_assembly_create_line
   end type
+  
+  interface grid_assembly_line
+    procedure :: new_grid_assembly_line
+  end interface
 
 contains
+
+  function new_grid_assembly_line() result(line)
+    implicit none
+    type(grid_assembly_line) :: line
+    ! Just use the default values
+    if (line % tag >= 0) print *, 'Woah! Tag should be negative at this point'
+  end function new_grid_assembly_line
 
   subroutine print_overview(this)
     implicit none
@@ -144,7 +157,7 @@ contains
         ! print '(I2, A, I3)', mutex % get_id(), ' Creating line ', line_id
 
         ! Get some shared memory
-        grid_size       = record % global_grid % size
+        grid_size       = record % reduced_global_grid % size % val
         grid_size(1)    = grid_size(1) * record % elem_size ! Use bytes in the first dimension (so multiply it by size of element)
         data_array_info = data_heap % allocate(data_array_byte, grid_size)
         if (.not. associated(data_array_byte)) then
@@ -154,10 +167,11 @@ contains
 
         ! Initialize the assembly line object
         associate(line => this % lines(line_id))
-          line % data_offset  = data_array_info % get_offset()
-          line % global_grid  = record % global_grid
-          line % missing_data = product(line % global_grid % size)
-          line % tag          = record % tag ! Signal that the assembly line is ready to be used
+          line % data_offset          = data_array_info % get_offset()
+          line % reduced_global_grid  = record % reduced_global_grid
+          line % element_size         = record % elem_size
+          line % missing_data         = line % reduced_global_grid % compute_num_elements()
+          line % tag                  = record % tag ! Signal that the assembly line is ready to be used
           ! print '(A, I3, I2, I10, I6)', 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
         end associate
       else
@@ -226,11 +240,11 @@ contains
 
     ! Compute addressing sizes/indices. The first dimension is actually in bytes rather than elements, so we need to include
     ! a factor of 'elem_size' into that index
-    full_size_byte    = this % lines(line_id) % global_grid % size
-    full_size_byte(1) = full_size_byte(1) * this % lines(line_id) % global_grid % elem_size
-    sub_size_byte     = record % subgrid_area % size
+    full_size_byte    = this % lines(line_id) % reduced_global_grid % size % val
+    full_size_byte(1) = full_size_byte(1) * this % lines(line_id) % element_size
+    sub_size_byte     = record % local_grid_global_id % size % val
     sub_size_byte(1)  = sub_size_byte(1) * record % elem_size
-    index_start       = record % subgrid_area % offset
+    index_start       = record % local_grid_global_id % min_bound % val
     index_start(1)    = (index_start(1) - 1) * record % elem_size + 1
     index_end         = index_start + sub_size_byte - 1
     
@@ -245,7 +259,7 @@ contains
 
     ! Update missing data indicator
     call mutex % lock()
-    this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - product(record % subgrid_area % size)
+    this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - record % local_grid_global_id % compute_num_elements()
     call mutex % unlock()
 
     success = .true.

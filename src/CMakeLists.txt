@@ -16,6 +16,7 @@ set(PROJECT_F_FILES
    circular_buffer.F90
    distributed_circular_buffer.F90
    grid_assembly.F90
+   grid_meta.F90
    ioserver_constants.F90
    ioserver_context.F90
    ioserver_message.F90
@@ -107,11 +108,12 @@ target_include_directories(${PROJECT_NAME} INTERFACE ${MODULE_DIR})
 
 # Specify which modules to include in the public package
 set(PUBLIC_MODULES
-   ${MODULE_DIR}/shmem_heap_module.mod
+   ${MODULE_DIR}/grid_meta_module.mod
    ${MODULE_DIR}/ioserver_context_module.mod
    ${MODULE_DIR}/ioserver_message_module.mod
    ${MODULE_DIR}/ioserver_run_module.mod
    ${MODULE_DIR}/model_stream_module.mod
+   ${MODULE_DIR}/shmem_heap_module.mod
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION ${PROJECT_VERSION})

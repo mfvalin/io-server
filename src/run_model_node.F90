@@ -418,6 +418,8 @@ function check_and_process_single_message(context, state, model_id) result(proce
   ! Copy message body
   if (header % command == MSG_COMMAND_DATA) then
 
+    !TODO Crop data tile, adjust data_size in record
+
     success = JAR_PUT_ITEM (state % server_bound_data, record)                                     .and. success  ! Data header
     success = JAR_PUT_ITEMS(state % server_bound_data, state % message_content(1:param_size_int8)) .and. success  ! All other metadata
     success = JAR_PUT_ITEMS(state % server_bound_data, f_data(:))                                  .and. success  ! The data

@@ -2,6 +2,7 @@ set -x
 ${BUILD_PATH}/tests/io_server_circular_buffer_single_thread                                     || exit -1
 ${BUILD_PATH}/tests/io_server_cb_unaligned_input                                                || exit -1
 ${BUILD_PATH}/tests/io_server_test_serializer                                                   || exit -1
+${BUILD_PATH}/tests/io_server_grid_meta                                                         || exit -1
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_circular_buffer                     || exit -1
 ${MPI_COMMAND} -n 4           ${BUILD_PATH}/tests/io_server_circular_buffer_fill                || exit -1
 ${MPI_COMMAND} -n 2           ${BUILD_PATH}/tests/io_server_circular_buffer_timeout             || exit -1

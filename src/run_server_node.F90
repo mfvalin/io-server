@@ -467,16 +467,6 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
       return
     end if
 
-    if (record % cmeta_size > 0) then
-      print '(A, A)', context % get_short_pe_name(), ' ERROR: Cannot handle compression metadata'
-      return
-    end if
-
-    if (record % meta_size > 0) then
-      print '(A, A)', context % get_short_pe_name(), ' ERROR: Cannot handle other metadata'
-      return
-    end if
-
     call state % allocate_command_buffer(record % command_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, record % command_size_int8, CB_KIND_INTEGER_8, .true.) .and. success ! Extract command from DCB
     success = stream_ptr % put_command(state % command_buffer(1:record % command_size_int8), header % message_tag)      .and. success ! Send command for later processing

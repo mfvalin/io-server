@@ -22,6 +22,7 @@
 module ioserver_message_module
   use ISO_C_BINDING
   use shmem_heap_module, only: MAX_ARRAY_RANK, HEAP_ELEMENT
+  use grid_meta_module
   use ioserver_constants_module
   use jar_module
   use rpn_extra_module
@@ -29,6 +30,8 @@ module ioserver_message_module
   private
 
   integer, parameter, public :: MAX_FILE_NAME_SIZE = 2048
+
+  public :: grid_bounds_t, grid_index_t
 
   type, public :: ioserver_messenger
     private
@@ -44,41 +47,19 @@ module ioserver_message_module
     procedure, pass :: get_file_tag
   end type ioserver_messenger
 
-  integer, parameter :: MAXPACK = 16
-  type, public :: cmeta                        ! information passed to compression software
-    real(kind=8)    :: errabs_r = 0.0
-    integer(kind=8) :: errabs_i = 0
-    real(kind=4)    :: errrel_r = 0.0
-    integer         :: errrel_i = 0
-    integer         :: nbits    = 0
-    integer, dimension(MAXPACK) :: pack_info
-  end type
-
-  type, public, bind(C) :: grid_t
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: size = 1 !< Number of elements in the grid in each possible dimension
-    integer(C_INT) :: id = -1
-    integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
-  end type grid_t
-
-  type, public, bind(C) :: subgrid_t
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: size   = 1  !< Number of elements of the subgrid in each possible dimension
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: offset = 1  !< Offset of the subgrid within the larger one in each possible dimension
-    ! integer(C_INT) :: elem_size = -1  !< Size of each grid element in bytes
-  end type subgrid_t
-
   ! Type used as a header when writing data to a stream from a model process
-  type, public, bind(C) :: data_record
-    integer(HEAP_ELEMENT) :: heap_offset    !< Offset of the data within its heap. Allows to retrieve it from another process
-    integer(C_INT64_T)    :: data_size_byte !< Size of the data packet itself, in bytes
-    integer(C_INT)        :: cmeta_size     !< Size of the compression metadata included, in # of 64-bit elements
-    integer(JAR_ELEMENT)  :: meta_size      !< Size of other metadata included, in number of 64-bit elements
+  type, public :: data_record
+    integer(HEAP_ELEMENT) :: heap_offset       !< Offset of the data within its heap. Allows to retrieve it from another process
+    integer(C_INT64_T)    :: data_size_byte    !< Size of the data packet itself, in bytes
     integer(C_INT64_T)    :: command_size_int8 !< Size of the command part of the message, in 64-bit elements
 
-    integer(C_INT) :: tag               !< Tag associated with this particular message (to be able to group with that of other model PEs)
-    integer(C_INT) :: stream            !< Stream to which the data is being sent
+    integer(C_INT) :: tag       !< Tag associated with this particular message (to be able to group with that of other model PEs)
+    integer(C_INT) :: stream    !< Stream to which the data is being sent
 
-    type(subgrid_t) :: subgrid_area
-    type(grid_t)    :: global_grid
+    type(grid_bounds_t) :: local_grid_with_halo !< Local grid bounds, in local coordinates, including the halo
+    type(grid_bounds_t) :: local_grid_global_id !< Local grid bounds, in global coordinates, excluding the halo
+    type(grid_bounds_t) :: global_grid          !< Entire dimension of the global grid, in global coordinates (duh)
+    type(grid_bounds_t) :: reduced_global_grid  !< Subset of the global grid in which we are interested, in global coord
 
     integer(C_INT) :: elem_size         !< Size of the grid elements in bytes
     integer(C_INT) :: output_grid_id    !< ID of the grid where the data is being sent
@@ -94,7 +75,7 @@ module ioserver_message_module
   integer(C_INT), parameter, public :: MSG_HEADER_TAG = 1010101 !< First entry of every message. Helps debugging
   integer(C_INT), parameter, public :: MSG_CAP_TAG    =  101010 !< (Second-to-)Last entry of every message. Helps debugging
   type, public, bind(C) :: message_header
-    integer(C_INT)     :: header_tag          = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
+    integer(C_INT)     :: header_tag     = MSG_HEADER_TAG !< Signals the start of a message. Gotta be the first item
     integer(C_INT)     :: command             = -1  !< What this message contains
     integer(C_INT64_T) :: content_size_int8   = -1  !< Message length (excluding this header), in number of 64-bit elements
     integer(C_INT)     :: stream_rank         = -1  !< Stream number in the (fixed) list of stream objects
@@ -105,14 +86,12 @@ module ioserver_message_module
   end type message_header
 
   type, public, bind(C) :: message_cap
-    integer(C_INT)     :: cap_tag    = MSG_CAP_TAG !< Signals the end of a message
-    integer(C_INT64_T) :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
+    integer(C_INT)      :: cap_tag    = MSG_CAP_TAG !< Signals the end of a message
+    integer(C_INT64_T)  :: msg_length = -1          !< Length of the message that just ended. Gotta match the length indicated in the message header
   end type message_cap
 
   integer(C_INT), parameter, public :: MSG_COMMAND_DATA          = 0 !< Indicate a message that contains grid data
   integer(C_INT), parameter, public :: MSG_COMMAND_DUMMY         = 1 !< Indicate a message without content or purpose
-  ! integer(C_INT), parameter, public :: MSG_COMMAND_OPEN_FILE     = 2 !< Indicate a message that wants to open a file
-  ! integer(C_INT), parameter, public :: MSG_COMMAND_CLOSE_FILE    = 3 !< Indicate a message that wants to close a file
   integer(C_INT), parameter, public :: MSG_COMMAND_MODEL_STOP    = 4 !< Indicate that the model that sends this message will no longer send anything
   integer(C_INT), parameter, public :: MSG_COMMAND_RELAY_STOP    = 5 !< Indicate that the relay that sends this message will no longer send anything
   integer(C_INT), parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
@@ -120,8 +99,8 @@ module ioserver_message_module
   integer(C_INT), parameter, public :: MSG_COMMAND_CLOSE_STREAM  = 8 !< Indicate a message that want to create a stream on the server
   integer(C_INT), parameter, public :: MSG_COMMAND_MODEL_STATS   = 9 !< Indicate a message that contains model statistics to transmit to the server
 
-  public :: message_header_size_int8, message_cap_size_int8, data_record_size_int8, command_record_size_int8, cmeta_size_int8
-  public :: message_header_size_byte, message_cap_size_byte, data_record_size_byte, command_record_size_byte, cmeta_size_byte
+  public :: message_header_size_int8, message_cap_size_int8, data_record_size_int8, command_record_size_int8
+  public :: message_header_size_byte, message_cap_size_byte, data_record_size_byte, command_record_size_byte
   public :: print_message_header, print_data_record, print_command_record
 
 contains
@@ -180,20 +159,6 @@ contains
     integer(C_INT64_T) :: command_record_size_int8
     command_record_size_int8 = num_char_to_num_int8(command_record_size_byte())
   end function command_record_size_int8
-
-  function cmeta_size_byte()
-    implicit none
-    integer(C_INT64_T) :: cmeta_size_byte !< Size of the cmeta type in bytes
-    type(cmeta) :: dummy_cmeta
-
-    cmeta_size_byte = storage_size(dummy_cmeta) / 8
-  end function cmeta_size_byte
-
-  function cmeta_size_int8()
-    implicit none
-    integer(C_INT64_T) :: cmeta_size_int8 !< How many 64-bit integers are needed to contain a cmeta
-    cmeta_size_int8 = num_char_to_num_int8(cmeta_size_byte())
-  end function cmeta_size_int8
 
   subroutine bump_tag(this, new_file)
     implicit none
