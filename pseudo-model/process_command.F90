@@ -163,8 +163,8 @@ function process_data(data_c, command, stream_id) result(success)
   logical :: success
 
   if (command % get_num_avail() <= 0) then
-    print *, 'ERROR: There is no command coming with the data!'
-    success = .false.
+    print *, 'WARNING: There is no command coming with the data!'
+    success = .true.
     return
   end if
 
