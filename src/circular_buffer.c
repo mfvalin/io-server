@@ -755,10 +755,6 @@ int CB_get(
   if (num_available < 0)
     return num_available;
 
-  // Update "max fill" metric
-  if (buffer->stats.max_fill < (uint64_t)num_available)
-    buffer->stats.max_fill = num_available;
-
   uint64_t       out   = buffer->m.out[CB_PARTIAL];
   const uint64_t limit = buffer->m.limit;
   data_element*  data  = buffer->data;
@@ -882,6 +878,10 @@ int CB_put(
 
   IO_timer_stop(&timer);
 
+  const uint64_t new_fill = limit - num_bytes_to_num_elem(num_available) + num_elements - 1;
+  if (new_fill > buffer->stats.max_fill) {
+    buffer->stats.max_fill = new_fill;
+  }
   buffer->stats.num_write_elems += num_elements;
   buffer->stats.num_writes++;
   buffer->stats.total_write_time_ms += IO_time_ms(&timer);
@@ -1092,7 +1092,7 @@ void CB_print_stats(
   readable_element_count(num_write_elems / total_write_time * 1000.0 * sizeof(data_element), write_per_sec_s);
   readable_element_count(num_read_elems  / total_read_time  * 1000.0 * sizeof(data_element), read_per_sec_s);
 
-  readable_element_count(stats->max_fill, max_fill_s);
+  readable_element_count(stats->max_fill * sizeof(data_element), max_fill_s);
   const int max_fill_percent = (int)(stats->max_fill * 100.0 / CB_get_capacity_bytes(buffer));
 
   const int frac_write_percent = num_writes > 0 ? (int)(stats->num_fractional_writes * 100.0 / num_writes) : 0;
