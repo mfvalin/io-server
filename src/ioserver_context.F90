@@ -398,7 +398,7 @@ subroutine set_debug_level(context, level)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer, intent(in) :: level
-  context % params % debug_level = min(max(level, 0), 2)
+  context % params % debug_level = max(level, 0)
 end subroutine set_debug_level
 
 !> NO OP loop to park processes with minimal CPU consumption
