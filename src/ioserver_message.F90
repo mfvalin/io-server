@@ -92,6 +92,7 @@ module ioserver_message_module
 
   integer(C_INT), parameter, public :: MSG_COMMAND_DATA          = 0 !< Indicate a message that contains grid data
   integer(C_INT), parameter, public :: MSG_COMMAND_DUMMY         = 1 !< Indicate a message without content or purpose
+  integer(C_INT), parameter, public :: MSG_COMMAND_USER          = 2 !< Will call a user-provided function on the server
   integer(C_INT), parameter, public :: MSG_COMMAND_MODEL_STOP    = 4 !< Indicate that the model that sends this message will no longer send anything
   integer(C_INT), parameter, public :: MSG_COMMAND_RELAY_STOP    = 5 !< Indicate that the relay that sends this message will no longer send anything
   integer(C_INT), parameter, public :: MSG_COMMAND_SERVER_CMD    = 6 !< Indicate a message that sends a command to the server to be processes there
@@ -137,7 +138,6 @@ contains
     implicit none
     integer(C_INT64_T) :: data_record_size_byte !< Size of the data_record type in bytes
     type(data_record) :: dummy_record
-
     data_record_size_byte = storage_size(dummy_record) / 8
   end function data_record_size_byte
 
@@ -213,8 +213,8 @@ contains
     select case (command)
     case (MSG_COMMAND_DATA)
       command_string = 'MSG_COMMAND_DATA'
-    ! case (MSG_COMMAND_CLOSE_FILE)
-    !   command_string = 'MSG_COMMAND_CLOSE_FILE'
+    case (MSG_COMMAND_USER)
+      command_string = 'MSG_COMMAND_USER'
     case (MSG_COMMAND_DUMMY)
       command_string = 'MSG_COMMAND_DUMMY'
     case (MSG_COMMAND_MODEL_STOP)

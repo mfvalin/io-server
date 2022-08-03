@@ -25,13 +25,14 @@ module run_server_node_module
   use ioserver_constants_module
   use ioserver_context_module
   use ioserver_message_module
+  use jar_module
   use rpn_extra_module
   use server_stream_module
   use statistics_module
   implicit none
   private
 
-  public :: run_server_node, server_function_template
+  public :: run_server_node, server_function_template, user_command_template
 
   type, private :: server_receiver_state
     private
@@ -63,23 +64,33 @@ module run_server_node_module
       type(ioserver_context), intent(inout) :: context !< IO server context with which the server process will operate
       logical :: server_success !< Whether the function terminated successfully
     end function server_function_template
+
+    subroutine user_command_template(context, command)
+      import ioserver_context, jar
+      implicit none
+      type(ioserver_context), intent(inout) :: context
+      type(jar),              intent(inout) :: command
+    end subroutine user_command_template
   end interface
+
+  procedure(user_command_template), pointer :: user_command_fn => null()
 
 contains
 
 function run_server_node(params, custom_channel_fn, custom_server_bound_fn, custom_model_bound_fn,    &
-  custom_stream_processor_fn, custom_no_op_fn, context_out) result(success)
+  custom_stream_processor_fn, custom_no_op_fn, custom_user_command_fn, context_out) result(success)
   implicit none
   type(ioserver_input_parameters), intent(in) :: params
-  procedure(server_function_template),  intent(in), pointer, optional :: custom_channel_fn
-  procedure(server_function_template),  intent(in), pointer, optional :: custom_server_bound_fn
-  procedure(server_function_template),  intent(in), pointer, optional :: custom_model_bound_fn
-  procedure(server_function_template),  intent(in), pointer, optional :: custom_stream_processor_fn
-  procedure(no_op_function_template),   intent(in), pointer, optional :: custom_no_op_fn
-  type(ioserver_context),               intent(out),         optional :: context_out
+  procedure(server_function_template),  intent(in),  pointer, optional :: custom_channel_fn
+  procedure(server_function_template),  intent(in),  pointer, optional :: custom_server_bound_fn
+  procedure(server_function_template),  intent(in),  pointer, optional :: custom_model_bound_fn
+  procedure(server_function_template),  intent(in),  pointer, optional :: custom_stream_processor_fn
+  procedure(no_op_function_template),   intent(in),  pointer, optional :: custom_no_op_fn
+  procedure(user_command_template),     intent(in),  pointer, optional :: custom_user_command_fn
+  type(ioserver_context),               intent(out), pointer, optional :: context_out
   logical :: success
   
-  type(ioserver_context) :: context
+  type(ioserver_context), target :: context
   procedure(server_function_template), pointer :: channel_fn
   procedure(server_function_template), pointer :: receiver_fn
   procedure(server_function_template), pointer :: producer_fn
@@ -95,6 +106,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   producer_fn         => default_model_bound
   stream_processor_fn => default_stream_processor
   no_op_fn            => default_no_op
+  user_command_fn     => default_user_command
 
   if (present(custom_channel_fn)) then
     if (associated(custom_channel_fn)) channel_fn => custom_channel_fn
@@ -110,6 +122,9 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   end if
   if (present(custom_no_op_fn)) then
     if (associated(custom_no_op_fn)) no_op_fn => custom_no_op_fn
+  end if
+  if (present(custom_user_command_fn)) then
+    if (associated(custom_user_command_fn)) user_command_fn => custom_user_command_fn
   end if
   !-------------------------------------
 
@@ -151,7 +166,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
 
   call context % finalize()
 
-  if (present(context_out)) context_out = context
+  if (present(context_out)) context_out => context
 end function run_server_node
 
 function default_server_bound(context) result(server_success)
@@ -380,6 +395,17 @@ function default_stream_processor(context) result(server_success)
   server_success = .not. early_stop
 end function default_stream_processor
 
+subroutine default_user_command(context, command)
+  implicit none
+  type(ioserver_context), intent(inout) :: context
+  type(jar),              intent(inout) :: command
+
+  print '(A, 1X, A, L2)',                 &
+      context % get_short_pe_name(),      &
+      'WARNING: You are sending custom user commands, but not processing them! Gotta give a "user command function" at initialization.',    &
+      command % is_valid()
+end subroutine default_user_command
+
 function receive_message(context, dcb, client_id, state) result(receive_success)
   implicit none
   type(ioserver_context),            intent(inout) :: context   !< IO server context in which we are operating
@@ -489,7 +515,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
-    if (context % get_debug_level() >= 2) print '(A, A, I4)', context % get_short_pe_name(), ' DEBUG: Got a SERVER_CMD message! From model ', header % sender_global_rank
+    if (context % get_debug_level() >= 2) print '(A, 1X, A, I5)', context % get_short_pe_name(), 'DEBUG: Got a SERVER_CMD message! From model ', header % sender_global_rank
     call state % allocate_command_buffer(header % content_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
@@ -499,6 +525,27 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
       call print_message_header(header)
       return
     end if
+
+  !--------------------
+  ! Custom user demand
+  else if (header % command == MSG_COMMAND_USER) then
+    block
+      type(jar) :: cmd
+
+      if (context % get_debug_level() >= 2) print '(A, 1X, A, I5)', context % get_short_pe_name(), 'DEBUG: Got a custom user command! From model ', header % sender_global_rank
+      call state % allocate_command_buffer(header % content_size_int8)
+      success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
+      success = cmd % shape_with(state % command_buffer, int(header % content_size_int8, kind=4)) .and. success
+      
+      if (.not. success) then
+        print '(A, 1X, A)', context % get_short_pe_name(), 'ERROR: Unable to retrieve + can the custom user command'
+        call print_message_header(header)
+        return
+      end if
+
+      call user_command_fn(context, cmd)
+      
+    end block
 
   !----------------
   ! Misc. message

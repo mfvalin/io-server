@@ -306,9 +306,11 @@ function check_and_process_single_message(context, state, model_id) result(proce
   success = model_buffer % get(header, message_header_size_byte(), CB_KIND_CHAR, .false.)
 
   ! Update lowest/highest message tags
+  if (header % message_tag >= 0) then
   state % lowest_tag  = min(state % lowest_tag, header % message_tag)
   state % highest_tag = max(state % highest_tag, header % message_tag)
   state % latest_tags(model_id) = header % message_tag
+  end if
 
   content_size = header % content_size_int8
 
@@ -356,7 +358,9 @@ function check_and_process_single_message(context, state, model_id) result(proce
     total_message_size_int8 = message_header_size_int8() + message_cap_size_int8()
 
   ! -- MSG_COMMAND_SERVER_CMD, MSG_COMMAND_MODEL_STATS
-  else if (header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_MODEL_STATS) then
+  else if (header % command == MSG_COMMAND_SERVER_CMD .or.        &
+           header % command == MSG_COMMAND_MODEL_STATS .or.       &
+           header % command == MSG_COMMAND_USER) then
     param_size_int8 = header % content_size_int8
 
     call state % allocate_message_buffer(param_size_int8)
@@ -431,7 +435,9 @@ function check_and_process_single_message(context, state, model_id) result(proce
       return
     end if
 
-  else if (header % command == MSG_COMMAND_SERVER_CMD .or. header % command == MSG_COMMAND_MODEL_STATS) then
+  else if (header % command == MSG_COMMAND_SERVER_CMD  .or.   &
+           header % command == MSG_COMMAND_MODEL_STATS .or.   &
+           header % command == MSG_COMMAND_USER) then
 
     success = JAR_PUT_ITEMS(state % server_bound_data, state % message_content(1:param_size_int8)) .and. success
 
