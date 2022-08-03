@@ -424,7 +424,7 @@ contains
     
     if (present(print_stats_header)) then
       if (print_stats_header) then
-        print '(5(A30, A))', DATA_COL, ' : ', WRITE_TIME_COL, ' : ', WAIT_TIME_COL, ' : ', FILL_COL, ' : ', HEAP_FILL_COL
+        print '(5(A31, A))', DATA_COL, ' : ', WRITE_TIME_COL, ' : ', WAIT_TIME_COL, ' : ', FILL_COL, ' : ', HEAP_FILL_COL
       end if
     end if
     
@@ -455,7 +455,7 @@ contains
     max_fill_min_h = min_v%c % max_heap_fill_byte * max_fill_multiplier_h
     max_fill_max_h = max_v%c % max_heap_fill_byte * max_fill_multiplier_h
 
-    print '(5(F6.1, A, A, F4.1, A, F6.1, A, F6.1, A))',                                                                       &
+    print '(5(F6.1, A, A, F5.1, A, F6.1, A, F6.1, A))',                                                                       &
           write_size, write_size_units, ' +-', write_size_dev, '(', write_size_min, '-', write_size_max, ') : ',              &
           write_time, write_time_units, ' +-', write_time_dev, '(', write_time_min, '-', write_time_max, ') : ',              &
           write_wait, write_wait_units, ' +-', write_wait_dev, '(', write_wait_min, '-', write_wait_max, ') : ',              &

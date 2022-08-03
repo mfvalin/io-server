@@ -89,12 +89,12 @@ typedef struct {
   int32_t num_elem_per_server_bound_instance; //!< How many #data_element can be stored in each server-bound instance
   int32_t num_elem_per_client_bound_instance; //!< How many #data_element can be stored in each server-bound instance
 
-  int32_t server_bound_win_offsets_index; 
-  int32_t client_bound_win_offsets_index;
-  int32_t server_bound_client_ranks_index;
-  int32_t client_bound_client_ranks_index;
-  int32_t channel_ranks_index;
-  int32_t signals_index;
+  int32_t server_bound_win_offsets_index;  //!< Where to find server-bound CB data offsets in the metadata
+  int32_t client_bound_win_offsets_index;  //!< Where to find client-bound CB data offsets in the metadata
+  int32_t server_bound_client_ranks_index; //!< Where to find server-bound client ranks in the metadata
+  int32_t client_bound_client_ranks_index; //!< Where to find client-bound client ranks in the metadata
+  int32_t channel_ranks_index;             //!< Where to find channel ranks in the metadata
+  int32_t signals_index;                   //!< Where to find signals in the metadata
 } control_header;
 
 typedef control_header* control_header_p;
@@ -130,7 +130,8 @@ typedef control_header* control_header_p;
  * 
  * A set of _channel_ processes also exist on the server as communication targets only (they don't do any actual work).
  * Each channel can be used to transmit server-bound and client-bound data by any client process. This enables a
- * larger bandwidth for remote data transfers.
+ * larger bandwidth for remote data transfers. Each client process is assigned a specific channel, through which it will
+ * send/retrieve its data.
  * To ensure that the data will be received as quickly as possible from the passive/target
  * side, each channel process is constantly polling for updates by synchronizing the window.
  * _The channel processes must be located on the same physical node as the server processes._
