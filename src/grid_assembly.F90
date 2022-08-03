@@ -157,7 +157,7 @@ contains
         ! print '(I2, A, I3)', mutex % get_id(), ' Creating line ', line_id
 
         ! Get some shared memory
-        grid_size       = record % reduced_global_grid % size % val
+        grid_size       = record % reduced_global_grid % get_size_val()
         grid_size(1)    = grid_size(1) * record % elem_size ! Use bytes in the first dimension (so multiply it by size of element)
         data_array_info = data_heap % allocate(data_array_byte, grid_size)
         if (.not. associated(data_array_byte)) then
@@ -240,11 +240,11 @@ contains
 
     ! Compute addressing sizes/indices. The first dimension is actually in bytes rather than elements, so we need to include
     ! a factor of 'elem_size' into that index
-    full_size_byte    = this % lines(line_id) % reduced_global_grid % size % val
+    full_size_byte    = this % lines(line_id) % reduced_global_grid % get_size_val()
     full_size_byte(1) = full_size_byte(1) * this % lines(line_id) % element_size
-    sub_size_byte     = record % local_grid_global_id % size % val
+    sub_size_byte     = record % local_grid_global_id % get_size_val()
     sub_size_byte(1)  = sub_size_byte(1) * record % elem_size
-    index_start       = record % local_grid_global_id % min_bound % val
+    index_start       = record % local_grid_global_id % get_min_val()
     index_start(1)    = (index_start(1) - 1) * record % elem_size + 1
     index_end         = index_start + sub_size_byte - 1
     

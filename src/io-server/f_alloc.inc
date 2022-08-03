@@ -36,50 +36,57 @@
 function allocate_I1_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 5D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
+  integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT8_T) :: pref
+  integer(C_INT8_T)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',5, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 5) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',5, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*1+16*I+5     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:5) = di(1:5)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*1 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 5) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:5)        = di(1:5)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I1_5D
 
 function ptr_to_blockmeta_I15D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -88,7 +95,7 @@ function ptr_to_blockmeta_I15D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -114,7 +121,7 @@ function blockmeta_to_ptr_I15D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -143,50 +150,57 @@ end function blockmeta_to_ptr_I15D
 function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 4D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
+  integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT8_T) :: pref
+  integer(C_INT8_T)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',4, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 4) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',4, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*1+16*I+4     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:4) = di(1:4)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*1 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 4) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:4)        = di(1:4)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I1_4D
 
 function ptr_to_blockmeta_I14D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -195,7 +209,7 @@ function ptr_to_blockmeta_I14D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -221,7 +235,7 @@ function blockmeta_to_ptr_I14D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -250,50 +264,57 @@ end function blockmeta_to_ptr_I14D
 function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 3D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
+  integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT8_T) :: pref
+  integer(C_INT8_T)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',3, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 3) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',3, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*1+16*I+3     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:3) = di(1:3)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*1 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 3) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:3)        = di(1:3)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I1_3D
 
 function ptr_to_blockmeta_I13D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -302,7 +323,7 @@ function ptr_to_blockmeta_I13D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -328,7 +349,7 @@ function blockmeta_to_ptr_I13D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -357,50 +378,57 @@ end function blockmeta_to_ptr_I13D
 function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 2D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
+  integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT8_T) :: pref
+  integer(C_INT8_T)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',2, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 2) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',2, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*1+16*I+2     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:2) = di(1:2)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*1 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 2) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:2)        = di(1:2)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I1_2D
 
 function ptr_to_blockmeta_I12D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -409,7 +437,7 @@ function ptr_to_blockmeta_I12D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -435,7 +463,7 @@ function blockmeta_to_ptr_I12D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -464,50 +492,57 @@ end function blockmeta_to_ptr_I12D
 function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*1 1D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT8_T), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
+  integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT8_T) :: pref
+  integer(C_INT8_T)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',1, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 1) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',1, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*1+16*I+1     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:1) = di(1:1)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*1 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 1) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:1)        = di(1:1)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I1_1D
 
 function ptr_to_blockmeta_I11D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -516,7 +551,7 @@ function ptr_to_blockmeta_I11D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -542,7 +577,7 @@ function blockmeta_to_ptr_I11D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -571,50 +606,57 @@ end function blockmeta_to_ptr_I11D
 function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 5D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
+  integer(C_SHORT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_SHORT) :: pref
+  integer(C_SHORT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',5, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 5) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',5, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*2+16*I+5     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:5) = di(1:5)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*2 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 5) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:5)        = di(1:5)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I2_5D
 
 function ptr_to_blockmeta_I25D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -623,7 +665,7 @@ function ptr_to_blockmeta_I25D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -649,7 +691,7 @@ function blockmeta_to_ptr_I25D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -678,50 +720,57 @@ end function blockmeta_to_ptr_I25D
 function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 4D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_SHORT), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
+  integer(C_SHORT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_SHORT) :: pref
+  integer(C_SHORT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',4, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 4) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',4, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*2+16*I+4     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:4) = di(1:4)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*2 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 4) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:4)        = di(1:4)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I2_4D
 
 function ptr_to_blockmeta_I24D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -730,7 +779,7 @@ function ptr_to_blockmeta_I24D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -756,7 +805,7 @@ function blockmeta_to_ptr_I24D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -785,50 +834,57 @@ end function blockmeta_to_ptr_I24D
 function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 3D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_SHORT), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
+  integer(C_SHORT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_SHORT) :: pref
+  integer(C_SHORT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',3, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 3) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',3, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*2+16*I+3     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:3) = di(1:3)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*2 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 3) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:3)        = di(1:3)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I2_3D
 
 function ptr_to_blockmeta_I23D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -837,7 +893,7 @@ function ptr_to_blockmeta_I23D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -863,7 +919,7 @@ function blockmeta_to_ptr_I23D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -892,50 +948,57 @@ end function blockmeta_to_ptr_I23D
 function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 2D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_SHORT), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
+  integer(C_SHORT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_SHORT) :: pref
+  integer(C_SHORT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',2, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 2) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',2, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*2+16*I+2     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:2) = di(1:2)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*2 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 2) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:2)        = di(1:2)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I2_2D
 
 function ptr_to_blockmeta_I22D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -944,7 +1007,7 @@ function ptr_to_blockmeta_I22D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -970,7 +1033,7 @@ function blockmeta_to_ptr_I22D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -999,50 +1062,57 @@ end function blockmeta_to_ptr_I22D
 function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*2 1D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_SHORT), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
+  integer(C_SHORT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_SHORT) :: pref
+  integer(C_SHORT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',1, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 1) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',1, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*2+16*I+1     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:1) = di(1:1)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*2 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 1) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:1)        = di(1:1)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I2_1D
 
 function ptr_to_blockmeta_I21D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1051,7 +1121,7 @@ function ptr_to_blockmeta_I21D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1077,7 +1147,7 @@ function blockmeta_to_ptr_I21D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1106,50 +1176,57 @@ end function blockmeta_to_ptr_I21D
 function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 5D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
+  integer(C_INT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT) :: pref
+  integer(C_INT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',5, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 5) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',5, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*I+5     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:5) = di(1:5)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 5) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:5)        = di(1:5)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I4_5D
 
 function ptr_to_blockmeta_I45D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1158,7 +1235,7 @@ function ptr_to_blockmeta_I45D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1184,7 +1261,7 @@ function blockmeta_to_ptr_I45D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1213,50 +1290,57 @@ end function blockmeta_to_ptr_I45D
 function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 4D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
+  integer(C_INT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT) :: pref
+  integer(C_INT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',4, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 4) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',4, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*I+4     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:4) = di(1:4)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 4) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:4)        = di(1:4)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I4_4D
 
 function ptr_to_blockmeta_I44D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1265,7 +1349,7 @@ function ptr_to_blockmeta_I44D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1291,7 +1375,7 @@ function blockmeta_to_ptr_I44D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1320,50 +1404,57 @@ end function blockmeta_to_ptr_I44D
 function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 3D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
+  integer(C_INT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT) :: pref
+  integer(C_INT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',3, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 3) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',3, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*I+3     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:3) = di(1:3)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 3) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:3)        = di(1:3)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I4_3D
 
 function ptr_to_blockmeta_I43D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1372,7 +1463,7 @@ function ptr_to_blockmeta_I43D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1398,7 +1489,7 @@ function blockmeta_to_ptr_I43D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1427,50 +1518,57 @@ end function blockmeta_to_ptr_I43D
 function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 2D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
+  integer(C_INT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT) :: pref
+  integer(C_INT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',2, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 2) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',2, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*I+2     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:2) = di(1:2)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 2) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:2)        = di(1:2)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I4_2D
 
 function ptr_to_blockmeta_I42D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1479,7 +1577,7 @@ function ptr_to_blockmeta_I42D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1505,7 +1603,7 @@ function blockmeta_to_ptr_I42D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1534,50 +1632,57 @@ end function blockmeta_to_ptr_I42D
 function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*4 1D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_INT), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
+  integer(C_INT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_INT) :: pref
+  integer(C_INT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',1, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 1) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',1, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*I+1     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:1) = di(1:1)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 1) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:1)        = di(1:1)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I4_1D
 
 function ptr_to_blockmeta_I41D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1586,7 +1691,7 @@ function ptr_to_blockmeta_I41D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1612,7 +1717,7 @@ function blockmeta_to_ptr_I41D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1641,50 +1746,57 @@ end function blockmeta_to_ptr_I41D
 function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 5D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to integer array
+  integer(C_LONG_LONG), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_LONG_LONG) :: pref
+  integer(C_LONG_LONG)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',5, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 5) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',5, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*I+5     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:5) = di(1:5)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 5) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:5)        = di(1:5)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I8_5D
 
 function ptr_to_blockmeta_I85D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1693,7 +1805,7 @@ function ptr_to_blockmeta_I85D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1719,7 +1831,7 @@ function blockmeta_to_ptr_I85D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1748,50 +1860,57 @@ end function blockmeta_to_ptr_I85D
 function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 4D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to integer array
+  integer(C_LONG_LONG), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_LONG_LONG) :: pref
+  integer(C_LONG_LONG)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',4, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 4) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',4, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*I+4     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:4) = di(1:4)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 4) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:4)        = di(1:4)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I8_4D
 
 function ptr_to_blockmeta_I84D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1800,7 +1919,7 @@ function ptr_to_blockmeta_I84D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1826,7 +1945,7 @@ function blockmeta_to_ptr_I84D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1855,50 +1974,57 @@ end function blockmeta_to_ptr_I84D
 function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 3D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to integer array
+  integer(C_LONG_LONG), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_LONG_LONG) :: pref
+  integer(C_LONG_LONG)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',3, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 3) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',3, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*I+3     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:3) = di(1:3)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 3) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:3)        = di(1:3)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I8_3D
 
 function ptr_to_blockmeta_I83D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -1907,7 +2033,7 @@ function ptr_to_blockmeta_I83D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -1933,7 +2059,7 @@ function blockmeta_to_ptr_I83D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -1962,50 +2088,57 @@ end function blockmeta_to_ptr_I83D
 function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 2D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_LONG_LONG), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to integer array
+  integer(C_LONG_LONG), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_LONG_LONG) :: pref
+  integer(C_LONG_LONG)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',2, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 2) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',2, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*I+2     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:2) = di(1:2)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 2) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:2)        = di(1:2)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I8_2D
 
 function ptr_to_blockmeta_I82D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2014,7 +2147,7 @@ function ptr_to_blockmeta_I82D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -2040,7 +2173,7 @@ function blockmeta_to_ptr_I82D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2069,50 +2202,57 @@ end function blockmeta_to_ptr_I82D
 function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! integer*8 1D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  integer(C_LONG_LONG), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to integer array
+  integer(C_LONG_LONG), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  integer(C_LONG_LONG) :: pref
+  integer(C_LONG_LONG)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',1, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 1) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',1, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*I+1     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:1) = di(1:1)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 1) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:1)        = di(1:1)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_I8_1D
 
 function ptr_to_blockmeta_I81D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2121,7 +2261,7 @@ function ptr_to_blockmeta_I81D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, ix
 
   status = -1
@@ -2147,7 +2287,7 @@ function blockmeta_to_ptr_I81D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: I = TKR_INTEGER
+  integer, parameter  :: I = TKR_INTEGER
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2176,50 +2316,57 @@ end function blockmeta_to_ptr_I81D
 function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 5D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to real array
+  real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_FLOAT) :: pref
+  real(C_FLOAT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',5, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 5) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',5, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*R+5     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:5) = di(1:5)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 5) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:5)        = di(1:5)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R4_5D
 
 function ptr_to_blockmeta_R45D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2228,7 +2375,7 @@ function ptr_to_blockmeta_R45D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2254,7 +2401,7 @@ function blockmeta_to_ptr_R45D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2283,50 +2430,57 @@ end function blockmeta_to_ptr_R45D
 function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 4D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to real array
+  real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_FLOAT) :: pref
+  real(C_FLOAT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',4, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 4) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',4, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*R+4     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:4) = di(1:4)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 4) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:4)        = di(1:4)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R4_4D
 
 function ptr_to_blockmeta_R44D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2335,7 +2489,7 @@ function ptr_to_blockmeta_R44D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2361,7 +2515,7 @@ function blockmeta_to_ptr_R44D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2390,50 +2544,57 @@ end function blockmeta_to_ptr_R44D
 function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 3D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to real array
+  real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_FLOAT) :: pref
+  real(C_FLOAT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',3, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 3) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',3, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*R+3     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:3) = di(1:3)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 3) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:3)        = di(1:3)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R4_3D
 
 function ptr_to_blockmeta_R43D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2442,7 +2603,7 @@ function ptr_to_blockmeta_R43D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2468,7 +2629,7 @@ function blockmeta_to_ptr_R43D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2497,50 +2658,57 @@ end function blockmeta_to_ptr_R43D
 function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 2D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to real array
+  real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_FLOAT) :: pref
+  real(C_FLOAT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',2, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 2) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',2, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*R+2     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:2) = di(1:2)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 2) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:2)        = di(1:2)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R4_2D
 
 function ptr_to_blockmeta_R42D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2549,7 +2717,7 @@ function ptr_to_blockmeta_R42D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2575,7 +2743,7 @@ function blockmeta_to_ptr_R42D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2604,50 +2772,57 @@ end function blockmeta_to_ptr_R42D
 function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*4 1D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_FLOAT), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to real array
+  real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_FLOAT) :: pref
+  real(C_FLOAT)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',1, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 1) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',1, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*4+16*R+1     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:1) = di(1:1)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*4 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 1) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:1)        = di(1:1)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R4_1D
 
 function ptr_to_blockmeta_R41D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2656,7 +2831,7 @@ function ptr_to_blockmeta_R41D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2682,7 +2857,7 @@ function blockmeta_to_ptr_R41D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2711,50 +2886,57 @@ end function blockmeta_to_ptr_R41D
 function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 5D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: array_ptr !< 5 dimensional pointer to real array
+  real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_DOUBLE) :: pref
+  real(C_DOUBLE)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 5) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',5, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 5) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',5, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*R+5     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:5) = di(1:5)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 5) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:5)        = di(1:5)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R8_5D
 
 function ptr_to_blockmeta_R85D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2763,7 +2945,7 @@ function ptr_to_blockmeta_R85D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2789,7 +2971,7 @@ function blockmeta_to_ptr_R85D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2818,50 +3000,57 @@ end function blockmeta_to_ptr_R85D
 function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 4D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: array_ptr !< 4 dimensional pointer to real array
+  real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_DOUBLE) :: pref
+  real(C_DOUBLE)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 4) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',4, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 4) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',4, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*R+4     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:4) = di(1:4)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 4) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:4)        = di(1:4)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R8_4D
 
 function ptr_to_blockmeta_R84D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2870,7 +3059,7 @@ function ptr_to_blockmeta_R84D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -2896,7 +3085,7 @@ function blockmeta_to_ptr_R84D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -2925,50 +3114,57 @@ end function blockmeta_to_ptr_R84D
 function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 3D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: array_ptr !< 3 dimensional pointer to real array
+  real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_DOUBLE) :: pref
+  real(C_DOUBLE)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 3) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',3, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 3) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',3, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*R+3     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:3) = di(1:3)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 3) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:3)        = di(1:3)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R8_3D
 
 function ptr_to_blockmeta_R83D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -2977,7 +3173,7 @@ function ptr_to_blockmeta_R83D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -3003,7 +3199,7 @@ function blockmeta_to_ptr_R83D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -3032,50 +3228,57 @@ end function blockmeta_to_ptr_R83D
 function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 2D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: array_ptr !< 2 dimensional pointer to real array
+  real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_DOUBLE) :: pref
+  real(C_DOUBLE)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 2) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',2, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 2) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',2, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*R+2     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:2) = di(1:2)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 2) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:2)        = di(1:2)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R8_2D
 
 function ptr_to_blockmeta_R82D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -3084,7 +3287,7 @@ function ptr_to_blockmeta_R82D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -3110,7 +3313,7 @@ function blockmeta_to_ptr_R82D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1
@@ -3139,50 +3342,57 @@ end function blockmeta_to_ptr_R82D
 function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(bmi) ! real*8 1D array allocator
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
-  real(C_DOUBLE), dimension(:), intent(OUT), pointer :: array_ptr !< 1 dimensional pointer to real array
+  real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr (size(di) must be the same as rank of array_ptr)
   logical, intent(in), optional     :: use_safe_alloc
   type(block_meta)                  :: bmi !< metadata for allocated block
-  real(C_DOUBLE) :: pref
+  real(C_DOUBLE)      :: pref
   type(block_meta_c)  :: bmc
   type(C_PTR)         :: cptr
   integer(C_SIZE_T)   :: asz
   integer             :: tkr, status, bsz
   integer(C_INT)      :: safe_alloc_flag
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
   bmi = block_meta( block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
 
-  if(size(di) .ne. 1) then       ! array rank, di dimension mismatch ?
-
-    print *,'bad rank request, expecting',1, ', got',size(di)
-
-  else                              ! NO, allocate array (size is in BYTES)
-
-    bsz = C_SIZEOF(bmc)                      ! size of C metadata
-    asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
-
-    ! Determine value of "safe allocation" flag to use
-    safe_alloc_flag = 0
-    if (present(use_safe_alloc)) then
-      if (use_safe_alloc) safe_alloc_flag = 1
+  if(size(di) .gt. 1) then       ! array rank, di dimension mismatch ?
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      print *,'bad rank request, expecting',1, ', got',size(di)
+      return
     end if
+  end if
 
-    cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
-    if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+  ! NO, allocate array (size is in BYTES)
 
-    call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  bsz = C_SIZEOF(bmc)                      ! size of C metadata
+  asz = PRODUCT(di)*C_SIZEOF(pref) + bsz   ! size of data + size of C metadata
 
-    tkr          = 256*8+16*R+1     ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-    bmi%a%tkr    = tkr              ! build C interoperable metadata
-    bmi%a%d      = 1                ! set all 5 dimensions to 1
-    bmi%a%d(1:1) = di(1:1)          ! set relevant dimensions to correct value
-    bmi%a%offset = ShmemHeap_offset_from_pointer(this % p, cptr)           ! minus reference address  (offset in number of heap elements)
-    bmi%p        = cptr                         ! actual address of array
-    status = ShmemHeap_set_block_meta(this % p, cptr, bmi%a, bsz)      ! insert metadata into data block
+  ! Determine value of "safe allocation" flag to use
+  safe_alloc_flag = 0
+  if (present(use_safe_alloc)) then
+    if (use_safe_alloc) safe_alloc_flag = 1
+  end if
 
-  endif
+  cptr = ShmemHeap_alloc_block(this % p, asz, safe_alloc_flag) ! allocate block in heap
+  if(.not. C_ASSOCIATED(cptr) ) return        ! allocation failed
+
+  call C_F_POINTER(cptr, array_ptr, [di]) ! make Fortran array pointer from C pointer
+
+  tkr              = 256*8 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  bmi % a % tkr    = tkr              ! build C interoperable metadata
+  bmi % a % d(:)   = 1                ! set all 5 dimensions to 1
+  ! set relevant dimensions to correct value
+  if (size(di) < 1) then
+    bmi % a % d(1:size(di)) = di(1:size(di))
+  else
+    bmi % a % d(1:1)        = di(1:1)
+  end if
+
+  bmi % a % offset = ShmemHeap_offset_from_pointer(this % p, cptr)     ! minus reference address  (offset in number of heap elements)
+  bmi % p          = cptr                                              ! actual address of array
+  status = ShmemHeap_set_block_meta(this % p, cptr, bmi % a, bsz)      ! insert metadata into data block
 end function allocate_R8_1D
 
 function ptr_to_blockmeta_R81D(p, bm) result(status)  ! fortran pointer to metadata translation
@@ -3191,7 +3401,7 @@ function ptr_to_blockmeta_R81D(p, bm) result(status)  ! fortran pointer to metad
   type(block_meta), intent(OUT) :: bm
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, ix
 
   status = -1
@@ -3217,7 +3427,7 @@ function blockmeta_to_ptr_R81D(p, bm, strict) result(status)  ! metadata to poin
   logical, intent(IN), value :: strict
   integer :: status
 
-  integer, parameter :: R = TKR_REAL
+  integer, parameter  :: R = TKR_REAL
   integer :: tkr, tp, kd, rk
 
   status = -1

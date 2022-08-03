@@ -214,19 +214,19 @@ contains
     num_compute_x = compute_width
     num_compute_y = compute_height
 
-    success = local_grid % set(       &
+    call local_grid % set(            &
         min_bound = grid_index_t(mod(global_model_id, compute_width) * block_width + 1, (global_model_id / compute_width) * block_height + 1),    &
         size      = grid_index_t(block_width, block_height))
 
-    success = global_grid % set(      &
+    call global_grid % set(           &
         min_bound = grid_index_t(),   &
         size      = grid_index_t(block_width * compute_width, block_height * compute_height))
 
-    success = big_local_grid % set(   &
+    call big_local_grid % set(        &
         min_bound = grid_index_t(mod(global_model_id, compute_width) * dim_x + 1, (global_model_id / compute_width) * dim_y + 1),     &
         size      = grid_index_t(dim_x, dim_y, dim_z, num_vars, num_time_steps))
 
-    success = big_global_grid % set(  &
+    call big_global_grid % set(       &
         min_bound = grid_index_t(),   &
         size      = grid_index_t(dim_x * compute_width, dim_y * compute_height, dim_z, num_vars, num_time_steps))
 
@@ -277,7 +277,7 @@ contains
         success = JAR_PUT_ITEM(command_jar, c_header)
 
         ! Grid metadata (for model processing)
-        m_grid % dims      = global_grid % size % val
+        m_grid % dims      = global_grid % get_size_val()
         m_grid % elem_size = data_array_info_1 % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
@@ -329,7 +329,7 @@ contains
         success = JAR_PUT_ITEM(command_jar, c_header)
 
         ! Grid metadata (for model processing)
-        m_grid % dims      = global_grid % size % val
+        m_grid % dims      = global_grid % get_size_val()
         m_grid % elem_size = data_array_info_2 % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
@@ -342,7 +342,7 @@ contains
         success = JAR_PUT_ITEM(command_jar, c_header) .and. success
 
         ! Grid metadata (for model processing)
-        m_grid % dims      = big_global_grid % size % val
+        m_grid % dims      = big_global_grid % get_size_val()
         m_grid % elem_size = big_array_info % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
@@ -493,10 +493,10 @@ program pseudomodelandserver
   integer :: num_relay_per_node, num_noop
 
   type(ioserver_input_parameters) :: params
-  type(ioserver_context) :: context
+  type(ioserver_context), pointer :: context
   procedure(model_function_template), pointer :: model_fn_ptr
   logical :: success
-
+  integer :: num_model_pes
   integer :: ierr
 
   success = .false.
@@ -556,6 +556,7 @@ program pseudomodelandserver
 
   if (params % is_on_server) then
     success = ioserver_run_server_node(params, context_out = context)
+    num_model_pes = context % get_num_total_model()
   else
     success = ioserver_run_model_node(params, model_function = model_fn_ptr)
   end if
@@ -568,25 +569,18 @@ program pseudomodelandserver
   call MPI_Finalize(ierr)
 
   if (server_node .and. node_rank == 0) then
-    block
-      integer :: num_model_pes
-
-      num_model_pes = context % get_num_total_model()
-
-      ! Init area info
-      if (mod(num_model_pes, 4) == 0) then
-        num_compute_x = num_model_pes / 4
-        num_compute_y = 4
-      else if (mod(num_model_pes, 2) == 0) then
-        num_compute_x = num_model_pes / 2
-        num_compute_y = 2
-      else
-        num_compute_x = num_model_pes
-        num_compute_y = 1
-      end if
-
-      call check_result()
-    end block
+    ! Init area info
+    if (mod(num_model_pes, 4) == 0) then
+      num_compute_x = num_model_pes / 4
+      num_compute_y = 4
+    else if (mod(num_model_pes, 2) == 0) then
+      num_compute_x = num_model_pes / 2
+      num_compute_y = 2
+    else
+      num_compute_x = num_model_pes
+      num_compute_y = 1
+    end if
+    call check_result()
   end if
 
 end program

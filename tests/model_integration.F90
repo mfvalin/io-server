@@ -134,8 +134,8 @@ program model_integration
 
       data_heap = context % get_local_heap()
 
-      success = local_grid % set(min_bound = grid_index_t(model_crs % rank + 1), size = grid_index_t(1))
-      success = global_grid % set(min_bound = grid_index_t(1), size = grid_index_t(model_crs % size))
+      call local_grid % set(min_bound = grid_index_t(model_crs % rank + 1), size = grid_index_t(1))
+      call global_grid % set(min_bound = grid_index_t(1), size = grid_index_t(model_crs % size))
 
       ! input_grid % elem_size = 8
 
@@ -158,7 +158,7 @@ program model_integration
       success = JAR_PUT_ITEM(command, header)
 
       ! Grid metadata
-      m_grid % dims      = global_grid % size % val
+      m_grid % dims      = global_grid % get_size_val()
       m_grid % elem_size = array_info % get_kind()
       success = JAR_PUT_ITEM(command, m_grid) .and. success
 

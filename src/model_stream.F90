@@ -21,10 +21,10 @@
 
 module model_stream_module
   use circular_buffer_module
-  use shmem_heap_module
   use ioserver_message_module
   use jar_module
   use rpn_extra_module
+  use shmem_heap_module
   implicit none
 
   private
@@ -333,24 +333,20 @@ contains
     if(this % stream_id <= 0) return
 
     ! Perform a short series of checks on the inputs
-    ! block
-    !   ! Check that dimensions in area are consistent with metadata
-    !   if (.not. all(my_data % get_dimensions() == subgrid_area % size)) then
-    !     print '(A, 5I4, 1X, 5I4)', 'ERROR: Trying to send data array that does not match subgrid dimensions', my_data % get_dimensions(), subgrid_area % size
-    !     return
-    !   end if
+    if (.not. (reduced_global_grid_bounds % is_valid() .and.    &
+               local_grid_bounds_with_halo % is_valid() .and.   &
+               local_grid_global_bounds % is_valid() .and.      &
+               global_grid_bounds % is_valid())) then
+      print '(A)', 'ERROR: Invalid grid size specified when sending data'
+      print '(L2, L2, L2, L2)', reduced_global_grid_bounds % is_valid(), local_grid_bounds_with_halo % is_valid(), local_grid_global_bounds % is_valid(), global_grid_bounds % is_valid()
+      return
+    end if
 
-    !   ! Check that the given offset of the subgrid can fit within the global grid
-    !   if (any(subgrid_area % offset < 1) .or. any(subgrid_area % offset > global_grid % size)) then
-    !     print '(A, 5I4)', 'ERROR: Subgrid offset is invalid!', subgrid_area % offset
-    !     return
-    !   end if
-    ! end block
-
-    ! Check that given element size is the same as in the global grid
-    ! if (my_data % get_kind() .ne. global_grid % elem_size) then
-    !   print '(A, 1X, I2, 1X, I2)', 'WARNING: Element size mentioned in global grid does not match data type', global_grid % elem_size, my_data % get_kind()
-    ! end if
+    if (any(reduced_global_grid_bounds % get_min_val() < global_grid_bounds % get_min_val()) .or.   &
+        any(reduced_global_grid_bounds % get_max_val() > global_grid_bounds % get_max_val())) then
+      print '(A)', 'ERROR: Reduced grid does NOT fit into global grid'
+      return
+    end if
 
     call this % messenger % bump_tag()
 
@@ -371,15 +367,21 @@ contains
     rec % stream         = this % stream_id
 
     rec % local_grid_with_halo        = local_grid_bounds_with_halo
-    rec % local_grid_global_id        = local_grid_global_bounds
+    rec % local_grid_global_id        = local_grid_global_bounds % intersection(reduced_global_grid_bounds)
     rec % global_grid                 = global_grid_bounds
     rec % reduced_global_grid         = reduced_global_grid_bounds
 
     rec % elem_size      = my_data % get_kind()
     rec % heap_offset    = my_data % get_offset()
     rec % data_size_byte = rec % local_grid_with_halo % compute_num_elements() * rec % elem_size
-
+    
     ! call print_data_record(rec)
+
+    ! Don't send anything if the entire tile will be cropped
+    if (.not. rec % local_grid_global_id % is_valid()) then
+      success = .true.
+      return
+    end if
 
     ! Prepare header for the entire message
     header % content_size_int8  = data_record_size_int8() + command_record_size_int8() + command_meta % size_int8

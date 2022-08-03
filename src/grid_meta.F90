@@ -27,7 +27,7 @@ module grid_meta_module
 
   !> How many grid dimensions we can manage.
   !> Must *not* be higher than #MAX_ARRAY_RANK in shmem_heap
-  integer, parameter :: IOSERVER_MAX_NUM_GRID_DIM = 5
+  integer, parameter, public :: IOSERVER_MAX_NUM_GRID_DIM = 5
 
   !> \brief Derived type that contains an index into a grid with up to 5
   !> (#IOSERVER_MAX_NUM_GRID_DIM) dimensions.
@@ -38,24 +38,39 @@ module grid_meta_module
     contains
     procedure, pass :: assign_array4
     procedure, pass :: assign_array8
-    generic :: assignment(=) => assign_array4, assign_array8
+    generic :: assignment(=)  => assign_array4, assign_array8
+    procedure, pass :: min    => grid_index_min
+    procedure, pass :: max    => grid_index_max
   end type grid_index_t
 
   !> \brief Derived type that describes a grid with its lower and upper
   !> bounds
   type, public :: grid_bounds_t
+    private
     type(grid_index_t) :: min_bound !< Minimum coordinate of the grid, in all its dimensions
     type(grid_index_t) :: max_bound !< Maximum coordinate of the grid, in all its dimensions
     type(grid_index_t) :: size      !< Size of the grid in all its dimensions
   contains
     procedure, pass :: compute_num_elements
 
-    procedure, pass :: get_min  => grid_bounds_get_min
-    procedure, pass :: get_max  => grid_bounds_get_max
-    procedure, pass :: get_size => grid_bounds_get_size
+    generic :: get_min  => grid_bounds_get_min, grid_bounds_get_min_1d
+    generic :: get_max  => grid_bounds_get_max, grid_bounds_get_max_1d
+    generic :: get_size => grid_bounds_get_size, grid_bounds_get_size_1d
+    procedure, pass :: grid_bounds_get_min, grid_bounds_get_min_1d
+    procedure, pass :: grid_bounds_get_max, grid_bounds_get_max_1d
+    procedure, pass :: grid_bounds_get_size, grid_bounds_get_size_1d
+    procedure, pass :: get_min_val  => grid_bounds_get_min_val
+    procedure, pass :: get_max_val  => grid_bounds_get_max_val
+    procedure, pass :: get_size_val => grid_bounds_get_size_val
     procedure, pass :: set      => grid_bounds_set
 
-    procedure, pass :: print    => grid_bounds_print
+    procedure, pass :: get_min_as_bytes
+    procedure, pass :: get_max_as_bytes
+    procedure, pass :: get_size_as_bytes
+
+    procedure, pass :: print        => grid_bounds_print
+    procedure, pass :: is_valid     => grid_bounds_is_valid
+    procedure, pass :: intersection => grid_bounds_intersection
   end type grid_bounds_t
 
   interface grid_index_t
@@ -147,12 +162,36 @@ contains
     print '(A, 5I7)', 'grid index', id % val
   end subroutine
 
+  function grid_index_min(lhs, rhs) result(min_index)
+    implicit none
+    class(grid_index_t), intent(in) :: lhs
+    type(grid_index_t),  intent(in) :: rhs
+    type(grid_index_t) :: min_index
+    min_index = grid_index_t(merge(lhs % val, rhs % val, lhs % val <= rhs % val))
+  end function grid_index_min
+
+  function grid_index_max(lhs, rhs) result(min_index)
+    implicit none
+    class(grid_index_t), intent(in) :: lhs
+    type(grid_index_t),  intent(in) :: rhs
+    type(grid_index_t) :: min_index
+    min_index = grid_index_t(merge(lhs % val, rhs % val, lhs % val >= rhs % val))
+  end function grid_index_max
+
   function grid_bounds_get_min(grid_bounds) result(min_bound)
     implicit none
     class(grid_bounds_t), intent(in) :: grid_bounds
     type(grid_index_t) :: min_bound
     min_bound = grid_bounds % min_bound
   end function grid_bounds_get_min
+
+  function grid_bounds_get_min_1d(grid_bounds, dim) result(min_bound)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer, intent(in) :: dim
+    integer(C_INT64_T) :: min_bound
+    min_bound = grid_bounds % min_bound % val(dim)
+  end function grid_bounds_get_min_1d
 
   function grid_bounds_get_max(grid_bounds) result(max_bound)
     implicit none
@@ -161,6 +200,14 @@ contains
     max_bound = grid_bounds % max_bound
   end function grid_bounds_get_max
 
+  function grid_bounds_get_max_1d(grid_bounds, dim) result(max_bound)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer, intent(in) :: dim
+    integer(C_INT64_T) :: max_bound
+    max_bound = grid_bounds % max_bound % val(dim)
+  end function grid_bounds_get_max_1d
+
   function grid_bounds_get_size(grid_bounds) result(grid_size)
     implicit none
     class(grid_bounds_t), intent(in) :: grid_bounds
@@ -168,17 +215,45 @@ contains
     grid_size = grid_bounds % size
   end function grid_bounds_get_size
 
-  function grid_bounds_set(this, min_bound, max_bound, size) result(success)
+  function grid_bounds_get_size_1d(grid_bounds, dim) result(grid_size)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer, intent(in) :: dim
+    integer(C_INT64_T) :: grid_size
+    grid_size = grid_bounds % size % val(dim)
+  end function grid_bounds_get_size_1d
+
+  function grid_bounds_get_min_val(grid_bounds) result(min_bound)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: min_bound
+    min_bound = grid_bounds % min_bound % val
+  end function grid_bounds_get_min_val
+
+  function grid_bounds_get_max_val(grid_bounds) result(max_bound)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: max_bound
+    max_bound = grid_bounds % max_bound % val
+  end function grid_bounds_get_max_val
+
+  function grid_bounds_get_size_val(grid_bounds) result(grid_size)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: grid_size
+    grid_size = grid_bounds % size % val
+  end function grid_bounds_get_size_val
+
+  subroutine grid_bounds_set(this, min_bound, max_bound, size)
     implicit none
     class(grid_bounds_t), intent(inout) :: this             !< The grid_bounds_t instance we want to specify
     type(grid_index_t), intent(in), optional :: min_bound
     type(grid_index_t), intent(in), optional :: max_bound
     type(grid_index_t), intent(in), optional :: size
-    logical :: success
 
     integer :: num_inputs
 
-    success = .false.
+    this % size % val(:) = 0
 
     num_inputs = 0
     if (present(min_bound)) num_inputs = num_inputs + 1
@@ -197,13 +272,8 @@ contains
     if (.not. present(max_bound)) this % max_bound = this % min_bound % val(:) + this % size % val(:) - 1
     if (.not. present(size))      this % size      = this % max_bound % val(:) - this % min_bound % val(:) + 1
 
-    if (any(this % size % val < 1)) then
-      print '(A, 10I8)', 'WARNING: Grid does not make sense, size = ', this % size % val
-      return 
-    end if
-
-    success = .true.
-  end function grid_bounds_set
+    if (.not. this % is_valid()) this % size % val(:) = 0
+  end subroutine grid_bounds_set
 
   function compute_num_elements(grid_bounds) result(num_elements)
     implicit none
@@ -213,15 +283,61 @@ contains
     num_elements = product(grid_bounds % size % val)
   end function compute_num_elements
 
+  function get_min_as_bytes(grid_bounds, elem_size) result(min_bytes)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer,              intent(in) :: elem_size
+    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: min_bytes
+
+    min_bytes = grid_bounds % min_bound % val
+    min_bytes(1) = (min_bytes(1) - 1) * elem_size + 1
+  end function get_min_as_bytes
+
+  function get_max_as_bytes(grid_bounds, elem_size) result(max_bytes)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer,              intent(in) :: elem_size
+    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: max_bytes
+
+    max_bytes    = grid_bounds % max_bound % val
+    max_bytes(1) = max_bytes(1) * elem_size
+  end function get_max_as_bytes
+
+  function get_size_as_bytes(grid_bounds, elem_size) result(grid_size_bytes)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    integer, intent(in) :: elem_size
+    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: grid_size_bytes
+
+    grid_size_bytes    = grid_bounds % size % val
+    grid_size_bytes(1) = grid_size_bytes(1) * elem_size
+  end function get_size_as_bytes
+
   subroutine grid_bounds_print(grid_bounds)
     implicit none
     class(grid_bounds_t), intent(in) :: grid_bounds
-    print '(3(A, 5I6, /), A, I9)',                          &
+    print '(3(A, 5I6, /), A, I12)',                         &
         'min_bound ', grid_bounds % min_bound % val,        &
         'max_bound ', grid_bounds % max_bound % val,        &
         'size      ', grid_bounds % size % val,             &
         'num elem  ', grid_bounds % compute_num_elements()
-
   end subroutine grid_bounds_print
+
+  function grid_bounds_is_valid(grid_bounds) result(is_valid)
+    implicit none
+    class(grid_bounds_t), intent(in) :: grid_bounds
+    logical :: is_valid
+    is_valid = all(grid_bounds % size % val >= 1)
+  end function grid_bounds_is_valid
+
+  function grid_bounds_intersection(lhs, rhs) result(intersection)
+    implicit none
+    class(grid_bounds_t), intent(in) :: lhs
+    type(grid_bounds_t),  intent(in) :: rhs
+    type(grid_bounds_t) :: intersection
+
+    call intersection % set(min_bound = lhs % min_bound % max(rhs % min_bound),   &
+                            max_bound = lhs % max_bound % min(rhs % max_bound))
+  end function grid_bounds_intersection
 
 end module grid_meta_module
