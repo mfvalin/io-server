@@ -324,7 +324,6 @@ contains
 
     ! integer :: num_flushed
 
-    integer(CB_DATA_ELEMENT), dimension(500) :: data_buffer
     type(command_record) :: record
 
     success = .false.
@@ -366,8 +365,17 @@ contains
             type(jar) :: command_content ! We want a new jar every time
             type(C_PTR) :: grid_data
             type(ioserver_timer) :: timer
+            integer(CB_DATA_ELEMENT), dimension(:), allocatable, save :: data_buffer
 
             call timer % create()
+
+            if (allocated(data_buffer)) then
+              if (size(data_buffer) < record % size_int8) deallocate(data_buffer)
+            end if
+
+            if (.not. allocated(data_buffer)) then
+              allocate(data_buffer(record % size_int8))
+            end if
 
             ! print *, 'Getting from command queue, size ', record % size_int8
             success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
@@ -395,7 +403,9 @@ contains
                 return 
               end if
 
-              ! print '(A, F8.3, A)', 'DEBUG: Waited ', timer % get_time_ms() / 1000.0, ' seconds for grid to be assembled'
+              if (this % debug_level >= 2) then
+                print '(A, 1X, A, F8.3, A)', this % pe_name, 'DEBUG: Waited ', timer % get_time_ms() / 1000.0, ' seconds for grid to be assembled'
+              end if
 
               ! Then execute the command on that assembled grid
               success = process_data(grid_data, command_content, this % shared_instance % get_id())
@@ -415,7 +425,9 @@ contains
       else
         ! Command has already been executed, so skip it
         ! Don't forget to discard data from the already-executed command
-        if (record % size_int8 > 0) success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.)
+        ! if (record % size_int8 > 0) success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.)
+        print '(A, 1X, A)', this % pe_name, 'ERROR: Duplicate command. This one has already been executed'
+        success = .false.
       end if
     end do
   end function local_server_stream_process_stream
