@@ -21,8 +21,4 @@ ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_edge_case_1     
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_unaligned_input                 || exit -1
 ${MPI_COMMAND} -n 3           ${BUILD_PATH}/tests/io_server_dcb_timeout                         || exit -1
 ${MPI_COMMAND} -n 20          ${BUILD_PATH}/tests/io_server_put_error                           || exit -1
-${MPI_COMMAND} -n ${NUM_CPUS}        ${BUILD_PATH}/tests/io_server_tile_crop      0 2 2 2 2     || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS}-1)) ${BUILD_PATH}/tests/io_server_tile_crop      0 2 2 2 2     || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS}-2)) ${BUILD_PATH}/tests/io_server_tile_crop      0 2 2 2 2     || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS}-3)) ${BUILD_PATH}/tests/io_server_tile_crop      0 2 2 2 2     || exit -1
 set +x

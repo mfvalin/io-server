@@ -408,15 +408,9 @@ function check_and_process_single_message(context, state, model_id) result(proce
   ! Copy message body
   if (header % command == MSG_COMMAND_DATA) then
 
-
     block
-      type(C_PTR) :: c_data ! C pointer into a heap, to the data to be transmitted
-      ! integer(C_INT64_T), dimension(:,:,:,:,:), pointer :: f_data_raw, halo
-      ! integer(C_INT8_T), dimension(record % elem_size * record % local_grid_with_halo % get_size(1), &
-      !                              record % local_grid_with_halo % get_size(2), &
-      !                              record % local_grid_with_halo % get_size(3), &
-      !                              record % local_grid_with_halo % get_size(4), &
-      !                              record % local_grid_with_halo % get_size(5)) :: cropped
+      type(C_PTR) :: c_data  ! C pointer into a heap, to the data to be transmitted
+      integer(C_INT8_T), dimension(:), pointer :: f_data ! Fortran pointer to the same data
 
       c_data = model_heap % get_address_from_offset(record % heap_offset) ! Get proper pointer to data in shared memory
       if (.not. c_associated(c_data)) then
@@ -424,18 +418,10 @@ function check_and_process_single_message(context, state, model_id) result(proce
         return
       end if
 
-      ! call c_f_pointer(c_data, f_data_raw, record % local_grid_with_halo % get_size_as_char_t())     ! Access data using a fortran pointer, for easy copy into the jar
-      ! halo()
-      ! print *, 'f_data: ', f_data(1:5)
-
-      !TODO Crop data tile, adjust data_size in record
-      record % data_size_byte = record % local_grid_global_id % compute_num_elements() * record % elem_size
-      ! record % 
+      call c_f_pointer(c_data, f_data, [record % data_size_byte])     ! Access data using a fortran pointer, for easy copy into the jar
       success = JAR_PUT_ITEM (state % server_bound_data, record)                                     .and. success  ! Data header
       success = JAR_PUT_ITEMS(state % server_bound_data, state % message_content(1:param_size_int8)) .and. success  ! All other metadata
-      success = crop_and_can_data(c_data, record % local_grid_with_halo, record % local_grid_global_id,   &
-                                  record % elem_size, state % server_bound_data)                     .and. success  ! The data
-      ! success = JAR_PUT_ITEMS(state % server_bound_data, f_data(:))                                  .and. success  ! The data
+      success = JAR_PUT_ITEMS(state % server_bound_data, f_data(:))                                  .and. success  ! The data
 
       if (.not. success) then
         print '(A, 1X, A)', context % get_short_pe_name(), 'ERROR: Could not put heap data into the server-bound jar!'
@@ -472,54 +458,6 @@ function check_and_process_single_message(context, state, model_id) result(proce
   success = JAR_PUT_ITEM(state % server_bound_data, end_cap) .and. success
 
   process_success = success
-
-contains
-
-  function crop_and_can_data(c_data, halo_grid, local_grid, elem_size, server_bound_jar) result(local_success)
-    use grid_meta_module
-    implicit none
-    type(C_PTR), intent(in) :: c_data
-    type(grid_bounds_t), intent(in) :: halo_grid
-    type(grid_bounds_t), intent(in) :: local_grid
-    integer(C_INT) :: elem_size
-    type(jar), intent(inout) :: server_bound_jar
-    character(len=128) :: halo_fmt, cropped_fmt
-
-    integer(C_INT8_T), dimension(:,:,:,:,:), pointer, contiguous :: f_data_raw, halo
-    integer(C_INT8_T), dimension(             &
-        elem_size * local_grid % get_size(1), &
-        local_grid % get_size(2),             &
-        local_grid % get_size(3),             &
-        local_grid % get_size(4),             &
-        local_grid % get_size(5))                                :: cropped
-
-    integer(C_INT64_T), dimension(IOSERVER_MAX_NUM_GRID_DIM) :: low, high, high_cropped
-
-    logical :: local_success
-
-    call c_f_pointer(c_data, f_data_raw, halo_grid % get_size_as_bytes(elem_size))     ! Access data using a fortran pointer, for easy copy into the jar
-
-    low  = halo_grid % get_min_as_bytes(elem_size)
-    high = halo_grid % get_max_as_bytes(elem_size)
-    halo(low(1):high(1), low(2):high(2), low(3):high(3), low(4):high(4), low(5):high(5)) => f_data_raw
-
-    high_cropped = local_grid % get_size_as_bytes(elem_size)
-    cropped(:,:,:,:,:) = halo(1:high_cropped(1), 1:high_cropped(2), 1:high_cropped(3), 1:high_cropped(4), 1:high_cropped(5))
-
-    local_success = JAR_PUT_ITEMS(server_bound_jar, cropped(:,:,:,:,:))
-    if (context % get_debug_level() >= 3) then
-      write (halo_fmt,    '("(A, 1X, A, /, ", I3.3, "(", I5.5, "(", I5.5, "(", I5.5, "(", I3.3, "Z3.2, 1X), /), /))))")')    &
-          size(halo, dim=4), size(halo, dim=3), size(halo, dim=2), size(halo, dim=1) / elem_size, elem_size
-      write (cropped_fmt, '("(A, 1X, A, /, ", I3.3, "(", I5.5, "(", I5.5, "(", I5.5, "(", I3.3, "Z3.2, 1X), /), /))))")')    &
-          size(cropped, dim=4), size(cropped, dim=3), size(cropped, dim=2), size(cropped, dim=1) / elem_size, elem_size
-
-      ! print *, 'fmt = ', halo_fmt, cropped_fmt
-
-      print halo_fmt, context % get_short_pe_name(), 'Cropping ', halo
-      print cropped_fmt, context % get_short_pe_name(), 'Cropped: ', cropped
-    end if
-
-  end function crop_and_can_data
 
 end function check_and_process_single_message
 

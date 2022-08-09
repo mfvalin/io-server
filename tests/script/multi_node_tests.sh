@@ -1,19 +1,15 @@
 set -x
-${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_default_model               || exit -1
-${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_model_write  1 2 2 2 2      || exit -1
+${MPI_COMMAND} -n ${NUM_CPUS}          ${BUILD_PATH}/tests/io_server_default_model               || exit -1
+${MPI_COMMAND} -n ${NUM_CPUS}          ${BUILD_PATH}/tests/io_server_model_write  1 2 2 2 2      || exit -1
 ${MPI_COMMAND} -n $((${NUM_CPUS} - 1)) ${BUILD_PATH}/tests/io_server_model_write  1 2 2 2 2      || exit -1      # Asymmetric nodes
-${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_model_write  0 2 2 2 2      || exit -1                  # Without debug mode
-${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_init_comms                  || exit -1
-${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_launch_pseudo_model || exit -1
-${MPI_COMMAND} -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_launch_pseudo_model : -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        || exit -1
-${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_model_integration   || exit -1
-${MPI_COMMAND} -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_model_integration   : -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        || exit -1
-${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server        : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_empty_model         || exit -1
-${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server --put-cmd-timeout 5  : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_many_streams        || exit -1
-${MPI_COMMAND} -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server --max-streams 100    : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_many_streams        || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS}    )) ${BUILD_PATH}/tests/io_server_tile_crop  0 2 2 2 2      || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS} - 1)) ${BUILD_PATH}/tests/io_server_tile_crop  0 2 2 2 2      || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS} - 2)) ${BUILD_PATH}/tests/io_server_tile_crop  0 2 2 2 2      || exit -1
-${MPI_COMMAND} -n $((${NUM_CPUS} - 3)) ${BUILD_PATH}/tests/io_server_tile_crop  0 2 2 2 2      || exit -1
+${MPI_COMMAND} -n ${NUM_CPUS}          ${BUILD_PATH}/tests/io_server_model_write  0 2 2 2 2      || exit -1      # Without debug mode
+${MPI_COMMAND} -n ${NUM_CPUS}          ${BUILD_PATH}/tests/io_server_init_comms                  || exit -1
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS}   ${BUILD_PATH}/src/io_server_launch_server         : -n ${NUM_MODEL_CPUS}  ${BUILD_PATH}/tests/io_server_launch_pseudo_model || exit -1
+${MPI_COMMAND} -n ${NUM_MODEL_CPUS}    ${BUILD_PATH}/tests/io_server_launch_pseudo_model : -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server         || exit -1
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS}   ${BUILD_PATH}/src/io_server_launch_server         : -n ${NUM_MODEL_CPUS}  ${BUILD_PATH}/tests/io_server_model_integration   || exit -1
+${MPI_COMMAND} -n ${NUM_MODEL_CPUS}    ${BUILD_PATH}/tests/io_server_model_integration   : -n ${NUM_SERVER_CPUS} ${BUILD_PATH}/src/io_server_launch_server         || exit -1
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS}   ${BUILD_PATH}/src/io_server_launch_server         : -n ${NUM_MODEL_CPUS}  ${BUILD_PATH}/tests/io_server_empty_model         || exit -1
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS}   ${BUILD_PATH}/src/io_server_launch_server --put-cmd-timeout 5  : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_many_streams        || exit -1
+${MPI_COMMAND} -n ${NUM_SERVER_CPUS}   ${BUILD_PATH}/src/io_server_launch_server --max-streams 100    : -n ${NUM_MODEL_CPUS} ${BUILD_PATH}/tests/io_server_many_streams        || exit -1
 # ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_put_error  || exit -1
 set +x
