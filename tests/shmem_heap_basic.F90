@@ -93,7 +93,7 @@ contains
       implicit none
       type(block_meta_f08) :: array_info
       logical :: success
-      integer(kind=4), dimension(:), pointer :: array_i4_1
+      integer(kind=4), dimension(:), contiguous, pointer :: array_i4_1
 
       array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .true.) ! Allocate 'safely'
       if (.not. associated(array_i4_1)) then
@@ -118,7 +118,7 @@ contains
       integer :: num_errors, total_errors
 
       type(block_meta_f08) :: array_info
-      integer(kind=4), dimension(:), pointer :: array_i4_1
+      integer(kind=4), dimension(:), contiguous, pointer :: array_i4_1
 
       do i = 1, 100
         ! Test freeing from block address
@@ -171,7 +171,7 @@ contains
       integer,            parameter :: FREEER_RANK  = 1
 
       integer(HEAP_ELEMENT), dimension(NUM_ALLOC) :: offsets
-      real(kind=8), dimension(:), pointer :: array, array2
+      real(kind=8), dimension(:), contiguous, pointer :: array, array2
       integer, dimension(MPI_STATUS_SIZE) :: status
       integer :: i, j, ierr
       logical :: success
@@ -253,12 +253,12 @@ contains
 
       integer(HEAP_ELEMENT), dimension(NUM_ARRAYS) :: offsets
       type(block_meta_f08),  dimension(NUM_ARRAYS) :: array_infos
-      integer(kind=1), dimension(:, :, :, :, :), pointer :: array_i1_5
-      integer(kind=2), dimension(:, :, :, :),    pointer :: array_i2_4
-      integer(kind=4), dimension(:, :, :),       pointer :: array_i4_3
-      integer(kind=8), dimension(:, :),          pointer :: array_i8_2
-      real(kind=4),    dimension(:, :),          pointer :: array_r4_2
-      real(kind=8),    dimension(:, :, :),       pointer :: array_r8_3
+      integer(kind=1), dimension(:, :, :, :, :), contiguous, pointer :: array_i1_5
+      integer(kind=2), dimension(:, :, :, :),    contiguous, pointer :: array_i2_4
+      integer(kind=4), dimension(:, :, :),       contiguous, pointer :: array_i4_3
+      integer(kind=8), dimension(:, :),          contiguous, pointer :: array_i8_2
+      real(kind=4),    dimension(:, :),          contiguous, pointer :: array_r4_2
+      real(kind=8),    dimension(:, :, :),       contiguous, pointer :: array_r8_3
 
       integer, dimension(MPI_STATUS_SIZE) :: status
       integer :: ierr
@@ -435,7 +435,7 @@ contains
     subroutine big_alloc()
       implicit none
       type(block_meta_f08) :: array_info1, array_info2
-      integer(kind=8), dimension(:), pointer :: kinda_big_array1, kinda_big_array2, big_array
+      integer(kind=8), dimension(:), contiguous, pointer :: kinda_big_array1, kinda_big_array2, big_array
       integer(kind=8) :: kinda_big_alloc_size, big_alloc_size
       integer :: num_errors, total_errors
       logical :: success

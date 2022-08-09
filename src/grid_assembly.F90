@@ -143,7 +143,7 @@ contains
 
     integer :: free_line_id
     type(block_meta_f08) :: data_array_info
-    integer(C_INT8_T), dimension(:,:,:,:,:), pointer :: data_array_byte
+    integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: data_array_byte
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: grid_size
 
     if (debug_level >= 4) then

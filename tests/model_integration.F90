@@ -130,7 +130,7 @@ program model_integration
       type(block_meta_f08) :: array_info
       type(model_grid)     :: m_grid
 
-      integer(kind=8), dimension(:), pointer :: model_data
+      integer(kind=8), dimension(:), contiguous, pointer :: model_data
 
       data_heap = context % get_local_heap()
 

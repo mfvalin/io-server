@@ -128,9 +128,9 @@ contains
     type(grid_bounds_t)  :: local_grid, big_local_grid
     type(grid_bounds_t)  :: global_grid, big_global_grid
     type(block_meta_f08) :: data_array_info_1, data_array_info_2, big_array_info
-    integer(kind=4), dimension(:,:), pointer :: data_array_4
-    integer(kind=8), dimension(:,:), pointer :: data_array_8
-    real(kind=8), dimension(:,:,:,:,:), pointer :: big_array
+    integer(kind=4), dimension(:,:), contiguous, pointer :: data_array_4
+    integer(kind=8), dimension(:,:), contiguous, pointer :: data_array_8
+    real(kind=8), dimension(:,:,:,:,:), contiguous, pointer :: big_array
 
     type(command_header) :: c_header
 
@@ -493,7 +493,7 @@ program pseudomodelandserver
   integer :: num_relay_per_node, num_noop
 
   type(ioserver_input_parameters) :: params
-  type(ioserver_context), pointer :: context
+  type(ioserver_context) :: context
   procedure(model_function_template), pointer :: model_fn_ptr
   logical :: success
   integer :: num_model_pes

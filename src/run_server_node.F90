@@ -87,7 +87,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
   procedure(server_function_template),  intent(in),  pointer, optional :: custom_stream_processor_fn
   procedure(no_op_function_template),   intent(in),  pointer, optional :: custom_no_op_fn
   procedure(user_command_template),     intent(in),  pointer, optional :: custom_user_command_fn
-  type(ioserver_context),               intent(out), pointer, optional :: context_out
+  type(ioserver_context),               intent(out),          optional :: context_out
   logical :: success
   
   type(ioserver_context), target :: context
@@ -166,7 +166,7 @@ function run_server_node(params, custom_channel_fn, custom_server_bound_fn, cust
 
   call context % finalize()
 
-  if (present(context_out)) context_out => context
+  if (present(context_out)) context_out = context
 end function run_server_node
 
 function default_server_bound(context) result(server_success)
