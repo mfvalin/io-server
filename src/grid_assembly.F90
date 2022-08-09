@@ -36,10 +36,10 @@ module grid_assembly_module
   !> Located in shared memory
   type, public :: grid_assembly_line
     integer               :: tag = -1               !< Message tag associated with this specific grid to assemble
-    type(grid_bounds_t)   :: reduced_global_grid    !< Grid dimensions info
+    type(grid_bounds_t)   :: global_bounds          !< Grid dimensions info
     integer               :: element_size = 0       !< Grid element size in number of bytes
     integer(HEAP_ELEMENT) :: data_offset = -1       !< Offset of the data region where the grid is being assembled in the shared memory heap
-    integer(kind=8)       :: missing_data = -1      !< Number of elements left to insert into the grid being assembled
+    integer(kind=8)       :: missing_elem = -1      !< Number of elements left to insert into the grid being assembled
 
   contains
     ! procedure, pass :: free_data => grid_assembly_line_free_data
@@ -86,22 +86,22 @@ contains
     integer :: i_line, num_lines
 
     integer, dimension(MAX_ASSEMBLY_LINES) :: tags
-    integer(kind=8), dimension(MAX_ASSEMBLY_LINES) :: missing_data
+    integer(kind=8), dimension(MAX_ASSEMBLY_LINES) :: missing_elem
 
-    missing_data(:) = -1
+    missing_elem(:) = -1
     num_lines = 0
     do i_line = 1, MAX_ASSEMBLY_LINES
       tags(i_line) = this % lines(i_line) % tag
       if (tags(i_line) > 0) then
         num_lines = num_lines + 1
-        missing_data(i_line) = this % lines(i_line) % missing_data
+        missing_elem(i_line) = this % lines(i_line) % missing_elem
       end if
     end do
 
     print '(A, I3, A)', 'There are ', num_lines, ' grids currently being assembled, with tags '
     print '(10I10)', tags
     print '(A)', ' and missing data '
-    print '(10I10)', missing_data
+    print '(10I10)', missing_elem
   end subroutine
 
   !> Retrieve the line id where the grid described by the given record is being assembled.
@@ -131,12 +131,14 @@ contains
   end function grid_assembly_get_line_id
 
   !> Create an assembly line for a grid in the owning stream
-  function grid_assembly_create_line(this, record, data_heap, mutex) result(line_id)
+  function grid_assembly_create_line(this, record, data_heap, mutex, pe_name, debug_level) result(line_id)
     implicit none
-    class(grid_assembly), intent(inout) :: this      !< The grid assembly object where we want to assemble a grid
-    type(data_record),    intent(in)    :: record    !< The data record that triggered the creation of an assembly line
-    type(shmem_heap),     intent(inout) :: data_heap !< Heap from which we will allocate the necessary (shared) memory for assembling the grid
-    type(simple_mutex),   intent(inout) :: mutex !< Mutex for the owning stream. We don't want other people creating assembly lines simultaneously
+    class(grid_assembly), intent(inout) :: this         !< The grid assembly object where we want to assemble a grid
+    type(data_record),    intent(in)    :: record       !< The data record that triggered the creation of an assembly line
+    type(shmem_heap),     intent(inout) :: data_heap    !< Heap from which we will allocate the necessary (shared) memory for assembling the grid
+    type(simple_mutex),   intent(inout) :: mutex        !< Mutex for the owning stream. We don't want other people creating assembly lines simultaneously
+    character(len=*),     intent(in)    :: pe_name      !< Who's trying to put the data
+    integer,              intent(in)    :: debug_level  !< How often we should pring debug messages
     integer :: line_id !< Id of the created line
 
     integer :: free_line_id
@@ -144,7 +146,9 @@ contains
     integer(C_INT8_T), dimension(:,:,:,:,:), pointer :: data_array_byte
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: grid_size
 
-    ! print '(I2,A,I6,A,I3)', mutex % get_id(), ' Trying to create an assembly line for tag ', record % tag, ' for file ', record % stream
+    if (debug_level >= 4) then
+      print '(A, 1X, A, I6, A, I3)', pe_name, 'DEBUG: Trying to create an assembly line for tag ', record % tag, ' in stream ', record % stream
+    end if
 
     call mutex % lock()
 
@@ -154,31 +158,38 @@ contains
       if (free_line_id .ne. -1) then  ! Good, there's a free line in the grid assembly object
         line_id = free_line_id
 
-        ! print '(I2, A, I3)', mutex % get_id(), ' Creating line ', line_id
+        if (debug_level >= 3) then
+          print '(A, 1X, A, I3)', pe_name, 'DEBUG: Creating line ', line_id
+        end if
 
         ! Get some shared memory
-        grid_size       = record % reduced_global_grid % get_size_val()
-        grid_size(1)    = grid_size(1) * record % elem_size ! Use bytes in the first dimension (so multiply it by size of element)
+        grid_size       = record % global_bounds % get_size_as_bytes(record % elem_size)
         data_array_info = data_heap % allocate(data_array_byte, grid_size)
         if (.not. associated(data_array_byte)) then
-          print *, 'ERROR: Could not allocate from the heap! (bytes)'
-          error stop 1
+          print '(A, 1X, A)', pe_name, 'ERROR: Could not allocate from the heap! (bytes)'
+          return
         end if
 
         ! Initialize the assembly line object
         associate(line => this % lines(line_id))
-          line % data_offset          = data_array_info % get_offset()
-          line % reduced_global_grid  = record % reduced_global_grid
-          line % element_size         = record % elem_size
-          line % missing_data         = line % reduced_global_grid % compute_num_elements()
-          line % tag                  = record % tag ! Signal that the assembly line is ready to be used
-          ! print '(A, I3, I2, I10, I6)', 'Created line ', line_id, mutex % get_id(), line % missing_data, record % tag
+          line % data_offset    = data_array_info % get_offset()
+          line % global_bounds  = record % global_bounds
+          line % element_size   = record % elem_size
+          line % missing_elem   = line % global_bounds % compute_num_elements()
+          line % tag            = record % tag ! Signal that the assembly line is ready to be used
+          if (debug_level >= 3) then
+            print '(A, 1X, A, I3, I10, I7)', pe_name, 'DEBUG: Created line ', line_id, line % missing_elem, record % tag
+          end if
         end associate
       else
-        ! print '(I2, A)', mutex % get_id(), ' ERROR (warning?). We have reached the maximum number of grids being assembled! Will not be able to insert data.'
+        if (debug_level >= 3) then
+          print '(A, 1X, A)', pe_name, 'WARNING: We have reached the maximum number of grids being assembled! Will not be able to insert data until some other grid is fully processed.'
+        end if
       end if
     else
-      print '(I2, A, I3, A)', mutex % get_id(), ' Looks like line ', line_id, ' was created by someone else '
+      if (debug_level >= 2) then
+        print '(A, 1X, A, I3, A)', pe_name, 'DEBUG: Looks like line ', line_id, ' was created by someone else '
+      end if
     end if
 
     call mutex % unlock()
@@ -192,7 +203,7 @@ contains
     logical :: is_line_full !< Whether the grid at the given line is fully assembled
     is_line_full = .false.
     if (this % lines(line_id) % tag > 0) then ! There is something at that line
-      is_line_full = (this % lines(line_id) % missing_data == 0)
+      is_line_full = (this % lines(line_id) % missing_elem == 0)
     end if
   end function grid_assembly_is_line_full
 
@@ -210,13 +221,15 @@ contains
   end subroutine set_full_grid_data
 
   !> Insert data from a subgrid in its appropriate "full grid" being assembled by this object.
-  function grid_assembly_put_data(this, record, subgrid_data, data_heap, mutex) result(success)
+  function grid_assembly_put_data(this, record, subgrid_data, data_heap, mutex, pe_name, debug_level) result(success)
     implicit none
     class(grid_assembly), intent(inout) :: this       !< [in,out] The grid assembler object where we want to put the data
     type(data_record),    intent(in)    :: record     !< [in]     Metadata about the subgrid we want to insert
     integer(C_INT64_T),   intent(in), dimension(:), pointer, contiguous :: subgrid_data !< [in] The data we want to insert, as a 1-D array of 64-bit integers
     type(shmem_heap),     intent(inout) :: data_heap  !< [in,out] The heap that contains the memory where we are assembling the grid
     type(simple_mutex),   intent(inout) :: mutex      !< [in,out] To avoid synchronization issues (allocating memory, updating completion percentage)
+    character(len=*),     intent(in)    :: pe_name    !< [in]     Who's trying to put the data
+    integer,              intent(in)    :: debug_level  !< [in]   How often we should pring debug messages
 
     logical :: success !< Whether we were able to insert the subgrid into the full grid without issues
 
@@ -227,26 +240,30 @@ contains
 
     success = .false.
 
-    line_id = this % get_line_id(record)                                      ! Retrieve line where the grid is being assembled
-    if (line_id < 0) line_id = this % create_line(record, data_heap, mutex)   ! Create the line if it didn't already exist
-    if (line_id < 0) return                                                   ! We have a problem
+    line_id = this % get_line_id(record)                                                          ! Retrieve line where the grid is being assembled
+    if (line_id < 0) line_id = this % create_line(record, data_heap, mutex, pe_name, debug_level) ! Create the line if it didn't already exist
+    if (line_id < 0) return                                                                       ! We have a problem
 
     ! Retrieve full grid from heap
     full_grid_ptr = data_heap % get_address_from_offset(this % lines(line_id) % data_offset)
     if (.not. c_associated(full_grid_ptr)) then
-      print *, 'ERROR: Pointer retrieved from heap is not associated!', this % lines(line_id) % data_offset, mutex % get_id()
-      error stop 1
+      print '(A, 1X, A, I8, I3)', pe_name, 'ERROR: Pointer retrieved from heap is not associated!',   &
+            this % lines(line_id) % data_offset, mutex % get_id()
+      return
+    end if
+
+    if (this % lines(line_id) % element_size .ne. record % elem_size) then
+      print '(A, 1X, A, 2I3)', pe_name, 'ERROR: global/local grids have different element sizes! ',   &
+            this % lines(line_id) % element_size, record % elem_size
+      return
     end if
 
     ! Compute addressing sizes/indices. The first dimension is actually in bytes rather than elements, so we need to include
     ! a factor of 'elem_size' into that index
-    full_size_byte    = this % lines(line_id) % reduced_global_grid % get_size_val()
-    full_size_byte(1) = full_size_byte(1) * this % lines(line_id) % element_size
-    sub_size_byte     = record % local_grid_global_id % get_size_val()
-    sub_size_byte(1)  = sub_size_byte(1) * record % elem_size
-    index_start       = record % local_grid_global_id % get_min_val()
-    index_start(1)    = (index_start(1) - 1) * record % elem_size + 1
-    index_end         = index_start + sub_size_byte - 1
+    full_size_byte    = this % lines(line_id) % global_bounds % get_size_as_bytes(record % elem_size)
+    sub_size_byte     = record % local_bounds % get_size_as_bytes(record % elem_size)
+    index_start       = record % local_bounds % get_min_as_bytes(record % elem_size)
+    index_end         = record % local_bounds % get_max_as_bytes(record % elem_size)
     
     ! Retrieve data as 5-D Fortran pointers
     subgrid_ptr = c_loc(subgrid_data)
@@ -259,7 +276,10 @@ contains
 
     ! Update missing data indicator
     call mutex % lock()
-    this % lines(line_id) % missing_data = this % lines(line_id) % missing_data - record % local_grid_global_id % compute_num_elements()
+    this % lines(line_id) % missing_elem = this % lines(line_id) % missing_elem - record % local_bounds % compute_num_elements()
+    if (debug_level >= 2) then
+      print '(A, 1X, A, I10, A)', pe_name, 'DEBUG: We still need to put ', this % lines(line_id) % missing_elem, ' elements in the grid'
+    end if
     call mutex % unlock()
 
     success = .true.

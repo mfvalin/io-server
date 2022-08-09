@@ -309,16 +309,14 @@ contains
   end function model_stream_close
 
   !> Send a bunch of data (a "tile") towards the server
-  function send_data(this, my_data, local_grid_bounds_with_halo, local_grid_global_bounds, global_grid_bounds, reduced_global_grid_bounds, command) result(success)
+  function send_data(this, data_info, local_bounds, global_bounds, command) result(success)
     use iso_c_binding
     use jar_module
     implicit none
-    class(model_stream),  intent(inout) :: this
-    type(block_meta_f08), intent(in)    :: my_data          !< array descriptor from h % allocate
-    type(grid_bounds_t),  intent(in)    :: local_grid_bounds_with_halo !< Bounds of the local grid, including halo
-    type(grid_bounds_t),  intent(in)    :: local_grid_global_bounds    !< Bounds of the local grid, excluding halo, in global coordinates
-    type(grid_bounds_t),  intent(in)    :: global_grid_bounds          !< Bounds of the global grid, global coordinates
-    type(grid_bounds_t),  intent(in)    :: reduced_global_grid_bounds  !< Bounds of the reduced global grid, global coordinates
+    class(model_stream),  intent(inout) :: this           !< model_stream instance
+    type(block_meta_f08), intent(in)    :: data_info      !< Array descriptor from shared memory heap allocation
+    type(grid_bounds_t),  intent(in)    :: local_bounds   !< Bounds of the local grid, in global coordinates
+    type(grid_bounds_t),  intent(in)    :: global_bounds  !< Bounds of the (reduced) global grid, in global coordinates
 
     type(jar),   intent(IN), optional :: command          !< Command to apply to the data by the model once assembled
 
@@ -333,18 +331,9 @@ contains
     if(this % stream_id <= 0) return
 
     ! Perform a short series of checks on the inputs
-    if (.not. (reduced_global_grid_bounds % is_valid() .and.    &
-               local_grid_bounds_with_halo % is_valid() .and.   &
-               local_grid_global_bounds % is_valid() .and.      &
-               global_grid_bounds % is_valid())) then
+    if (.not. (local_bounds % is_valid() .and. global_bounds % is_valid())) then
       print '(A)', 'ERROR: Invalid grid size specified when sending data'
-      print '(L2, L2, L2, L2)', reduced_global_grid_bounds % is_valid(), local_grid_bounds_with_halo % is_valid(), local_grid_global_bounds % is_valid(), global_grid_bounds % is_valid()
-      return
-    end if
-
-    if (any(reduced_global_grid_bounds % get_min_val() < global_grid_bounds % get_min_val()) .or.   &
-        any(reduced_global_grid_bounds % get_max_val() > global_grid_bounds % get_max_val())) then
-      print '(A)', 'ERROR: Reduced grid does NOT fit into global grid'
+      print '(2L2)', local_bounds % is_valid(), global_bounds % is_valid()
       return
     end if
 
@@ -366,19 +355,17 @@ contains
     rec % tag            = this % messenger % get_msg_tag()
     rec % stream         = this % stream_id
 
-    rec % local_grid_with_halo        = local_grid_bounds_with_halo
-    rec % local_grid_global_id        = local_grid_global_bounds % intersection(reduced_global_grid_bounds)
-    rec % global_grid                 = global_grid_bounds
-    rec % reduced_global_grid         = reduced_global_grid_bounds
+    rec % global_bounds = global_bounds
+    rec % local_bounds  = local_bounds % intersection(global_bounds)
 
-    rec % elem_size      = my_data % get_kind()
-    rec % heap_offset    = my_data % get_offset()
-    rec % data_size_byte = rec % local_grid_with_halo % compute_num_elements() * rec % elem_size
+    rec % elem_size      = data_info % get_kind()
+    rec % heap_offset    = data_info % get_offset()
+    rec % data_size_byte = rec % local_bounds % compute_num_elements() * rec % elem_size
     
     ! call print_data_record(rec)
 
     ! Don't send anything if the entire tile will be cropped
-    if (.not. rec % local_grid_global_id % is_valid()) then
+    if (.not. rec % local_bounds % is_valid()) then
       success = .true.
       return
     end if

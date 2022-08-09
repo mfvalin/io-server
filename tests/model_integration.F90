@@ -167,9 +167,7 @@ program model_integration
       ! The global grid is not reduced, so we specify the same global grid for both inputs
       success = stream % send_data(     &
                     array_info,         &   ! Info about the size of allocated data
-                    local_grid,         &   ! Local grid bounds, including the halo (which is zero, since no halo). Also, is that the same info as in array_info?
-                    local_grid,         &   ! Local grid bounds, excluding the halo, in global coordinates
-                    global_grid,        &   ! Full global grid bounds, in global coords (of course)
+                    local_grid,         &   ! Local grid bounds, in global coordinates
                     global_grid,        &   ! Reduced global grid bounds, in global coords
                     command = command) .and. success
       if (.not. success) then
@@ -184,7 +182,7 @@ program model_integration
       call command % reset()
       success = JAR_PUT_ITEM(command, header)
       success = JAR_PUT_ITEM(command, m_grid) .and. success
-      success = stream % send_data(array_info, local_grid, local_grid, global_grid, global_grid, command = command) .and. success
+      success = stream % send_data(array_info, local_grid, global_grid, command = command) .and. success
 
       if (.not. success) then
         print *, 'ERROR: Unable to send second set of data'

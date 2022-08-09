@@ -56,10 +56,8 @@ module ioserver_message_module
     integer(C_INT) :: tag       !< Tag associated with this particular message (to be able to group with that of other model PEs)
     integer(C_INT) :: stream    !< Stream to which the data is being sent
 
-    type(grid_bounds_t) :: local_grid_with_halo !< Local grid bounds, in local coordinates, including the halo
-    type(grid_bounds_t) :: local_grid_global_id !< Local grid bounds, in global coordinates, excluding the halo
-    type(grid_bounds_t) :: global_grid          !< Entire dimension of the global grid, in global coordinates (duh)
-    type(grid_bounds_t) :: reduced_global_grid  !< Subset of the global grid in which we are interested, in global coord
+    type(grid_bounds_t) :: local_bounds         !< Local grid bounds, in global coordinates
+    type(grid_bounds_t) :: global_bounds        !< Subset of the global grid in which we are interested, in global coord ("reduced" global grid)
 
     integer(C_INT) :: elem_size         !< Size of the grid elements in bytes
     integer(C_INT) :: output_grid_id    !< ID of the grid where the data is being sent

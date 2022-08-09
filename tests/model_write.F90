@@ -282,7 +282,7 @@ contains
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
         ! Write the data to a file (i.e. send it to the server to do that for us)
-        success = output_stream_1 % send_data(data_array_info_1, local_grid, local_grid, global_grid, global_grid, command = command_jar) .and. success
+        success = output_stream_1 % send_data(data_array_info_1, local_grid, global_grid, command = command_jar) .and. success
 
         if (.not. success) then
           print *, 'ERROR: Send data into model stream failed'
@@ -333,7 +333,7 @@ contains
         m_grid % elem_size = data_array_info_2 % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
-        success = output_stream_2 % send_data(data_array_info_2, local_grid, local_grid, global_grid, global_grid, command = command_jar) .and. success
+        success = output_stream_2 % send_data(data_array_info_2, local_grid, global_grid, command = command_jar) .and. success
 
         ! Command header
         call command_jar % reset()
@@ -346,7 +346,7 @@ contains
         m_grid % elem_size = big_array_info % get_kind()
         success = JAR_PUT_ITEM(command_jar, m_grid) .and. success
 
-        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_local_grid, big_global_grid, big_global_grid, command = command_jar)    .and. success
+        success = output_stream_2 % send_data(big_array_info, big_local_grid, big_global_grid, command = command_jar) .and. success
         if (.not. success) then
           print *, 'ERROR while trying to do a SEND DATA'
           return

@@ -459,21 +459,22 @@ contains
     integer :: i
 
     ! First attempt
-    success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex)
+    success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
 
     max_num_attempts = MAX_WAIT_TIME_S * 1000000 / WAIT_TIME_US
 
     ! Try again a few times, after waiting a bit, instead of just crashing right away
     do i = 1, max_num_attempts
       if (.not. success) then
-        if (mod(i, 10) == 0) then
+        ! Print a message every second or so
+        if (mod(i, 10000000/WAIT_TIME_US) == 0) then
           print '(A, A, I2, A, F5.2, A)', this % pe_name, ' WARNING: Could not put the data into the grid for owner ', &
               this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
               (max_num_attempts - i) * WAIT_TIME_US / 1000000.0, 's'
         end if
 
         call sleep_us(WAIT_TIME_US)
-        success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex)
+        success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
       else
         exit ! We're good, can finish now
       end if
