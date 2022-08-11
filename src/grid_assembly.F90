@@ -277,7 +277,7 @@ contains
     ! Update missing data indicator
     call mutex % lock()
     this % lines(line_id) % missing_elem = this % lines(line_id) % missing_elem - record % local_bounds % compute_num_elements()
-    if (debug_level >= 2) then
+    if (debug_level >= 3) then
       print '(A, 1X, A, I10, A)', pe_name, 'DEBUG: We still need to put ', this % lines(line_id) % missing_elem, ' elements in the grid'
     end if
     call mutex % unlock()

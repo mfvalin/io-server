@@ -486,7 +486,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !-------
   ! Data
   if (header % command == MSG_COMMAND_DATA) then
-    ! print *, 'Got DATA message', consumer_id
+    if (context % get_debug_level() >= 3) print '(A, 1X, A, I5)', context % get_short_pe_name(), 'DEBUG: Got a DATA message! From model ', header % sender_global_rank
     success = dcb % get_elems(client_id, record, data_record_size_byte(), CB_KIND_CHAR, .true.)
     if (.not. success) then
       print '(A, A)', context % get_short_pe_name(), ' ERROR: reading record'
@@ -515,7 +515,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !--------------------
   ! Execute a command
   else if (header % command == MSG_COMMAND_SERVER_CMD) then
-    if (context % get_debug_level() >= 2) print '(A, 1X, A, I5)', context % get_short_pe_name(), 'DEBUG: Got a SERVER_CMD message! From model ', header % sender_global_rank
+    if (context % get_debug_level() >= 3) print '(A, 1X, A, I5)', context % get_short_pe_name(), 'DEBUG: Got a SERVER_CMD message! From model ', header % sender_global_rank
     call state % allocate_command_buffer(header % content_size_int8)
     success = dcb % get_elems(client_id, state % command_buffer, header % content_size_int8, CB_KIND_INTEGER_8, .true.)
     success = stream_ptr % put_command(state % command_buffer(1:header % content_size_int8), header % message_tag) .and. success
@@ -550,7 +550,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
   !----------------
   ! Misc. message
   else if (header % command == MSG_COMMAND_DUMMY) then
-    if (context % get_debug_level() >= 2) print '(A, A)', context % get_short_pe_name(), ' DEBUG: Got a DUMMY message!'
+    if (context % get_debug_level() >= 3) print '(A, A)', context % get_short_pe_name(), ' DEBUG: Got a DUMMY message!'
 
   !---------------------------------
   ! Stop receiving from this relay
