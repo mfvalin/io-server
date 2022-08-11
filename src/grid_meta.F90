@@ -62,11 +62,18 @@ module grid_meta_module
     procedure, pass :: get_min_val  => grid_bounds_get_min_val
     procedure, pass :: get_max_val  => grid_bounds_get_max_val
     procedure, pass :: get_size_val => grid_bounds_get_size_val
-    procedure, pass :: set      => grid_bounds_set
 
     procedure, pass :: get_min_as_bytes
     procedure, pass :: get_max_as_bytes
     procedure, pass :: get_size_as_bytes
+
+    generic :: set_min  => grid_bounds_set_min_index ,  grid_bounds_set_min_vals_i4,  grid_bounds_set_min_vals_i8
+    generic :: set_max  => grid_bounds_set_max_index ,  grid_bounds_set_max_vals_i4,  grid_bounds_set_max_vals_i8
+    generic :: set_size => grid_bounds_set_size_index, grid_bounds_set_size_vals_i4, grid_bounds_set_size_vals_i8
+    procedure, pass :: grid_bounds_set_min_vals_i4, grid_bounds_set_min_vals_i8, grid_bounds_set_min_index
+    procedure, pass :: grid_bounds_set_max_vals_i4, grid_bounds_set_max_vals_i8, grid_bounds_set_max_index
+    procedure, pass :: grid_bounds_set_size_vals_i4, grid_bounds_set_size_vals_i8, grid_bounds_set_size_index
+    procedure, pass :: set => grid_bounds_set
 
     procedure, pass :: print        => grid_bounds_print
     procedure, pass :: is_valid     => grid_bounds_is_valid
@@ -244,6 +251,123 @@ contains
     grid_size = grid_bounds % size % val
   end function grid_bounds_get_size_val
 
+  subroutine grid_bounds_set_min_index(grid_bounds, min_bound)
+    implicit none
+    class(grid_bounds_t), intent(inout) :: grid_bounds
+    type(grid_index_t),   intent(in)    :: min_bound
+    grid_bounds % min_bound = min_bound
+    grid_bounds % max_bound = min_bound % val(:) + grid_bounds % size % val(:) - 1
+    if (.not. grid_bounds % is_valid()) grid_bounds % size % val(:) = 0
+  end subroutine grid_bounds_set_min_index
+
+  subroutine grid_bounds_set_max_index(grid_bounds, max_bound)
+    implicit none
+    class(grid_bounds_t), intent(inout) :: grid_bounds
+    type(grid_index_t),   intent(in)    :: max_bound
+    grid_bounds % max_bound = max_bound
+    grid_bounds % size      = grid_bounds % max_bound % val(:) - grid_bounds % min_bound % val(:) + 1
+    if (.not. grid_bounds % is_valid()) grid_bounds % size % val(:) = 0
+  end subroutine grid_bounds_set_max_index
+
+  subroutine grid_bounds_set_size_index(grid_bounds, grid_size)
+    implicit none
+    class(grid_bounds_t), intent(inout) :: grid_bounds
+    type(grid_index_t),   intent(in)    :: grid_size
+    grid_bounds % size      = grid_size
+    grid_bounds % max_bound = grid_bounds % min_bound % val(:) + grid_bounds % size % val(:) - 1
+    if (.not. grid_bounds % is_valid()) grid_bounds % size % val(:) = 0
+  end subroutine grid_bounds_set_size_index
+
+  subroutine grid_bounds_set_min_vals_i8(grid_bounds, v1, v2, v3, v4, v5)
+    implicit none
+    class(grid_bounds_t),         intent(inout) :: grid_bounds
+    integer(C_INT64_T),           intent(in)    :: v1
+    integer(C_INT64_T), optional, intent(in)    :: v2, v3, v4, v5
+
+    type(grid_index_t) :: min_bound
+    min_bound % val(1) = v1
+    if (present(v2)) min_bound % val(2) = v2
+    if (present(v3)) min_bound % val(3) = v3
+    if (present(v4)) min_bound % val(4) = v4
+    if (present(v5)) min_bound % val(5) = v5
+    call grid_bounds % grid_bounds_set_min_index(min_bound)
+  end subroutine grid_bounds_set_min_vals_i8
+
+  subroutine grid_bounds_set_min_vals_i4(grid_bounds, v1, v2, v3, v4, v5)
+    implicit none
+    class(grid_bounds_t),         intent(inout) :: grid_bounds
+    integer(C_INT32_T),           intent(in)    :: v1
+    integer(C_INT32_T), optional, intent(in)    :: v2, v3, v4, v5
+
+    type(grid_index_t) :: min_bound
+    min_bound % val(1) = v1
+    if (present(v2)) min_bound % val(2) = v2
+    if (present(v3)) min_bound % val(3) = v3
+    if (present(v4)) min_bound % val(4) = v4
+    if (present(v5)) min_bound % val(5) = v5
+    call grid_bounds % grid_bounds_set_min_index(min_bound)
+  end subroutine grid_bounds_set_min_vals_i4
+
+  subroutine grid_bounds_set_max_vals_i8(grid_bounds, v1, v2, v3, v4, v5)
+    implicit none
+    class(grid_bounds_t),         intent(inout) :: grid_bounds
+    integer(C_INT64_T),           intent(in)    :: v1
+    integer(C_INT64_T), optional, intent(in)    :: v2, v3, v4, v5
+
+    type(grid_index_t) :: max_bound
+    max_bound % val(1) = v1
+    if (present(v2)) max_bound % val(2) = v2
+    if (present(v3)) max_bound % val(3) = v3
+    if (present(v4)) max_bound % val(4) = v4
+    if (present(v5)) max_bound % val(5) = v5
+    call grid_bounds % grid_bounds_set_max_index(max_bound)
+  end subroutine grid_bounds_set_max_vals_i8
+
+  subroutine grid_bounds_set_max_vals_i4(grid_bounds, v1, v2, v3, v4, v5)
+    implicit none
+    class(grid_bounds_t),         intent(inout) :: grid_bounds
+    integer(C_INT32_T),           intent(in)    :: v1
+    integer(C_INT32_T), optional, intent(in)    :: v2, v3, v4, v5
+
+    type(grid_index_t) :: max_bound
+    max_bound % val(1) = v1
+    if (present(v2)) max_bound % val(2) = v2
+    if (present(v3)) max_bound % val(3) = v3
+    if (present(v4)) max_bound % val(4) = v4
+    if (present(v5)) max_bound % val(5) = v5
+    call grid_bounds % grid_bounds_set_max_index(max_bound)
+  end subroutine grid_bounds_set_max_vals_i4
+
+  subroutine grid_bounds_set_size_vals_i8(grid_bounds, v1, v2, v3, v4, v5)
+    implicit none
+    class(grid_bounds_t),         intent(inout) :: grid_bounds
+    integer(C_INT64_T),           intent(in)    :: v1
+    integer(C_INT64_T), optional, intent(in)    :: v2, v3, v4, v5
+
+    type(grid_index_t) :: size
+    size % val(1) = v1
+    if (present(v2)) size % val(2) = v2
+    if (present(v3)) size % val(3) = v3
+    if (present(v4)) size % val(4) = v4
+    if (present(v5)) size % val(5) = v5
+    call grid_bounds % grid_bounds_set_size_index(size)
+  end subroutine grid_bounds_set_size_vals_i8
+
+  subroutine grid_bounds_set_size_vals_i4(grid_bounds, v1, v2, v3, v4, v5)
+    implicit none
+    class(grid_bounds_t),         intent(inout) :: grid_bounds
+    integer(C_INT32_T),           intent(in)    :: v1
+    integer(C_INT32_T), optional, intent(in)    :: v2, v3, v4, v5
+
+    type(grid_index_t) :: size
+    size % val(1) = v1
+    if (present(v2)) size % val(2) = v2
+    if (present(v3)) size % val(3) = v3
+    if (present(v4)) size % val(4) = v4
+    if (present(v5)) size % val(5) = v5
+    call grid_bounds % grid_bounds_set_size_index(size)
+  end subroutine grid_bounds_set_size_vals_i4
+
   subroutine grid_bounds_set(this, min_bound, max_bound, size)
     implicit none
     class(grid_bounds_t), intent(inout) :: this             !< The grid_bounds_t instance we want to specify
@@ -251,28 +375,18 @@ contains
     type(grid_index_t), intent(in), optional :: max_bound
     type(grid_index_t), intent(in), optional :: size
 
-    integer :: num_inputs
-
-    this % size % val(:) = 0
-
-    num_inputs = 0
-    if (present(min_bound)) num_inputs = num_inputs + 1
-    if (present(max_bound)) num_inputs = num_inputs + 1
-    if (present(size))      num_inputs = num_inputs + 1
-    if (num_inputs .ne. 2) then
-      print *, 'ERROR: Setting grid params in grid_bounds_t. Need to give exactly 2 params (out of min_bound, max_bound and size)'
-      return
+    if (present(min_bound) .and. present(max_bound) .and. .not. present(size)) then
+      this % min_bound = min_bound
+      call this % set_max(max_bound)
+    else if (present(min_bound) .and. present(size) .and. .not. present(max_bound)) then
+      this % min_bound = min_bound
+      call this % set_size(size)
+    else if (present(max_bound) .and. present(size) .and. .not. present(min_bound)) then
+      this % min_bound = max_bound % val(:) - size % val(:) + 1
+      call this % set_size(size)
+    else
+      this % size % val(:) = 0
     end if
-
-    if (present(min_bound)) this % min_bound = min_bound
-    if (present(max_bound)) this % max_bound = max_bound
-    if (present(size))      this % size      = size
-
-    if (.not. present(min_bound)) this % min_bound = this % max_bound % val(:) - this % size % val(:) + 1
-    if (.not. present(max_bound)) this % max_bound = this % min_bound % val(:) + this % size % val(:) - 1
-    if (.not. present(size))      this % size      = this % max_bound % val(:) - this % min_bound % val(:) + 1
-
-    if (.not. this % is_valid()) this % size % val(:) = 0
   end subroutine grid_bounds_set
 
   function compute_num_elements(grid_bounds) result(num_elements)

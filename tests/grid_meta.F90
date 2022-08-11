@@ -70,7 +70,58 @@ program grid_meta_test
   g_max  = (/ 1, 4, 3, 0 /)
   g_size = (/ 3, 7, 3, 1 /)
 
+  call grid % set_min(-1, -2, 1, 0)
+  if (.not. all(grid % get_min_val() == g_min % val)) then
+    print *, 'ERROR: set_min failed!'
+    error stop 1
+  end if
+
+  call grid % set_min(1_8, 4_8, 3_8, 0_8)
+  if (.not. all(grid % get_min_val() == g_max % val)) then
+    print *, 'ERROR: set_min failed!'
+    error stop 1
+  end if
+
+  call grid % set_max(-1, -2, 1, 0)
+  if (.not. all(grid % get_max_val() == g_min % val)) then
+    print *, 'ERROR: set_max failed!'
+    error stop 1
+  end if
+
+  call grid % set_max(3_8, 7_8, 3_8, 1_8)
+  if (.not. all(grid % get_max_val() == g_size % val)) then
+    print *, 'ERROR: set_max failed!'
+    error stop 1
+  end if
+
+  call grid % set_size(-1, -2, 1, 0)
+  if (.not. all(grid % get_size_val() == 0)) then
+    print '(A)', 'ERROR: set_size should have failed!'
+    error stop 1
+  end if
+
+  call grid % set_size(3, 7, 3, 1)
+  if (.not. all(grid % get_size_val() == g_size % val)) then
+    print *, 'ERROR: set_size failed! (1)'
+    error stop 1
+  end if
+
+  call grid % set_size(-1, -2, 1, 0)
+  call grid % set_size(3_8, 7_8, 3_8, 1_8)
+  if (.not. all(grid % get_size_val() == g_size % val)) then
+    print *, 'ERROR: set_size failed! (2)'
+    error stop 1
+  end if
+
   call grid % set(min_bound = g_min, max_bound = g_max)
+  a = grid % get_size()
+  if (.not. grid % is_valid() .or. .not. all( a % val == g_size % val) ) then
+    print '(A, 5I4, A, 5I4)', 'ERROR: Wrong grid size, got ', a % val, ', should be ', g_size % val
+    error stop 1
+  end if
+
+  call grid % set_min(g_min)
+  call grid % set_max(g_max)
   a = grid % get_size()
   if (.not. grid % is_valid() .or. .not. all( a % val == g_size % val) ) then
     print '(A, 5I4, A, 5I4)', 'ERROR: Wrong grid size, got ', a % val, ', should be ', g_size % val
@@ -89,6 +140,14 @@ program grid_meta_test
     error stop 1
   end if
 
+  call grid % set_min(g_min)
+  call grid % set_size(g_size)
+  a = grid % get_max()
+  if (.not. grid % is_valid() .or. .not. all(a%val == g_max%val)) then
+    print '(A, 5I4, A, 5I4)', 'ERROR: Wrong max bound, got ', a % val, ', should be ', g_max % val
+    error stop 1
+  end if
+
   call grid % set(max_bound = g_max, size = g_size)
   a = grid % get_min()
   if (.not. grid % is_valid() .or. .not. all(a%val == g_min%val)) then
@@ -98,31 +157,31 @@ program grid_meta_test
 
   call grid % set(min_bound = g_min)
   if (grid % is_valid()) then
-    print *, 'ERROR: set grid vals should have failed'
+    print *, 'ERROR: set grid vals should have failed (1)'
     error stop 1
   end if
 
   call grid % set()
   if (grid % is_valid()) then
-    print *, 'ERROR: set grid vals should have failed'
+    print *, 'ERROR: set grid vals should have failed (2)'
     error stop 1
   end if
 
   call grid % set(min_bound = g_min, max_bound = g_max, size = g_size)
   if (grid % is_valid()) then
-    print *, 'ERROR: set grid vals should have failed'
+    print *, 'ERROR: set grid vals should have failed (3)'
     error stop 1
   end if
 
   call grid % set(min_bound = g_max, max_bound = g_min)
   if (grid % is_valid()) then
-    print *, 'ERROR: set grid vals should have failed'
+    print *, 'ERROR: set grid vals should have failed (4)'
     error stop 1
   end if
 
   call grid % set(max_bound = g_max, size = g_min)
   if (grid % is_valid()) then
-    print *, 'ERROR: set grid vals should have failed'
+    print *, 'ERROR: set grid vals should have failed (5)'
     error stop 1
   end if
 

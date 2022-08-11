@@ -134,8 +134,10 @@ program model_integration
 
       data_heap = context % get_local_heap()
 
-      call local_grid % set(min_bound = grid_index_t(model_crs % rank + 1), size = grid_index_t(1))
-      call global_grid % set(min_bound = grid_index_t(1), size = grid_index_t(model_crs % size))
+      call local_grid % set_min(model_crs % rank + 1)
+      call local_grid % set_size(1)
+      call global_grid % set_min(1)
+      call global_grid % set_max(model_crs % size)
 
       ! input_grid % elem_size = 8
 

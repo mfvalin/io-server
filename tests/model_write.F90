@@ -214,31 +214,33 @@ contains
     num_compute_x = compute_width
     num_compute_y = compute_height
 
-    call local_grid % set(            &
-        min_bound = grid_index_t(mod(global_model_id, compute_width) * block_width + 1, (global_model_id / compute_width) * block_height + 1),    &
-        size      = grid_index_t(block_width, block_height))
+    block
+      integer :: min_x, min_y
+      min_x = mod(global_model_id, compute_width) * block_width + 1
+      min_y = (global_model_id / compute_width) * block_height + 1
+      call local_grid % set_min(min_x, min_y)
+      call local_grid % set_size(block_width, block_height)
 
-    call global_grid % set(           &
-        min_bound = grid_index_t(),   &
-        size      = grid_index_t(block_width * compute_width, block_height * compute_height))
+      call global_grid % set_min(1, 1)    ! Not actually necessary, the default value is already 1
+      call global_grid % set_size(block_width * compute_width, block_height * compute_height)
 
-    call big_local_grid % set(        &
-        min_bound = grid_index_t(mod(global_model_id, compute_width) * dim_x + 1, (global_model_id / compute_width) * dim_y + 1),     &
-        size      = grid_index_t(dim_x, dim_y, dim_z, num_vars, num_time_steps))
+      min_x = mod(global_model_id, compute_width) * dim_x + 1
+      min_y = (global_model_id / compute_width) * dim_y + 1
+      call big_local_grid % set_min(min_x, min_y)
+      call big_local_grid % set_size(dim_x, dim_y, dim_z, num_vars, num_time_steps)
 
-    call big_global_grid % set(       &
-        min_bound = grid_index_t(),   &
-        size      = grid_index_t(dim_x * compute_width, dim_y * compute_height, dim_z, num_vars, num_time_steps))
+      call big_global_grid % set_size(dim_x * compute_width, dim_y * compute_height, dim_z, num_vars, num_time_steps)
 
-    if (model_crs % rank == 0) then
-      print '(A, I7, A, I3)', 'Blocks:  ', block_width, 'x', block_height
-      print '(A, I7, A, I3)', 'Compute: ', compute_width, 'x', compute_height
-      print '(A, I3, A)', 'Using grids for ', model_crs % size, ' PEs'
-      call local_grid % print()
-      call global_grid % print()
-      call big_local_grid % print()
-      call big_global_grid % print()
-    end if
+      if (model_crs % rank == 0) then
+        print '(A, I7, A, I3)', 'Blocks:  ', block_width, 'x', block_height
+        print '(A, I7, A, I3)', 'Compute: ', compute_width, 'x', compute_height
+        print '(A, I3, A)', 'Using grids for ', model_crs % size, ' PEs'
+        call local_grid % print()
+        call global_grid % print()
+        call big_local_grid % print()
+        call big_global_grid % print()
+      end if
+    end block
 
     ! call sleep_us(5000)
     block
