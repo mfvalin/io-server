@@ -21,6 +21,7 @@ enable_language(Fortran)
 enable_language(C)
 
 include(ec_compiler_presets)
+include(ec_openmp)
 ec_build_info()            # Generate build include file (optional)
 
 option(IOSERVER_BUILD_PSEUDO_MODEL "Whether to build the small library that provides the 'process_command' functionality" OFF)
