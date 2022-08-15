@@ -60,7 +60,11 @@ module server_stream_module
     integer :: mutex_value        =  0  !< When we need to lock this stream with a mutex. Don't ever touch this value directly (i.e. other than through a mutex object)
     integer :: status             = STREAM_STATUS_UNINITIALIZED !< Status of the stream object
     integer :: current_command_tag = 0  !< Tag of the latest command processed (or being processed) by the owner of this stream
-    integer :: command_tag_counter = 0  !< DO NOT TOUCH DIRECTLY. Atomically accessed counter for the latest command put in the command buffer
+
+    !> Counter for the latest command put in the command buffer.
+    !> *Careful when updating this! Multiple PEs can do it.*. Should only be updated when putting stuff in the 
+    !> command queue
+    integer :: command_tag_counter = 0
     integer :: num_opens           = 0  !< How many times this stream rank was opened
 
     type(circular_buffer) :: command_buffer
@@ -81,6 +85,7 @@ module server_stream_module
     procedure, pass, private :: get_owner_id => shared_server_stream_get_owner_id
 
     procedure, pass :: get_tag_counter => shared_server_stream_get_tag_counter
+    procedure, pass :: set_tag_counter => shared_server_stream_set_tag_counter
 
   end type shared_server_stream
 
@@ -99,9 +104,9 @@ module server_stream_module
     type(simple_mutex)  :: mutex                  !< Used to protect access to the underlying 
     type(shmem_heap)    :: data_heap              !< Heap where we can get space in shared memory
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
-    type(circular_buffer) :: command_buffer
-    type(atomic_int32)  :: command_counter
-    integer             :: put_cmd_timeout = 0    !< How long to wait before failing, when inserting a command into the buffer
+    type(circular_buffer) :: command_buffer       !< Access to the command buffer of the underlying shared stream
+    integer               :: put_cmd_timeout = 0  !< How long to wait before failing, when inserting a command into the buffer
+    type(ioserver_timer)  :: timer                !< To evaluate performance
     character(len=:), allocatable :: pe_name
 
     contains
@@ -112,7 +117,7 @@ module server_stream_module
     procedure, pass :: is_owner => local_server_stream_is_owner
     procedure, pass :: is_open  => local_server_stream_is_open
     procedure, pass :: get_id   => local_server_stream_get_id
-
+    procedure, pass :: get_rank => local_server_stream_get_rank
 
     procedure, pass :: put_command    => local_server_stream_put_command
     procedure, pass :: process_stream => local_server_stream_process_stream
@@ -121,6 +126,8 @@ module server_stream_module
 
     procedure, pass, private :: open  => local_server_stream_open
     procedure, pass, private :: close => local_server_stream_close
+
+    final :: local_server_stream_finalize
   end type local_server_stream
 
 contains
@@ -225,13 +232,19 @@ contains
           ', status: ', this % status, ', owner ID: ', this % owner_id, ', mutex value: ', this % mutex_value
   end subroutine shared_server_stream_print
 
-  !> Create an atomic counter from the tag counter variable of this shared_server_stream
   function shared_server_stream_get_tag_counter(this) result(tag_counter)
     implicit none
-    class(shared_server_stream), intent(in) :: this   !< shared_server_stream instance
-    type(atomic_int32) :: tag_counter
-    call tag_counter % init_from_int(this % command_tag_counter)
+    class(shared_server_stream), intent(in) :: this
+    integer :: tag_counter
+    tag_counter = this % command_tag_counter
   end function shared_server_stream_get_tag_counter
+
+  subroutine shared_server_stream_set_tag_counter(this, new_tag)
+    implicit none
+    class(shared_server_stream), intent(inout) :: this
+    integer,                     intent(in)    :: new_tag
+    this % command_tag_counter = new_tag
+  end subroutine shared_server_stream_set_tag_counter
 
   !> Initialize this local instance (but *not* the underlying shared memory stream), associate this local instance with its underlying shared stream,
   !> initialize the mutex to point to the shared instance mutex value, associate this local instance with a shared memory heap where the grids will
@@ -254,12 +267,17 @@ contains
     this % debug_level      =  debug_level
     this % shared_instance  => shared_instance
     this % data_heap        =  data_heap
+    
+    ! Create mutex using the shared instance location
     call this % mutex % init_from_int(this % shared_instance % mutex_value, this % server_id)
-    this % command_counter = this % shared_instance % get_tag_counter()
 
+    ! Get access to already-created shared buffer
     success = this % command_buffer % create_bytes(c_loc(this % shared_instance % command_buffer_data))
+
     this % pe_name         = pe_name
     this % put_cmd_timeout = put_cmd_timeout
+
+    call this % timer % create()
   end function local_server_stream_init
 
   !> Check whether this local stream has been initialized (i.e. it has an ID and is associated with a shared instance)
@@ -285,34 +303,64 @@ contains
     implicit none
     class(local_server_stream), intent(inout) :: this
     integer :: stream_id
-    stream_id = -1
+    stream_id = STREAM_ID_SHARED_INITIAL - 1
     if (this % is_init()) stream_id = this % shared_instance % get_id()
   end function local_server_stream_get_id
 
+  function local_server_stream_get_rank(this) result(stream_rank)
+    implicit none
+    class(local_server_stream), intent(inout) :: this
+    integer :: stream_rank
+    stream_rank = -2
+    if (this % is_init()) stream_rank = this % shared_instance % stream_rank
+  end function local_server_stream_get_rank
+
+  !> Put the given command in this streams command queue. Only a single command with a given tag will ever be put in
+  !> the stream. This assumes that command tags are always increasing.
   function local_server_stream_put_command(this, command_content, tag) result(success)
     implicit none
-    class(local_server_stream),             intent(inout) :: this
-    integer(CB_DATA_ELEMENT), dimension(:), intent(in)    :: command_content
-    integer(C_INT),                         intent(in)    :: tag
+    class(local_server_stream),             intent(inout) :: this               !< Local server stream instance
+    integer(CB_DATA_ELEMENT), dimension(:), intent(in)    :: command_content    !< Command to put in the queue
+    integer(C_INT),                         intent(in)    :: tag                !< Command's tag
+    !> .true. if we were able to put the command in the queue or if the command was already there, .false. otherwise
     logical :: success
 
-    integer(C_INT32_T) :: old_value
-    old_value = this % command_counter % read()
     success = .true.
-    if (tag > old_value) then
-      if (this % command_counter % try_update(old_value, tag)) then
-        ! print '(A, I8, A, I8, I8)', 'Enqueuing command, tag ', tag, ', size ', size(command_content), this % command_counter % read()
-        success = this % command_buffer % put(command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true., thread_safe = .true., timeout_ms = this % put_cmd_timeout)
+    if (tag > this % shared_instance % get_tag_counter()) then ! We only try to enqueue the command if its tag is higher than the last one
+
+      ! --- START Critical region ---
+      call this % mutex % lock()
+      if (tag > this % shared_instance % get_tag_counter()) then
+        call this % shared_instance % set_tag_counter(tag)
+        if (this % debug_level >= 2) then
+          print '(A, 1X, A, I8, A, I8, A, I7, A, I3)', this % pe_name,                              &
+                'DEBUG: Enqueuing command, tag ', tag, ', size ', size(command_content),            &
+                ' in stream ', this % get_id(), ', rank ', this % get_rank()
+        end if
+
+        ! Enqueue the command
+        success = this % command_buffer % put(                                                          &
+            command_content, size(command_content, kind=8), CB_DATA_ELEMENT_KIND, .true.,               &
+            thread_safe = .true., timeout_ms = this % put_cmd_timeout)
+
+      end if
+      call this % mutex % unlock()
+      ! --- END critical region ---
+
         if (.not. success) then
-          print '(A, A, I7, A, F8.2, A, I4, A)', this % pe_name, ' ERROR: Command buffer for stream ID ', this % get_id(),  &
+        print '(A, A, I7, A, F8.2, A, I4, A)', this % pe_name,                                        &
+              ' ERROR: Command buffer for stream ID ', this % get_id(),                               &
                 ' is full. You could make it bigger (currently ',                                       &
                 real(this % command_buffer % get_capacity(CB_KIND_CHAR), kind=8) / 1000.0,              &
                 'kB), wait longer for buffer to be processed (current timeout is ',                     &
                 this % put_cmd_timeout,                                                                 &
                 ' ms), or just send less commands.'
         end if
+      return ! We put the command (successfully or not), now just leave the function
       end if
-    end if
+
+    if (this % debug_level >= 3)                                                                        &
+        print '(A, 1X, A, I8)', this % pe_name, 'DEBUG: discarding command with tag ', tag
   end function local_server_stream_put_command
 
   !> Do any task that needs to be done with this stream: open the underlying file, process a completed grid,
@@ -322,67 +370,71 @@ contains
     class(local_server_stream), intent(inout) :: this
     logical :: success
 
-    ! integer :: num_flushed
-
     type(command_record) :: record
 
     success = .false.
 
-    ! if (.not. this % is_writer) then
-    !   print *, 'ERROR: This function should only be called from a "writer" process (not a server receiver)'
-    !   return
-    ! end if
-
     if (.not. this % is_owner()) then
-      print '(A, A)', this % pe_name, ' ERROR: I am not the owner of that stream'
+      print '(A, 1X, A)', this % pe_name, 'ERROR: I am not the owner of this stream'
       return
     end if
-    ! if (this % shared_instance % status == 0) return
 
     success = .true.
     do while (this % command_buffer % get_num_elements(CB_KIND_INTEGER_8) > 0 .and. success)
-      ! Extract the command and execute it
 
-      ! print *, 'Getting from command queue, size ', command_record_size_int8()
-      success = this % command_buffer % get(record, command_record_size_int8(), CB_KIND_INTEGER_8, .true.)
-      if (.not. success) return
-      if (record % message_tag > this % shared_instance % current_command_tag) then
+      ! Extract the command
+      success = this % command_buffer % get(record, command_record_size_byte(), CB_KIND_CHAR, .true.)
+      if (.not. success) then
+        print '(A, 1X, A)', this % pe_name, 'ERROR: Could not retrieve command!!!!!!!!!'
+        return
+      end if
+
+      ! Verify we haven't already executed that command
+      if (record % message_tag <= this % shared_instance % current_command_tag) then
+        print '(A, 1X, A)', this % pe_name, 'ERROR: Duplicate command. This one has already been executed.'
+        success = .false.
+        return
+      end if
+
         this % shared_instance % current_command_tag = record % message_tag
-        ! call print_command_record(record)
 
+      if (this % debug_level >= 2)                                                                                  &
+          print '(A, 1X, A, A, A, I8)', this % pe_name, 'DEBUG: Processing ',                                       &
+          trim(get_message_command_string(record % command_type)), ', tag ', record % message_tag
+
+      ! Execute the command, based on its content
         if (record % command_type == MSG_COMMAND_OPEN_STREAM) then
-          if (this % debug_level >= 2) print '(A, A)', this % pe_name, ' DEBUG: Processing MSG_COMMAND_OPEN_STREAM'
           success = this % open(record % stream_id) .and. success
-          if (.not. success) print '(A, A, I6)', this % pe_name, ' ERROR: Failed to open stream, ID ', record % stream_id
+        if (.not. success)                                                                                          &
+            print '(A, A, I6)', this % pe_name, ' ERROR: Failed to open stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_CLOSE_STREAM) then
           success = this % close() .and. success
-          if (.not. success) print '(A, A, I6)', this % pe_name, ' ERROR: Failed to close stream, ID ', record % stream_id
+        if (.not. success)                                                                                          &
+            print '(A, A, I6)', this % pe_name, ' ERROR: Failed to close stream, ID ', record % stream_id
 
         else if (record % command_type == MSG_COMMAND_SERVER_CMD .or. record % command_type == MSG_COMMAND_DATA) then
-
           block
             type(jar) :: command_content ! We want a new jar every time
             type(C_PTR) :: grid_data
-            type(ioserver_timer) :: timer
             integer(CB_DATA_ELEMENT), dimension(:), allocatable, save :: data_buffer
 
-            call timer % create()
-
+          ! Make sure we have enough space to retrieve all data
             if (allocated(data_buffer)) then
               if (size(data_buffer) < record % size_int8) deallocate(data_buffer)
             end if
-
             if (.not. allocated(data_buffer)) then
               allocate(data_buffer(record % size_int8))
             end if
 
             ! print *, 'Getting from command queue, size ', record % size_int8
-            success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
+          success = this % command_buffer % get(                                                                    &
+              data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.) .and. success
             ! call command_content % reset()
             success = command_content % shape_with(data_buffer, int(record % size_int8, kind=4)) .and. success
             if (.not. success) then
-              print '(A, A, I4)', this % pe_name, ' ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
+            print '(A, 1X, A, I4)', this % pe_name,                                                                 &
+                'ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
               call print_command_record(record)
               success = .false.
               return
@@ -394,39 +446,34 @@ contains
 
             else if (record % command_type == MSG_COMMAND_DATA) then
               ! First get a pointer to the assembled grid that comes with the command. Might have to wait a bit for it
-              call timer % start()
-              grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(record % message_tag, this % data_heap)
-              call timer % stop()
+            call this % timer % start()
+            grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(                       &
+                record % message_tag, this % data_heap)
+            call this % timer % stop()
               if (.not. c_associated(grid_data)) then
-                print '(A, 1X, A, F5.2, A)', this % pe_name, 'ERROR: Could not get completed line data!!! In ', timer % get_time_ms() / 1000.0, 's'
+              print '(A, 1X, A, F5.2, A)', this % pe_name, 'ERROR: Could not get completed line data!!! In ',       &
+                  this % timer % get_time_ms() / 1000.0, 's'
                 success = .false.
                 return 
               end if
 
-              if (this % debug_level >= 2) then
-                print '(A, 1X, A, F8.3, A)', this % pe_name, 'DEBUG: Waited ', timer % get_time_ms() / 1000.0, ' seconds for grid to be assembled'
-              end if
+            if (this % debug_level >= 2)                                                                            &
+                print '(A, 1X, A, F8.3, A)', this % pe_name, 'DEBUG: Waited ',                                      &
+                this % timer % get_time_ms() / 1000.0, ' seconds for grid to be assembled'
 
               ! Then execute the command on that assembled grid
               success = process_data(grid_data, command_content, this % shared_instance % get_id())
 
               ! Free the grid data
-              success = this % shared_instance % partial_grid_data % free_line(record % message_tag, this % data_heap, this % mutex) .and. success
+            success = this % shared_instance % partial_grid_data % free_line(                                       &
+                record % message_tag, this % data_heap, this % mutex) .and. success
             end if
-
-            call timer % delete()
           end block
 
         else
-          print '(A, A, I3, A)', this % pe_name, ' ERROR: Unknown message command ', record % command_type, '. Will just stop processing this stream.'
+        print '(A, A, I3, A)', this % pe_name, ' ERROR: Unknown message command ', record % command_type,           &
+            '. Will just stop processing this stream.'
           call print_command_record(record)
-          success = .false.
-        end if
-      else
-        ! Command has already been executed, so skip it
-        ! Don't forget to discard data from the already-executed command
-        ! if (record % size_int8 > 0) success = this % command_buffer % get(data_buffer, record % size_int8, CB_KIND_INTEGER_8, .true.)
-        print '(A, 1X, A)', this % pe_name, 'ERROR: Duplicate command. This one has already been executed'
         success = .false.
       end if
     end do
@@ -518,4 +565,10 @@ contains
       success = this % shared_instance % close()
     end if
   end function local_server_stream_close
+
+  subroutine local_server_stream_finalize(stream)
+    implicit none
+    type(local_server_stream), intent(inout) :: stream
+    call stream % timer % delete()
+  end subroutine local_server_stream_finalize
 end module server_stream_module
