@@ -150,6 +150,7 @@ contains
       print '(A, 1X, A, I6, A, I3)', pe_name, 'DEBUG: Trying to create an assembly line for tag ', record % tag, ' in stream ', record % stream
     end if
 
+    ! --- START Critical region ---
     call mutex % lock()
 
     line_id = this % get_line_id(record, free_line_id) ! First check if someone else has already created an assembly line for this record
@@ -193,6 +194,7 @@ contains
     end if
 
     call mutex % unlock()
+    ! --- END critical region ---
   end function grid_assembly_create_line
 
   !> Check whether the grid at the given line is fully assembled
@@ -274,13 +276,15 @@ contains
     ! Using a function allows to avoid aliasing restrictions (i.e. having to copy on the stack first)
     call set_full_grid_data(full_grid_byte, subgrid_byte, index_start, index_end)
 
-    ! Update missing data indicator
+    ! Update missing data indicator. TODO just use an atomic variable
+    ! --- START Critical region ---
     call mutex % lock()
     this % lines(line_id) % missing_elem = this % lines(line_id) % missing_elem - record % local_bounds % compute_num_elements()
     if (debug_level >= 3) then
       print '(A, 1X, A, I10, A)', pe_name, 'DEBUG: We still need to put ', this % lines(line_id) % missing_elem, ' elements in the grid'
     end if
     call mutex % unlock()
+    ! --- END critical region ---
 
     success = .true.
   end function grid_assembly_put_data
