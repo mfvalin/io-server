@@ -45,6 +45,67 @@ contains
     val = int(rank * 10 + index, kind = 1)
   end function get_val
 
+  function test_alloc(the_heap, array, expected, dim1, dim2) result(success)
+    implicit none
+    type(shmem_heap), intent(inout) :: the_heap
+    integer(C_INT16_T), dimension(:, :, :), contiguous, pointer, intent(inout) :: array
+    logical, intent(in) :: expected
+    integer(C_INT64_T), dimension(:), intent(in) :: dim1
+    integer(C_INT64_T), dimension(:), intent(in), optional :: dim2
+    logical :: success
+
+    type(block_meta_f08) :: info
+    integer, dimension(size(dim1)) :: default_dim2
+    default_dim2(:) = 1
+
+    if (present(dim2)) then
+      default_dim2(:) = dim2(1:size(dim1))
+      info = the_heap % allocate(array, dim1, dim2)
+    else
+      info = the_heap % allocate(array, dim1)
+    end if
+
+    success = .not. expected
+    if (associated(array)) success = expected
+    if (.not. success) then
+      if (expected) then
+        print *, 'ERROR: Unable to allocate: ', dim1, default_dim2
+      else
+        print *, 'ERROR: Should NOT have allocated: ', size(array), dim1, default_dim2
+      endif
+    end if
+
+    if (associated(array)) then
+      success = the_heap % free(info) .and. success
+    end if
+
+    if (.not. success) error stop 1
+  end function test_alloc
+
+  function test_alloc4(the_heap, array, expected, dim1, dim2) result(success)
+    implicit none
+    type(shmem_heap), intent(inout) :: the_heap
+    integer(C_INT16_T), dimension(:, :, :), contiguous, pointer, intent(inout) :: array
+    logical, intent(in) :: expected
+    integer(C_INT32_T), dimension(:), intent(in) :: dim1
+    integer(C_INT32_T), dimension(:), intent(in), optional :: dim2
+    logical :: success
+
+    integer(C_INT64_T), dimension(size(dim1)) :: dim1_8
+
+    dim1_8(:) = dim1(:)
+
+    if (present(dim2)) then
+      block
+        integer(C_INT64_T), dimension(size(dim2)) :: dim2_8
+        dim2_8(:) = dim2(:)
+        success = test_alloc(the_heap, array, expected, dim1_8, dim2_8)
+      end block
+    else
+      success = test_alloc(the_heap, array, expected, dim1_8)
+    end if
+  end function test_alloc4
+
   subroutine run_test(the_heap)
     implicit none
     type(shmem_heap), intent(inout) :: the_heap
@@ -55,25 +116,36 @@ contains
     call MPI_Comm_rank(MPI_COMM_WORLD, rank, ierr)
     call MPI_Comm_size(MPI_COMM_WORLD, num_procs, ierr)
 
+    if (rank == 0) print *, 'Concurrent alloc'
     call concurrent_alloc_basic()
 
     !------------------------
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
+    if (rank == 0) print *, 'One producer, one consumer'
     call one_producer_one_consumer()
 
     !------------------------
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
+    if (rank == 0) print *, 'Array TKR and values'
     call array_tkr_and_values()
 
     !------------------------
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
+    if (rank == 0) print *, 'Big alloc'
     call big_alloc()
+
+    !------------------------
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    !------------------------
+
+    if (rank == 0) print *, 'Various inputs'
+    call various_params()
 
     !------------------------
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
@@ -81,6 +153,7 @@ contains
 
     !!!!!!!!!!!!!!!!!!!!!!!
     ! Gotta do this test last, because it does bad thing to the heap (and might leave it in an inconsistent state)
+    if (rank == 0) print *, 'Concurrent alloc many'
     call concurrent_alloc_many()
 
     !------------------------
@@ -243,6 +316,41 @@ contains
         end do
       end if
     end subroutine one_producer_one_consumer
+
+    subroutine various_params()
+      implicit none
+      type(block_meta_f08) :: info
+      logical :: success
+      integer(C_INT16_T), dimension(:, :, :), contiguous, pointer :: array
+
+      if (rank .ne. 0) return
+
+      success = test_alloc4(the_heap, array, .true., [2, 2])
+      success = test_alloc4(the_heap, array, .true., [2, 2, 2, 1])       .and. success
+      success = test_alloc4(the_heap, array, .true., [2, 2, 3, 1, 1, 1]) .and. success
+      success = test_alloc4(the_heap, array, .false., [2, 2, 2, 2])      .and. success
+
+      success = test_alloc4(the_heap, array, .true., [1, 1, 1], [2, 2, 1])           .and. success
+      success = test_alloc4(the_heap, array, .true., [1, 4, 1], [2, 4, 1])           .and. success
+      success = test_alloc4(the_heap, array, .true., [-5, -1], [-2, 2])              .and. success
+      success = test_alloc4(the_heap, array, .true., [-5, -1, 1, 1], [-2, 2, 1, 1])  .and. success
+      success = test_alloc4(the_heap, array, .true., [-5, -1, 1, 1], [-5, 2, 1, 1])  .and. success
+      success = test_alloc4(the_heap, array, .false., [1, 1], [2, 2, 1])             .and. success
+      success = test_alloc4(the_heap, array, .false., [1, 1, 1], [2, 2])             .and. success
+      success = test_alloc4(the_heap, array, .false., [1, 1, 1], [2, 0, 1])          .and. success
+      success = test_alloc4(the_heap, array, .false., [1, 2, 1], [2, 0, 1])          .and. success
+
+      success = test_alloc(the_heap, array, .true., [1_8, 1_8, 1_8], [2_8, 2_8, 1_8])               .and. success
+      success = test_alloc(the_heap, array, .true., [1_8, 4_8, 1_8], [2_8, 4_8, 1_8])               .and. success
+      success = test_alloc(the_heap, array, .true., [-5_8, -1_8], [-2_8, 2_8])                      .and. success
+      success = test_alloc(the_heap, array, .true., [-5_8, -1_8, 1_8, 1_8], [-2_8, 2_8, 1_8, 1_8])  .and. success
+      success = test_alloc(the_heap, array, .true., [-5_8, -1_8, 1_8, 1_8], [-5_8, 2_8, 1_8, 1_8])  .and. success
+      success = test_alloc(the_heap, array, .false., [1_8, 1_8], [2_8, 2_8, 1_8])                   .and. success
+      success = test_alloc(the_heap, array, .false., [1_8, 1_8, 1_8], [2_8, 2_8])                   .and. success
+      success = test_alloc(the_heap, array, .false., [1_8, 1_8, 1_8], [2_8, 0_8, 1_8])              .and. success
+      success = test_alloc(the_heap, array, .false., [1_8, 2_8, 1_8], [2_8, 0_8, 1_8])              .and. success
+
+    end subroutine various_params
 
     subroutine array_tkr_and_values()
       implicit none
