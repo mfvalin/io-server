@@ -27,6 +27,7 @@ post-test-cleanup:u2:
    dependencies: 
       - test:U2_intel-2022.1.2_single_node
       - test:U2_intel-2022.1.2_multi_node
+      - test:U2_intel-2022.1.2_many_nodes
       - test:U2_gnu-9.3.0_single_node
       - test:U2_gnu-9.3.0_multi_node
       - test:U2_aocc
@@ -106,6 +107,32 @@ test:U2_intel-2022.1.2_multi_node:
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
+
+test:U2_intel-2022.1.2_many_nodes:
+   stage: test
+   tags:
+      - U2
+   dependencies:
+      - build:U2_intel-2022.1.2
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      NUM_CPUS: "800"
+      NUM_SERVER_CPUS: "80"
+      NUM_MODEL_CPUS: "720"
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_C: "${NUM_CPUS}x1"
+      ORD_SOUMET_M: "2G"
+      ORD_SOUMET_W: "30"
+      ORD_SOUMET_JN: u2-intel-many-nodes
+      MPI_COMMAND: "mpirun"
+   script:
+      - set +e
+      - source ci-env/latest/rhel-8-icelake-64/inteloneapi-2022.1.2.sh
+      - SRC_DIR=$(pwd)
+      - cd ${build_dir}
+      - BUILD_PATH=`pwd`
+      - mkdir -pv many_nodes_test && cd many_nodes_test
+      - ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_model_write  0 2 4 4 2 || exit -1
 
 ####################
 # U2 GNU 9.3.0
