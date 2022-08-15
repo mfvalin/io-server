@@ -100,7 +100,7 @@ module ioserver_message_module
 
   public :: message_header_size_int8, message_cap_size_int8, data_record_size_int8, command_record_size_int8
   public :: message_header_size_byte, message_cap_size_byte, data_record_size_byte, command_record_size_byte
-  public :: print_message_header, print_data_record, print_command_record
+  public :: print_message_header, print_data_record, print_command_record, get_message_command_string
 
 contains
 
