@@ -97,9 +97,11 @@ contains
 
     if (present(dim2)) then
       block
-        integer(C_INT64_T), dimension(size(dim2)) :: dim2_8
+        integer(C_INT64_T), dimension(:), allocatable :: dim2_8
+        allocate(dim2_8(size(dim2)))
         dim2_8(:) = dim2(:)
         success = test_alloc(the_heap, array, expected, dim1_8, dim2_8)
+        deallocate(dim2_8)
       end block
     else
       success = test_alloc(the_heap, array, expected, dim1_8)
