@@ -137,7 +137,8 @@ contains
     new_shared_server_stream % stream_rank = stream_rank
     new_shared_server_stream % owner_id    = owner_id
 
-    success = new_shared_server_stream % command_buffer % create_bytes(c_loc(new_shared_server_stream % command_buffer_data), COMMAND_BUFFER_SIZE_BYTES)
+    success = new_shared_server_stream % command_buffer % create_bytes(                                               &
+        c_loc(new_shared_server_stream % command_buffer_data), COMMAND_BUFFER_SIZE_BYTES)
 
     new_shared_server_stream % status = STREAM_STATUS_INITIALIZED
   end function new_shared_server_stream
@@ -221,8 +222,9 @@ contains
   subroutine shared_server_stream_print(this)
     implicit none
     class(shared_server_stream), intent(in) :: this
-    print '(A, I4, A, I4, A, I4, A, I4, A, I2)', 'Stream rank: ', this % stream_rank, ', stream ID: ', this % stream_id,  &
-          ', status: ', this % status, ', owner ID: ', this % owner_id, ', mutex value: ', this % mutex_value
+    print '(A, I4, A, I4, A, I4, A, I4, A, I2)', 'Stream rank: ', this % stream_rank, ', stream ID: ',                &
+          this % stream_id, ', status: ', this % status, ', owner ID: ', this % owner_id, ', mutex value: ',          &
+          this % mutex_value
   end subroutine shared_server_stream_print
 
   !> Create an atomic counter from the tag counter variable of this shared_server_stream
@@ -364,10 +366,10 @@ contains
           block
             type(jar) :: command_content ! We want a new jar every time
             type(C_PTR) :: grid_data
-            type(ioserver_timer) :: timer
+              type(ioserver_timer) :: timer
             integer(CB_DATA_ELEMENT), dimension(:), allocatable, save :: data_buffer
 
-            call timer % create()
+              call timer % create()
 
             if (allocated(data_buffer)) then
               if (size(data_buffer) < record % size_int8) deallocate(data_buffer)
@@ -382,12 +384,12 @@ contains
             ! call command_content % reset()
             success = command_content % shape_with(data_buffer, int(record % size_int8, kind=4)) .and. success
             if (.not. success) then
-              print '(A, A, I4)', this % pe_name, ' ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
+                print '(A, A, I4)', this % pe_name, ' ERROR: Unable to extract and package command from command buffer in stream ', record % stream_id
               call print_command_record(record)
               success = .false.
               return
             end if
-            
+          
             if (record % command_type == MSG_COMMAND_SERVER_CMD) then
               ! Simply execute the command
               success = process_command(command_content, this % shared_instance % get_id())
@@ -459,7 +461,8 @@ contains
     integer :: i
 
     ! First attempt
-    success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
+    success = this % shared_instance % partial_grid_data % put_data(                                                  &
+        record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
 
     max_num_attempts = MAX_WAIT_TIME_S * 1000000 / WAIT_TIME_US
 
@@ -468,13 +471,14 @@ contains
       if (.not. success) then
         ! Print a message every second or so
         if (mod(i, 10000000/WAIT_TIME_US) == 0) then
-          print '(A, A, I2, A, F5.2, A)', this % pe_name, ' WARNING: Could not put the data into the grid for owner ', &
+          print '(A, A, I2, A, F5.2, A)', this % pe_name, ' WARNING: Could not put the data into the grid for owner ',&
               this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
               (max_num_attempts - i) * WAIT_TIME_US / 1000000.0, 's'
         end if
 
         call sleep_us(WAIT_TIME_US)
-        success = this % shared_instance % partial_grid_data % put_data(record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
+        success = this % shared_instance % partial_grid_data % put_data(                                              &
+            record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
       else
         exit ! We're good, can finish now
       end if

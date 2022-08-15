@@ -124,13 +124,33 @@ module shmem_heap_module
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
 !   ===========================  interfaces to script generated functions  ===========================
     !> \return                           a fortran pointer
-    procedure   ::            &  !< specific procedures needed for generic type bound allocator
+    procedure   ::            &  !< specific procedures needed for generic type-bound allocator (specify array size)
                               allocate_I1_5D, allocate_I1_4D, allocate_I1_3D, allocate_I1_2D, allocate_I1_1D, &
                               allocate_I2_5D, allocate_I2_4D, allocate_I2_3D, allocate_I2_2D, allocate_I2_1D, &
                               allocate_I4_5D, allocate_I4_4D, allocate_I4_3D, allocate_I4_2D, allocate_I4_1D, &
                               allocate_I8_5D, allocate_I8_4D, allocate_I8_3D, allocate_I8_2D, allocate_I8_1D, &
                               allocate_R4_5D, allocate_R4_4D, allocate_R4_3D, allocate_R4_2D, allocate_R4_1D, &
-                              allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D 
+                              allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D, &
+                              allocate_I1_5D_integer, allocate_I1_4D_integer, allocate_I1_3D_integer, allocate_I1_2D_integer, allocate_I1_1D_integer, &
+                              allocate_I2_5D_integer, allocate_I2_4D_integer, allocate_I2_3D_integer, allocate_I2_2D_integer, allocate_I2_1D_integer, &
+                              allocate_I4_5D_integer, allocate_I4_4D_integer, allocate_I4_3D_integer, allocate_I4_2D_integer, allocate_I4_1D_integer, &
+                              allocate_I8_5D_integer, allocate_I8_4D_integer, allocate_I8_3D_integer, allocate_I8_2D_integer, allocate_I8_1D_integer, &
+                              allocate_R4_5D_integer, allocate_R4_4D_integer, allocate_R4_3D_integer, allocate_R4_2D_integer, allocate_R4_1D_integer, &
+                              allocate_R8_5D_integer, allocate_R8_4D_integer, allocate_R8_3D_integer, allocate_R8_2D_integer, allocate_R8_1D_integer 
+
+    procedure   ::            &  !< specific procedures needed for generic type-bound allocator (specify array bounds)
+                              allocate_I1_5D_bounds, allocate_I1_4D_bounds, allocate_I1_3D_bounds, allocate_I1_2D_bounds, allocate_I1_1D_bounds, &
+                              allocate_I2_5D_bounds, allocate_I2_4D_bounds, allocate_I2_3D_bounds, allocate_I2_2D_bounds, allocate_I2_1D_bounds, &
+                              allocate_I4_5D_bounds, allocate_I4_4D_bounds, allocate_I4_3D_bounds, allocate_I4_2D_bounds, allocate_I4_1D_bounds, &
+                              allocate_I8_5D_bounds, allocate_I8_4D_bounds, allocate_I8_3D_bounds, allocate_I8_2D_bounds, allocate_I8_1D_bounds, &
+                              allocate_R4_5D_bounds, allocate_R4_4D_bounds, allocate_R4_3D_bounds, allocate_R4_2D_bounds, allocate_R4_1D_bounds, &
+                              allocate_R8_5D_bounds, allocate_R8_4D_bounds, allocate_R8_3D_bounds, allocate_R8_2D_bounds, allocate_R8_1D_bounds, &
+                              allocate_I1_5D_bounds_int4, allocate_I1_4D_bounds_int4, allocate_I1_3D_bounds_int4, allocate_I1_2D_bounds_int4, allocate_I1_1D_bounds_int4, &
+                              allocate_I2_5D_bounds_int4, allocate_I2_4D_bounds_int4, allocate_I2_3D_bounds_int4, allocate_I2_2D_bounds_int4, allocate_I2_1D_bounds_int4, &
+                              allocate_I4_5D_bounds_int4, allocate_I4_4D_bounds_int4, allocate_I4_3D_bounds_int4, allocate_I4_2D_bounds_int4, allocate_I4_1D_bounds_int4, &
+                              allocate_I8_5D_bounds_int4, allocate_I8_4D_bounds_int4, allocate_I8_3D_bounds_int4, allocate_I8_2D_bounds_int4, allocate_I8_1D_bounds_int4, &
+                              allocate_R4_5D_bounds_int4, allocate_R4_4D_bounds_int4, allocate_R4_3D_bounds_int4, allocate_R4_2D_bounds_int4, allocate_R4_1D_bounds_int4, &
+                              allocate_R8_5D_bounds_int4, allocate_R8_4D_bounds_int4, allocate_R8_3D_bounds_int4, allocate_R8_2D_bounds_int4, allocate_R8_1D_bounds_int4 
 !> \endcond
     !> \return     a fortran pointer to integer and real arrays of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
     GENERIC   :: allocate =>  &  !< generic Fortran array type bound allocator
@@ -139,7 +159,25 @@ module shmem_heap_module
                               allocate_I4_5D, allocate_I4_4D, allocate_I4_3D, allocate_I4_2D, allocate_I4_1D, &
                               allocate_I8_5D, allocate_I8_4D, allocate_I8_3D, allocate_I8_2D, allocate_I8_1D, &
                               allocate_R4_5D, allocate_R4_4D, allocate_R4_3D, allocate_R4_2D, allocate_R4_1D, &
-                              allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D
+                              allocate_R8_5D, allocate_R8_4D, allocate_R8_3D, allocate_R8_2D, allocate_R8_1D, &
+                              allocate_I1_5D_integer, allocate_I1_4D_integer, allocate_I1_3D_integer, allocate_I1_2D_integer, allocate_I1_1D_integer, &
+                              allocate_I2_5D_integer, allocate_I2_4D_integer, allocate_I2_3D_integer, allocate_I2_2D_integer, allocate_I2_1D_integer, &
+                              allocate_I4_5D_integer, allocate_I4_4D_integer, allocate_I4_3D_integer, allocate_I4_2D_integer, allocate_I4_1D_integer, &
+                              allocate_I8_5D_integer, allocate_I8_4D_integer, allocate_I8_3D_integer, allocate_I8_2D_integer, allocate_I8_1D_integer, &
+                              allocate_R4_5D_integer, allocate_R4_4D_integer, allocate_R4_3D_integer, allocate_R4_2D_integer, allocate_R4_1D_integer, &
+                              allocate_R8_5D_integer, allocate_R8_4D_integer, allocate_R8_3D_integer, allocate_R8_2D_integer, allocate_R8_1D_integer, &
+                              allocate_I1_5D_bounds, allocate_I1_4D_bounds, allocate_I1_3D_bounds, allocate_I1_2D_bounds, allocate_I1_1D_bounds, &
+                              allocate_I2_5D_bounds, allocate_I2_4D_bounds, allocate_I2_3D_bounds, allocate_I2_2D_bounds, allocate_I2_1D_bounds, &
+                              allocate_I4_5D_bounds, allocate_I4_4D_bounds, allocate_I4_3D_bounds, allocate_I4_2D_bounds, allocate_I4_1D_bounds, &
+                              allocate_I8_5D_bounds, allocate_I8_4D_bounds, allocate_I8_3D_bounds, allocate_I8_2D_bounds, allocate_I8_1D_bounds, &
+                              allocate_R4_5D_bounds, allocate_R4_4D_bounds, allocate_R4_3D_bounds, allocate_R4_2D_bounds, allocate_R4_1D_bounds, &
+                              allocate_R8_5D_bounds, allocate_R8_4D_bounds, allocate_R8_3D_bounds, allocate_R8_2D_bounds, allocate_R8_1D_bounds, &
+                              allocate_I1_5D_bounds_int4, allocate_I1_4D_bounds_int4, allocate_I1_3D_bounds_int4, allocate_I1_2D_bounds_int4, allocate_I1_1D_bounds_int4, &
+                              allocate_I2_5D_bounds_int4, allocate_I2_4D_bounds_int4, allocate_I2_3D_bounds_int4, allocate_I2_2D_bounds_int4, allocate_I2_1D_bounds_int4, &
+                              allocate_I4_5D_bounds_int4, allocate_I4_4D_bounds_int4, allocate_I4_3D_bounds_int4, allocate_I4_2D_bounds_int4, allocate_I4_1D_bounds_int4, &
+                              allocate_I8_5D_bounds_int4, allocate_I8_4D_bounds_int4, allocate_I8_3D_bounds_int4, allocate_I8_2D_bounds_int4, allocate_I8_1D_bounds_int4, &
+                              allocate_R4_5D_bounds_int4, allocate_R4_4D_bounds_int4, allocate_R4_3D_bounds_int4, allocate_R4_2D_bounds_int4, allocate_R4_1D_bounds_int4, &
+                              allocate_R8_5D_bounds_int4, allocate_R8_4D_bounds_int4, allocate_R8_3D_bounds_int4, allocate_R8_2D_bounds_int4, allocate_R8_1D_bounds_int4 
   end type shmem_heap
 
 ! tell doxygen to ignore the following block (for now)

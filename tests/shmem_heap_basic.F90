@@ -45,6 +45,22 @@ contains
     val = int(rank * 10 + index, kind = 1)
   end function get_val
 
+  ! function test_alloc(the_heap, array, expected, dim1, dim2) result(success)
+  !   implicit none
+  !   integer(C_INT16_T), dimension(:, :, :), contiguous, pointer, intent(inout) :: array
+  !   logical :: expected
+  !   integer, dimension(:), intent(in) :: dim1
+  !   integer, dimension(:), intent(in), optional :: dim2
+  !   logical :: success
+
+  !   type(block_meta_f08) :: info
+
+  !   success = .false.
+  !   info = the_heap
+
+
+  ! end function test_alloc
+
   subroutine run_test(the_heap)
     implicit none
     type(shmem_heap), intent(inout) :: the_heap
@@ -74,6 +90,12 @@ contains
     !------------------------
 
     call big_alloc()
+
+    !------------------------
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    !------------------------
+
+    call various_params()
 
     !------------------------
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
@@ -243,6 +265,52 @@ contains
         end do
       end if
     end subroutine one_producer_one_consumer
+
+    subroutine various_params()
+      implicit none
+      type(block_meta_f08) :: info
+      logical :: success
+      integer(C_INT16_T), dimension(:, :, :), contiguous, pointer :: array
+
+      success = .false.
+
+      info = the_heap % allocate(array, [2, 2])
+      if (.not. associated(array)) then
+        print *, 'ERROR: Unable to allocate'
+        error stop 1
+      end if
+      success = the_heap % free(info)
+
+      info = the_heap % allocate(array, [2, 2, 2, 1])
+      if (.not. associated(array)) then
+        print *, 'ERROR: Unable to allocate'
+        error stop 1
+      end if
+      success = the_heap % free(info) .and. success
+
+      info = the_heap % allocate(array, [2, 2, 3, 1, 1, 1])
+      if (.not. associated(array)) then
+        print *, 'ERROR: Unable to allocate'
+        error stop 1
+      end if
+      success = the_heap % free(info) .and. success
+
+      info = the_heap % allocate(array, [2, 2, 2, 2])
+      if (associated(array)) then
+        print *, 'ERROR: Should not have been able to allocated that!'
+        error stop 1
+      end if
+
+      info = the_heap % allocate(array, [1, 1, 1], [2, 2, 1])
+      if (.not. associated(array)) then
+        print *, 'ERROR: Unable to allocate'
+        error stop 1
+      end if
+      success = the_heap % free(info) .and. success
+
+      ! info = the_heap % allocate(array, )
+
+    end subroutine various_params
 
     subroutine array_tkr_and_values()
       implicit none
