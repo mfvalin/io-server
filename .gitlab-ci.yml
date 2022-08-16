@@ -135,6 +135,7 @@ test:U2_intel-2022.1.2_many_nodes:
       - BUILD_PATH=`pwd`
       - mkdir -pv many_nodes_test && cd many_nodes_test
       - ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_model_write  0 2 4 4 2 || exit -1
+      - rm -fv pseudo_model_{1,2}
 
 ####################
 # U2 GNU 9.3.0
