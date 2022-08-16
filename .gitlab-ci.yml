@@ -81,6 +81,7 @@ test:U2_intel-2022.1.2_single_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
+      - mkdir -pv single_node_test && cd single_node_test
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
 test:U2_intel-2022.1.2_multi_node:
@@ -106,6 +107,7 @@ test:U2_intel-2022.1.2_multi_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
+      - mkdir -pv multi_node_test && cd multi_node_test
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
 test:U2_intel-2022.1.2_many_nodes:
@@ -179,6 +181,7 @@ test:U2_gnu-9.3.0_single_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
+      - mkdir -pv single_node_test && cd single_node_test
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
 test:U2_gnu-9.3.0_multi_node:
@@ -204,6 +207,7 @@ test:U2_gnu-9.3.0_multi_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
+      - mkdir -pv multi_node_test && cd multi_node_test
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
 ################

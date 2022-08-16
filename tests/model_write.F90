@@ -107,12 +107,13 @@ contains
   end function am_server_node
 
   function pseudo_model_process(context) result(model_success)
-    use shmem_heap_module
+    use circular_buffer_module
     use ioserver_context_module
     use ioserver_message_module
     use jar_module
     use process_command_module
     use rpn_extra_module, only: sleep_us
+    use shmem_heap_module
     implicit none
 
 #include <serializer.hf>
@@ -121,6 +122,7 @@ contains
     logical :: model_success
 
     type(shmem_heap)      :: node_heap
+    type(circular_buffer) :: model_cb
     type(model_stream), pointer :: output_stream_1, output_stream_2
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs
@@ -144,6 +146,7 @@ contains
     model_success = .false.
 
     node_heap = context % get_local_heap()
+    model_cb  = context % get_server_bound_cb()
     success = command_jar % new(100)
 
     ! Open and check stream 1
@@ -214,6 +217,27 @@ contains
     num_compute_x = compute_width
     num_compute_y = compute_height
 
+    if (model_crs % rank == 0) then
+      block
+        type(message_header) :: header
+        type(message_cap)    :: end_cap
+        header % command = MSG_COMMAND_USER
+        header % sender_global_rank = context % get_global_rank()
+        header % content_size_int8 = 2
+        end_cap % msg_length = header % content_size_int8
+
+        success = model_cb % put(header, message_header_size_byte(), CB_KIND_CHAR, .false., timeout_ms = 0)
+        success = model_cb % put(num_compute_x, 1_8, CB_KIND_INTEGER_4, .false., timeout_ms = 0)          .and. success
+        success = model_cb % put(num_compute_y, 1_8, CB_KIND_INTEGER_4, .false., timeout_ms = 0)          .and. success
+        success = model_cb % put(end_cap, message_cap_size_byte(), CB_KIND_CHAR, .true., timeout_ms = 0)  .and. success
+
+        if (.not. success) then
+          print '(A, 1X, A)', context % get_short_pe_name(), 'ERROR: Unable to send user command...'
+          return
+        end if
+      end block
+    end if
+
     block
       integer :: min_x, min_y
       min_x = mod(global_model_id, compute_width) * block_width + 1
@@ -249,10 +273,14 @@ contains
       integer(C_INT64_T), dimension(2) :: array_dims
       integer(C_INT64_T), dimension(5) :: big_array_dims
       integer :: i, j, k, l, m
+      integer :: data_size_divisor
+
+      data_size_divisor = 1
+      if (model_crs % size >= 200) data_size_divisor = 4
       array_dims = [block_width, block_height]
       big_array_dims = [dim_x, dim_y, dim_z, num_vars, num_time_steps]
       current_tag = 0
-      do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT
+      do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT / data_size_divisor
         !------------------------
         ! First stream
       
@@ -400,6 +428,7 @@ contains
     integer :: start_i, end_i, start_j, end_j
     integer :: i, j, k, l, m
     real(kind=8) :: expected, val
+    integer :: data_size_divisor
 
     print '(A)', 'Checking written file'
 
@@ -425,8 +454,11 @@ contains
 
     open(newunit = file_unit, file = trim(filename2), status = 'old', form = 'unformatted', action = 'read')
 
+    data_size_divisor = 1
+    if (num_compute_x * num_compute_y >= 200) data_size_divisor = 4
+    print *, 'num_model_pes = ', num_compute_x * num_compute_y, num_compute_x, num_compute_y
     tag = 2
-    do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT ! Loop through all pairs of records in this file
+    do i_msg = 1, CB_TOTAL_DATA_TO_SEND_INT / CB_MESSAGE_SIZE_INT / data_size_divisor ! Loop through all pairs of records in this file
       read(unit=file_unit) read1 ! First one won't be checked
       read(unit=file_unit) read2 ! This is the one we are interested in
       ! print *, array1(:,1)
@@ -471,6 +503,22 @@ contains
 
   end subroutine check_result
 
+  subroutine receive_num_pes(context, command)
+    use ioserver_context_module
+    use jar_module
+    implicit none
+    type(ioserver_context), intent(inout) :: context
+    type(jar),              intent(inout) :: command
+#include <serializer.hf>
+
+    logical :: success
+
+    success = JAR_GET_ITEM(command, num_compute_x)
+    success = JAR_GET_ITEM(command, num_compute_y)
+
+    print '(A, 1X, A, 2I6)', context % get_short_pe_name(), 'Got num PEs: ', num_compute_x, num_compute_y
+  end subroutine receive_num_pes
+
 end module model_write_parameters
 
 program pseudomodelandserver
@@ -495,10 +543,9 @@ program pseudomodelandserver
   integer :: num_relay_per_node, num_noop
 
   type(ioserver_input_parameters) :: params
-  type(ioserver_context) :: context
   procedure(model_function_template), pointer :: model_fn_ptr
+  procedure(user_command_template),   pointer :: user_command_fn
   logical :: success
-  integer :: num_model_pes
   integer :: ierr
 
   success = .false.
@@ -539,7 +586,7 @@ program pseudomodelandserver
   num_noop             = 0
 
   model_fn_ptr => pseudo_model_process
-  ! nullify(model_fn_ptr)
+  user_command_fn => receive_num_pes
 
   if (server_node) then
     if (.not. single_node .or. node_rank < num_server_processes) params % is_on_server = .true.
@@ -554,8 +601,7 @@ program pseudomodelandserver
   params % dcb_server_bound_size_mb = 500.0
 
   if (params % is_on_server) then
-    success = ioserver_run_server_node(params, context_out = context)
-    num_model_pes = context % get_num_total_model()
+    success = ioserver_run_server_node(params, custom_user_command_fn = user_command_fn)
   else
     success = ioserver_run_model_node(params, model_function = model_fn_ptr)
   end if
@@ -568,17 +614,6 @@ program pseudomodelandserver
   call MPI_Finalize(ierr)
 
   if (server_node .and. node_rank == 0) then
-    ! Init area info
-    if (mod(num_model_pes, 4) == 0) then
-      num_compute_x = num_model_pes / 4
-      num_compute_y = 4
-    else if (mod(num_model_pes, 2) == 0) then
-      num_compute_x = num_model_pes / 2
-      num_compute_y = 2
-    else
-      num_compute_x = num_model_pes
-      num_compute_y = 1
-    end if
     call check_result()
   end if
 
