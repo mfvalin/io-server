@@ -489,6 +489,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     if (context % get_debug_level() >= 3) print '(A, 1X, A, I5, A, I8)',                &
           context % get_short_pe_name(), 'DEBUG: Got a DATA message! From model ',      &
           header % sender_global_rank, ', tag ', header % message_tag
+
     success = dcb % get_elems(client_id, record, data_record_size_byte(), CB_KIND_CHAR, .true.)
     if (.not. success) then
       print '(A, A)', context % get_short_pe_name(), ' ERROR: reading record'
@@ -504,6 +505,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
       return
     end if
  
+    if (record % data_size_byte > 0) then
     num_data_int8 = num_char_to_num_int8(record % data_size_byte)
     call state % allocate_model_data(num_data_int8)
     success = dcb % get_elems(client_id, state % model_data, num_data_int8, CB_KIND_INTEGER_8, .true.) .and. success ! Extract data from DCB
@@ -512,6 +514,7 @@ function receive_message(context, dcb, client_id, state) result(receive_success)
     if (.not. success) then
       print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not put data into partial grid! (or maybe something else)'
       return
+      end if
     end if
 
   !--------------------

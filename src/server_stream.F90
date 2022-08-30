@@ -190,7 +190,7 @@ contains
     if (this % is_open()) then
       num_grids = this % partial_grid_data % get_num_grids()
       if (num_grids > 0) then
-        print '(A, I3, A)', 'ERROR: There are still ', num_grids, ' in this stream. We should not be closing it.'
+        print '(A, I3, A)', 'ERROR: There are still ', num_grids, ' grids being assembled in this stream. We should not be closing it.'
         this % status = STREAM_STATUS_UNINITIALIZED
         return
       end if

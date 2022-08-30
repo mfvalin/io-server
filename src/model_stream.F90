@@ -364,12 +364,6 @@ contains
     
     ! call print_data_record(rec)
 
-    ! Don't send anything if the entire tile will be cropped
-    if (.not. rec % local_bounds % is_valid()) then
-      success = .true.
-      return
-    end if
-
     ! Prepare header for the entire message
     header % content_size_int8  = data_record_size_int8() + command_record_size_int8() + command_meta % size_int8
     header % command            = MSG_COMMAND_DATA

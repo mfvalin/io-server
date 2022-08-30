@@ -421,7 +421,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
       call c_f_pointer(c_data, f_data, [record % data_size_byte])     ! Access data using a fortran pointer, for easy copy into the jar
       success = JAR_PUT_ITEM (state % server_bound_data, record)                                     .and. success  ! Data header
       success = JAR_PUT_ITEMS(state % server_bound_data, state % message_content(1:param_size_int8)) .and. success  ! All other metadata
-      success = JAR_PUT_ITEMS(state % server_bound_data, f_data(:))                                  .and. success  ! The data
+      if (record % data_size_byte > 0) success = JAR_PUT_ITEMS(state % server_bound_data, f_data(:)) .and. success  ! The data
 
       if (.not. success) then
         print '(A, 1X, A)', context % get_short_pe_name(), 'ERROR: Could not put heap data into the server-bound jar!'
@@ -538,6 +538,8 @@ subroutine allocate_message_buffer(this, num_elem)
   implicit none
   class(relay_state), intent(inout) :: this     !< Relay state instance
   integer(C_INT64_T), intent(in)    :: num_elem !< How many 64-bit elements in the buffer
+
+  if (num_elem <= 0) return
 
   if (allocated(this % message_content)) then
     if (size(this % message_content) >= num_elem) return
