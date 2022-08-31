@@ -35,17 +35,18 @@ module model_stream_module
 
   type, public :: model_stream
     private
-    integer               :: version = VERSION      !< Version marker, used to check version coherence
+    integer               :: version     = VERSION  !< Version marker, used to check version coherence
     integer               :: stream_rank = -1       !< Stream rank in fixed list of streams, for internal use
-    integer               :: stream_id = -1         !< Unique stream ID, for internal use
-    logical               :: debug = .false.        !< debug mode at the file level (is this even used?)
+    integer               :: stream_id   = -1       !< Unique stream ID, for internal use
+    integer               :: debug_level =  0       !< Debug level for this PE (determines sychronisation and debug messages)
     integer               :: global_rank = -1       !< Rank of the model PE that created this object, within the world communicator
-    integer               :: model_rank = -1        !< Rank of the model PE that created this object, within the model-only communicator
+    integer               :: model_rank  = -1       !< Rank of the model PE that created this object, within the model-only communicator
     type(shmem_heap)      :: local_heap             !< Access to the shared memory heap owned by this model PE
     type(circular_buffer) :: server_bound_cb        !< Access to the server-bound buffer owned by this model PE
     type(ioserver_messenger), pointer :: messenger => NULL() !< Messenger used to manage/synchronized data transmission to the server
     integer               :: put_cmd_timeout_ms     !< How many milliseconds to wait before failing when sending a command
     integer               :: put_data_timeout_ms    !< How many milliseconds to wait before failing when sending data
+    character(len=:), allocatable :: pe_name        !< Human-readable name of the PE that owns this model stream (for help with debugging)
 
     contains
 
@@ -57,7 +58,7 @@ module model_stream_module
     procedure :: is_open
     procedure, private :: is_version_valid
     procedure :: is_valid
-    procedure :: set_debug
+    procedure :: set_debug_level
     procedure :: send_command
     procedure :: send_data
   end type
@@ -68,18 +69,20 @@ module model_stream_module
 
 contains
 
-  function new_model_stream(global_rank, model_rank, stream_rank, local_heap, server_bound_cb, debug_mode, messenger, put_cmd_timeout_ms, put_data_timeout_ms)
+  function new_model_stream(global_rank, model_rank, stream_rank, local_heap, server_bound_cb, debug_level,           &
+                            messenger, put_cmd_timeout_ms, put_data_timeout_ms, pe_name)
     implicit none
-    integer,                intent(in)  :: global_rank
-    integer,                intent(in)  :: model_rank
-    integer,                intent(in)  :: stream_rank
-    type(shmem_heap),       intent(in)  :: local_heap
-    type(circular_buffer),  intent(in)  :: server_bound_cb
-    logical,                intent(in)  :: debug_mode
-    type(ioserver_messenger), pointer, intent(in) :: messenger
+    integer,                  intent(in) :: global_rank
+    integer,                  intent(in) :: model_rank
+    integer,                  intent(in) :: stream_rank
+    type(shmem_heap),         intent(in) :: local_heap
+    type(circular_buffer),    intent(in) :: server_bound_cb
+    integer,                  intent(in) :: debug_level
+    type(ioserver_messenger), intent(in), pointer :: messenger
     type(model_stream) :: new_model_stream
-    integer,                intent(in) :: put_cmd_timeout_ms
-    integer,                intent(in) :: put_data_timeout_ms
+    integer,                  intent(in) :: put_cmd_timeout_ms
+    integer,                  intent(in) :: put_data_timeout_ms
+    character(len=*),         intent(in) :: pe_name
 
     if (server_bound_cb % is_valid()) then
       new_model_stream % global_rank = global_rank
@@ -87,26 +90,26 @@ contains
       new_model_stream % stream_rank = stream_rank
       new_model_stream % local_heap  = local_heap
       new_model_stream % server_bound_cb = server_bound_cb
-      new_model_stream % debug = debug_mode
+      new_model_stream % debug_level = debug_level
       new_model_stream % messenger => messenger
       new_model_stream % put_cmd_timeout_ms = put_cmd_timeout_ms
       new_model_stream % put_data_timeout_ms = put_data_timeout_ms
+      new_model_stream % pe_name     = pe_name
     else
       print '(A)', 'ERROR: Server-bound CB has not been initialized!'
       return
     end if
   end function new_model_stream
 
-  function set_debug(this, dbg) result(status)
+  function set_debug_level(this, new_debug_level) result(old_debug_level)
     implicit none
-    class(model_stream), intent(INOUT) :: this
-    logical, intent(IN) :: dbg
-    logical :: status
+    class(model_stream), intent(inout) :: this
+    integer,             intent(in)    :: new_debug_level
+    integer :: old_debug_level
 
-    status = this % debug
-    this % debug = dbg
-
-  end function set_debug
+    old_debug_level = this % debug_level
+    this % debug_level = new_debug_level
+  end function set_debug_level
 
   function is_version_valid(this) result(status)
     implicit none
@@ -151,8 +154,12 @@ contains
     ! print *, 'Command content: ', command_content % array()
 
     ! Check if we actually can send a command to this stream
-    if (.not. this % is_open()) return
-    if (.not. this % server_bound_cb % is_valid()) return
+    if (.not. this % is_open()) then
+      if (this % debug_level >= 1)                                                                                    &
+        print '(A, 1X, A, I6, A)', this % pe_name, 'WARNING: Cannot send a command to stream ', this % stream_id,     &
+              " because IT'S NOT OPEN!!"
+      return
+    end if
 
     ! Never forget to get a new message tag! (message only, not file)
     call this % messenger % bump_tag(.false.)
@@ -173,7 +180,10 @@ contains
 
     ! call print_message_header(header)
     ! call print_command_record(command_header)
-    ! print '(A, I8)', 'Sending command with content size ', command_header % size_int8
+    if (this % debug_level >= 3)                                                                                  &
+      print '(A, 1X, A, I8, A, I6, A, I4)',                                                                       &
+            this % pe_name, 'DEBUG: Sending command with tag ', header % message_tag, ' to stream ',              &
+            header % stream_id, ' with content size ', command_header % size_int8
 
     ! Header
     success = this % server_bound_cb % put(                                                                       &
@@ -326,14 +336,20 @@ contains
     type(message_header)  :: header
     type(message_cap)     :: end_cap
     type(command_record)  :: command_meta
+    type(grid_bounds_t)   :: overlap
 
     success = .false.
-    if(this % stream_id <= 0) return
+    if (.not. this % is_open()) then
+      if (this % debug_level >= 1)                                                                                    &
+        print '(A, 1X, A, I6, A)', this % pe_name, 'WARNING: Cannot send data to stream ', this % stream_id,          &
+              " because IT'S NOT OPEN!!"
+      return
+    end if
 
     ! Perform a short series of checks on the inputs
     if (.not. (local_bounds % is_valid() .and. global_bounds % is_valid())) then
-      print '(A)', 'ERROR: Invalid grid size specified when sending data'
-      print '(2L2)', local_bounds % is_valid(), global_bounds % is_valid()
+      print '(A, 1X, A, 2L2)', this % pe_name, 'ERROR: Invalid grid size specified when sending data',                &
+            local_bounds % is_valid(), global_bounds % is_valid()
       return
     end if
 
@@ -356,11 +372,14 @@ contains
     rec % stream         = this % stream_id
 
     rec % global_bounds = global_bounds
-    rec % local_bounds  = local_bounds % intersection(global_bounds)
+    rec % local_bounds  = local_bounds
 
     rec % elem_size      = data_info % get_kind()
     rec % heap_offset    = data_info % get_offset()
     rec % data_size_byte = rec % local_bounds % compute_num_elements() * rec % elem_size
+    
+    overlap = local_bounds % intersection(global_bounds)
+    if (overlap % compute_num_elements() <= 0) rec % data_size_byte = 0
     
     ! call print_data_record(rec)
 
@@ -373,6 +392,12 @@ contains
     header % sender_global_rank = this % global_rank
 
     end_cap % msg_length = header % content_size_int8
+
+    if (this % debug_level >= 3)                                                                                  &
+      print '(A, 1X, A, I8, A, I6, A, I9, A, I4)',                                                                &
+            this % pe_name, 'DEBUG: Sending data with tag ', header % message_tag, ' to stream ',                 &
+            header % stream_id, ' with data size ', rec % data_size_byte, ' and command size ',                   &
+            command_meta % size_int8
 
     !-------------------
     ! Send the message

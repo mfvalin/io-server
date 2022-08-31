@@ -576,10 +576,11 @@ function ioctx_init_shared_mem(context) result(success)
                               i_stream,                                               &
                               context % local_heap,                                   &
                               context % local_server_bound_cb,                        &
-                              context % get_debug_level() >= 1,                       &
+                              context % get_debug_level(),                            &
                               context % messenger,                                    &
                               context % params % model_stream_put_cmd_timeout_ms,     &
-                              context % params % model_stream_put_data_timeout_ms)
+                              context % params % model_stream_put_data_timeout_ms,    &
+                              context % get_short_pe_name())
         end do
       end block
     end if
