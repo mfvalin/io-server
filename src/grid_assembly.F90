@@ -241,7 +241,7 @@ contains
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: full_grid_byte, subgrid_byte ! Fortran pointers to the full/subgrid data
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: full_grid_tmp, subgrid_tmp   ! Intermediary pointers to the full/subgrid data
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: index_start, index_end, full_size_byte, sub_size_byte  ! Sets of array indices
-    integer, dimension(MAX_ARRAY_RANK) :: g_min, g_max, l_min, l_max
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: g_min, g_max, l_min, l_max
     type(grid_bounds_t) :: overlap
 
     success = .false.

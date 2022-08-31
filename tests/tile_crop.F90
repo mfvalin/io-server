@@ -304,7 +304,7 @@ contains
     integer :: file_unit
     integer :: i, j
     integer :: num_errors
-    integer(C_INT8_T), dimension(global_num_x * 4, global_num_y) :: read4
+    integer(C_INT8_T), dimension(global_num_x * 4, global_num_y), target :: read4
     integer(C_INT32_T), dimension(:,:), pointer :: data_i4
     integer(C_INT32_T), dimension(global_num_x, global_num_y) :: expected_i4
     type(C_PTR) :: tmp_ptr
