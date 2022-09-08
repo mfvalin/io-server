@@ -157,10 +157,8 @@ contains
 
     if (line_id == -1) then           ! Good, there's no assembly line yet
       if (free_line_id .ne. -1) then  ! Good, there's a free line in the grid assembly object
-        line_id = free_line_id
-
         if (debug_level >= 3) then
-          print '(A, 1X, A, I3)', pe_name, 'DEBUG: Creating line ', line_id
+          print '(A, 1X, A, I3)', pe_name, 'DEBUG: Creating grid assembly line as position', free_line_id
         end if
 
         ! Get some shared memory
@@ -168,9 +166,12 @@ contains
         global_max = record % global_bounds % get_max_as_bytes(record % elem_size)
         data_array_info = data_heap % allocate(data_array_byte, global_min, global_max)
         if (.not. associated(data_array_byte)) then
-          print '(A, 1X, A)', pe_name, 'ERROR: Could not allocate from the heap! (bytes)'
+          print '(A, 1X, A)', pe_name, 'WARNING: Could not allocate from the heap! (bytes)'
+          call mutex % unlock()
           return
         end if
+
+        line_id = free_line_id
 
         ! Initialize the assembly line object
         associate(line => this % lines(line_id))
