@@ -215,13 +215,16 @@ contains
   !> do it in its own function because it bypasses precautions for potentially aliased pointers.
   !> This means you should *not* call this function on array pointers if the full_grid memory might
   !> overlap with the subgrid memory.
-  subroutine set_full_grid_data(full_grid, subgrid, start, end)
+  subroutine set_full_grid_data(full_grid, subgrid, g_start, g_end, l_start, l_end)
     implicit none
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, intent(inout) :: full_grid !< [in,out] Destination of the copy
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, intent(inout) :: subgrid   !< [in,out] Source of the copy
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: start, end !< [in] Starting and ending index in each dimension of the arrays
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: g_start, g_end !< [in] Starting and ending index in each dimension of the global array
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK), intent(in) :: l_start, l_end !< [in] Starting and ending index in each dimension of the local array
 
-    full_grid(start(1):end(1), start(2):end(2), start(3):end(3), start(4):end(4), start(5):end(5)) = subgrid(:,:,:,:,:)
+    full_grid(g_start(1):g_end(1), g_start(2):g_end(2), g_start(3):g_end(3), g_start(4):g_end(4), g_start(5):g_end(5)) =  &
+      subgrid(l_start(1):l_end(1), l_start(2):l_end(2), l_start(3):l_end(3), l_start(4):l_end(4), l_start(5):l_end(5))
+
   end subroutine set_full_grid_data
 
   !> Insert data from a subgrid in its appropriate "full grid" being assembled by this object.
@@ -240,9 +243,8 @@ contains
     integer :: line_id ! Assembly line where the full grid is being assembled
     type(C_PTR) :: full_grid_ptr, subgrid_ptr                                                    ! C pointers to the full grid and subgrid data
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: full_grid_byte, subgrid_byte ! Fortran pointers to the full/subgrid data
-    integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: full_grid_tmp, subgrid_tmp   ! Intermediary pointers to the full/subgrid data
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: index_start, index_end, full_size_byte, sub_size_byte  ! Sets of array indices
-    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: g_min, g_max, l_min, l_max
+    integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: g_start, g_end, l_start, l_end
     type(grid_bounds_t) :: overlap
 
     success = .false.
@@ -267,34 +269,33 @@ contains
 
     ! Compute addressing sizes/indices. The first dimension is actually in bytes rather than elements, so we need to include
     ! a factor of 'elem_size' into that index
-    full_size_byte    = this % lines(line_id) % global_bounds % get_size_as_bytes(record % elem_size)
-    sub_size_byte     = record % local_bounds % get_size_as_bytes(record % elem_size)
-    overlap           = record % local_bounds % intersection(record % global_bounds)
+    full_size_byte    = record % global_bounds % get_size_as_bytes(record % elem_size)
+    sub_size_byte     = record % local_bounds  % get_size_as_bytes(record % elem_size)
+    overlap           = record % local_bounds  % intersection(record % global_bounds)
     index_start       = overlap % get_min_as_bytes(record % elem_size)
     index_end         = overlap % get_max_as_bytes(record % elem_size)
 
+    g_start = index_start - record % global_bounds % get_min_as_bytes(record % elem_size) + 1
+    g_end   = index_end   - record % global_bounds % get_min_as_bytes(record % elem_size) + 1
+    l_start = index_start - record % local_bounds  % get_min_as_bytes(record % elem_size) + 1
+    l_end   = index_end   - record % local_bounds  % get_min_as_bytes(record % elem_size) + 1
+
     ! Retrieve data as 5-D Fortran pointers
     subgrid_ptr = c_loc(subgrid_data)
-    call c_f_pointer(subgrid_ptr, subgrid_tmp, sub_size_byte)
-    l_min = record % local_bounds % get_min_as_bytes(record % elem_size)
-    l_max = record % local_bounds % get_max_as_bytes(record % elem_size)
-    subgrid_byte(l_min(1):l_max(1), l_min(2):l_max(2), l_min(3):l_max(3), l_min(4):l_max(4), l_min(5):l_max(5)) => subgrid_tmp(:,:,:,:,:)
-
-    call c_f_pointer(full_grid_ptr, full_grid_tmp, full_size_byte)
-    g_min = record % global_bounds % get_min_as_bytes(record % elem_size)
-    g_max = record % global_bounds % get_max_as_bytes(record % elem_size)
-    full_grid_byte(g_min(1):g_max(1), g_min(2):g_max(2), g_min(3):g_max(3), g_min(4):g_max(4), g_min(5):g_max(5)) => full_grid_tmp(:,:,:,:,:)
+    call c_f_pointer(subgrid_ptr, subgrid_byte, sub_size_byte)
+    call c_f_pointer(full_grid_ptr, full_grid_byte, full_size_byte)
 
     ! Insert data into full grid
     ! Using a function allows to avoid aliasing restrictions (i.e. having to copy on the stack first)
-    call set_full_grid_data(full_grid_byte, subgrid_byte, index_start, index_end)
+    call set_full_grid_data(full_grid_byte, subgrid_byte, g_start, g_end, l_start, l_end)
 
     ! Update missing data indicator. TODO just use an atomic variable
     ! --- START Critical region ---
     call mutex % lock()
     this % lines(line_id) % missing_elem = this % lines(line_id) % missing_elem - overlap % compute_num_elements()
     if (debug_level >= 3) then
-      print '(A, 1X, A, I10, A)', pe_name, 'DEBUG: We still need to put ', this % lines(line_id) % missing_elem, ' elements in the grid'
+      print '(A, 1X, A, I10, A)', pe_name, 'DEBUG: We still need to put ', this % lines(line_id) % missing_elem,      &
+            ' elements in the grid'
     end if
     call mutex % unlock()
     ! --- END critical region ---

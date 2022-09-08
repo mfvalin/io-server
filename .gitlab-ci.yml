@@ -3,6 +3,8 @@ variables:
    ORD_SOUMET_SHELL: /bin/bash
    BUILD_BASE_BASE_DIR: /home/sici000/special_builds/
    BUILD_BASE_DIR: /home/sici000/special_builds/just_to_be_safe
+   RUN_BASE_BASE_DIR: /home/sici000/special_runs/
+   RUN_BASE_DIR: /home/sici000/special_runs/just_to_be_safe
 
 before_script:
    - export CLICOLOR_FORCE=1
@@ -21,6 +23,7 @@ cleanup:u2:
       - U2
    script:
       - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
+      - rm -rfv ${RUN_BASE_BASE_DIR}/just_to_be_safe
 
 post-test-cleanup:u2:
    stage: post-test-cleanup
@@ -35,6 +38,7 @@ post-test-cleanup:u2:
       - U2
    script:
       - rm -rfv ${BUILD_BASE_BASE_DIR}/just_to_be_safe
+      - rm -rfv ${RUN_BASE_BASE_DIR}/just_to_be_safe
 
 ####################
 # U2 Intel 2022
@@ -68,6 +72,7 @@ test:U2_intel-2022.1.2_single_node:
       - build:U2_intel-2022.1.2
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2/single_node_test
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
@@ -81,7 +86,7 @@ test:U2_intel-2022.1.2_single_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
-      - mkdir -pv single_node_test && cd single_node_test
+      - mkdir -pv ${run_dir} && cd ${run_dir}
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
 test:U2_intel-2022.1.2_multi_node:
@@ -92,6 +97,7 @@ test:U2_intel-2022.1.2_multi_node:
       - build:U2_intel-2022.1.2
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2/multi_node_test
       NUM_CPUS: "320"
       NUM_SERVER_CPUS: "80"
       NUM_MODEL_CPUS: "240"
@@ -107,7 +113,7 @@ test:U2_intel-2022.1.2_multi_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
-      - mkdir -pv multi_node_test && cd multi_node_test
+      - mkdir -pv ${run_dir} && cd ${run_dir}
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
 test:U2_intel-2022.1.2_many_nodes:
@@ -118,6 +124,7 @@ test:U2_intel-2022.1.2_many_nodes:
       - build:U2_intel-2022.1.2
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2/many_nodes_test
       NUM_CPUS: "800"
       NUM_SERVER_CPUS: "80"
       NUM_MODEL_CPUS: "720"
@@ -133,7 +140,7 @@ test:U2_intel-2022.1.2_many_nodes:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
-      - mkdir -pv many_nodes_test && cd many_nodes_test
+      - mkdir -pv ${run_dir} && cd ${run_dir}
       - ${MPI_COMMAND} -n ${NUM_CPUS} ${BUILD_PATH}/tests/io_server_model_write  0 2 4 4 2 || exit -1
       - rm -fv pseudo_model_{1,2}
 
@@ -169,6 +176,7 @@ test:U2_gnu-9.3.0_single_node:
       - build:U2_gnu-9.3.0
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0/single_node_test
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
@@ -182,7 +190,7 @@ test:U2_gnu-9.3.0_single_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
-      - mkdir -pv single_node_test && cd single_node_test
+      - mkdir -pv ${run_dir} && cd ${run_dir}
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
 test:U2_gnu-9.3.0_multi_node:
@@ -193,6 +201,7 @@ test:U2_gnu-9.3.0_multi_node:
       - build:U2_gnu-9.3.0
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0/multi_node_test
       NUM_CPUS: "320"
       NUM_SERVER_CPUS: "80"
       NUM_MODEL_CPUS: "240"
@@ -208,7 +217,7 @@ test:U2_gnu-9.3.0_multi_node:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
-      - mkdir -pv multi_node_test && cd multi_node_test
+      - mkdir -pv ${run_dir} && cd ${run_dir}
       - source ${SRC_DIR}/tests/script/multi_node_tests.sh
 
 ################
@@ -245,6 +254,7 @@ test:U2_aocc:
       - build:U2_aocc
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_aocc
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_aocc/single_node_test
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
@@ -259,6 +269,7 @@ test:U2_aocc:
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
+      - mkdir -pv ${run_dir} && cd ${run_dir}
       - source ${SRC_DIR}/tests/script/single_node_tests.sh
 
 ################
