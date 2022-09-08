@@ -14,6 +14,7 @@ set(TEST_SOURCES
    distributed_circular_buffer.F90
    grid_meta.F90
    put_error.F90
+   serializer_large.F90
    shmem_heap_basic.F90
    simple_mutex.F90
    test_memory_arena.F90
@@ -136,6 +137,9 @@ get_test_name(cb_unaligned_input.c TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
 
 get_test_name(test_serializer.F90 TEST_TARGET)
+add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
+
+get_test_name(serializer_large.F90 TEST_TARGET)
 add_test(NAME ${TEST_TARGET} COMMAND ${TEST_TARGET})
 
 get_test_name(grid_meta.F90 TEST_TARGET)

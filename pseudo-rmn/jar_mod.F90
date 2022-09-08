@@ -70,7 +70,8 @@ module jar_module
         integer(JAR_ELEMENT) :: opt       = 0             ! option flags (0 owner of data memory, 1 not owner)
         type(C_PTR)          :: ptr       = C_NULL_PTR    ! address of actual data
     contains
-        procedure, PASS :: new            => jar_new
+        procedure, PASS :: jar_new_i4, jar_new_i8
+        generic         :: new            => jar_new_i4, jar_new_i8
         procedure, PASS :: shape_with     => jar_shape_with
         procedure, PASS :: is_valid       => jar_is_valid
         procedure, PASS :: free           => jar_free
@@ -105,11 +106,22 @@ module jar_module
     end function debug_jars
 
 
-    !> Create a new data jar, allocate data storage
-    function jar_new(jar_instance, data_size) result(ok)
+    !> Create a new data jar (size specified with an 32-bit integer), allocate data storage
+    function jar_new_i4(jar_instance, data_size) result(ok)
         implicit none
-        class(jar), intent(INOUT) :: jar_instance !> Data jar instance
-        integer, intent(IN), value :: data_size   !> Number of elements in jar
+        class(jar),         intent(INOUT)     :: jar_instance !> Data jar instance
+        integer(C_INT32_T), intent(IN), value :: data_size    !> Number of elements in jar
+        logical :: ok                             !> .true. if jar was successfully created, .false. otherwise
+
+        ok = jar_instance % jar_new_i8(int(data_size, kind = 8))
+    end function jar_new_i4
+
+
+    !> Create a new data jar (size specified with a 64-bit integer), allocate data storage
+    function jar_new_i8(jar_instance, data_size) result(ok)
+        implicit none
+        class(jar),         intent(INOUT)     :: jar_instance !> Data jar instance
+        integer(C_INT64_T), intent(IN), value :: data_size    !> Number of elements in jar
         logical :: ok                             !> .true. if jar was successfully created, .false. otherwise
 
         integer(C_SIZE_T)    :: data_size_byte
@@ -118,7 +130,7 @@ module jar_module
         ok = .false.
         if (C_ASSOCIATED(jar_instance%ptr)) return       ! error, there is already an allocated data container
 
-        data_size_byte = data_size * storage_size(dummy_jar_element) / 8
+        data_size_byte = data_size * (storage_size(dummy_jar_element) / 8)
         ! size in bytes
         jar_instance%ptr = libc_malloc(data_size_byte)
         if (.not. C_ASSOCIATED(jar_instance%ptr)) return ! malloc failed
@@ -128,7 +140,7 @@ module jar_module
         jar_instance%bot       = 0                            ! data jar is empty (no data to read)
         jar_instance%opt       = 0                            ! options = 0, jar owns the memory storage
         jar_instance%size_elem = data_size                    ! data jar capacity
-    end function jar_new
+    end function jar_new_i8
 
 
     !> Transform an integer array into a jar
@@ -325,9 +337,9 @@ module jar_module
         integer(JAR_ELEMENT), intent(IN), optional :: position  !> Insertion point (1 = start of jar), optional
         logical :: success                                      !> Whether the operation succeeded
         if (present(position)) then
-            success = jar_instance % insert(string, storage_size(string), position)
+            success = jar_instance % insert(string, int(storage_size(string), kind = 8), position)
         else
-            success = jar_instance % insert(string, storage_size(string))
+            success = jar_instance % insert(string, int(storage_size(string), kind = 8))
         end if
     end function jar_put_string_into
 
@@ -338,7 +350,7 @@ module jar_module
         implicit none
         class(jar), intent(INOUT) :: jar_instance               !> Data jar instance
 #include <IgnoreTypeKindRank.hf>
-        integer, intent(IN), value :: size_bits                 !> Size to insert in number of bits = storage_size(item) * nb_of_items
+        integer(JAR_ELEMENT), intent(IN), value    :: size_bits !> Size to insert in number of bits = storage_size(item) * nb_of_items
         integer(JAR_ELEMENT), intent(IN), optional :: position  !> Insertion point (1 = start of jar), optional
         logical :: success                                      !> Whether the operation succeeded
 
