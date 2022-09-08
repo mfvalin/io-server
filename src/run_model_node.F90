@@ -80,7 +80,8 @@ module run_model_node_module
 
     logical :: done_transmitting = .false. !< After a pass, whether we can exit the loop (because all model PEs are done)
 
-    character(len=:), allocatable :: name
+    character(len=:), allocatable :: name !< Human-readable, for printing debug messages
+    integer :: debug_level = 0            !< To what extent we want to print debug messages
   contains
     procedure, pass :: init       => relay_state_init
     procedure, pass :: pre_pass   => relay_state_pre_pass
@@ -189,7 +190,11 @@ function default_server_bound_relay(context) result(relay_success)
 
   relay_success = .false.
 
-  call state % init(context)
+  success = state % init(context)
+  if (.not. success) then
+    print '(A, 1X, A)', context % get_short_pe_name(), 'ERROR: Unable to initialize server-bound relay state'
+    return
+  end if
 
   ! Main loop (until all model PEs have sent their STOP signal)
   do while (.not. state % done_transmitting)
@@ -309,7 +314,11 @@ function check_and_process_single_message(context, state, model_id) result(proce
 
   content_size = header % content_size_int8
 
+  if (context % get_debug_level() >= 3) then
+    print '(A, 1X, A, A, A, I7)', context % get_short_pe_name(), 'DEBUG: Got a ',                                     &
+          trim(get_message_command_string(header % command)), ' message from PE ', header % sender_global_rank
   ! call print_message_header(header)
+  end if
 
   !------------------------------
   ! Extract/process message data
@@ -384,7 +393,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
 
   !------------------------------------
   ! If the DCB message buffer is too full to contain that new package, flush it now
-  if (state % server_bound_data % get_top() + total_message_size_int8 > state % server_bound_data_size_int8) then
+  if (state % server_bound_data % get_top() + total_message_size_int8 >= state % server_bound_data_size_int8) then
     success = state % flush_dcb_message_buffer()
 
     if (.not. success) then
@@ -392,7 +401,7 @@ function check_and_process_single_message(context, state, model_id) result(proce
       return
     end if
 
-    if (total_message_size_int8 > state % server_bound_data % get_size()) then
+    if (total_message_size_int8 >= state % server_bound_data % get_size()) then
       print '(A, A, I9, I9)', context % get_short_pe_name(), ' ERROR: Too much data to fit in jar...', total_message_size_int8, state % server_bound_data % get_size()
       return
     end if
@@ -461,15 +470,17 @@ function check_and_process_single_message(context, state, model_id) result(proce
 
 end function check_and_process_single_message
 
-subroutine relay_state_init(this, context)
+function relay_state_init(this, context) result(success)
   implicit none
   class(relay_state),     intent(inout) :: this
   type(ioserver_context), intent(in)    :: context
+  logical :: success
 
   type(comm_rank_size) :: local_relay_crs
   integer(C_INT64_T)   :: dcb_capacity_int8
   integer(JAR_ELEMENT) :: dummy_jar_element
-  logical :: success
+
+  success = .false.
 
   ! Retrieve useful data structures
   call context % get_server_bound_cb_list(this % model_message_buffers)
@@ -487,23 +498,32 @@ subroutine relay_state_init(this, context)
   dcb_capacity_int8 = this % server_bound_sender % get_capacity(CB_KIND_INTEGER_8)
   this % server_bound_data_size_int8 = int(dcb_capacity_int8 * DCB_MESSAGE_RATIO, kind = 4)
 
+  if (context % get_debug_level() >= 2) then
+    print '(A, 1X, A, F10.2, A, F10.2, A)',                                                                           &
+      context % get_short_pe_name(), 'DEBUG: DCB capacity ', dcb_capacity_int8 * 8 / 1000000.0, 'MB, jar size ',      &
+      this % server_bound_data_size_int8 / 1000000.0 * 8, 'MB'
+  end if
+
   if (storage_size(dummy_jar_element) / 8 .ne. 8) then
-    print '(A)', 'ABOOOOOORT - Cannot deal with jar elements other than 64 bits in size'
-    error stop 1
+    print '(A, 1X, A)', 'ABOOOOOORT - Cannot deal with jar elements other than 64 bits in size'
+    return
   end if
 
   ! Create buffer for outbound data
   success = this % server_bound_data % new(this % server_bound_data_size_int8)
   if (.not. success) then
-    print '(A, A)', context % get_short_pe_name(), ' ERROR: Could not create jar to contain DCB message...'
-    error stop 1
+    print '(A, 1X, A)', context % get_short_pe_name(), 'ERROR: Could not create jar to contain DCB message...'
+    return
   end if
 
   allocate(this % latest_tags(0:this % num_local_compute - 1))
   this % latest_tags(:) = 0
 
-  this % name = context % get_short_pe_name()
-end subroutine relay_state_init
+  this % name        = context % get_short_pe_name()
+  this % debug_level = context % get_debug_level()
+
+  success = .true.
+end function relay_state_init
 
 subroutine relay_state_pre_pass(this)
   implicit none
@@ -545,6 +565,11 @@ subroutine allocate_message_buffer(this, num_elem)
     if (size(this % message_content) >= num_elem) return
     deallocate(this % message_content)
   end if
+
+  if (this % debug_level >= 2) then
+    print '(A, 1X, A, I8, A)', this % name, 'DEBUG: Allocating buffer for reading model messages, size ', num_elem, ' elements'
+  end if
+
   allocate(this % message_content(num_elem))
 end subroutine allocate_message_buffer
 
@@ -562,8 +587,12 @@ function flush_dcb_message_buffer(this) result(success)
   num_data = this % server_bound_data % get_top()
   data_ptr =>  this % server_bound_data % f_array()
   if (num_data > 0) then
+    if (this % debug_level >= 2) print '(A, 1X, A, I12, A)', this % name,                                             &
+        'DEBUG: Sending message batch to server, size ', num_data, ' elements'
+
     success = this % server_bound_sender % put_elems(data_ptr, num_data, CB_DATA_ELEMENT_KIND, .true.)
     call this % server_bound_data % reset()
+
     if (.not. success) print '(A, A)', this % name, ' ERROR: Flushing message buffer into DCB!'
   end if
 end function flush_dcb_message_buffer
