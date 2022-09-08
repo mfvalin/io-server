@@ -452,14 +452,14 @@ contains
             call this % timer % stop()
             if (.not. c_associated(grid_data)) then
               print '(A, 1X, A, F5.2, A)', this % pe_name, 'ERROR: Could not get completed line data!!! In ',         &
-                  this % timer % get_time_ms() / 1000.0, 's'
+                  this % timer % get_latest_time_ms() / 1000.0, 's'
               success = .false.
               return 
             end if
 
             if (this % debug_level >= 2)                                                                              &
                 print '(A, 1X, A, F8.3, A)', this % pe_name, 'DEBUG: Waited ',                                        &
-                this % timer % get_time_ms() / 1000.0, ' seconds for grid to be assembled'
+                this % timer % get_latest_time_ms() / 1000.0, ' seconds for grid to be assembled'
 
             ! Then execute the command on that assembled grid
             success = process_data(grid_data, command_content, this % shared_instance % get_id())
@@ -515,7 +515,7 @@ contains
     do i = 1, max_num_attempts
       if (.not. success) then
         ! Print a message every second or so
-        if (mod(i, 10000000/WAIT_TIME_US) == 0) then
+        if (mod(i, 1000000/WAIT_TIME_US) == 0) then
           print '(A, A, I2, A, F5.2, A)', this % pe_name, ' WARNING: Could not put the data into the grid for owner ',&
               this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
               (max_num_attempts - i) * WAIT_TIME_US / 1000000.0, 's'

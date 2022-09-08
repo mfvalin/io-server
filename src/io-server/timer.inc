@@ -57,12 +57,18 @@ import C_PTR
 implicit none
 type(C_PTR), intent(IN), value :: timer
 end subroutine IO_timer_stop
-function IO_time_ms(timer) result(time) BIND(C, name = 'IO_time_ms_f')
+function IO_total_time_ms(timer) result(time) BIND(C, name = 'IO_total_time_ms_f')
 import C_PTR, C_DOUBLE
 implicit none
 type(C_PTR), intent(IN), value :: timer
 real(C_DOUBLE) :: time
-end function IO_time_ms
+end function IO_total_time_ms
+function IO_latest_time_ms(timer) result(time) BIND(C, name = 'IO_latest_time_ms_f')
+import C_PTR, C_DOUBLE
+implicit none
+type(C_PTR), intent(IN), value :: timer
+real(C_DOUBLE) :: time
+end function IO_latest_time_ms
 function rdtscp() result(count) BIND(C, name = 'rdtscp_f')
 import C_INT64_T
 implicit none

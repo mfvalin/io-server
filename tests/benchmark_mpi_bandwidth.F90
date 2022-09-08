@@ -211,7 +211,7 @@ contains
 
     if (rank == 0) then
       call timer % stop()
-      total_time = timer % get_time_ms()
+      total_time = timer % get_latest_time_ms()
       gb_per_s = print_stats(total_time, num_relays, num_channels, msg_size, msg_count)
     end if
 

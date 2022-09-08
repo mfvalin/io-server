@@ -748,7 +748,7 @@ int CB_get(
     )
 //C_EnD
 {
-  io_timer_t timer = {0, 0};
+  io_timer_t timer = {0, 0, 0};
   IO_timer_start(&timer);
 
   const int64_t num_available = CB_wait_data_available_bytes(buffer, num_bytes, timeout_ms);
@@ -794,7 +794,7 @@ int CB_get(
   buffer->stats.num_reads++;
 
   IO_timer_stop(&timer);
-  buffer->stats.total_read_time_ms += IO_time_ms(&timer);
+  buffer->stats.total_read_time_ms += IO_latest_time_ms(&timer);
 
   // Only count fractional reads that won't be read again (so no CB_PEEK)
   if (num_bytes_1 != num_elements * sizeof(data_element) && operation != CB_PEEK) buffer->stats.num_fractional_reads++;
@@ -831,7 +831,7 @@ int CB_put(
     )
 //C_EnD
 {
-  io_timer_t timer = {0, 0};
+  io_timer_t timer = {0, 0, 0};
   IO_timer_start(&timer);
 
   if (thread_safe == 1 && operation != CB_COMMIT) {
@@ -884,7 +884,7 @@ int CB_put(
   }
   buffer->stats.num_write_elems += num_elements;
   buffer->stats.num_writes++;
-  buffer->stats.total_write_time_ms += IO_time_ms(&timer);
+  buffer->stats.total_write_time_ms += IO_latest_time_ms(&timer);
 
   if (num_bytes != num_elements * sizeof(data_element)) buffer->stats.num_fractional_writes++;
 

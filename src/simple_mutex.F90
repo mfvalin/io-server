@@ -23,14 +23,16 @@
 module simple_mutex_module
   use ISO_C_BINDING
   use rpn_extra_module
+  use ioserver_timer_module
   implicit none
 
   private
 
   type, public :: simple_mutex
     private
-    type(C_PTR)    :: c_location = C_NULL_PTR
-    integer(C_INT) :: id = -1
+    type(C_PTR)          :: c_location = C_NULL_PTR
+    type(ioserver_timer) :: wait_timer
+    integer(C_INT)       :: id = -1
   contains
     procedure, pass :: is_valid
     procedure, pass :: init_from_ptr
@@ -42,6 +44,8 @@ module simple_mutex_module
     procedure, pass :: is_locked_by_me
     procedure, pass :: reset
     procedure, pass :: get_id
+    procedure, pass :: get_total_wait_time_ms
+    procedure, pass :: get_latest_wait_time_ms
   end type simple_mutex
 
 contains
@@ -82,7 +86,11 @@ contains
   subroutine lock(this)
     implicit none
     class(simple_mutex), intent(inout) :: this
-    if (this % is_valid()) call acquire_idlock(this % c_location, this % id)
+    if (this % is_valid()) then
+      call this % wait_timer % start()
+      call acquire_idlock(this % c_location, this % id)
+      call this % wait_timer % stop()
+    end if
   end subroutine lock
 
   subroutine unlock(this)
@@ -141,6 +149,8 @@ contains
     implicit none
     class(simple_mutex), intent(inout) :: this
     if (this % is_valid()) call reset_lock(this % c_location)
+    if (this % wait_timer % is_valid()) call this % wait_timer % delete()
+    call this % wait_timer % create()
   end subroutine reset
 
   function get_id(this) result(id)
@@ -149,4 +159,18 @@ contains
     integer(C_INT) :: id
     id = this % id
   end function get_id
+
+  function get_total_wait_time_ms(this) result(wait_time)
+    implicit none
+    class(simple_mutex), intent(in) :: this
+    real(C_DOUBLE) :: wait_time
+    wait_time = this % wait_timer % get_total_time_ms()
+  end function get_total_wait_time_ms
+
+  function get_latest_wait_time_ms(this) result(wait_time)
+    implicit none
+    class(simple_mutex), intent(in) :: this
+    real(C_DOUBLE) :: wait_time
+    wait_time = this % wait_timer % get_latest_time_ms()
+  end function get_latest_wait_time_ms
 end module simple_mutex_module

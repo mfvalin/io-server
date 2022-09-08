@@ -1344,7 +1344,7 @@ void DCB_delete(distributed_circular_buffer_p buffer //!< [in,out] Buffer to del
       total_data_sent += remote_stats.num_write_elems;
     }
 
-    const double existence_time = IO_time_ms(&buffer->existence_timer);
+    const double existence_time = IO_total_time_ms(&buffer->existence_timer);
     char total_data_recv_s[8], dps_recv_s[8];
     char total_data_send_s[8], dps_send_s[8];
     readable_element_count((double)total_data_received * sizeof(data_element), total_data_recv_s);
@@ -1633,7 +1633,7 @@ int DCB_put_client(
     )
 //C_EnD
 {
-  io_timer_t timer = {0, 0};
+  io_timer_t timer = {0, 0, 0};
   IO_timer_start(&timer);
 
   const size_t  num_elements = num_bytes_to_num_elem(num_bytes);
@@ -1702,7 +1702,7 @@ int DCB_put_client(
 
   buffer->local_header.circ_buffer.stats.num_write_elems += num_elements;
   buffer->local_header.circ_buffer.stats.num_writes++;
-  buffer->local_header.circ_buffer.stats.total_write_time_ms += IO_time_ms(&timer);
+  buffer->local_header.circ_buffer.stats.total_write_time_ms += IO_latest_time_ms(&timer);
 
   if (num_bytes != num_elements * sizeof(data_element)) buffer->local_header.circ_buffer.stats.num_fractional_writes++;
 
@@ -1742,7 +1742,7 @@ int DCB_get_server(
     )
 //C_EnD
 {
-  io_timer_t timer = {0, 0};
+  io_timer_t timer = {0, 0, 0};
   IO_timer_start(&timer);
 
   const size_t  num_elements       = num_bytes_to_num_elem(num_bytes);
@@ -1794,7 +1794,7 @@ int DCB_get_server(
   }
 
   IO_timer_stop(&timer);
-  instance->circ_buffer.stats.total_read_time_ms += IO_time_ms(&timer);
+  instance->circ_buffer.stats.total_read_time_ms += IO_latest_time_ms(&timer);
   if (operation != CB_PEEK) {
     instance->circ_buffer.stats.num_read_elems += num_elements;
     instance->circ_buffer.stats.num_unique_reads++;

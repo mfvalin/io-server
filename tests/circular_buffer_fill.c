@@ -118,7 +118,7 @@ int fill_test(int argc, char** argv) {
   //---------------------------
 
   {
-    io_timer_t put_time = {0, 0};
+    io_timer_t put_time = {0, 0, 0};
     IO_timer_start(&put_time);
 
     //---------------------------
@@ -136,7 +136,7 @@ int fill_test(int argc, char** argv) {
       CB_put(local_buffer, local_data + NUM_BUFFER_BYTES / 4, 1*8, CB_COMMIT, -1, 0);
       IO_timer_stop(&put_time);
 
-      const double t = IO_time_ms(&put_time);
+      const double t = IO_latest_time_ms(&put_time);
       //      printf("Put data after %f ms (rank %d)\n", t, my_rank);
 
       if (t * 1000 < READ_DELAY_US * my_rank)
@@ -153,7 +153,7 @@ int fill_test(int argc, char** argv) {
   //---------------------------
 
   {
-    io_timer_t read_time = {0, 0};
+    io_timer_t read_time = {0, 0, 0};
     IO_timer_start(&read_time);
 
     //---------------------------
@@ -165,7 +165,7 @@ int fill_test(int argc, char** argv) {
         CB_get(all_buffers[i], received_data, max_num_bytes - NUM_BUFFER_BYTES / 2 + 2*8, CB_COMMIT, -1);
         IO_timer_stop(&read_time);
         // IO_timer_start(&read_time);
-        const double t = IO_time_ms(&read_time);
+        const double t = IO_latest_time_ms(&read_time);
         if (t * 1000 < WRITE_DELAY_US * i)
         {
           printf("Error in delay! (WRITE) t = %f ms, i = %d\n", t, i);

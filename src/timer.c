@@ -28,8 +28,9 @@
 
 //! Timer that can accumulate microsecond intervals
 typedef struct {
-  uint64_t start;      //! Timestamp when the timer was started
-  uint64_t total_time; //! How many clock ticks have been recorded (updates every time the timer stops)
+  uint64_t start;       //! Timestamp when the timer was started
+  uint64_t latest_time; //! Number of ticks between latest start/stop cycle
+  uint64_t total_time;  //! How many clock ticks have been recorded (updates every time the timer stops)
 } io_timer_t;
 
 static const clockid_t IO_CLOCK_ID = CLOCK_MONOTONIC;
@@ -51,8 +52,9 @@ static inline uint64_t get_current_time_us() {
 //F_EnD
 
 static inline void IO_timer_init(io_timer_t* timer) {
-  timer->start = 0;
-  timer->total_time = 0;
+  timer->start        = 0;
+  timer->latest_time  = 0;
+  timer->total_time   = 0;
 }
 
 static inline io_timer_t* IO_timer_create() {
@@ -104,7 +106,8 @@ void IO_timer_start_f(io_timer_t* timer) { IO_timer_start(timer); }
 //C_StArT
 //! Increment total time with number of ticks since last start
 static inline void IO_timer_stop(io_timer_t* timer) {
-  timer->total_time += get_current_time_us() - timer->start;
+  timer->latest_time = get_current_time_us() - timer->start;
+  timer->total_time += timer->latest_time;
 }
 //C_EnD
 
@@ -117,24 +120,42 @@ static inline void IO_timer_stop(io_timer_t* timer) {
 //F_EnD
 void IO_timer_stop_f(io_timer_t* timer) { IO_timer_stop(timer); }
 
-
 //C_StArT
 //! Retrieve the accumulated time in number of milliseconds, as a double
-static inline double IO_time_ms(const io_timer_t* timer) {
+static inline double IO_total_time_ms(const io_timer_t* timer) {
   // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
   return timer->total_time / 1000.0;
 }
 //C_EnD
 
 //F_StArT
-//  function IO_time_ms(timer) result(time) BIND(C, name = 'IO_time_ms_f')
+//  function IO_total_time_ms(timer) result(time) BIND(C, name = 'IO_total_time_ms_f')
 //    import C_PTR, C_DOUBLE
 //    implicit none
 //    type(C_PTR), intent(IN), value :: timer
 //    real(C_DOUBLE) :: time
-//  end function IO_time_ms
+//  end function IO_total_time_ms
 //F_EnD
-double IO_time_ms_f(const io_timer_t* timer) { return IO_time_ms(timer); }
+double IO_total_time_ms_f(const io_timer_t* timer) { return IO_total_time_ms(timer); }
+
+//C_StArT
+//! Retrieve the time between the latest start/stop cycle in number of milliseconds, as a double
+static inline double IO_latest_time_ms(const io_timer_t* timer) {
+  // If we only count microseconds in a year, this conversion to double does not lose any precision (about 2^31 us/year)
+  return timer->latest_time / 1000.0;
+}
+//C_EnD
+
+//F_StArT
+//  function IO_latest_time_ms(timer) result(time) BIND(C, name = 'IO_latest_time_ms_f')
+//    import C_PTR, C_DOUBLE
+//    implicit none
+//    type(C_PTR), intent(IN), value :: timer
+//    real(C_DOUBLE) :: time
+//  end function IO_latest_time_ms
+//F_EnD
+double IO_latest_time_ms_f(const io_timer_t* timer) { return IO_latest_time_ms(timer); }
+
 
 //C_StArT
 static inline double IO_time_since_start(const io_timer_t* timer) {
