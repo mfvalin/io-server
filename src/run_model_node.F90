@@ -500,8 +500,8 @@ function relay_state_init(this, context) result(success)
 
   if (context % get_debug_level() >= 2) then
     print '(A, 1X, A, F10.2, A, F10.2, A)',                                                                           &
-      context % get_short_pe_name(), 'DEBUG: DCB capacity ', dcb_capacity_int8 * 8 / 1000000.0, 'MB, jar size ',      &
-      this % server_bound_data_size_int8 / 1000000.0 * 8, 'MB'
+      context % get_short_pe_name(), 'DEBUG: DCB capacity ', real(dcb_capacity_int8 * 8, kind=4) / 1000000.0,         &
+      'MB, jar size ', real(this % server_bound_data_size_int8, kind=4) / 1000000.0 * 8, 'MB'
   end if
 
   if (storage_size(dummy_jar_element) / 8 .ne. 8) then

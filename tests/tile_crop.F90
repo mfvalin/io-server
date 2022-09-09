@@ -39,6 +39,7 @@ module tile_crop_module
   ! integer, parameter :: global_num_y = 3
 
   integer, dimension(2, 2, 21), parameter :: reduced_grids = &
+    reshape(                                                 &
       [                                               &
         ! Full grid
         1, global_num_x,      1, global_num_y,        &
@@ -76,7 +77,7 @@ module tile_crop_module
         ! A single entry
         1, 1,                 1, 1,                   &
         global_num_x, global_num_x, global_num_y, global_num_y  &
-      ]
+      ], shape = shape(reduced_grids))
 
   character(len=*), parameter :: filename = 'tile_crop_test.out'
 
@@ -505,10 +506,10 @@ contains
     integer :: i, j, k
     integer :: minx, maxx, miny, maxy
     integer :: num_errors
-    integer(C_INT8_T), dimension(:,:), allocatable :: read_i1
-    integer(C_INT8_T), dimension(:,:), allocatable :: read_i2
-    integer(C_INT8_T), dimension(:,:), allocatable :: read_i4, read_r4, read_r4b
-    integer(C_INT8_T), dimension(:,:), allocatable :: read_i8, read_r8
+    integer(C_INT8_T), dimension(:,:), allocatable, target :: read_i1
+    integer(C_INT8_T), dimension(:,:), allocatable, target :: read_i2
+    integer(C_INT8_T), dimension(:,:), allocatable, target :: read_i4, read_r4, read_r4b
+    integer(C_INT8_T), dimension(:,:), allocatable, target :: read_i8, read_r8
     integer(C_INT8_T),  dimension(:,:), pointer :: data_i1
     integer(C_INT16_T), dimension(:,:), pointer :: data_i2
     integer(C_INT32_T), dimension(:,:), pointer :: data_i4
