@@ -1,7 +1,7 @@
 
 hybrid IO server for model usage
 
-- [linkkkk](/doc/test_page.md)
+- [linkkkk](doc/test_page.md)
 
 * At CMC
 
