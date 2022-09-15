@@ -111,6 +111,19 @@ subroutine finalize_server(this)
       ! Stream processor barrier
       call MPI_Barrier(stream_crs % comm, ierr)
 
+      if (stream_crs % rank == 0) call this % local_server_streams(1) % print_process_times(1, .true.)
+
+      ! Stream processor barrier
+      call MPI_Barrier(stream_crs % comm, ierr)
+
+      do i = 2, this % params % max_num_concurrent_streams
+        stream => this % local_server_streams(i)
+        if (stream % is_owner()) call stream % print_process_times(i, .false.)
+      end do
+
+      ! Stream processor barrier
+      call MPI_Barrier(stream_crs % comm, ierr)
+
       if (stream_crs % rank == 0) print '(A)', '------------------------------------------------------------------'
 
       do i = 1, this % params % max_num_concurrent_streams

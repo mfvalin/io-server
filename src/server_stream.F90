@@ -106,7 +106,9 @@ module server_stream_module
     type(shared_server_stream), pointer :: shared_instance => NULL() !< Pointer to the underlying shared stream
     type(circular_buffer) :: command_buffer       !< Access to the command buffer of the underlying shared stream
     integer               :: put_cmd_timeout = 0  !< How long to wait before failing, when inserting a command into the buffer
-    type(ioserver_timer)  :: timer                !< To evaluate performance
+    type(ioserver_timer)  :: data_wait_timer      !< To determine how long we have waited for grids to be assembled
+    type(ioserver_timer)  :: process_cmd_timer    !< To determine how long we spent executing commands (the function provided by the client)
+    type(ioserver_timer)  :: process_data_timer   !< To determing how long we spent executing the commands associated with data grids (the function provided by the client)
     character(len=:), allocatable :: pe_name
 
     contains
@@ -122,7 +124,8 @@ module server_stream_module
     procedure, pass :: put_command    => local_server_stream_put_command
     procedure, pass :: process_stream => local_server_stream_process_stream
     procedure, pass :: put_data       => local_server_stream_put_data
-    procedure, pass :: print_command_stats => local_server_stream_print_command_stats
+    procedure, pass :: print_command_stats  => local_server_stream_print_command_stats
+    procedure, pass :: print_process_times  => local_server_stream_print_process_times
 
     procedure, pass, private :: open  => local_server_stream_open
     procedure, pass, private :: close => local_server_stream_close
@@ -279,7 +282,9 @@ contains
     this % pe_name         = pe_name
     this % put_cmd_timeout = put_cmd_timeout
 
-    call this % timer % create()
+    call this % data_wait_timer % create()
+    call this % process_cmd_timer % create()
+    call this % process_data_timer % create()
   end function local_server_stream_init
 
   !> Check whether this local stream has been initialized (i.e. it has an ID and is associated with a shared instance)
@@ -335,8 +340,8 @@ contains
       if (tag > this % shared_instance % get_tag_counter()) then
         call this % shared_instance % set_tag_counter(tag)
         if (this % debug_level >= 2) then
-          print '(A, 1X, A, I8, A, I8, A, I7, A, I3)', this % pe_name,                              &
-                'DEBUG: Enqueuing command, tag ', tag, ', size ', size(command_content),            &
+          print '(A, 1X, A, I8, A, I8, A, I7, A, I3)', this % pe_name,                                  &
+                'DEBUG: Enqueuing command, tag ', tag, ', size ', size(command_content),                &
                 ' in stream ', this % get_id(), ', rank ', this % get_rank()
         end if
 
@@ -350,8 +355,8 @@ contains
       ! --- END critical region ---
 
         if (.not. success) then
-        print '(A, A, I7, A, F8.2, A, I4, A)', this % pe_name,                                        &
-              ' ERROR: Command buffer for stream ID ', this % get_id(),                               &
+        print '(A, A, I7, A, F8.2, A, I4, A)', this % pe_name,                                          &
+              ' ERROR: Command buffer for stream ID ', this % get_id(),                                 &
                 ' is full. You could make it bigger (currently ',                                       &
                 real(this % command_buffer % get_capacity(CB_KIND_CHAR), kind=8) / 1000.0,              &
                 'kB), wait longer for buffer to be processed (current timeout is ',                     &
@@ -442,27 +447,31 @@ contains
           
           if (record % command_type == MSG_COMMAND_SERVER_CMD) then
             ! Simply execute the command
+            call this % process_cmd_timer % start()
             success = process_command(command_content, this % shared_instance % get_id())
+            call this % process_cmd_timer % stop()
 
           else if (record % command_type == MSG_COMMAND_DATA) then
             ! First get a pointer to the assembled grid that comes with the command. Might have to wait a bit for it
-            call this % timer % start()
+            call this % data_wait_timer % start()
             grid_data = this % shared_instance % partial_grid_data % get_completed_line_data(                         &
                 record % message_tag, this % data_heap)
-            call this % timer % stop()
+            call this % data_wait_timer % stop()
             if (.not. c_associated(grid_data)) then
               print '(A, 1X, A, F5.2, A)', this % pe_name, 'ERROR: Could not get completed line data!!! In ',         &
-                  this % timer % get_latest_time_ms() / 1000.0, 's'
+                  this % data_wait_timer % get_latest_time_ms() / 1000.0, 's'
               success = .false.
               return 
             end if
 
             if (this % debug_level >= 2)                                                                              &
                 print '(A, 1X, A, F8.3, A)', this % pe_name, 'DEBUG: Waited ',                                        &
-                this % timer % get_latest_time_ms() / 1000.0, ' seconds for grid to be assembled'
+                this % data_wait_timer % get_latest_time_ms() / 1000.0, ' seconds for grid to be assembled'
 
             ! Then execute the command on that assembled grid
+            call this % process_data_timer % start()
             success = process_data(grid_data, command_content, this % shared_instance % get_id())
+            call this % process_data_timer % stop()
 
             ! Free the grid data
             success = this % shared_instance % partial_grid_data % free_line(                                         &
@@ -546,6 +555,22 @@ contains
     end if
   end function local_server_stream_print_command_stats
 
+  subroutine local_server_stream_print_process_times(this, id, with_header)
+    implicit none
+    class(local_server_stream), intent(in) :: this
+    integer, intent(in) :: id
+    logical, intent(in) :: with_header
+    if (with_header) print '(A)', 'Rank   process cmd (s) : wait for data (s) : process data (s)'
+    if (this % is_init()) then
+      if (this % shared_instance % num_opens > 0) then
+        print '(I4.4, 3F18.3)', id,                                                                                   &
+              this % process_cmd_timer % get_total_time_ms() / 1000.0,                                                &
+              this % data_wait_timer % get_total_time_ms() / 1000.0,                                                  &
+              this % process_data_timer % get_total_time_ms() / 1000.0
+      end if
+    end if
+  end subroutine local_server_stream_print_process_times
+
   function local_server_stream_open(this, stream_id) result(success)
     implicit none
     class(local_server_stream), intent(inout) :: this
@@ -571,6 +596,8 @@ contains
   subroutine local_server_stream_finalize(stream)
     implicit none
     type(local_server_stream), intent(inout) :: stream
-    call stream % timer % delete()
+    call stream % data_wait_timer % delete()
+    call stream % process_cmd_timer % delete()
+    call stream % process_data_timer % delete()
   end subroutine local_server_stream_finalize
 end module server_stream_module
