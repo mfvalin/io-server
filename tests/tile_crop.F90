@@ -31,8 +31,8 @@ module tile_crop_module
   integer :: num_active_pes = 0
 
   integer, parameter :: halo_size = 3
-  integer, parameter :: global_num_x = 10002
-  integer, parameter :: global_num_y = 9997
+  integer, parameter :: global_num_x = 5002
+  integer, parameter :: global_num_y = 2999
   ! integer, parameter :: global_num_x = 202
   ! integer, parameter :: global_num_y = 197
   ! integer, parameter :: global_num_x = 5
@@ -274,7 +274,7 @@ contains
       real(C_DOUBLE),     dimension(:,:), pointer, contiguous :: data_r8
       
       type(model_grid)     :: m_grid
-      integer :: num_waits
+      integer(kind = 8) :: num_waits
       integer, parameter :: WAIT_TIME_US = 10
 
       tile_id_x = mod(model_crs % rank, num_pe_x)  ! Tile index starting at 0
@@ -294,6 +294,7 @@ contains
       ! call halo_grid % print()
       if (model_crs % rank == 0) call global_grid % print()
 
+      num_waits = 0
       do k = 1, ubound(reduced_grids, 3)
 
         minx = reduced_grids(1, 1, k)
