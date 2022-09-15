@@ -76,7 +76,7 @@ test:U2_intel-2022.1.2_single_node:
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
-      ORD_SOUMET_M: "16G"
+      ORD_SOUMET_M: "2G"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-intel-single-node
       MPI_COMMAND: "mpirun"
@@ -180,7 +180,7 @@ test:U2_gnu-9.3.0_single_node:
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
-      ORD_SOUMET_M: "16G"
+      ORD_SOUMET_M: "2G"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-gnu-single-node
       MPI_COMMAND: "mpirun"
@@ -258,7 +258,7 @@ test:U2_aocc:
       NUM_CPUS: "80"
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
-      ORD_SOUMET_M: "16G"
+      ORD_SOUMET_M: "2G"
       ORD_SOUMET_W: "30"
       ORD_SOUMET_JN: u2-aocc-single-node
       MPI_COMMAND: "mpirun"
