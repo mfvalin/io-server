@@ -9,3 +9,5 @@ This is a test page, with an image:
 3: ![](communicators.svg)
 
 4: <img src="./communicators.svg">
+
+5: ![joij](./communicators.svg)
