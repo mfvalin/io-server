@@ -2,8 +2,10 @@
 This is a test page, with an image:
 
 
-![Alt text](communicators.svg "a title")
+1: ![Alt text](communicators.svg "a title")
 
-![](png.png)
+2: ![](png.png)
 
-![](communicators.svg)
+3: ![](communicators.svg)
+
+4: <img src="./communicators.svg">
