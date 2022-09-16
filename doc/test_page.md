@@ -2,7 +2,7 @@
 This is a test page, with an image:
 
 
-1: ![Alt text](plan.svg "a title")
+1: ![Alt text](test.svg "a title")
 
 2: ![](png.png)
 
