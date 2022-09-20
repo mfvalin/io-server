@@ -1,5 +1,8 @@
-# hybrid IO server for model usage
+# IO server
 
+Library for gathering and processing data asynchronously on a specific node of a cluster. Its main use is to perform IO, which could otherwise occupy a large number of processors on large-scale compute clusters.
+
+- [IO server overview](doc/Overview.md)
 - [linkkkk](doc/test_page.md)
 
 ## Building at CMC
