@@ -63,10 +63,10 @@ There will be 2 types of nodes, running different types of processes (PEs):
 In general, all data is transferred using a first in, first out (FIFO) queue,
 where each queue is only used by a single sender and a single receiver.
 These queues are implemented in a lockless fashion with circular buffers.
-More details on that in [Implementation](#Implementation)
+More details on that in [Implementation elements](#Implementation)
 
 * Compute processes
-    * Put their entry in their individual queue, located in shared memory. The entry contains a pointer to the data.
+    * Put their entry in their individual queue, located in shared memory. The entry contains a pointer to the data. The entry could also just be a command
 
 * Relay processes
     * Will collect data from local queues, located in shared memory
@@ -78,17 +78,16 @@ More details on that in [Implementation](#Implementation)
         * Strip the common metadata
         * Get data from the heap.
         * Put in message buffer
-    * Once all entries are collected into the message buffer, send that buffer through MPI
+    * Once all entries are collected into the message buffer, send that buffer to the server through MPI
 
-    <img src="https://github.com/mfvalin/io-server/raw/main/doc/local_circular_buffers.svg"
-         title="Shared memory circular buffers" width="600" />
+    ![local_cb](img/local_circular_buffers.svg)
 
 * IO server processes
     * Will collect data in distributed circular buffers (stored on the server)
     * 1 buffer for each relay process
     * Data exchanged using MPI 1-sided
     
-## Implementation {#Implementation}
+## Implementation elements
 
 ### Data structures
 
@@ -182,12 +181,17 @@ More details on that in [Implementation](#Implementation)
 
 - Stored in a shared memory area on the IO server. Directly accessible (for data extraction) by the server processes on that node, and remotely accessible (for data insertion/extraction) through 1-sided MPI calls by the client processes. Each client process is associated with a single instance of a (remotely located) circular buffer and will only insert data into (or extract from) that one.
 
-  <img src="https://github.com/mfvalin/io-server/raw/main/doc/distributed_circular_buffers.svg"
-         title="Distributed circular buffers" width="800" />
+    ![DCB](img/distributed_circular_buffers.svg)
 
-- There are server-bound buffer (for data output) and client-bound buffers (for data input). For both types of buffers, their data content is stored on the server. For server-bound buffer, MPI communication occurs when inserting data; for client-bound buffers, communication occurs when extracting data.
-- Uses almost the same protocol to produce/consume as the local circular buffer. However, since communication is more expensive, we want to minimize the number of MPI API calls that require synchronization. More specifically, *only the producer will perform data transfers between the two nodes*. This means that the consumer node will always be passive with respect to these data transfers.
-- We will choose a buffer size such that the producer should not have to wait to insert anything. If we get to a point where it does have to wait, we have other issues to deal with first.
+- There are server-bound buffers (for data output) and client-bound buffers (for data input).
+For both types of buffers, their data content is stored on the server.
+For server-bound buffers, MPI communication occurs when inserting data; for client-bound buffers, communication occurs when extracting data.
+- Uses almost the same protocol to produce/consume as the local circular buffer.
+However, since communication is more expensive, we want to minimize the number of MPI API calls that require synchronization.
+More specifically, *only the producer will perform data transfers between the two nodes*.
+This means that the consumer node will always be passive with respect to these data transfers.
+- We will choose a buffer size such that the producer should not have to wait to insert anything.
+If we get to a point where it does have to wait, we have other issues to deal with first.
 - While the buffer set itself is only located on the consumer node, each producer holds a copy of its buffer instance header (mainly pointers to start and end of data).
 - To add data, the producer:
   - Checks its local header for available space (no communication)
@@ -205,8 +209,7 @@ More details on that in [Implementation](#Implementation)
 - _For client-bound buffers, the protocol is slightly different, and not implemented yet_
 ### Shared memory heap
 
- <img src="https://github.com/mfvalin/io-server/raw/main/doc/shared_memory_heap.svg"
-         title="Shared memory heap" width="600" />
+![Shared memory heap](img/shared_memory_heap.svg)
 
 - First location in heap signals how much space the heap occupies, in number of elements (including that first location and the last one)
 - Last location is a marker
@@ -219,5 +222,4 @@ More details on that in [Implementation](#Implementation)
 
 ### Communicators
 
- <img src="https://github.com/mfvalin/io-server/raw/main/doc/communicators.svg"
-         title="Communicators" width="600" />
+![Communicators](img/communicators.svg)
