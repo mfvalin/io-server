@@ -1,66 +1,64 @@
-
-hybrid IO server for model usage
+# hybrid IO server for model usage
 
 - [linkkkk](doc/test_page.md)
 
-* At CMC
+## Building at CMC
 
-** Build dependencies
+### Build dependencies
 
 - CMake 3.16+
+- A library that provides the `process_command` and `process_data` functions
 
-Note: =cmake_rpn= and =ci-env= are included as a submodule.  Please clone with the
-=--recursive= flag or run =git submodule update --init --recursive= in the
+Note: `cmake_rpn` and `ci-env` are included as a submodule.  Please clone with the
+`--recursive` flag or run `git submodule update --init --recursive` in the
 git repo after having cloned.
 
-** Environment
+### Environment
 
 Source the right file depending on the architecture you need from the env directory.
 This will load the specified compiler and define the ECCI_DATA_DIR variable for the test datasets
 
 - Example for PPP3 and skylake specific architecture:
-
-#+begin_src
+```
 . ci-env/latest/ubuntu-18.04-skylake-64/intel-19.0.3.199.sh
-#+end_src
+```
 
 - Example for XC50 on intel-19.0.5
-
-#+begin_src
+```
 . ci-env/latest/sles-15-skylake-64/intel-19.0.5.281.sh
-#+end_src
+```
 
 - Example for CMC network and gnu 7.5:
-
-#+begin_src
+```
 . ci-env/latest/ubuntu-18.04-amd-64/gnu-7.5.0.sh
-#+end_src
+```
 
-** Build and install
+### Build and install
 
-#+begin_src
+```
 mkdir build
 cd build
 cmake ../
 make
 make package
-#+end_src
+```
 
-* Outside CMC (External users)
+## Building outside CMC (External users)
 
-** Build dependencies
+### Build dependencies
 
 - CMake 3.16+
+- A library that provides the `process_command` and `process_data` functions
 
-Note: =cmake_rpn= and =ci-env= are included as a submodule but =ci-env= is not available externally. 
-Please run =git -c submodule."ci-env".update=none submodule update --init --recursive= in the git repo after having cloned.
+Note: `cmake_rpn` and `ci-env` are included as a submodule but `ci-env` is not available externally. 
+Please run `git -c submodule."ci-env".update=none submodule update --init --recursive` in the git repo after having cloned.
 
-** Build and install
+### Build and install
 
-#+begin_src
+```
 mkdir build
 cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=${your_choice}
 make 
 make install
-#+end_src
+```
