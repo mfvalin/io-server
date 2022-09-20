@@ -2,9 +2,39 @@
 
 The IO server library exposes 3 main elements to be used by the model to interact with it:
 
-* **Streams**: The model can open them, use them to send data to be interpolated, written, or otherwise processed on the server, and close them.
+* **[Streams](Streams.md)**: The model can open them, use them to send data to be interpolated, written, or otherwise processed on the server, and close them.
+One stream will be processed by a single process on the server node. To distribute the work among multiple PEs on the server, we have to use multiple streams.
 * **Shared memory heap**: Can be used to place data directly accessible to other processes on the node so that they can transmit it without the model having to copy it.
 * **Serializer**: Can be used to transmit data without knowing anything about how that data is structured.
+
+Using the IO server requires three actions from the model:
+1. Library initialization/finalization. Done only once (each)
+2. Stream opening/closing. Can be done as frequently as desired. Might be done only once in an entire run.
+3. Sending data/commands
+
+## Initialization
+
+We might want (**or not**) to have a few global variables for certain structures.
+
+```.f90
+use ioserver_context_module
+use jar_module
+type(ioserver_context)      :: context
+type(model_stream), pointer :: stream1, stream2
+type(jar)                   :: metadata_jar
+```
+
+So, at first, we must initialize the [context](#ioserver_context_module::ioserver_context).
+This creates all communicators used internally by the IO server library, as well as the data structures
+used to communicate between PEs on a single node.
+```.f90
+type(ioserver_input_parameters) :: io_params
+logical :: success
+
+! First adjust any desired parameters, like size of buffers between model and relay PEs, debug level, etc.
+io_params % debug_level = 2
+success = ioserver
+```
 
 ## The model (user) interface to the IO server package
 ### model -> IO server 

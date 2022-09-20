@@ -16,6 +16,7 @@ There will be 2 types of nodes, running different types of processes (PEs):
     3. Multiple _stream processor_ processes
         - Execute commands sent by the compute nodes
         - Process assembled grid (interpolation, writing to files, etc.)
+        - See [streams](Streams.md)
     4. Multiple _channel_ processes
         - Act as communication channels
         - Continuously sync buffers so that MPI communication through that process is completed
