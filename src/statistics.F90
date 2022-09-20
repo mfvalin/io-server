@@ -396,7 +396,8 @@ contains
     implicit none
     type(ioserver_stats), intent(in) :: mean           !< Mean of the stats samples
     type(ioserver_stats), intent(in) :: var            !< Variance of the stats samples
-    type(ioserver_stats), intent(in) :: min_v, max_v   !< Min/max values of the stats samples
+    type(ioserver_stats), intent(in) :: min_v          !< Min values of the stats samples
+    type(ioserver_stats), intent(in) :: max_v          !< Max values of the stats samples
     logical, optional,    intent(in) :: print_stats_header !< [optional] Whether to print a header describing the values
 
     real(kind=8) :: write_size, write_size_multiplier, write_size_dev, write_size_min, write_size_max

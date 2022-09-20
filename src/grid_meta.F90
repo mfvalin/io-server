@@ -30,7 +30,7 @@ module grid_meta_module
   integer, parameter, public :: IOSERVER_MAX_NUM_GRID_DIM = 5
 
   !> \brief Derived type that contains an index into a grid with up to 5
-  !> (#IOSERVER_MAX_NUM_GRID_DIM) dimensions.
+  !> (IOSERVER_MAX_NUM_GRID_DIM) dimensions.
   !> Can be used to describe a point within a grid, or the upper or lower
   !> bound of a grid
   type, public :: grid_index_t
