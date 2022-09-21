@@ -4,7 +4,8 @@ Library for gathering and processing data asynchronously on a specific node of a
 
 - [IO server overview](doc/Overview.md)
 - [Usage](doc/Usage.md)
-    - [Streams](doc/Streams.md)
+  - [Streams](doc/Streams.md)
+  - [Shared memory heap](doc/ShmemHeap.md)
 - [linkkkk](doc/test_page.md)
 
 ## Building at CMC
