@@ -508,8 +508,8 @@ static inline MPI_Aint buffer_element_displacement(
   return elem_displacement;
 }
 
-//! _Must be called from a client process._
-//! @return The displacement in the shared memory window where the insertion index of the given buffer is located
+//! _Must be called from a client process_.
+//! @return The displacement in the shared memory window where the insertion index of the given buffer is located.
 static inline MPI_Aint insertion_index_displacement(const distributed_circular_buffer_p buffer) {
   // Position of the insertion index within the CB instance
   const ptrdiff_t ptr_offset = (data_element*)buffer->local_header.circ_buffer.m.in - (data_element*)&buffer->local_header;
@@ -718,7 +718,7 @@ static int64_t DCB_wait_space_available_client(
 }
 
 //! Stop and wait until there is enough data in this circular buffer instance
-//! _Can only be called from a server-bound server process._
+//! _Can only be called from a server-bound server process_.
 //!
 //! @return The number of data elements in the buffer, if everything goes smoothly, -1 otherwise.
 static int64_t DCB_wait_data_available_server(
@@ -1123,7 +1123,7 @@ void DCB_sync_window(distributed_circular_buffer_p buffer) {
 //! physical node, which we call the "server node"._
 //! The other processes are clients and only get a copy of the header of their circular buffer, as well as an offset
 //! that points to the location of their data within the shared window.
-//! _The buffer with rank #DCB_SERVER_ROOT_ID on the given server DCB communicator will be considered the root of the DCB._
+//! _The buffer with rank #DCB_SERVER_ROOT_RANK on the given server DCB communicator will be considered the root of the DCB._
 //! \sa distributed_circular_buffer
 //!
 //! @return If all went well, a pointer to a newly-allocated distributed circular buffer struct that contains all the

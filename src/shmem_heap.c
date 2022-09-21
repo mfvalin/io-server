@@ -236,7 +236,6 @@ void *Pointer_add_offset(
 // F_EnD
 //  C_StArT
 //! print heap statistics
-//! @return none
 void ShmemHeap_dump_info(
     shmem_heap *heap
 ){

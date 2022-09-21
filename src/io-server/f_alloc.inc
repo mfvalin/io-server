@@ -114,7 +114,8 @@ function allocate_I1_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -147,7 +148,8 @@ function allocate_I1_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -303,7 +305,8 @@ function allocate_I1_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -336,7 +339,8 @@ function allocate_I1_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -492,7 +496,8 @@ function allocate_I1_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -525,7 +530,8 @@ function allocate_I1_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -681,7 +687,8 @@ function allocate_I1_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -714,7 +721,8 @@ function allocate_I1_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -870,7 +878,8 @@ function allocate_I1_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -903,7 +912,8 @@ function allocate_I1_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1059,7 +1069,8 @@ function allocate_I2_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1092,7 +1103,8 @@ function allocate_I2_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1248,7 +1260,8 @@ function allocate_I2_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1281,7 +1294,8 @@ function allocate_I2_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1437,7 +1451,8 @@ function allocate_I2_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1470,7 +1485,8 @@ function allocate_I2_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1626,7 +1642,8 @@ function allocate_I2_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1659,7 +1676,8 @@ function allocate_I2_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1815,7 +1833,8 @@ function allocate_I2_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -1848,7 +1867,8 @@ function allocate_I2_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2004,7 +2024,8 @@ function allocate_I4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2037,7 +2058,8 @@ function allocate_I4_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2193,7 +2215,8 @@ function allocate_I4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2226,7 +2249,8 @@ function allocate_I4_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2382,7 +2406,8 @@ function allocate_I4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2415,7 +2440,8 @@ function allocate_I4_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2571,7 +2597,8 @@ function allocate_I4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2604,7 +2631,8 @@ function allocate_I4_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2760,7 +2788,8 @@ function allocate_I4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2793,7 +2822,8 @@ function allocate_I4_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2949,7 +2979,8 @@ function allocate_I8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -2982,7 +3013,8 @@ function allocate_I8_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3138,7 +3170,8 @@ function allocate_I8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3171,7 +3204,8 @@ function allocate_I8_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3327,7 +3361,8 @@ function allocate_I8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3360,7 +3395,8 @@ function allocate_I8_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3516,7 +3552,8 @@ function allocate_I8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3549,7 +3586,8 @@ function allocate_I8_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3705,7 +3743,8 @@ function allocate_I8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3738,7 +3777,8 @@ function allocate_I8_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3894,7 +3934,8 @@ function allocate_R4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -3927,7 +3968,8 @@ function allocate_R4_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4083,7 +4125,8 @@ function allocate_R4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4116,7 +4159,8 @@ function allocate_R4_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4272,7 +4316,8 @@ function allocate_R4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4305,7 +4350,8 @@ function allocate_R4_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4461,7 +4507,8 @@ function allocate_R4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4494,7 +4541,8 @@ function allocate_R4_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4650,7 +4698,8 @@ function allocate_R4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4683,7 +4732,8 @@ function allocate_R4_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4839,7 +4889,8 @@ function allocate_R8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -4872,7 +4923,8 @@ function allocate_R8_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5028,7 +5080,8 @@ function allocate_R8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5061,7 +5114,8 @@ function allocate_R8_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5217,7 +5271,8 @@ function allocate_R8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5250,7 +5305,8 @@ function allocate_R8_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5406,7 +5462,8 @@ function allocate_R8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5439,7 +5496,8 @@ function allocate_R8_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5595,7 +5653,8 @@ function allocate_R8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
@@ -5628,7 +5687,8 @@ function allocate_R8_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 

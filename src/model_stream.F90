@@ -33,6 +33,10 @@ module model_stream_module
 #define VERSION 10000
 #endif
 
+  !> Object that allows to open a stream (a communication channel) to the server. Streams can be
+  !> used to send commands and data to the server for execution/reassembly/processing. The content of
+  !> each stream will be processed on a specific server PE, which is determined when _opening_ the
+  !> stream.
   type, public :: model_stream
     private
     integer               :: version     = VERSION  !< Version marker, used to check version coherence
@@ -101,6 +105,7 @@ contains
     end if
   end function new_model_stream
 
+  !> Choose level at which this stream will output debug messages
   function set_debug_level(this, new_debug_level) result(old_debug_level)
     implicit none
     class(model_stream), intent(inout) :: this
@@ -118,6 +123,7 @@ contains
     status = this % version == VERSION
   end function is_version_valid
 
+  !> Check whether this model stream is properly initialized (does _not_ mean it is open).
   function is_valid(this)
     implicit none
     class(model_stream), intent(in) :: this
@@ -131,6 +137,7 @@ contains
     end if
   end function is_valid
 
+  !> Check whether this stream is open
   function is_open(this) result(status)
     implicit none
     class(model_stream), intent(IN) :: this
@@ -139,10 +146,13 @@ contains
     status = this % is_valid() .and. this % stream_id > 0
   end function is_open
 
+  !> Send a command to the server through this stream. This is a collective call that must be performed
+  !> by _all_ model PEs, to the _same stream_. The content of the command will be passed as is to the
+  !> process_command() function on the server.
   function send_command(this, command_content) result(success)
     implicit none
-    class(model_stream), intent(inout) :: this
-    type(jar),           intent(inout) :: command_content
+    class(model_stream), intent(inout) :: this              !< model_stream instance
+    type(jar),           intent(inout) :: command_content   !< Content of the command, contained in a jar
     logical :: success
 
     type(message_header) :: header
@@ -210,6 +220,7 @@ contains
     end if
   end function send_command
 
+  !> Open a stream to the server. This is a collective call and will send a signal to the server.
   function model_stream_open(this) result(success)
     implicit none
     class(model_stream),    intent(INOUT) :: this
@@ -268,9 +279,10 @@ contains
     end if
   end function model_stream_open
 
+  !> Close this server stream. This is a collective call and will send a signal to the server.
   function model_stream_close(this) result(success)
     implicit none
-    class(model_stream), intent(INOUT) :: this
+    class(model_stream), intent(INOUT) :: this !< model_stream instance
     logical :: success
 
     type(message_header) :: header
@@ -318,7 +330,8 @@ contains
 
   end function model_stream_close
 
-  !> Send a bunch of data (a "tile") towards the server
+  !> Send a bunch of data (a "tile") towards the server, to be reassembled as a global grid. Can
+  !> optionally include a command to be executed once the global grid is fully assembled.
   function send_data(this, data_info, local_bounds, global_bounds, command) result(success)
     use iso_c_binding
     use jar_module
@@ -434,6 +447,7 @@ contains
 
   end function send_data
 
+  !> ???
   function model_stream_read(this) result(status)
     implicit none
     class(model_stream), intent(INOUT) :: this

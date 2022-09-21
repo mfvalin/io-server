@@ -130,7 +130,6 @@ void *Pointer_add_offset(
   uint32_t szeof            //!< [in]  size of element for offset purposes (power of 2)
   );
 //! print heap statistics
-//! @return none
 void ShmemHeap_dump_info(
     shmem_heap *heap
 );
