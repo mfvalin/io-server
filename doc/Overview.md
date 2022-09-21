@@ -64,7 +64,7 @@ There will be 2 types of nodes, running different types of processes (PEs):
 In general, all data is transferred using a first in, first out (FIFO) queue,
 where each queue is only used by a single sender and a single receiver.
 These queues are implemented in a lockless fashion with circular buffers.
-More details on that in [Implementation elements](#Implementation)
+More details on that in [Implementation elements](#Implementation_elements)
 
 * Compute processes
     * Put their entry in their individual queue, located in shared memory. The entry contains a pointer to the data. The entry could also just be a command
@@ -89,6 +89,7 @@ More details on that in [Implementation elements](#Implementation)
     * Data exchanged using MPI 1-sided
     
 ## Implementation elements
+## {#Implementation_elements}
 
 ### Data structures
 
