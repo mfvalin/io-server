@@ -5,6 +5,10 @@
 
 [sec1](Sec1)
 
+[Sec1]
+
+[Sec1][]
+
 ```
 !
 
@@ -42,7 +46,7 @@
 !
 ```
 
-## Sec1 {#Sec1}
+## {#Sec1}
 
 This is the first Sec1
 
