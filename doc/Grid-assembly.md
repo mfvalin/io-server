@@ -1,0 +1,1 @@
+![Grid assembly](img/grid_assembly_1.svg)

@@ -30,7 +30,7 @@ module grid_meta_module
   integer, parameter, public :: IOSERVER_MAX_NUM_GRID_DIM = 5
 
   !> \brief Derived type that contains an index into a grid with up to 5
-  !> (#IOSERVER_MAX_NUM_GRID_DIM) dimensions.
+  !> (IOSERVER_MAX_NUM_GRID_DIM) dimensions.
   !> Can be used to describe a point within a grid, or the upper or lower
   !> bound of a grid
   type, public :: grid_index_t
@@ -90,7 +90,7 @@ module grid_meta_module
 contains
 
   !> Assign an array of 32-bit integers to the set of indices
-  !> If the array is too long, only take the first #IOSERVER_MAX_NUM_GRID_DIM
+  !> If the array is too long, only take the first IOSERVER_MAX_NUM_GRID_DIM
   !> entries
   subroutine assign_array4(this, array)
     implicit none
@@ -105,7 +105,7 @@ contains
   end subroutine assign_array4
 
   !> Assign an array of 64-bit integers to the set of indices
-  !> If the array is too long, only take the first #IOSERVER_MAX_NUM_GRID_DIM
+  !> If the array is too long, only take the first IOSERVER_MAX_NUM_GRID_DIM
   !> entries
   subroutine assign_array8(this, array)
     implicit none

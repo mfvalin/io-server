@@ -57,8 +57,8 @@ function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(al
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
-  logical, intent(in), optional     :: use_safe_alloc
-  type(block_meta)                  :: alloc_info !< metadata for allocated block
+  logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
+  type(block_meta)                  :: alloc_info     !< metadata for allocated block
 
   $TYPE($KIND)      :: pref
   type(block_meta_c)  :: alloc_info_c
@@ -115,7 +115,7 @@ function allocate_${RI}${L}_${D}D_integer(this, array_ptr, di, use_safe_alloc) r
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
-  logical, intent(in), optional     :: use_safe_alloc
+  logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
@@ -133,8 +133,9 @@ function allocate_${RI}${L}_${D}D_bounds(this, array_ptr, min_bound, max_bound, 
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
-  logical, intent(in), optional     :: use_safe_alloc
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
   $TYPE($KIND), dimension($DIMENSION), contiguous, pointer :: tmp_ptr
@@ -166,8 +167,9 @@ function allocate_${RI}${L}_${D}D_bounds_int4(this, array_ptr, min_bound, max_bo
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
-  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound, max_bound  !< bounds of array array_ptr
-  logical, intent(in), optional     :: use_safe_alloc
+  integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
+  integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   type(block_meta)                  :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
@@ -181,10 +183,11 @@ function allocate_${RI}${L}_${D}D_bounds_int4(this, array_ptr, min_bound, max_bo
   end if
 end function allocate_${RI}${L}_${D}D_bounds_int4
 
-function ptr_to_blockmeta_${RI}${L}${D}D(p, bm) result(status)  ! fortran pointer to metadata translation
+!> Convert a fortran pointer to the corresponding heap block metadata 
+function ptr_to_blockmeta_${RI}${L}${D}D(p, bm) result(status)
   implicit none
-  $TYPE($KIND), dimension($DIMENSION), intent(IN), pointer :: p
-  type(block_meta), intent(OUT) :: bm
+  $TYPE($KIND), dimension($DIMENSION), intent(IN), pointer :: p !< Fortran pointer to convert
+  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
   integer :: status
 
   ${PARAM_DECLARE}
@@ -206,12 +209,13 @@ function ptr_to_blockmeta_${RI}${L}${D}D(p, bm) result(status)  ! fortran pointe
   status = 0
 end function ptr_to_blockmeta_${RI}${L}${D}D
 
-function blockmeta_to_ptr_${RI}${L}${D}D(p, bm, strict) result(status)  ! metadata to pointer translation
+!> Retrieve the fortran pointer from a given heap block metadata
+function blockmeta_to_ptr_${RI}${L}${D}D(p, bm, strict) result(status)
   implicit none
-  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p
-  type(block_meta), intent(IN) :: bm
-  logical, intent(IN), value :: strict
-  integer :: status
+  $TYPE($KIND), dimension($DIMENSION), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
+  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
+  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
+  integer :: status !< To indicate whether the conversion was successful
 
   ${PARAM_DECLARE}
   integer :: tkr, tp, kd, rk

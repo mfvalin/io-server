@@ -17,7 +17,7 @@
 !
 !> \author  V. Magnoux, Recherche en Prevision Numerique
 !> \date    2020-2022
-!> \file atomic_mod.F90 Module to facilitate atomic updates to variables
+!> \file atomic.F90 Module to facilitate atomic updates to variables
 
 module atomic_module
   use iso_c_binding

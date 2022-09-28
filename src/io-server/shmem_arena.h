@@ -185,7 +185,6 @@ int32_t shmem_arena_set_id(
 );
 //! dump arena header and symbol table (description of contents of memory arena)<br>
 //! shmem_arena_print_status(mem)
-//! @return none
 void shmem_arena_print_status(
   void *mem                                  //!< [in] pointer to memory arena (see  shmem_arena_init)
 );

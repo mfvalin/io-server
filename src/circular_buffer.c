@@ -184,7 +184,8 @@ typedef struct {
 
 typedef cb_stats* cb_stats_p;
 
-//! skeleton for circular buffer
+//! @brief A first-in, first-out queue that can have one producer and one consumer.
+//! @copydoc circular_buffer.c
 typedef struct {
   fiol_management m;      //!< Management structure
   cb_stats        stats;  //!< Set of recorded statistics
