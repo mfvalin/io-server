@@ -35,19 +35,20 @@
 
 /**
  \file
-   quick and dirty "process shared memory" heap management (C and Fortran)
+   "process shared memory" heap management (C and Fortran)
 
  \verbatim
 
-  ShmemHeap : A quick and dirty heap management package
+  ShmemHeap : A heap management package
                (mostly intended for use in managing shared memory across processes)
 
   Server Heap layout
 
-  +------+---------------+    +---------------+     +---------------+------+-----------------+
-  |  NT  |    block 0    | ...|    block i    | ... |    block N    | 0/1  | heap statistics |
-  +------+---------------+    +---------------+     +---------------+------+-----------------+
-  <------------------------------------ NT elements ----------------------->
+  +---------------+-----------------+---------------+    +---------------+     +---------------+
+  | heap metadata | heap statistics |    block 0    | ...|    block i    | ... |    block N    |
+  +---------------+-----------------+---------------+    +---------------+     +---------------+
+                                    <------------------------ capacity ------------------------>
+  <---------------------------------------- full size ----------------------------------------->
 
   NT  :  total number of elements in entire Heap including NT itself (but EXCLUDING statistics)
 
@@ -72,15 +73,13 @@
 
   Server Heap contents at creation
 
-  +------+------+------+----------------------------------+------+------+------+-----------------+
-  |  NT  |  NH0 | HEAD |   NH0 - 4 elements (free space)  | TAIL |  NH0 |   0  | heap statistics |
-  +------+------+-----------------------------------------+------+------+------+-----------------+
-         <------------------------- NH0 elements ----------------------->
-  <-------------------------------- NT elementss ------------------------------>
-  NT  :  total number of elements in entire Heap
-  NH0 :  NT - 2 (initial block with NT -2 elements)
+  +---------------+-----------------+------+------+----------------------------------+------+------+
+  | heap metadata | heap statistics |  NT  | HEAD |   NT - 4 elements (free space)   | TAIL |  NT  |
+  +---------------+-----------------+------+-----------------------------------------+------+------+
+                                    <------------------------- NT elements ------------------------>
+  NT :  Capacity of the heap, in number of elements
 
-  elements are expected to be 32 bit elements in this implementation (see io-server/common.h)
+  elements are expected to be 64 bit elements in this implementation (see io-server/common.h)
 
  \endverbatim
 */
@@ -105,6 +104,7 @@ typedef struct{
   uint64_t total_num_alloc_elems; //!< number of elements allocated in the heap's lifetime
 } heap_stats;
 
+//!> General information about the state of a heap, located at the beginning of the heap space.
 typedef struct {
   heap_element marker;            //!< Marker to be able to verify (a little bit) that a heap exists
   size_t       full_size;         //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
@@ -120,6 +120,8 @@ typedef struct {
  * 
  * This is basically a set of pointers to the data itself: some metadata, some stats, the heap contents
  * 
+ * @copydoc shmem_heap.c
+ * 
  */
 typedef struct {
   heap_metadata* meta;        //!< General information about the state of the heap
@@ -134,15 +136,6 @@ typedef  struct {
     int tkr ;             //!< type, kind, rank information (private information, DO NOT USE)
   } meta_c;
 // \endcond
-
-// //!> number of registered heaps
-// static int32_t num_heaps = 0 ;
-
-// //!> table containing registered heap information
-// static heap_item heap_table[MAX_HEAPS] ;
-
-// //!> default heap (used by some functions if heap address is NULL)
-// static void *default_heap = NULL ;
 
 //F_StArT
 //  interface
@@ -626,7 +619,7 @@ int32_t ShmemHeap_check(
 //  C_StArT
 //! allocate space on a Server Heap
 //! @return address of block, NULL in case of failure to allocate
-void *ShmemHeap_alloc_block(
+heap_element *ShmemHeap_alloc_block(
   shmem_heap    *heap,                //!< [in,out] Pointer to heap struct
   const size_t  num_requested_bytes,  //!< [in]  size in bytes of block to allocate
   const int32_t safe                  //!< [in]  if nonzero, perform operation under lock

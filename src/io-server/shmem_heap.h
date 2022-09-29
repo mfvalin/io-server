@@ -88,6 +88,7 @@ typedef struct{
   uint64_t total_num_alloc_elems; //!< number of elements allocated in the heap's lifetime
 } heap_stats;
 
+//!> General information about the state of a heap, located at the beginning of the heap space.
 typedef struct {
   heap_element marker;            //!< Marker to be able to verify (a little bit) that a heap exists
   size_t       full_size;         //!< Space taken by the entire heap and its metadata within the shared memory region, in number of #heap_element
@@ -102,6 +103,8 @@ typedef struct {
  * @brief Local access point to a heap whose data is located in shared memory and thus accessible to other processes.
  * 
  * This is basically a set of pointers to the data itself: some metadata, some stats, the heap contents
+ * 
+ * @copydoc shmem_heap.c
  * 
  */
 typedef struct {
@@ -189,7 +192,7 @@ int32_t ShmemHeap_check(
   );
 //! allocate space on a Server Heap
 //! @return address of block, NULL in case of failure to allocate
-void *ShmemHeap_alloc_block(
+heap_element *ShmemHeap_alloc_block(
   shmem_heap    *heap,                //!< [in,out] Pointer to heap struct
   const size_t  num_requested_bytes,  //!< [in]  size in bytes of block to allocate
   const int32_t safe                  //!< [in]  if nonzero, perform operation under lock

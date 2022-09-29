@@ -111,7 +111,7 @@ module shmem_heap_module
     procedure :: get_ptr => heap_get_ptr  !< \return Internal pointer to heap
 
     procedure :: get_size               !< \return Size of heap, -1 if error
-    procedure :: alloc                  !< Allocate a block from a shmem_heap.  \return block address, NULL if allocation fails
+    procedure :: alloc                  !< \copydoc shmem_heap_module::alloc
 
     GENERIC   :: free => free_by_address, free_by_offset, free_by_meta
     procedure :: free_by_address        !< Free an allocated block by address in memory. \return .true. if O.K., .false. if error
@@ -152,8 +152,32 @@ module shmem_heap_module
                               allocate_R4_5D_bounds_int4, allocate_R4_4D_bounds_int4, allocate_R4_3D_bounds_int4, allocate_R4_2D_bounds_int4, allocate_R4_1D_bounds_int4, &
                               allocate_R8_5D_bounds_int4, allocate_R8_4D_bounds_int4, allocate_R8_3D_bounds_int4, allocate_R8_2D_bounds_int4, allocate_R8_1D_bounds_int4 
 !> \endcond
+
+    !> Generic Fortran array type bound allocator.
+    !> There are two available interfaces: one that specifies the size of the desired array (in each dimension), and
+    !> the other that specifies the min and max bounds of the desired array (in each dimension). For both interfaces,
+    !> two optional parameters are available
+    !>   - to choose a "multi-process" safe allocation
+    !>   - to choose a timeout, in case the heap is full and we want to wait for space to become available. The 
+    !>     default timeout is 30 seconds. Setting the timeout to zero will make the function return immediately
+    !>     with an error if the heap is full. Setting it to a negative value will make the function wait until
+    !>     the requested space becomes available.
+    !>
+    !> For example:
+    !> ```
+    !> type(shmem_heap)     :: h
+    !> type(block_meta_f08) :: info
+    !> integer, dimension(:),       contiguous, pointer :: i1, i1_nowait, i1_safe
+    !> real,    dimension(:, :, :), contiguous, pointer :: r3
+    !> 
+    !> info = h % allocate(i1, [50])                                              ! Allocate a 1D array of 50 integers
+    !> info = h % allocate(r3, min_bound = [0, 0, 5], max_bound = [49, 49, 100])  ! Allocate a 3D array of 50x50x96 reals
+    !> info = h % allocate(i1_nowait, [5], [34], timeout_ms = 0)                  ! Allocate a 1D array of 30 integers, and return immediately if the heap is full
+    !> info = h % allocate(i1_safe, [40], safe = .true.)                          ! Allocate a 1D array of 40 integers safely, in case other processes are allocating from the same heap
+    !> !
+    !> ```
     !> \return     a fortran pointer to integer and real arrays of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
-    GENERIC   :: allocate =>  &  !< generic Fortran array type bound allocator
+    GENERIC   :: allocate =>  &
                               allocate_I1_5D, allocate_I1_4D, allocate_I1_3D, allocate_I1_2D, allocate_I1_1D, &
                               allocate_I2_5D, allocate_I2_4D, allocate_I2_3D, allocate_I2_2D, allocate_I2_1D, &
                               allocate_I4_5D, allocate_I4_4D, allocate_I4_3D, allocate_I4_2D, allocate_I4_1D, &
@@ -182,15 +206,6 @@ module shmem_heap_module
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
-  ! interface sm_allocate   ! generic non type bound procedure
-  !   module procedure I1_5D, I1_4D, I1_3D, I1_2D, I1_1D, &   !  8 bit integer functions
-  !                    I2_5D, I2_4D, I2_3D, I2_2D, I2_1D, &   ! 16 bit integer functions
-  !                    I4_5D, I4_4D, I4_3D, I4_2D, I4_1D, &   ! 32 bit integer functions
-  !                    I8_5D, I8_4D, I8_3D, I8_2D, I8_1D, &   ! 64 bit integer functions
-  !                    R4_5D, R4_4D, R4_3D, R4_2D, R4_1D, &   ! 32 bit real functions, 
-  !                    R8_5D, R8_4D, R8_3D, R8_2D, R8_1D      ! 64 bit real functions
-  ! end interface
-
   interface ptr_to_bm
     module procedure &
       ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
@@ -252,10 +267,11 @@ module shmem_heap_module
     status = ShmemHeap_get_block_meta(this % p, block, this%a, msz)
   end function retrieve_metadata
 
+  !> \brief Get the 
   function block_meta_get_ptr(this) result(this_ptr)
     implicit none
-    class(block_meta_f08), intent(IN) :: this
-    type(C_PTR) :: this_ptr
+    class(block_meta_f08), intent(IN) :: this !< block_meta_f08 instance
+    type(C_PTR) :: this_ptr                   !< The C_PTR stored in that instance
     this_ptr = this % p
   end function block_meta_get_ptr
 
@@ -378,15 +394,21 @@ module shmem_heap_module
     success = c_associated(this % p)
   end function clone_h
 
-  !> \brief allocate a memory block in a heap
-  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p<br>integer(C_SIZE_T) :: nbytes<br>
-  !> p = h\%alloc(nbytes, 0)
+  !> \brief Allocate a memory block in the heap.
+  !>
+  !> Example :
+  !> ```
+  !> type(shmem_heap) :: h
+  !> type(C_PTR) :: p 
+  !> integer(C_SIZE_T) :: nbytes
+  !> p = h % alloc(nbytes, 0)
+  !> ```
   function alloc(h, nbytes, safe) result(p)
     implicit none
     class(shmem_heap), intent(INOUT)     :: h               !< shmem_heap instance
-    integer(C_SIZE_T), intent(IN), value :: nbytes          !< size in bytes of the desired block
-    integer(C_INT),    intent(IN), value :: safe            !< if nonzero perform operation under lock (atomic operation)
-    type(C_PTR) :: p                                        !< address of created heap
+    integer(C_SIZE_T), intent(IN), value :: nbytes          !< Size in bytes of the desired block
+    integer(C_INT),    intent(IN), value :: safe            !< If nonzero perform operation under lock (atomic operation)
+    type(C_PTR) :: p                                        !< Address of created heap (C_PTR)
     p = ShmemHeap_alloc_block(h%p, nbytes, safe)
   end function alloc 
   
