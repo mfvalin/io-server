@@ -198,7 +198,7 @@ contains
       do i = 1, 100
         ! Test freeing from block address
         array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .true.) ! Allocate 'safely'
-        success = the_heap % free(array_info % get_ptr()) ! Free from block address
+        success = the_heap % free(array_info) ! Free from block
         if (.not. success) then
           print *, 'ERROR: Could not free from block address'
           error stop 1
@@ -206,7 +206,7 @@ contains
 
         ! Test freeing from block offset
         array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .true.) ! Allocate 'safely'
-        success = the_heap % free(array_info % get_offset()) ! Free from block address
+        success = the_heap % free(array_info % get_offset()) ! Free from block offset
         if (.not. success) then
           print *, 'ERROR: Could not free from block offset', array_info % get_offset()
           error stop 1
@@ -259,7 +259,7 @@ contains
         ! This shoudl also check coalescing small blocks into a bigger one
         array_info = the_heap % allocate(array, [ALLOC_BASE_SIZE], .false.) ! Allocate *not* safely
         offsets(1) = array_info % get_offset()
-        if (.not. the_heap % is_valid_block(array_info % get_ptr()) .or. .not. associated(array)) then
+        if (.not. the_heap % is_valid_block(c_loc(array)) .or. .not. associated(array)) then
           print *, 'ERROR: Allocated block is not valid!'
           error stop 1
         end if

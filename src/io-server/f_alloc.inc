@@ -39,10 +39,9 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT8_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -51,7 +50,7 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
@@ -61,7 +60,7 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -76,18 +75,17 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*1 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 5) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:5)        = di(1:5)
+    alloc_info % d(1:5)        = di(1:5)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I1_5D
 
 !> Wrapper around allocate_I1_5D to be able to call it and specify dimensions with an array of integer*4
@@ -97,7 +95,7 @@ function allocate_I1_5D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -117,13 +115,13 @@ function allocate_I1_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -151,7 +149,7 @@ function allocate_I1_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -164,64 +162,6 @@ function allocate_I1_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I1_5D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I15D(p, bm) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*1+16*I+5
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I15D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I15D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*1+16*I+5                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 1) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 5) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I15D
-
 !! ===============================  integer*1 4D  ===============================
 !> \brief integer*1 4D array allocator
 function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -230,10 +170,9 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT8_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -242,7 +181,7 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
@@ -252,7 +191,7 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -267,18 +206,17 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*1 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 4) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:4)        = di(1:4)
+    alloc_info % d(1:4)        = di(1:4)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I1_4D
 
 !> Wrapper around allocate_I1_4D to be able to call it and specify dimensions with an array of integer*4
@@ -288,7 +226,7 @@ function allocate_I1_4D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -308,13 +246,13 @@ function allocate_I1_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -342,7 +280,7 @@ function allocate_I1_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -355,64 +293,6 @@ function allocate_I1_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I1_4D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I14D(p, bm) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*1+16*I+4
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I14D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I14D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*1+16*I+4                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 1) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 4) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I14D
-
 !! ===============================  integer*1 3D  ===============================
 !> \brief integer*1 3D array allocator
 function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -421,10 +301,9 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT8_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -433,7 +312,7 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
@@ -443,7 +322,7 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -458,18 +337,17 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*1 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 3) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:3)        = di(1:3)
+    alloc_info % d(1:3)        = di(1:3)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I1_3D
 
 !> Wrapper around allocate_I1_3D to be able to call it and specify dimensions with an array of integer*4
@@ -479,7 +357,7 @@ function allocate_I1_3D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -499,13 +377,13 @@ function allocate_I1_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -533,7 +411,7 @@ function allocate_I1_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -546,64 +424,6 @@ function allocate_I1_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I1_3D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I13D(p, bm) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*1+16*I+3
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I13D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I13D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*1+16*I+3                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 1) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 3) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I13D
-
 !! ===============================  integer*1 2D  ===============================
 !> \brief integer*1 2D array allocator
 function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -612,10 +432,9 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT8_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -624,7 +443,7 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
@@ -634,7 +453,7 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -649,18 +468,17 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*1 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 2) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:2)        = di(1:2)
+    alloc_info % d(1:2)        = di(1:2)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I1_2D
 
 !> Wrapper around allocate_I1_2D to be able to call it and specify dimensions with an array of integer*4
@@ -670,7 +488,7 @@ function allocate_I1_2D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -690,13 +508,13 @@ function allocate_I1_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -724,7 +542,7 @@ function allocate_I1_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -737,64 +555,6 @@ function allocate_I1_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I1_2D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I12D(p, bm) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*1+16*I+2
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I12D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I12D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*1+16*I+2                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 1) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 2) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I12D
-
 !! ===============================  integer*1 1D  ===============================
 !> \brief integer*1 1D array allocator
 function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -803,10 +563,9 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT8_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -815,7 +574,7 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
@@ -825,7 +584,7 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -840,18 +599,17 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*1 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 1) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:1)        = di(1:1)
+    alloc_info % d(1:1)        = di(1:1)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I1_1D
 
 !> Wrapper around allocate_I1_1D to be able to call it and specify dimensions with an array of integer*4
@@ -861,7 +619,7 @@ function allocate_I1_1D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -881,13 +639,13 @@ function allocate_I1_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -915,7 +673,7 @@ function allocate_I1_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -928,64 +686,6 @@ function allocate_I1_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I1_1D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I11D(p, bm) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*1+16*I+1
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I11D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I11D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT8_T), dimension(:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*1+16*I+1                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 1) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 1) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I11D
-
 !! ===============================  integer*2 5D  ===============================
 !> \brief integer*2 5D array allocator
 function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -994,10 +694,9 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT16_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -1006,7 +705,7 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
@@ -1016,7 +715,7 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -1031,18 +730,17 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*2 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 5) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:5)        = di(1:5)
+    alloc_info % d(1:5)        = di(1:5)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I2_5D
 
 !> Wrapper around allocate_I2_5D to be able to call it and specify dimensions with an array of integer*4
@@ -1052,7 +750,7 @@ function allocate_I2_5D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -1072,13 +770,13 @@ function allocate_I2_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -1106,7 +804,7 @@ function allocate_I2_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -1119,64 +817,6 @@ function allocate_I2_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I2_5D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I25D(p, bm) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*2+16*I+5
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I25D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I25D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*2+16*I+5                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 2) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 5) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I25D
-
 !! ===============================  integer*2 4D  ===============================
 !> \brief integer*2 4D array allocator
 function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -1185,10 +825,9 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT16_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -1197,7 +836,7 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
@@ -1207,7 +846,7 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -1222,18 +861,17 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*2 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 4) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:4)        = di(1:4)
+    alloc_info % d(1:4)        = di(1:4)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I2_4D
 
 !> Wrapper around allocate_I2_4D to be able to call it and specify dimensions with an array of integer*4
@@ -1243,7 +881,7 @@ function allocate_I2_4D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -1263,13 +901,13 @@ function allocate_I2_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -1297,7 +935,7 @@ function allocate_I2_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -1310,64 +948,6 @@ function allocate_I2_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I2_4D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I24D(p, bm) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*2+16*I+4
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I24D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I24D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*2+16*I+4                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 2) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 4) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I24D
-
 !! ===============================  integer*2 3D  ===============================
 !> \brief integer*2 3D array allocator
 function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -1376,10 +956,9 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT16_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT16_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -1388,7 +967,7 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
@@ -1398,7 +977,7 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -1413,18 +992,17 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*2 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 3) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:3)        = di(1:3)
+    alloc_info % d(1:3)        = di(1:3)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I2_3D
 
 !> Wrapper around allocate_I2_3D to be able to call it and specify dimensions with an array of integer*4
@@ -1434,7 +1012,7 @@ function allocate_I2_3D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT16_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -1454,13 +1032,13 @@ function allocate_I2_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -1488,7 +1066,7 @@ function allocate_I2_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -1501,64 +1079,6 @@ function allocate_I2_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I2_3D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I23D(p, bm) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*2+16*I+3
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I23D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I23D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*2+16*I+3                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 2) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 3) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I23D
-
 !! ===============================  integer*2 2D  ===============================
 !> \brief integer*2 2D array allocator
 function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -1567,10 +1087,9 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT16_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT16_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -1579,7 +1098,7 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
@@ -1589,7 +1108,7 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -1604,18 +1123,17 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*2 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 2) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:2)        = di(1:2)
+    alloc_info % d(1:2)        = di(1:2)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I2_2D
 
 !> Wrapper around allocate_I2_2D to be able to call it and specify dimensions with an array of integer*4
@@ -1625,7 +1143,7 @@ function allocate_I2_2D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT16_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -1645,13 +1163,13 @@ function allocate_I2_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -1679,7 +1197,7 @@ function allocate_I2_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -1692,64 +1210,6 @@ function allocate_I2_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I2_2D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I22D(p, bm) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*2+16*I+2
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I22D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I22D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*2+16*I+2                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 2) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 2) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I22D
-
 !! ===============================  integer*2 1D  ===============================
 !> \brief integer*2 1D array allocator
 function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -1758,10 +1218,9 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT16_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT16_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -1770,7 +1229,7 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
@@ -1780,7 +1239,7 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -1795,18 +1254,17 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*2 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 1) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:1)        = di(1:1)
+    alloc_info % d(1:1)        = di(1:1)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I2_1D
 
 !> Wrapper around allocate_I2_1D to be able to call it and specify dimensions with an array of integer*4
@@ -1816,7 +1274,7 @@ function allocate_I2_1D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT16_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -1836,13 +1294,13 @@ function allocate_I2_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -1870,7 +1328,7 @@ function allocate_I2_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -1883,64 +1341,6 @@ function allocate_I2_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I2_1D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I21D(p, bm) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*2+16*I+1
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I21D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I21D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT16_T), dimension(:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*2+16*I+1                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 2) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 1) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I21D
-
 !! ===============================  integer*4 5D  ===============================
 !> \brief integer*4 5D array allocator
 function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -1949,10 +1349,9 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT32_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -1961,7 +1360,7 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
@@ -1971,7 +1370,7 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -1986,18 +1385,17 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 5) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:5)        = di(1:5)
+    alloc_info % d(1:5)        = di(1:5)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I4_5D
 
 !> Wrapper around allocate_I4_5D to be able to call it and specify dimensions with an array of integer*4
@@ -2007,7 +1405,7 @@ function allocate_I4_5D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -2027,13 +1425,13 @@ function allocate_I4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -2061,7 +1459,7 @@ function allocate_I4_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -2074,64 +1472,6 @@ function allocate_I4_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I4_5D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I45D(p, bm) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*I+5
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I45D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I45D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*I+5                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 5) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I45D
-
 !! ===============================  integer*4 4D  ===============================
 !> \brief integer*4 4D array allocator
 function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -2140,10 +1480,9 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT32_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -2152,7 +1491,7 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
@@ -2162,7 +1501,7 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -2177,18 +1516,17 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 4) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:4)        = di(1:4)
+    alloc_info % d(1:4)        = di(1:4)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I4_4D
 
 !> Wrapper around allocate_I4_4D to be able to call it and specify dimensions with an array of integer*4
@@ -2198,7 +1536,7 @@ function allocate_I4_4D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -2218,13 +1556,13 @@ function allocate_I4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -2252,7 +1590,7 @@ function allocate_I4_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -2265,64 +1603,6 @@ function allocate_I4_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I4_4D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I44D(p, bm) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*I+4
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I44D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I44D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*I+4                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 4) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I44D
-
 !! ===============================  integer*4 3D  ===============================
 !> \brief integer*4 3D array allocator
 function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -2331,10 +1611,9 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT32_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT32_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -2343,7 +1622,7 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
@@ -2353,7 +1632,7 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -2368,18 +1647,17 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 3) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:3)        = di(1:3)
+    alloc_info % d(1:3)        = di(1:3)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I4_3D
 
 !> Wrapper around allocate_I4_3D to be able to call it and specify dimensions with an array of integer*4
@@ -2389,7 +1667,7 @@ function allocate_I4_3D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT32_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -2409,13 +1687,13 @@ function allocate_I4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -2443,7 +1721,7 @@ function allocate_I4_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -2456,64 +1734,6 @@ function allocate_I4_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I4_3D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I43D(p, bm) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*I+3
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I43D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I43D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*I+3                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 3) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I43D
-
 !! ===============================  integer*4 2D  ===============================
 !> \brief integer*4 2D array allocator
 function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -2522,10 +1742,9 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT32_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT32_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -2534,7 +1753,7 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
@@ -2544,7 +1763,7 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -2559,18 +1778,17 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 2) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:2)        = di(1:2)
+    alloc_info % d(1:2)        = di(1:2)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I4_2D
 
 !> Wrapper around allocate_I4_2D to be able to call it and specify dimensions with an array of integer*4
@@ -2580,7 +1798,7 @@ function allocate_I4_2D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT32_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -2600,13 +1818,13 @@ function allocate_I4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -2634,7 +1852,7 @@ function allocate_I4_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -2647,64 +1865,6 @@ function allocate_I4_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I4_2D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I42D(p, bm) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*I+2
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I42D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I42D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*I+2                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 2) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I42D
-
 !! ===============================  integer*4 1D  ===============================
 !> \brief integer*4 1D array allocator
 function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -2713,10 +1873,9 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT32_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT32_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -2725,7 +1884,7 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
@@ -2735,7 +1894,7 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -2750,18 +1909,17 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 1) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:1)        = di(1:1)
+    alloc_info % d(1:1)        = di(1:1)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I4_1D
 
 !> Wrapper around allocate_I4_1D to be able to call it and specify dimensions with an array of integer*4
@@ -2771,7 +1929,7 @@ function allocate_I4_1D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT32_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -2791,13 +1949,13 @@ function allocate_I4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -2825,7 +1983,7 @@ function allocate_I4_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -2838,64 +1996,6 @@ function allocate_I4_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I4_1D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I41D(p, bm) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*I+1
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I41D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I41D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT32_T), dimension(:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*I+1                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 1) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I41D
-
 !! ===============================  integer*8 5D  ===============================
 !> \brief integer*8 5D array allocator
 function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -2904,10 +2004,9 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT64_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -2916,7 +2015,7 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
@@ -2926,7 +2025,7 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -2941,18 +2040,17 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 5) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:5)        = di(1:5)
+    alloc_info % d(1:5)        = di(1:5)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I8_5D
 
 !> Wrapper around allocate_I8_5D to be able to call it and specify dimensions with an array of integer*4
@@ -2962,7 +2060,7 @@ function allocate_I8_5D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -2982,13 +2080,13 @@ function allocate_I8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -3016,7 +2114,7 @@ function allocate_I8_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -3029,64 +2127,6 @@ function allocate_I8_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I8_5D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I85D(p, bm) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*I+5
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I85D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I85D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*I+5                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 5) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I85D
-
 !! ===============================  integer*8 4D  ===============================
 !> \brief integer*8 4D array allocator
 function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -3095,10 +2135,9 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT64_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -3107,7 +2146,7 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
@@ -3117,7 +2156,7 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -3132,18 +2171,17 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 4) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:4)        = di(1:4)
+    alloc_info % d(1:4)        = di(1:4)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I8_4D
 
 !> Wrapper around allocate_I8_4D to be able to call it and specify dimensions with an array of integer*4
@@ -3153,7 +2191,7 @@ function allocate_I8_4D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -3173,13 +2211,13 @@ function allocate_I8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -3207,7 +2245,7 @@ function allocate_I8_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -3220,64 +2258,6 @@ function allocate_I8_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I8_4D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I84D(p, bm) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*I+4
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I84D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I84D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*I+4                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 4) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I84D
-
 !! ===============================  integer*8 3D  ===============================
 !> \brief integer*8 3D array allocator
 function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -3286,10 +2266,9 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT64_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT64_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -3298,7 +2277,7 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
@@ -3308,7 +2287,7 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -3323,18 +2302,17 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 3) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:3)        = di(1:3)
+    alloc_info % d(1:3)        = di(1:3)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I8_3D
 
 !> Wrapper around allocate_I8_3D to be able to call it and specify dimensions with an array of integer*4
@@ -3344,7 +2322,7 @@ function allocate_I8_3D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT64_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -3364,13 +2342,13 @@ function allocate_I8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -3398,7 +2376,7 @@ function allocate_I8_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -3411,64 +2389,6 @@ function allocate_I8_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I8_3D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I83D(p, bm) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*I+3
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I83D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I83D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*I+3                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 3) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I83D
-
 !! ===============================  integer*8 2D  ===============================
 !> \brief integer*8 2D array allocator
 function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -3477,10 +2397,9 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT64_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT64_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -3489,7 +2408,7 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
@@ -3499,7 +2418,7 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -3514,18 +2433,17 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 2) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:2)        = di(1:2)
+    alloc_info % d(1:2)        = di(1:2)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I8_2D
 
 !> Wrapper around allocate_I8_2D to be able to call it and specify dimensions with an array of integer*4
@@ -3535,7 +2453,7 @@ function allocate_I8_2D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT64_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -3555,13 +2473,13 @@ function allocate_I8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -3589,7 +2507,7 @@ function allocate_I8_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -3602,64 +2520,6 @@ function allocate_I8_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I8_2D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I82D(p, bm) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*I+2
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I82D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I82D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*I+2                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 2) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I82D
-
 !! ===============================  integer*8 1D  ===============================
 !> \brief integer*8 1D array allocator
 function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -3668,10 +2528,9 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer(C_INT64_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   integer(C_INT64_T)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -3680,7 +2539,7 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: I = TKR_INTEGER
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
@@ -3690,7 +2549,7 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -3705,18 +2564,17 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 1) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:1)        = di(1:1)
+    alloc_info % d(1:1)        = di(1:1)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_I8_1D
 
 !> Wrapper around allocate_I8_1D to be able to call it and specify dimensions with an array of integer*4
@@ -3726,7 +2584,7 @@ function allocate_I8_1D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   integer(C_INT64_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -3746,13 +2604,13 @@ function allocate_I8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -3780,7 +2638,7 @@ function allocate_I8_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -3793,64 +2651,6 @@ function allocate_I8_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_I8_1D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_I81D(p, bm) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*I+1
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_I81D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_I81D(p, bm, strict) result(status)
-  implicit none
-  integer(C_INT64_T), dimension(:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: I = TKR_INTEGER
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*I+1                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. I) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 1) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_I81D
-
 !! ===============================  real*4 5D  ===============================
 !> \brief real*4 5D array allocator
 function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -3859,10 +2659,9 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_FLOAT)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -3871,7 +2670,7 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
@@ -3881,7 +2680,7 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -3896,18 +2695,17 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 5) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:5)        = di(1:5)
+    alloc_info % d(1:5)        = di(1:5)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R4_5D
 
 !> Wrapper around allocate_R4_5D to be able to call it and specify dimensions with an array of integer*4
@@ -3917,7 +2715,7 @@ function allocate_R4_5D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -3937,13 +2735,13 @@ function allocate_R4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -3971,7 +2769,7 @@ function allocate_R4_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -3984,64 +2782,6 @@ function allocate_R4_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R4_5D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R45D(p, bm) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*R+5
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R45D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R45D(p, bm, strict) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*R+5                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 5) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R45D
-
 !! ===============================  real*4 4D  ===============================
 !> \brief real*4 4D array allocator
 function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -4050,10 +2790,9 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_FLOAT)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -4062,7 +2801,7 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
@@ -4072,7 +2811,7 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -4087,18 +2826,17 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 4) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:4)        = di(1:4)
+    alloc_info % d(1:4)        = di(1:4)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R4_4D
 
 !> Wrapper around allocate_R4_4D to be able to call it and specify dimensions with an array of integer*4
@@ -4108,7 +2846,7 @@ function allocate_R4_4D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -4128,13 +2866,13 @@ function allocate_R4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -4162,7 +2900,7 @@ function allocate_R4_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -4175,64 +2913,6 @@ function allocate_R4_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R4_4D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R44D(p, bm) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*R+4
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R44D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R44D(p, bm, strict) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*R+4                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 4) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R44D
-
 !! ===============================  real*4 3D  ===============================
 !> \brief real*4 3D array allocator
 function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -4241,10 +2921,9 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_FLOAT)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -4253,7 +2932,7 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
@@ -4263,7 +2942,7 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -4278,18 +2957,17 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 3) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:3)        = di(1:3)
+    alloc_info % d(1:3)        = di(1:3)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R4_3D
 
 !> Wrapper around allocate_R4_3D to be able to call it and specify dimensions with an array of integer*4
@@ -4299,7 +2977,7 @@ function allocate_R4_3D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -4319,13 +2997,13 @@ function allocate_R4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -4353,7 +3031,7 @@ function allocate_R4_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -4366,64 +3044,6 @@ function allocate_R4_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R4_3D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R43D(p, bm) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*R+3
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R43D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R43D(p, bm, strict) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*R+3                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 3) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R43D
-
 !! ===============================  real*4 2D  ===============================
 !> \brief real*4 2D array allocator
 function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -4432,10 +3052,9 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_FLOAT)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -4444,7 +3063,7 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
@@ -4454,7 +3073,7 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -4469,18 +3088,17 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 2) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:2)        = di(1:2)
+    alloc_info % d(1:2)        = di(1:2)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R4_2D
 
 !> Wrapper around allocate_R4_2D to be able to call it and specify dimensions with an array of integer*4
@@ -4490,7 +3108,7 @@ function allocate_R4_2D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -4510,13 +3128,13 @@ function allocate_R4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -4544,7 +3162,7 @@ function allocate_R4_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -4557,64 +3175,6 @@ function allocate_R4_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R4_2D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R42D(p, bm) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*R+2
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R42D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R42D(p, bm, strict) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*R+2                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 2) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R42D
-
 !! ===============================  real*4 1D  ===============================
 !> \brief real*4 1D array allocator
 function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -4623,10 +3183,9 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_FLOAT)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -4635,7 +3194,7 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
@@ -4645,7 +3204,7 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -4660,18 +3219,17 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*4 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 1) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:1)        = di(1:1)
+    alloc_info % d(1:1)        = di(1:1)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R4_1D
 
 !> Wrapper around allocate_R4_1D to be able to call it and specify dimensions with an array of integer*4
@@ -4681,7 +3239,7 @@ function allocate_R4_1D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -4701,13 +3259,13 @@ function allocate_R4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -4735,7 +3293,7 @@ function allocate_R4_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -4748,64 +3306,6 @@ function allocate_R4_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R4_1D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R41D(p, bm) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*4+16*R+1
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R41D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R41D(p, bm, strict) result(status)
-  implicit none
-  real(C_FLOAT), dimension(:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*4+16*R+1                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 4) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 1) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R41D
-
 !! ===============================  real*8 5D  ===============================
 !> \brief real*8 5D array allocator
 function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -4814,10 +3314,9 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_DOUBLE)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -4826,7 +3325,7 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
@@ -4836,7 +3335,7 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -4851,18 +3350,17 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 5) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:5)        = di(1:5)
+    alloc_info % d(1:5)        = di(1:5)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R8_5D
 
 !> Wrapper around allocate_R8_5D to be able to call it and specify dimensions with an array of integer*4
@@ -4872,7 +3370,7 @@ function allocate_R8_5D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -4892,13 +3390,13 @@ function allocate_R8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -4926,7 +3424,7 @@ function allocate_R8_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -4939,64 +3437,6 @@ function allocate_R8_5D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R8_5D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R85D(p, bm) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*R+5
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 5                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R85D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R85D(p, bm, strict) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*R+5                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 5) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:5))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R85D
-
 !! ===============================  real*8 4D  ===============================
 !> \brief real*8 4D array allocator
 function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -5005,10 +3445,9 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_DOUBLE)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -5017,7 +3456,7 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
@@ -5027,7 +3466,7 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -5042,18 +3481,17 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 4) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:4)        = di(1:4)
+    alloc_info % d(1:4)        = di(1:4)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R8_4D
 
 !> Wrapper around allocate_R8_4D to be able to call it and specify dimensions with an array of integer*4
@@ -5063,7 +3501,7 @@ function allocate_R8_4D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -5083,13 +3521,13 @@ function allocate_R8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -5117,7 +3555,7 @@ function allocate_R8_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -5130,64 +3568,6 @@ function allocate_R8_4D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R8_4D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R84D(p, bm) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*R+4
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 4                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R84D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R84D(p, bm, strict) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*R+4                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 4) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:4))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R84D
-
 !! ===============================  real*8 3D  ===============================
 !> \brief real*8 3D array allocator
 function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -5196,10 +3576,9 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_DOUBLE)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -5208,7 +3587,7 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
@@ -5218,7 +3597,7 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -5233,18 +3612,17 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 3) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:3)        = di(1:3)
+    alloc_info % d(1:3)        = di(1:3)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R8_3D
 
 !> Wrapper around allocate_R8_3D to be able to call it and specify dimensions with an array of integer*4
@@ -5254,7 +3632,7 @@ function allocate_R8_3D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -5274,13 +3652,13 @@ function allocate_R8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -5308,7 +3686,7 @@ function allocate_R8_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -5321,64 +3699,6 @@ function allocate_R8_3D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R8_3D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R83D(p, bm) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*R+3
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 3                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R83D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R83D(p, bm, strict) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*R+3                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 3) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:3))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R83D
-
 !! ===============================  real*8 2D  ===============================
 !> \brief real*8 2D array allocator
 function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -5387,10 +3707,9 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_DOUBLE)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -5399,7 +3718,7 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
@@ -5409,7 +3728,7 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -5424,18 +3743,17 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 2) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:2)        = di(1:2)
+    alloc_info % d(1:2)        = di(1:2)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R8_2D
 
 !> Wrapper around allocate_R8_2D to be able to call it and specify dimensions with an array of integer*4
@@ -5445,7 +3763,7 @@ function allocate_R8_2D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -5465,13 +3783,13 @@ function allocate_R8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -5499,7 +3817,7 @@ function allocate_R8_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -5512,64 +3830,6 @@ function allocate_R8_2D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   end if
 end function allocate_R8_2D_bounds_int4
 
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R82D(p, bm) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*R+2
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 2                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R82D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R82D(p, bm, strict) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:,:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*R+2                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 2) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:2))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R82D
-
 !! ===============================  real*8 1D  ===============================
 !> \brief real*8 1D array allocator
 function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
@@ -5578,10 +3838,9 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: alloc_info     !< metadata for allocated block
+  type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   real(C_DOUBLE)      :: pref
-  type(block_meta_c)  :: alloc_info_c
   type(C_PTR)         :: ptr_c
   integer(C_SIZE_T)   :: alloc_size
   integer             :: tkr, status
@@ -5590,7 +3849,7 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   integer, parameter  :: R = TKR_REAL
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
@@ -5600,7 +3859,7 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   ! Gotta allocate more than zero
   if (PRODUCT(di) <= 0) return
 
-  metadata_size = C_SIZEOF(alloc_info_c)                      ! size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
@@ -5615,18 +3874,17 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
   tkr                     = 256*8 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % a % tkr    = tkr              ! build C interoperable metadata
-  alloc_info % a % d(:)   = 1                ! set all 5 dimensions to 1
+  alloc_info % tkr        = tkr              ! build C interoperable metadata
+  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
   ! set relevant dimensions to correct value
   if (size(di) < 1) then
-    alloc_info % a % d(1:size(di)) = di(1:size(di))
+    alloc_info % d(1:size(di)) = di(1:size(di))
   else
-    alloc_info % a % d(1:1)        = di(1:1)
+    alloc_info % d(1:1)        = di(1:1)
   end if
 
-  alloc_info % a % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)          ! minus reference address  (offset in number of heap elements)
-  alloc_info % p          = ptr_c                                                   ! actual address of array
-  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info % a, metadata_size) ! insert metadata into data block
+  alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
 end function allocate_R8_1D
 
 !> Wrapper around allocate_R8_1D to be able to call it and specify dimensions with an array of integer*4
@@ -5636,7 +3894,7 @@ function allocate_R8_1D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
   real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
@@ -5656,13 +3914,13 @@ function allocate_R8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:), contiguous, pointer :: tmp_ptr
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta(block_meta_c([0,0,0,0,0], 0, 0), C_NULL_PTR)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0)
 
   if (size(min_bound) .ne. size(max_bound))  then
     print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
@@ -5690,7 +3948,7 @@ function allocate_R8_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
-  type(block_meta)                  :: bmi !< metadata for allocated block
+  type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
   integer(C_INT64_T), dimension(size(max_bound)) :: max_i8
@@ -5702,62 +3960,4 @@ function allocate_R8_1D_bounds_int4(this, array_ptr, min_bound, max_bound, use_s
     bmi = this % allocate_R8_1D_bounds(array_ptr, min_i8, max_i8)
   end if
 end function allocate_R8_1D_bounds_int4
-
-!> Convert a fortran pointer to the corresponding heap block metadata 
-function ptr_to_blockmeta_R81D(p, bm) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:), intent(IN), pointer :: p !< Fortran pointer to convert
-  type(block_meta), intent(OUT) :: bm   !< Corresponding block metadata
-  integer :: status
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, ix
-
-  status = -1
-  bm % p = C_NULL_PTR               ! prepare for failure
-  bm % a % d   = 0
-  bm % a % tkr = 0
-  if(.not. ASSOCIATED(p)) return    ! NULL pointer
-  tkr = 256*8+16*R+1
-  bm % a % tkr = tkr                ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  bm % a % d   = 1
-  do ix = 1, 1                   ! copy array dimensions
-    bm % a % d(ix) = size(p, ix)
-  enddo
-  bm % p = transfer(LOC(p), bm % p) ! array address
-  
-  status = 0
-end function ptr_to_blockmeta_R81D
-
-!> Retrieve the fortran pointer from a given heap block metadata
-function blockmeta_to_ptr_R81D(p, bm, strict) result(status)
-  implicit none
-  real(C_DOUBLE), dimension(:), intent(OUT), pointer :: p !< [out] Fortran pointer corresponding to the given block
-  type(block_meta), intent(IN) :: bm !< [in] Block to convert to a pointer
-  logical, intent(IN), value :: strict !< [in] Whether to fail if the given Fortran pointer does not have the correct type, kind and rank
-  integer :: status !< To indicate whether the conversion was successful
-
-  integer, parameter  :: R = TKR_REAL
-  integer :: tkr, tp, kd, rk
-
-  status = -1
-  p => NULL()                                       ! prepare for failure
-  if(.not. C_ASSOCIATED(bm % p) ) return            ! NULL pointer
-
-  tkr = 256*8+16*R+1                      ! full TKR
-
-  kd = ishft(bm % a % tkr, -8)                      ! expected kind 1/2/4/8
-  if(kd .ne. 8) return                           ! wrong kind
-
-  tp = and(15, ishft(bm % a % tkr, -4))             ! expected type 1/2
-  if(tp .ne. R) return                          ! wrong type
-
-  rk = and(bm % a % tkr, 15)                        ! expected rank 1/2/3/4/5
-  if(rk > 1) return                              ! insufficient rank of pointer
-
-  if((bm % a % tkr  .ne. tkr) .and. strict)    return     ! wrong STRICT type, kind, or rank
-
-  call C_F_POINTER(bm % p, p, bm % a % d(1:1))   ! make Fortran array pointer from C pointer
-  status = 0
-end function blockmeta_to_ptr_R81D
 

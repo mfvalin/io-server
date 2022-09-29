@@ -32,8 +32,6 @@ module shmem_heap_module
   integer, parameter         :: TKR_INTEGER = 1           !< tkr code for integer arrays
   integer, parameter         :: TKR_REAL    = 2           !< tkr code for real arrays
 
-
-  public :: bm_to_ptr, ptr_to_bm
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, bind(C) :: block_meta_c
@@ -45,34 +43,25 @@ module shmem_heap_module
 
   include 'io-server/shmem_heap.inc'
 
-  !> \brief C interoperable version of block_meta_f08
-  type, bind(C) :: block_meta
-    private
-    type(block_meta_c) :: a           !< array descriptor, C interoperable \private
-    type(C_PTR) :: p   = C_NULL_PTR   !< array address \private
-  end type block_meta
-
   !> \brief Fortran 2008 data block metadata (using the C layout)
   type, public :: block_meta_f08
     private
     type(block_meta_c) :: a           !< array descriptor, C interoperable \private
-    type(C_PTR) :: p   = C_NULL_PTR   !< array address \private
 
   contains
     procedure :: print => block_meta_print
-    
-    procedure :: get_ptr    => block_meta_get_ptr    !< \return The stored pointer
+
     procedure :: get_offset => block_meta_get_offset !< \return The offset of this block within its heap
     procedure :: get_type   => block_meta_get_type   !< \return Array type code (1=integer, 2=real)
     procedure :: get_kind   => block_meta_get_kind   !< \return Array kind (1/2/4/8 bytes)
     procedure :: get_rank   => block_meta_get_rank   !< \return Array rank (1/2/3/../MAX_ARRAY_RANK)
     procedure :: get_dimensions                      !< \return array(MAX_ARRAY_RANK) containing dimensions
-    procedure :: retrieve_metadata                   !< Get metadata from what's stored in the heap. \return 0 if O.K. non zero otherwise
+    ! procedure :: retrieve_metadata                   !< Get metadata from what's stored in the heap. \return 0 if O.K. non zero otherwise
 
     procedure :: reset                      !< nullify operator
     procedure :: assign                     !< assignment operator, block_meta_f08 = block_meta_f08
-    procedure :: assign_meta                !< assignment operator, block_meta_f08 = block_meta
-    GENERIC :: ASSIGNMENT(=) => assign, assign_meta      !< generic assignment operator
+    procedure :: assign_c                   !< assignment operator, block_meta_f08 = block_meta
+    GENERIC :: ASSIGNMENT(=) => assign, assign_c      !< generic assignment operator
 
     procedure :: equal                      !< equality operator
     GENERIC :: operator(==) => equal        !< equality operator
@@ -107,8 +96,8 @@ module shmem_heap_module
     procedure :: get_block_size_from_offset
     procedure :: is_valid_block           !< \return Whether the given address points to a valid block in this heap
 
-    procedure :: get_address_from_offset  !< \return Block address that corresponds to the given offset in the heap. NULL if error
-    procedure :: get_ptr => heap_get_ptr  !< \return Internal pointer to heap
+    procedure :: get_address_from_offset  !< \copydoc shmem_heap_module::get_address_from_offset
+    procedure :: get_ptr => heap_get_ptr  !< \copydoc shmem_heap_module::head_get_ptr
 
     procedure :: get_size               !< \return Size of heap, -1 if error
     procedure :: alloc                  !< \copydoc shmem_heap_module::alloc
@@ -206,25 +195,25 @@ module shmem_heap_module
 
 ! tell doxygen to ignore the following block (for now)
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
-  interface ptr_to_bm
-    module procedure &
-      ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
-      ptr_to_blockmeta_I25D, ptr_to_blockmeta_I24D, ptr_to_blockmeta_I23D, ptr_to_blockmeta_I22D, ptr_to_blockmeta_I21D, &   ! 16 bit integer functions
-      ptr_to_blockmeta_I45D, ptr_to_blockmeta_I44D, ptr_to_blockmeta_I43D, ptr_to_blockmeta_I42D, ptr_to_blockmeta_I41D, &   ! 32 bit integer functions
-      ptr_to_blockmeta_I85D, ptr_to_blockmeta_I84D, ptr_to_blockmeta_I83D, ptr_to_blockmeta_I82D, ptr_to_blockmeta_I81D, &   ! 64 bit integer functions
-      ptr_to_blockmeta_R45D, ptr_to_blockmeta_R44D, ptr_to_blockmeta_R43D, ptr_to_blockmeta_R42D, ptr_to_blockmeta_R41D, &   ! 32 bit real functions, 
-      ptr_to_blockmeta_R85D, ptr_to_blockmeta_R84D, ptr_to_blockmeta_R83D, ptr_to_blockmeta_R82D, ptr_to_blockmeta_R81D      ! 64 bit real functions
-  end interface
+  ! interface ptr_to_bm
+  !   module procedure &
+  !     ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
+  !     ptr_to_blockmeta_I25D, ptr_to_blockmeta_I24D, ptr_to_blockmeta_I23D, ptr_to_blockmeta_I22D, ptr_to_blockmeta_I21D, &   ! 16 bit integer functions
+  !     ptr_to_blockmeta_I45D, ptr_to_blockmeta_I44D, ptr_to_blockmeta_I43D, ptr_to_blockmeta_I42D, ptr_to_blockmeta_I41D, &   ! 32 bit integer functions
+  !     ptr_to_blockmeta_I85D, ptr_to_blockmeta_I84D, ptr_to_blockmeta_I83D, ptr_to_blockmeta_I82D, ptr_to_blockmeta_I81D, &   ! 64 bit integer functions
+  !     ptr_to_blockmeta_R45D, ptr_to_blockmeta_R44D, ptr_to_blockmeta_R43D, ptr_to_blockmeta_R42D, ptr_to_blockmeta_R41D, &   ! 32 bit real functions, 
+  !     ptr_to_blockmeta_R85D, ptr_to_blockmeta_R84D, ptr_to_blockmeta_R83D, ptr_to_blockmeta_R82D, ptr_to_blockmeta_R81D      ! 64 bit real functions
+  ! end interface
 
-  interface bm_to_ptr
-    module procedure &
-      blockmeta_to_ptr_I15D, blockmeta_to_ptr_I14D, blockmeta_to_ptr_I13D, blockmeta_to_ptr_I12D, blockmeta_to_ptr_I11D, &   !  8 bit integer functions
-      blockmeta_to_ptr_I25D, blockmeta_to_ptr_I24D, blockmeta_to_ptr_I23D, blockmeta_to_ptr_I22D, blockmeta_to_ptr_I21D, &   ! 16 bit integer functions
-      blockmeta_to_ptr_I45D, blockmeta_to_ptr_I44D, blockmeta_to_ptr_I43D, blockmeta_to_ptr_I42D, blockmeta_to_ptr_I41D, &   ! 32 bit integer functions
-      blockmeta_to_ptr_I85D, blockmeta_to_ptr_I84D, blockmeta_to_ptr_I83D, blockmeta_to_ptr_I82D, blockmeta_to_ptr_I81D, &   ! 64 bit integer functions
-      blockmeta_to_ptr_R45D, blockmeta_to_ptr_R44D, blockmeta_to_ptr_R43D, blockmeta_to_ptr_R42D, blockmeta_to_ptr_R41D, &   ! 32 bit real functions, 
-      blockmeta_to_ptr_R85D, blockmeta_to_ptr_R84D, blockmeta_to_ptr_R83D, blockmeta_to_ptr_R82D, blockmeta_to_ptr_R81D      ! 64 bit real functions
-  end interface
+  ! interface bm_to_ptr
+  !   module procedure &
+  !     blockmeta_to_ptr_I15D, blockmeta_to_ptr_I14D, blockmeta_to_ptr_I13D, blockmeta_to_ptr_I12D, blockmeta_to_ptr_I11D, &   !  8 bit integer functions
+  !     blockmeta_to_ptr_I25D, blockmeta_to_ptr_I24D, blockmeta_to_ptr_I23D, blockmeta_to_ptr_I22D, blockmeta_to_ptr_I21D, &   ! 16 bit integer functions
+  !     blockmeta_to_ptr_I45D, blockmeta_to_ptr_I44D, blockmeta_to_ptr_I43D, blockmeta_to_ptr_I42D, blockmeta_to_ptr_I41D, &   ! 32 bit integer functions
+  !     blockmeta_to_ptr_I85D, blockmeta_to_ptr_I84D, blockmeta_to_ptr_I83D, blockmeta_to_ptr_I82D, blockmeta_to_ptr_I81D, &   ! 64 bit integer functions
+  !     blockmeta_to_ptr_R45D, blockmeta_to_ptr_R44D, blockmeta_to_ptr_R43D, blockmeta_to_ptr_R42D, blockmeta_to_ptr_R41D, &   ! 32 bit real functions, 
+  !     blockmeta_to_ptr_R85D, blockmeta_to_ptr_R84D, blockmeta_to_ptr_R83D, blockmeta_to_ptr_R82D, blockmeta_to_ptr_R81D      ! 64 bit real functions
+  ! end interface
   
 !   ===========================  type bound procedures used by heap user type ===========================
 !> \endcond
@@ -255,25 +244,25 @@ module shmem_heap_module
     call ShmemHeap_dump_info(this % p)
   end subroutine dump_info
 
-  !> \brief get array type from Fortran block metadata
-  function retrieve_metadata(this, block) result(status)
-    implicit none
-    class(block_meta_f08), intent(OUT) :: this         !< block object
-    type(C_PTR), intent(IN), value :: block            !< address of block
-    integer(C_INT) :: status                           !< 0 if O.K., nonzero if error
-    integer :: msz
-    type(block_meta_c) :: dummy_meta
-    msz = C_SIZEOF(dummy_meta)
-    status = ShmemHeap_get_block_meta(this % p, block, this%a, msz)
-  end function retrieve_metadata
+  ! !> \brief get array type from Fortran block metadata
+  ! function retrieve_metadata(this, block) result(status)
+  !   implicit none
+  !   class(block_meta_f08), intent(OUT) :: this         !< block object
+  !   type(C_PTR), intent(IN), value :: block            !< address of block
+  !   integer(C_INT) :: status                           !< 0 if O.K., nonzero if error
+  !   integer :: msz
+  !   type(block_meta_c) :: dummy_meta
+  !   msz = C_SIZEOF(dummy_meta)
+  !   status = ShmemHeap_get_block_meta(this % p, block, this%a, msz)
+  ! end function retrieve_metadata
 
-  !> \brief Get the 
-  function block_meta_get_ptr(this) result(this_ptr)
-    implicit none
-    class(block_meta_f08), intent(IN) :: this !< block_meta_f08 instance
-    type(C_PTR) :: this_ptr                   !< The C_PTR stored in that instance
-    this_ptr = this % p
-  end function block_meta_get_ptr
+  ! !> \brief Get the 
+  ! function block_meta_get_ptr(this) result(this_ptr)
+  !   implicit none
+  !   class(block_meta_f08), intent(IN) :: this !< block_meta_f08 instance
+  !   type(C_PTR) :: this_ptr                   !< The C_PTR stored in that instance
+  !   this_ptr = this % p
+  ! end function block_meta_get_ptr
 
   !> \brief get array type from Fortran block metadata
   function block_meta_get_type(this) result(n)
@@ -307,71 +296,68 @@ module shmem_heap_module
     d = this%a%d
   end function get_dimensions
 
-  !> \brief nullify operator for type block_meta_f08
+  !> \brief Nullify operator for type block_meta_f08
   subroutine reset(this)
     implicit none
     class(block_meta_f08), intent(INOUT) :: this              !< metadata object
-    this%p     = C_NULL_PTR
-    this%a%tkr = 0
-    this%a%d   = 0
+    this % a % tkr    = 0
+    this % a % d      = 0
+    this % a % offset = 0
   end subroutine reset
 
-  !> \brief assignment operator for type block_meta_f08
+  !> \brief Assignment operator for type block_meta_f08
   subroutine assign(this, other)
     implicit none
     class(block_meta_f08), intent(INOUT) :: this              !< metadata object
-    type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
-    this%p          = other%p
-    this%a%tkr      = other%a%tkr
-    this%a%d        = other%a%d
-    this%a%offset   = other%a%offset
+    type(block_meta_f08),  intent(IN)    :: other             !< metadata object assigned to this (this = other)
+    this % a % tkr      = other % a % tkr
+    this % a % d        = other % a % d
+    this % a % offset   = other % a % offset
   end subroutine assign
 
-  !> \brief assignment operator for type block_meta_f08
-  subroutine assign_meta(this, other)
+  !> \brief Assignment operator for type block_meta_f08
+  subroutine assign_c(this, other)
     implicit none
-    class(block_meta_f08), intent(INOUT) :: this              !< metadata object
-    type(block_meta), intent(IN)     :: other             !< metadata object assigned to this (this = other)
-    this%p          = other%p
-    this%a%tkr      = other%a%tkr
-    this%a%d        = other%a%d
-    this%a%offset   = other%a%offset
-  end subroutine assign_meta
+    class(block_meta_f08), intent(INOUT) :: this              !< metadata instance
+    type(block_meta_c),    intent(IN)    :: other             !< metadata object assigned to this (this = other)
+    this % a % tkr      = other % tkr
+    this % a % d        = other % d
+    this % a % offset   = other % offset
+  end subroutine assign_c
 
-  !> \brief equality operator for type block_meta_f08
+  !> \brief Equality operator for type block_meta_f08
   function equal(this, other) result(isequal)
     implicit none
     class(block_meta_f08), intent(IN)    :: this              !< metadata object
     type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
     logical :: isequal                                        !< true if equal
-    integer :: i
-    isequal = C_ASSOCIATED(this%p, other%p)
-    isequal = isequal .and. (this%a%tkr == other%a%tkr)
-    do i = 1, size(this%a%d)
-      isequal = isequal .and. (this%a%d(i)   == other%a%d(i))
-    enddo
+    isequal = (this % a % tkr == other % a % tkr)
+    isequal = isequal .and. (all(this % a % d == other % a % d))
   end function equal
 
-  !> \brief non equality operator for type block_meta_f08
-  function unequal_meta(this, other) result(isequal)
+  !> \brief Non equality operator for type block_meta_f08
+  function unequal_meta(this, other) result(is_unequal)
     implicit none
     class(block_meta_f08), intent(IN)    :: this              !< metadata object
     type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
-    logical :: isequal                                        !< true if equal
-    integer :: i
-    isequal = .not. C_ASSOCIATED(this%p, other%p)
-    isequal = isequal .and. (this%a%tkr /= other%a%tkr)
-    do i = 1, size(this%a%d)
-      isequal = isequal .and. (this%a%d(i)   /= other%a%d(i))
-    enddo
+    logical :: is_unequal                                     !< true if unequal
+    is_unequal = (this % a % tkr /= other % a % tkr)
+    is_unequal = is_unequal .or. any(this % a % d /= other % a % d)
   end function unequal_meta
 
   ! include code generated by script shape_f_pointer.sh (multiple versions of allocate)
   include 'io-server/f_alloc.inc'
 
-  !> \brief create, initialize, and register a heap
-  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p, addr<br>integer(C_SIZE_T) :: nbytes<br>
-  !> p = h\%createb(addr, nbytes)
+  !> \brief Create, initialize, and register a heap
+  !> 
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> type(C_PTR) :: p, addr
+  !> integer(C_SIZE_T) :: nbytes
+  !> p = h % createb(addr, nbytes)
+  !> !
+  !> ```
   function createb(this, addr, nbytes) result(success)
     implicit none
     class(shmem_heap), intent(INOUT)     :: this            !< shmem_heap instance
@@ -382,14 +368,20 @@ module shmem_heap_module
     success = c_associated(this % p)
   end function createb
 
-  !> \brief create a new shmem_heap object using the address of an existing heap (NO SETUP)
-  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p, addr<br>
-  !> p = h\%clone_h(addr)
+  !> \brief Create a new shmem_heap object using the address of an existing heap (NO SETUP)
+  !>
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> type(C_PTR) :: p, addr
+  !> p = h % clone_h(addr)
+  !> !
+  !> ```
   function clone_h(this, addr) result(success)
     implicit none
     class(shmem_heap), intent(INOUT) :: this                  !< shmem_heap instance
     type(C_PTR), intent(IN), value   :: addr                  !< memory address (must be an existing heap address)
-    logical :: success
+    logical :: success !< Whether the returned pointer is actually associated (i.e. not NULL)
     this % p = ShmemHeap_clone(addr)
     success = c_associated(this % p)
   end function clone_h
@@ -423,7 +415,7 @@ module shmem_heap_module
     success = (status == 0)
   end function free_by_address 
   
-  !> \brief free block by offset in heap
+  !> \brief Free block by offset in heap
   function free_by_offset(this, offset) result(success)
     implicit none
     class(shmem_heap),     intent(INOUT)     :: this    !< shmem_heap instance
@@ -444,17 +436,19 @@ module shmem_heap_module
     class(shmem_heap),    intent(inout) :: this       !< shmem_heap instance
     type(block_meta_f08), intent(in)    :: block_info !< metadata associated to memory block
     logical :: success                                !< .true. if call to underlying C function had no error
-
-    integer(C_INT) :: status                          !< 0 if O.K., nonzero if error
-
-    status        = ShmemHeap_free_block(this % p, block_info % get_ptr())
-    success       = (status == 0)
+    success = this % free(block_info % get_offset())
   end function free_by_meta 
   
-  !> \brief check integrity of a heap
-  !> <br>example :<br>type(shmem_heap) :: h<br>
-  !> <br>integer(C_SIZE_T) :: free_space,used_space<br>integer(C_INT) :: status<br>
-  !> status = h\%check(free_blocks, free_space, used_blocks, used_space)
+  !> \brief Check integrity of a heap
+  !>
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> integer(C_SIZE_T) :: free_space, used_space
+  !> integer(C_INT) :: status
+  !> status = h % check(free_blocks, free_space, used_blocks, used_space)
+  !> !
+  !> ```
   function check(h, free_blocks_out, free_space_out, used_blocks_out, used_space_out) result(is_ok)
     implicit none
     class(shmem_heap), intent(INOUT)         :: h                 !< shmem_heap instance
@@ -480,8 +474,15 @@ module shmem_heap_module
   end function check 
   
   !> \brief Find if given address belongs to a block from the given shmem_heap
-  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: addr<br>integer(C_INT) :: status<br>
+  !> 
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> type(C_PTR) :: addr
+  !> integer(C_INT) :: status
   !> status = h\%is_valid_block(addr)
+  !> !
+  !> ```
   function is_valid_block(this, block_addr) result(is_valid)
     implicit none
     class(shmem_heap), intent(inout) :: this        !< shmem_heap instance
@@ -492,9 +493,15 @@ module shmem_heap_module
     is_valid = (status == 0)
   end function is_valid_block 
   
-  !> \brief get the size of a heap
-  !> <br>example :<br>type(shmem_heap) :: h<br>integer(C_SIZE_T) :: bsz<br>
-  !> bsz = h\%get_size()
+  !> \brief Get the size of a heap
+  !> 
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> integer(C_SIZE_T) :: bsz
+  !> bsz = h % get_size()
+  !> !
+  !> ```
   function get_size(h) result(bsz)
     implicit none
     class(shmem_heap), intent(INOUT) :: h             !< shmem_heap instance
@@ -520,24 +527,37 @@ module shmem_heap_module
     num_bytes = ShmemHeap_block_size_from_offset(this % p, offset)
   end function get_block_size_from_offset
   
-  !> \brief get internal pointer(address) to heap
-  !> <br>example :<br>type(shmem_heap) :: h<br>type(C_PTR) :: p<br>
+  !> \brief Get internal pointer (address) to heap
+  !> 
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> type(C_PTR) :: p
   !> p = h\%get_ptr()
+  !> !
+  !> ```
   function heap_get_ptr(h) result(p)
     implicit none
     class(shmem_heap), intent(inout) :: h       !< shmem_heap instance
-    type(C_PTR) :: p                            !< internal address, NULL if not initialized
+    type(C_PTR) :: p                            !< internal address as a C_PTR, NULL if not initialized
     p = h%p
   end function heap_get_ptr 
   
-  !> \brief translate offset in heap into address
-  !> <br>example :<br>type(shmem_heap) :: h<br>integer(HEAP_ELEMENT) :: offset<br>type(C_PTR) :: p<br>
-  !> p = h\%get_address_from_offset(offset)
+  !> \brief Translate offset in heap into absolute address (C_PTR)
+  !>
+  !> Example:
+  !> ```
+  !> type(shmem_heap) :: h
+  !> integer(HEAP_ELEMENT) :: offset
+  !> type(C_PTR) :: p
+  !> p = h % get_address_from_offset(offset)
+  !> !
+  !> ```
   function get_address_from_offset(this, offset) result(p)
     implicit none
     class(shmem_heap),     intent(inout)     :: this    !< shmem_heap instance
     integer(HEAP_ELEMENT), intent(in), value :: offset  !< offset into heap
-    type(C_PTR) :: p                            !< address, NULL if invalid offset/heap combination
+    type(C_PTR) :: p     !< Block address that corresponds to the given offset in the heap, NULL if invalid offset/heap combination
     p = ShmemHeap_ptr_from_offset(this % p, offset)
   end function get_address_from_offset
 
