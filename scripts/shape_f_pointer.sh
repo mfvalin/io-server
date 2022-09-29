@@ -52,12 +52,17 @@ for RI in I R ; do
     cat <<EOT
 !! ===============================  ${TYPE}*${L} ${D}D  ===============================
 !> \brief ${TYPE}*${L} ${D}D array allocator
-function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(alloc_info)
+function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+  use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
+  !> When heap is full, how long to wait for space to be freed before declaring failure.
+  !> 0 to fail immediately (no wait), -1 to wait indefinitely
+  integer(C_INT32_T),  optional     :: timeout_ms
+
   type(block_meta_c)                :: alloc_info     !< metadata for allocated block
 
   $TYPE($KIND)      :: pref
@@ -67,6 +72,9 @@ function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(al
   integer             :: metadata_size
   integer(C_INT)      :: safe_alloc_flag
   ${PARAM_DECLARE}
+
+  integer, parameter :: SINGLE_WAIT_TIME_MS = 10
+  integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
@@ -88,8 +96,26 @@ function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(al
     if (use_safe_alloc) safe_alloc_flag = 1
   end if
 
+  ! First attempt at allocating block
   ptr_c = ${MALLOC}(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
-  if(.not. C_ASSOCIATED(ptr_c) ) return        ! allocation failed
+
+  ! Determine max number of times to try allocating
+  num_waits = (DEFAULT_ALLOC_TIMEOUT_MS + SINGLE_WAIT_TIME_MS - 1) / SINGLE_WAIT_TIME_MS
+  if (present(timeout_ms)) then
+    if (timeout_ms < 0) then
+      num_waits = huge(num_waits)
+    else
+      num_waits = (timeout_ms + SINGLE_WAIT_TIME_MS - 1)/ SINGLE_WAIT_TIME_MS
+    end if
+  end if
+
+  do i_wait = 1, num_waits
+    if (C_ASSOCIATED(ptr_c)) exit
+    call sleep_us(SINGLE_WAIT_TIME_MS * 1000)
+    ptr_c = ${MALLOC}(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
+  end do
+
+  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -108,32 +134,46 @@ function allocate_${RI}${L}_${D}D(this, array_ptr, di, use_safe_alloc) result(al
 end function allocate_${RI}${L}_${D}D
 
 !> Wrapper around allocate_${RI}${L}_${D}D to be able to call it and specify dimensions with an array of integer*4
-function allocate_${RI}${L}_${D}D_integer(this, array_ptr, di, use_safe_alloc) result(bmi)
+function allocate_${RI}${L}_${D}D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT32_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
+  !> When heap is full, how long to wait for space to be freed before declaring failure.
+  !> 0 to fail immediately (no wait), -1 to wait indefinitely
+  integer(C_INT32_T),  optional     :: timeout_ms
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(di)) :: di_int8
   di_int8(:) = di(:)
 
   if (present(use_safe_alloc)) then
-    bmi = this % allocate_${RI}${L}_${D}D(array_ptr, di_int8, use_safe_alloc)
+    if (present(timeout_ms)) then
+      bmi = this % allocate_${RI}${L}_${D}D(array_ptr, di_int8, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
+    else
+      bmi = this % allocate_${RI}${L}_${D}D(array_ptr, di_int8, use_safe_alloc = use_safe_alloc)
+    end if
   else
-    bmi = this % allocate_${RI}${L}_${D}D(array_ptr, di_int8)
+    if (present(timeout_ms)) then
+      bmi = this % allocate_${RI}${L}_${D}D(array_ptr, di_int8, timeout_ms = timeout_ms)
+    else
+      bmi = this % allocate_${RI}${L}_${D}D(array_ptr, di_int8)
+    end if
   end if
 end function allocate_${RI}${L}_${D}D_integer
 
 !> ${TYPE}*${L} ${D}D array allocator (with custom bounds)
-function allocate_${RI}${L}_${D}D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc) result(bmi)
+function allocate_${RI}${L}_${D}D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
+  !> When heap is full, how long to wait for space to be freed before declaring failure.
+  !> 0 to fail immediately (no wait), -1 to wait indefinitely
+  integer(C_INT32_T),  optional     :: timeout_ms
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   $TYPE($KIND), dimension($DIMENSION), contiguous, pointer :: tmp_ptr
@@ -149,9 +189,17 @@ function allocate_${RI}${L}_${D}D_bounds(this, array_ptr, min_bound, max_bound, 
 
   array_size(:) = max_bound - min_bound + 1
   if (present(use_safe_alloc)) then
-    bmi = this % allocate_${RI}${L}_${D}D(tmp_ptr, array_size, use_safe_alloc)
+    if (present(timeout_ms)) then
+      bmi = this % allocate_${RI}${L}_${D}D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
+    else
+      bmi = this % allocate_${RI}${L}_${D}D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc)
+    end if
   else
-    bmi = this % allocate_${RI}${L}_${D}D(tmp_ptr, array_size)
+    if (present(timeout_ms)) then
+      bmi = this % allocate_${RI}${L}_${D}D(tmp_ptr, array_size, timeout_ms = timeout_ms)
+    else
+      bmi = this % allocate_${RI}${L}_${D}D(tmp_ptr, array_size)
+    end if
   end if
 
   if (associated(tmp_ptr)) then
@@ -161,13 +209,16 @@ function allocate_${RI}${L}_${D}D_bounds(this, array_ptr, min_bound, max_bound, 
 end function allocate_${RI}${L}_${D}D_bounds
 
 !> Wrapper on ${TYPE}*${L} ${D}D to be able to call it, specifying bounds with integer*4 arrays
-function allocate_${RI}${L}_${D}D_bounds_int4(this, array_ptr, min_bound, max_bound, use_safe_alloc) result(bmi) ! ${TYPE}*${L} ${D}D array allocator (with custom bounds)
+function allocate_${RI}${L}_${D}D_bounds_int4(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi) ! ${TYPE}*${L} ${D}D array allocator (with custom bounds)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   $TYPE($KIND), dimension($DIMENSION), intent(OUT), contiguous, pointer :: array_ptr !< ${D} dimensional pointer to $TYPE array
   integer(C_INT32_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
   integer(C_INT32_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
+  !> When heap is full, how long to wait for space to be freed before declaring failure.
+  !> 0 to fail immediately (no wait), -1 to wait indefinitely
+  integer(C_INT32_T),  optional     :: timeout_ms
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(size(min_bound)) :: min_i8
@@ -175,9 +226,17 @@ function allocate_${RI}${L}_${D}D_bounds_int4(this, array_ptr, min_bound, max_bo
   min_i8(:) = min_bound(:)
   max_i8(:) = max_bound(:)
   if (present(use_safe_alloc)) then
-    bmi = this % allocate_${RI}${L}_${D}D_bounds(array_ptr, min_i8, max_i8, use_safe_alloc)
+    if (present(timeout_ms)) then
+      bmi = this % allocate_${RI}${L}_${D}D_bounds(array_ptr, min_i8, max_i8, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
+    else
+      bmi = this % allocate_${RI}${L}_${D}D_bounds(array_ptr, min_i8, max_i8, use_safe_alloc = use_safe_alloc)
+    end if
   else
-    bmi = this % allocate_${RI}${L}_${D}D_bounds(array_ptr, min_i8, max_i8)
+    if (present(timeout_ms)) then
+      bmi = this % allocate_${RI}${L}_${D}D_bounds(array_ptr, min_i8, max_i8, timeout_ms = timeout_ms)
+    else
+      bmi = this % allocate_${RI}${L}_${D}D_bounds(array_ptr, min_i8, max_i8)
+    end if
   end if
 end function allocate_${RI}${L}_${D}D_bounds_int4
 

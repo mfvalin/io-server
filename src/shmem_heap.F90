@@ -32,6 +32,9 @@ module shmem_heap_module
   integer, parameter         :: TKR_INTEGER = 1           !< tkr code for integer arrays
   integer, parameter         :: TKR_REAL    = 2           !< tkr code for real arrays
 
+  !> How long to wait (in ms) for space to become available on the heap, when allocating, before declaring failure
+  integer, parameter, public :: DEFAULT_ALLOC_TIMEOUT_MS = 30000
+
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, bind(C) :: block_meta_c

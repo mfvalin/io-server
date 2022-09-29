@@ -139,6 +139,13 @@ contains
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     !------------------------
 
+    if (rank == 0) print *, 'Timeout test (please be patient)'
+    call timeout_test()
+
+    !------------------------
+    call MPI_Barrier(MPI_COMM_WORLD, ierr)
+    !------------------------
+
     if (rank == 0) print *, 'Big alloc'
     call big_alloc()
 
@@ -353,6 +360,124 @@ contains
       success = test_alloc(the_heap, array, .false., [1_8, 2_8, 1_8], [2_8, 0_8, 1_8])              .and. success
 
     end subroutine various_params
+
+    subroutine timeout_test()
+      use ioserver_timer_module
+      use rpn_extra_module, only: sleep_us
+      implicit none
+      type(block_meta_f08) :: info
+      integer(kind=8), dimension(:), contiguous, pointer :: a
+      integer(kind=8) :: big_size
+      logical :: success
+      type(ioserver_timer) :: timer
+      real :: time
+
+      integer, parameter :: ALLOC_RANK_0 = 0
+      integer, parameter :: ALLOC_RANK_1 = 1
+
+      call timer % create()
+
+      big_size = the_heap % get_size() / (8 * 2) + 10     ! A bit more than half the heap
+
+      if (rank == ALLOC_RANK_0) then
+
+        info = the_heap % allocate(a, [big_size], use_safe_alloc = .true.)
+        !------------------------
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !------------------------
+
+        !------------------------
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !------------------------
+        call sleep_us(100000)
+        success = the_heap % free(info)
+      else if (rank == ALLOC_RANK_1) then
+        !------------------------
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !------------------------
+        call timer % start()
+        info = the_heap % allocate(a, [big_size])
+        call timer % stop()
+        time = timer % get_latest_time_ms()
+
+        if (associated(a)) then
+          print *, 'ERROR: Allocation should have failed'
+          error stop 1
+        end if
+
+        if (time < DEFAULT_ALLOC_TIMEOUT_MS) then
+          print *, 'ERROR: Did not wait long enough (default is 30 seconds)'
+          error stop 1
+        else if (time > DEFAULT_ALLOC_TIMEOUT_MS + 2000) then
+          print *, 'ERROR: Took too long to fail!'
+          error stop 1
+        end if
+
+        call timer % start()
+        info = the_heap % allocate(a, [int(big_size, kind = 4)], use_safe_alloc = .true., timeout_ms = 0)
+        call timer % stop()
+        time = timer % get_latest_time_ms()
+
+        if (associated(a)) then
+          print *, 'ERROR: Allocation should have failed'
+          error stop 1
+        end if
+
+        if (time > 10) then
+          print *, 'ERROR: Took too long to fail!'
+          error stop 1
+        end if
+
+        call timer % start()
+        info = the_heap % allocate(a, [1_8], [big_size], timeout_ms = 20)
+        call timer % stop()
+        time = timer % get_latest_time_ms()
+
+        if (associated(a)) then
+          print *, 'ERROR: Allocation should have failed'
+          error stop 1
+        end if
+
+        if (time < 20) then
+          print *, 'ERROR: Failed too quickly'
+          error stop 1
+        else if (time > 30) then
+          print *, 'ERROR: Failed too slowly!'
+          error stop 1
+        end if
+
+        !------------------------
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !------------------------
+
+        call timer % start()
+        info = the_heap % allocate(a, [1], [int(big_size, kind=4)], timeout_ms = 100)
+        call timer % stop()
+        time = timer % get_latest_time_ms()
+
+        if (.not. associated(a)) then
+          print *, 'ERROR: Should have succeeded with the allocation!'
+          error stop 1
+        end if
+
+        if (time < 95) then
+          print *, 'WARNING: Allocation was suspiciously fast ', time
+        end if
+
+        success = the_heap % free(info)
+
+      else
+        !------------------------
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !------------------------
+        !------------------------
+        call MPI_Barrier(MPI_COMM_WORLD, ierr)
+        !------------------------
+
+      end if
+
+      call timer % delete()
+    end subroutine timeout_test
 
     subroutine array_tkr_and_values()
       implicit none
@@ -598,7 +723,7 @@ contains
           error stop 1
         end if
 
-        array_info1 = the_heap % allocate(big_array, [the_heap % get_size() / 8 + 1])
+        array_info1 = the_heap % allocate(big_array, [the_heap % get_size() / 8 + 1], timeout_ms = 0)
         if (associated(big_array)) then
           print *, 'ERROR: Should not have been able to allocate that much data!'
           error stop 1
