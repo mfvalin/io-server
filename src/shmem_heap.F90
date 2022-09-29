@@ -49,24 +49,23 @@ module shmem_heap_module
     type(block_meta_c) :: a           !< array descriptor, C interoperable \private
 
   contains
-    procedure :: print => block_meta_print
+    procedure :: print => block_meta_print !< \copydoc shmem_heap_module::block_meta_print
 
-    procedure :: get_offset => block_meta_get_offset !< \return The offset of this block within its heap
-    procedure :: get_type   => block_meta_get_type   !< \return Array type code (1=integer, 2=real)
-    procedure :: get_kind   => block_meta_get_kind   !< \return Array kind (1/2/4/8 bytes)
-    procedure :: get_rank   => block_meta_get_rank   !< \return Array rank (1/2/3/../MAX_ARRAY_RANK)
-    procedure :: get_dimensions                      !< \return array(MAX_ARRAY_RANK) containing dimensions
-    ! procedure :: retrieve_metadata                   !< Get metadata from what's stored in the heap. \return 0 if O.K. non zero otherwise
+    procedure :: get_offset => block_meta_get_offset !< \copydoc shmem_heap_module::block_meta_get_offset
+    procedure :: get_type   => block_meta_get_type   !< \copydoc block_meta_get_type
+    procedure :: get_kind   => block_meta_get_kind   !< \copydoc block_meta_get_kind
+    procedure :: get_rank   => block_meta_get_rank   !< \copydoc block_meta_get_rank
+    procedure :: get_dimensions                      !< \copydoc shmem_heap_module::get_dimensions
 
-    procedure :: reset                      !< nullify operator
-    procedure :: assign                     !< assignment operator, block_meta_f08 = block_meta_f08
-    procedure :: assign_c                   !< assignment operator, block_meta_f08 = block_meta
+    procedure :: reset                      !< \copydoc shmem_heap_module::reset
+    procedure :: assign                     !< \copydoc shmem_heap_module::assign
+    procedure :: assign_c                   !< \copydoc shmem_heap_module::assign_c
     GENERIC :: ASSIGNMENT(=) => assign, assign_c      !< generic assignment operator
 
-    procedure :: equal                      !< equality operator
-    GENERIC :: operator(==) => equal        !< equality operator
-    procedure :: unequal_meta               !< non equality operator
-    GENERIC :: operator(/=) => unequal_meta !< non equality operator
+    procedure :: equal                      !< \copydoc shmem_heap_module::equal
+    GENERIC :: operator(==) => equal        !< \copydoc shmem_heap_module::equal
+    procedure :: unequal_meta               !< \copydoc shmem_heap_module::unequal_meta
+    GENERIC :: operator(/=) => unequal_meta !< \copydoc shmem_heap_module::unequal_meta
   end type block_meta_f08
 
   type, public :: heap_stats
@@ -83,36 +82,35 @@ module shmem_heap_module
     type(C_PTR) :: p   = C_NULL_PTR      !< address of storage used by shmem_heap \private
   contains
 
-    procedure :: createb      !< create, initialize, register a heap at specified address (size in uint64_t bytes). \return address of heap
-    GENERIC   :: create => createb !, createw
+    procedure :: createb      !< \copydoc shmem_heap_module::createb
+    GENERIC   :: create => createb !< \copydoc shmem_heap_module::createb
 
-    procedure :: clone_h      !< Clone a shmem_heap object using the address of an existing heap. \return The given address
-    GENERIC   :: clone => clone_h
+    procedure :: clone_h      !< \copydoc shmem_heap_module::clone_h
+    GENERIC   :: clone => clone_h !< \copydoc shmem_heap_module::clone_h
 
-    procedure :: check        !< Check integrity of heap. \return .true. if OK, something else otherwise
+    procedure :: check        !< \copydoc shmem_heap_module::check
 
     GENERIC :: get_block_size => get_block_size_from_pointer, get_block_size_from_offset
-    procedure :: get_block_size_from_pointer
-    procedure :: get_block_size_from_offset
-    procedure :: is_valid_block           !< \return Whether the given address points to a valid block in this heap
+    procedure :: get_block_size_from_pointer !< \copydoc shmem_heap_module::get_block_size_from_pointer
+    procedure :: get_block_size_from_offset  !< \copydoc shmem_heap_module::get_block_size_from_offset
+    procedure :: is_valid_block           !< \copydoc shmem_heap_module::is_valid_block
 
     procedure :: get_address_from_offset  !< \copydoc shmem_heap_module::get_address_from_offset
     procedure :: get_ptr => heap_get_ptr  !< \copydoc shmem_heap_module::head_get_ptr
 
-    procedure :: get_size               !< \return Size of heap, -1 if error
+    procedure :: get_size               !< \copydoc shmem_heap_module::get_size
     procedure :: alloc                  !< \copydoc shmem_heap_module::alloc
 
     GENERIC   :: free => free_by_address, free_by_offset, free_by_meta
-    procedure :: free_by_address        !< Free an allocated block by address in memory. \return .true. if O.K., .false. if error
-    procedure :: free_by_offset         !< Free space associated to offset into heap. \return .true. if O.K., .false. if error
-    procedure :: free_by_meta           !< Free block in heap from its metadata. \return .true. if O.K., .false. if error
+    procedure :: free_by_address        !< \copydoc shmem_heap_module::free_by_address
+    procedure :: free_by_offset         !< \copydoc shmem_heap_module::free_by_offset
+    procedure :: free_by_meta           !< \copydoc shmem_heap_module::free_by_meta
 
-    procedure :: get_stats              !< Get heap statistics using shmem_heap address. \return .true. if O.K., .false. if error
-    procedure :: dump_info              !< Dump information about this shmem_heap
+    procedure :: get_stats              !< \copydoc shmem_heap_module::get_stats
+    procedure :: dump_info              !< \copydoc shmem_heap_module::dump_info
 
 !> \cond DOXYGEN_SHOULD_SKIP_THIS
 !   ===========================  interfaces to script generated functions  ===========================
-    !> \return                           a fortran pointer
     procedure   ::            &  !< specific procedures needed for generic type-bound allocator (specify array size)
                               allocate_I1_5D, allocate_I1_4D, allocate_I1_3D, allocate_I1_2D, allocate_I1_1D, &
                               allocate_I2_5D, allocate_I2_4D, allocate_I2_3D, allocate_I2_2D, allocate_I2_1D, &
@@ -193,40 +191,16 @@ module shmem_heap_module
                               allocate_R8_5D_bounds_int4, allocate_R8_4D_bounds_int4, allocate_R8_3D_bounds_int4, allocate_R8_2D_bounds_int4, allocate_R8_1D_bounds_int4 
   end type shmem_heap
 
-! tell doxygen to ignore the following block (for now)
-!> \cond DOXYGEN_SHOULD_SKIP_THIS
-  ! interface ptr_to_bm
-  !   module procedure &
-  !     ptr_to_blockmeta_I15D, ptr_to_blockmeta_I14D, ptr_to_blockmeta_I13D, ptr_to_blockmeta_I12D, ptr_to_blockmeta_I11D, &   !  8 bit integer functions
-  !     ptr_to_blockmeta_I25D, ptr_to_blockmeta_I24D, ptr_to_blockmeta_I23D, ptr_to_blockmeta_I22D, ptr_to_blockmeta_I21D, &   ! 16 bit integer functions
-  !     ptr_to_blockmeta_I45D, ptr_to_blockmeta_I44D, ptr_to_blockmeta_I43D, ptr_to_blockmeta_I42D, ptr_to_blockmeta_I41D, &   ! 32 bit integer functions
-  !     ptr_to_blockmeta_I85D, ptr_to_blockmeta_I84D, ptr_to_blockmeta_I83D, ptr_to_blockmeta_I82D, ptr_to_blockmeta_I81D, &   ! 64 bit integer functions
-  !     ptr_to_blockmeta_R45D, ptr_to_blockmeta_R44D, ptr_to_blockmeta_R43D, ptr_to_blockmeta_R42D, ptr_to_blockmeta_R41D, &   ! 32 bit real functions, 
-  !     ptr_to_blockmeta_R85D, ptr_to_blockmeta_R84D, ptr_to_blockmeta_R83D, ptr_to_blockmeta_R82D, ptr_to_blockmeta_R81D      ! 64 bit real functions
-  ! end interface
-
-  ! interface bm_to_ptr
-  !   module procedure &
-  !     blockmeta_to_ptr_I15D, blockmeta_to_ptr_I14D, blockmeta_to_ptr_I13D, blockmeta_to_ptr_I12D, blockmeta_to_ptr_I11D, &   !  8 bit integer functions
-  !     blockmeta_to_ptr_I25D, blockmeta_to_ptr_I24D, blockmeta_to_ptr_I23D, blockmeta_to_ptr_I22D, blockmeta_to_ptr_I21D, &   ! 16 bit integer functions
-  !     blockmeta_to_ptr_I45D, blockmeta_to_ptr_I44D, blockmeta_to_ptr_I43D, blockmeta_to_ptr_I42D, blockmeta_to_ptr_I41D, &   ! 32 bit integer functions
-  !     blockmeta_to_ptr_I85D, blockmeta_to_ptr_I84D, blockmeta_to_ptr_I83D, blockmeta_to_ptr_I82D, blockmeta_to_ptr_I81D, &   ! 64 bit integer functions
-  !     blockmeta_to_ptr_R45D, blockmeta_to_ptr_R44D, blockmeta_to_ptr_R43D, blockmeta_to_ptr_R42D, blockmeta_to_ptr_R41D, &   ! 32 bit real functions, 
-  !     blockmeta_to_ptr_R85D, blockmeta_to_ptr_R84D, blockmeta_to_ptr_R83D, blockmeta_to_ptr_R82D, blockmeta_to_ptr_R81D      ! 64 bit real functions
-  ! end interface
-  
-!   ===========================  type bound procedures used by heap user type ===========================
-!> \endcond
   contains
 
+  !> Print metadata content
   subroutine block_meta_print(this)
     implicit none
-    class(block_meta_f08), intent(in) :: this
-    ! print *, 'BLOCK META tkr, kind: ', this % a % tkr, this % get_kind()
+    class(block_meta_f08), intent(in) :: this !< block_meta instance
     print *, this % get_offset(), this % get_type(), this % get_kind(), this % get_rank(), this % get_dimensions()
   end subroutine block_meta_print
 
-  !> get heap statistics
+  !> Get heap statistics
   function get_stats(h, stats) result(success)
     implicit none
     class(shmem_heap),    intent(INOUT) :: h                !< heap instance
@@ -237,42 +211,22 @@ module shmem_heap_module
     success = (status == 0)
   end function get_stats
 
-  !> dump info about this heap
+  !> Dump info about this heap
   subroutine dump_info(this)
     implicit none
-    class(shmem_heap), intent(inout) :: this
+    class(shmem_heap), intent(inout) :: this !< shmem_heap instance
     call ShmemHeap_dump_info(this % p)
   end subroutine dump_info
 
-  ! !> \brief get array type from Fortran block metadata
-  ! function retrieve_metadata(this, block) result(status)
-  !   implicit none
-  !   class(block_meta_f08), intent(OUT) :: this         !< block object
-  !   type(C_PTR), intent(IN), value :: block            !< address of block
-  !   integer(C_INT) :: status                           !< 0 if O.K., nonzero if error
-  !   integer :: msz
-  !   type(block_meta_c) :: dummy_meta
-  !   msz = C_SIZEOF(dummy_meta)
-  !   status = ShmemHeap_get_block_meta(this % p, block, this%a, msz)
-  ! end function retrieve_metadata
-
-  ! !> \brief Get the 
-  ! function block_meta_get_ptr(this) result(this_ptr)
-  !   implicit none
-  !   class(block_meta_f08), intent(IN) :: this !< block_meta_f08 instance
-  !   type(C_PTR) :: this_ptr                   !< The C_PTR stored in that instance
-  !   this_ptr = this % p
-  ! end function block_meta_get_ptr
-
-  !> \brief get array type from Fortran block metadata
+  !> \brief Get array type from Fortran block metadata
   function block_meta_get_type(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
-    integer(C_INT) :: n                                !< array type
+    integer(C_INT) :: n                                !< array type code
     n = and(ishft(this%a%tkr,-4), 15)
   end function block_meta_get_type
 
-  !> \brief get array kind from Fortran block metadata
+  !> \brief Get array kind from Fortran block metadata
   function block_meta_get_kind(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
@@ -280,7 +234,7 @@ module shmem_heap_module
     n = and(ishft(this%a%tkr,-8), 15)
   end function block_meta_get_kind
 
-  !> \brief get array rank from Fortran block metadata
+  !> \brief Get array rank from Fortran block metadata
   function block_meta_get_rank(this) result(n)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
@@ -288,7 +242,7 @@ module shmem_heap_module
     n = and(this%a%tkr, 15)
   end function block_meta_get_rank
 
-  !> \brief get array dimensions from Fortran block metadata
+  !> \brief Get array dimensions from Fortran block metadata
   function get_dimensions(this) result(d)
     implicit none
     class(block_meta_f08), intent(IN) :: this              !< block object
