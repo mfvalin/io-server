@@ -120,3 +120,12 @@ print *, name                            ! Fine with Intel and GNU, but crashes 
 ```
 
 Printing an unallocated character variable works with Intel and GNU compilers, as if the variable is simply an empty string. However, when compiled with AOCC, the program crashes with a failed deallocation error.
+
+### Writing large amounts of unformatted data (`gfortran` vs other compilers)
+
+When writing a large array of unformatted data, specifically on our GPFS system, `gfortran` seems to break down the data
+into smaller blocks of about 8kB, which makes it slower than the other compilers (tested `ifort` and `flang`).
+
+There are [runtime variables](https://gcc.gnu.org/onlinedocs/gfortran/Runtime.html) that should modulate this behavior
+but that don't seem to be taken into account on our system. In particular `GFORTRAN_UNFORMATTED_BUFFER_SIZE` should
+control how many bytes of data are written per block.
