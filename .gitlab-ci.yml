@@ -51,7 +51,7 @@ build:U2_intel-2022.1.2:
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_intel-2022.1.2
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
-      ORD_SOUMET_W: "10"
+      ORD_SOUMET_W: "20"
       ORD_SOUMET_C: "20"
       ORD_SOUMET_M: "2G"
    script:
@@ -77,7 +77,7 @@ test:U2_intel-2022.1.2_single_node:
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
       ORD_SOUMET_M: "2G"
-      ORD_SOUMET_W: "30"
+      ORD_SOUMET_W: "60"
       ORD_SOUMET_JN: u2-intel-single-node
       MPI_COMMAND: "mpirun"
    script:
@@ -104,7 +104,7 @@ test:U2_intel-2022.1.2_multi_node:
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}x1"
       ORD_SOUMET_M: "2G"
-      ORD_SOUMET_W: "30"
+      ORD_SOUMET_W: "60"
       ORD_SOUMET_JN: u2-intel-multi-node
       MPI_COMMAND: "mpirun"
    script:
@@ -131,7 +131,7 @@ test:U2_intel-2022.1.2_many_nodes:
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}x1"
       ORD_SOUMET_M: "2G"
-      ORD_SOUMET_W: "30"
+      ORD_SOUMET_W: "60"
       ORD_SOUMET_JN: u2-intel-many-nodes
       MPI_COMMAND: "mpirun"
    script:
@@ -155,7 +155,7 @@ build:U2_gnu-9.3.0:
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_gnu-9.3.0
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
-      ORD_SOUMET_W: "10"
+      ORD_SOUMET_W: "20"
       ORD_SOUMET_C: "20"
       ORD_SOUMET_M: "2G"
    script:
@@ -181,7 +181,7 @@ test:U2_gnu-9.3.0_single_node:
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
       ORD_SOUMET_M: "2G"
-      ORD_SOUMET_W: "30"
+      ORD_SOUMET_W: "60"
       ORD_SOUMET_JN: u2-gnu-single-node
       MPI_COMMAND: "mpirun"
    script:
@@ -208,7 +208,7 @@ test:U2_gnu-9.3.0_multi_node:
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}x1"
       ORD_SOUMET_M: "2G"
-      ORD_SOUMET_W: "30"
+      ORD_SOUMET_W: "60"
       ORD_SOUMET_JN: u2-intel-multi-node
       MPI_COMMAND: "mpirun"
    script:
@@ -231,7 +231,7 @@ build:U2_aocc:
    variables:
       build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_aocc
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
-      ORD_SOUMET_W: "10"
+      ORD_SOUMET_W: "20"
       ORD_SOUMET_C: "20"
       ORD_SOUMET_M: "2G"
    script:
@@ -259,7 +259,7 @@ test:U2_aocc:
       ORD_SOUMET_MACH: ${ECCI_FRONTEND}
       ORD_SOUMET_C: "${NUM_CPUS}"
       ORD_SOUMET_M: "2G"
-      ORD_SOUMET_W: "30"
+      ORD_SOUMET_W: "60"
       ORD_SOUMET_JN: u2-aocc-single-node
       MPI_COMMAND: "mpirun"
    script:
