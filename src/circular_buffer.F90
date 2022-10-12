@@ -39,32 +39,46 @@ module circular_buffer_module
   type, public :: circular_buffer
     !> \private
     private
-    type(C_PTR) :: p = C_NULL_PTR       !< Pointer to internal struct of the #circular_buffer
+    type(C_PTR) :: p = C_NULL_PTR     !< Pointer to internal struct of the #circular_buffer
     logical :: is_shared = .false.    !< Whether the circular_buffer is stored in shared memory
     logical :: is_owner  = .false.    !< Whether the circular_buffer owns the memory where it resides (i.e. whether it is responsible for freeing it)
   contains
 
-    procedure :: create_local_bytes         !< circular_buffer_module::create_local_bytes
-    procedure :: create_shared_bytes        !< circular_buffer_module::create_shared_bytes
-    procedure :: create_from_pointer_bytes  !< circular_buffer_module::create_from_pointer_bytes
-    procedure :: create_from_other          !< circular_buffer_module::create_from_other
+    !> @{ \name Create/delete
+    procedure :: create_local_bytes         !< \copydoc circular_buffer_module::create_local_bytes
+    procedure :: create_shared_bytes        !< \copydoc circular_buffer_module::create_shared_bytes
+    procedure :: create_from_pointer_bytes  !< \copydoc circular_buffer_module::create_from_pointer_bytes
+    procedure :: create_from_other          !< \copydoc circular_buffer_module::create_from_other
     GENERIC   :: create_bytes => create_local_bytes, create_shared_bytes, create_from_pointer_bytes, create_from_other  !< generic create circular buffer
-    procedure :: delete !< circular_buffer_module::delete
+    procedure :: delete !< \copydoc circular_buffer_module::delete
+    !> @}
 
-    procedure :: get_num_spaces   !< circular_buffer_module::get_num_spaces
-    procedure :: get_num_elements !< circular_buffer_module::get_num_elements
-    procedure :: get_capacity     !< circular_buffer_module::get_capacity
-    procedure :: peek             !< circular_buffer_module::peek
-    procedure :: get              !< circular_buffer_module::get
-    procedure :: put              !< circular_buffer_module::put
+    !> @{ \name Read/write data
+    procedure :: peek             !< \copydoc circular_buffer_module::peek
+    procedure :: get              !< \copydoc circular_buffer_module::get
+    procedure :: put              !< \copydoc circular_buffer_module::put
+    !> @}
 
-    procedure :: is_valid     !< circular_buffer_module::is_valid
-    procedure :: get_integrity_status !< circular_buffer_module::get_integrity_status
-    procedure :: print_header !< Print the buffer header (to help debugging). circular_buffer_module::print_header
-    procedure :: print_stats  !< Print stats collected during the buffer's lifetime. circular_buffer_module::print_stats
-    procedure :: get_stats
+    !> @{ \name Query metadata
+    procedure :: get_num_spaces   !< \copydoc circular_buffer_module::get_num_spaces
+    procedure :: get_num_elements !< \copydoc circular_buffer_module::get_num_elements
+    procedure :: get_capacity     !< \copydoc circular_buffer_module::get_capacity
+    !> @}
 
-    procedure, nopass :: error_code_to_string
+    !> @{ \name Check validity
+    procedure :: is_valid             !< \copydoc circular_buffer_module::is_valid
+    procedure :: get_integrity_status !< \copydoc circular_buffer_module::get_integrity_status
+    !> @}
+
+    !> @{ \name Debug info
+    procedure :: print_header         !< \copydoc circular_buffer_module::print_header
+    procedure :: print_stats          !< \copydoc circular_buffer_module::print_stats
+    procedure :: get_stats            !< \copydoc circular_buffer_module::get_stats
+    !> @}
+
+    !> @{ \name Static functions
+    procedure, nopass :: error_code_to_string !< \copydoc circular_buffer_module::error_code_to_string
+    !> @}
 
   end type circular_buffer
 
@@ -72,11 +86,10 @@ contains
 
   !> Check integrity of the circular buffer: the pointer is valid and the integrity check on the underlying C struct passes.
   !> \sa CB_check_integrity
-  !> \return A status code that indicate a specific error, if there is one
   pure function get_integrity_status(this) result(integrity_status)
     implicit none
     class(circular_buffer), intent(in) :: this    !< circular_buffer instance
-    integer(C_INT) :: integrity_status
+    integer(C_INT) :: integrity_status !< A status code that indicate a specific error, if there is one
     integrity_status = CB_check_integrity(this % p)
   end function get_integrity_status
 
@@ -85,24 +98,28 @@ contains
   !> \return Wether the circular buffer passes all checks
   pure function is_valid(this)
     implicit none
-    class(circular_buffer), intent(IN) :: this
+    class(circular_buffer), intent(IN) :: this !< circular_buffer instance
     logical :: is_valid
     is_valid = (this % get_integrity_status() == CB_SUCCESS)
   end function is_valid
 
-  !> Print the C struct header of this circular buffer. See CB_print_header()
-  !> \sa CB_print_header()
+  !> Print the C struct header of this circular buffer. See CB_print_header
+  !> \sa CB_print_header
   subroutine print_header(this)
     implicit none
     class(circular_buffer), intent(INOUT) :: this
     call CB_print_header(this % p)
   end subroutine print_header
 
-  !> \brief create a circular buffer in local memory
-  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
-  !> p = cb\%create_local_bytes(num_bytes)
-  !> <br>p = cb\%create(num_bytes)
-  !> \sa CB_create_bytes()
+  !> Create a circular buffer in local memory
+  !> ```
+  !> type(circular_buffer) :: cb
+  !> type(C_PTR) :: p
+  !> 
+  !> p = cb % create_local_bytes(num_bytes)
+  !> p = cb % create(num_bytes)
+  !> ```
+  !> \sa CB_create_bytes
   function create_local_bytes(this, num_bytes) result(success)
     implicit none
     class(circular_buffer), intent(INOUT)     :: this      !< circular_buffer instance
@@ -118,10 +135,14 @@ contains
     if (.not. success) print '(A, A)', 'ERROR: local creation failed: ', error_code_to_string(status)
   end function create_local_bytes
 
-  !> \brief create a circular buffer in shared memory
-  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
-  !> p = cb\%create_shared_bytes(shmid, num_bytes)
-  !> <br>p = cb\%create(shmid, num_bytes)
+  !> Create a circular buffer in shared memory
+  !> ```
+  !> type(circular_buffer) :: cb
+  !> type(C_PTR) :: p
+  !> 
+  !> p = cb % create_shared_bytes(shmid, num_bytes)
+  !> p = cb % create(shmid, num_bytes)
+  !> ```
   !> \sa CB_create_shared_bytes()
   function create_shared_bytes(this, shmid, num_bytes) result(success)
     implicit none
@@ -138,14 +159,18 @@ contains
     if (.not. success) print '(A, A)', 'ERROR: creation in shared memory failed: ', error_code_to_string(status)
   end function create_shared_bytes
 
-  !> \brief Create a circular buffer from user supplied memory
-  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
-  !> p = cb\%create_from_pointer_bytes(ptr, num_bytes)
-  !> <br>p = cb\%create(ptr, num_bytes)
+  !> Create a circular buffer from user supplied memory
+  !> ```
+  !> type(circular_buffer) :: cb
+  !> type(C_PTR) :: p
+  !> 
+  !> p = cb % create_from_pointer_bytes(ptr, num_bytes)
+  !> p = cb % create(ptr, num_bytes)
+  !> ```
   !> \sa CB_from_pointer_bytes
   function create_from_pointer_bytes(this, ptr, num_bytes) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT) :: this      !< circular_buffer
+    class(circular_buffer), intent(INOUT) :: this      !< circular_buffer instance
     type(C_PTR), intent(IN), value        :: ptr       !< pointer to user supplied memory
     integer(C_SIZE_T), intent(IN), value  :: num_bytes !< size in 32 bit elements of the circular buffer
     logical :: success                                 !< Whether the created buffer is valid
@@ -160,13 +185,17 @@ contains
     if (.not. success) print '(A, A)', 'ERROR: creation from pointer failed: ', error_code_to_string(status)
   end function create_from_pointer_bytes
 
-  !> \brief Create a circular buffer from address of another circular buffer
-  !> <br>type(circular_buffer) :: cb<br>type(C_PTR) :: p<br>
-  !> p = cb\%create_from_other(ptr)
-  !> <br>p = cb\%create(ptr)
+  !> Create a circular buffer from address of another circular buffer
+  !> ```
+  !> type(circular_buffer) :: cb
+  !> type(C_PTR) :: p
+  !> 
+  !> p = cb % create_from_other(ptr)
+  !> p = cb % create(ptr)
+  !> ```
   function create_from_other(this, ptr) result(success)
     implicit none
-    class(circular_buffer), intent(INOUT) :: this !< circular_buffer
+    class(circular_buffer), intent(INOUT) :: this !< circular_buffer instance
     type(C_PTR), intent(IN), value        :: ptr  !< pointer to user supplied memory
     logical :: success                            !< Whether the resulting buffer is valid
     integer(C_INT) :: status
@@ -180,12 +209,14 @@ contains
     if (.not. success) print '(A, A)', 'ERROR: creation from existing CB failed: ', error_code_to_string(status)
   end function create_from_other
   
-  !> \brief Get number of empty element slots available in the buffer
-  !> num_integers = cb\%get_num_spaces(CB_KIND_INTEGER_4)
-  !> \sa CB_get_available_space_bytes()
+  !> Get number of empty element slots available in the buffer
+  !> ```
+  !> num_integers = cb % get_num_spaces(CB_KIND_INTEGER_4)
+  !> ```
+  !> \sa CB_get_available_space_bytes
   pure function get_num_spaces(this, type_id) result(num_elements)
     implicit none
-    class(circular_buffer), intent(IN) :: this     !< circular_buffer
+    class(circular_buffer), intent(IN) :: this     !< circular_buffer instance
     integer, intent(IN)                :: type_id  !< ID of the type of elements we want to fit
     integer(C_INT64_T) :: num_elements             !< Number of empty slots available, -1 if error
 
@@ -198,9 +229,11 @@ contains
     if (num_bytes < 0) num_elements = -1
   end function get_num_spaces
 
-  !> \brief Get current number of data elements from the given type stored in the buffer
-  !> <br> num_reals = cb\%get_num_elements(CB_KIND_REAL_8)
-  !> \sa CB_get_available_data_bytes()
+  !> Get current number of data elements from the given type stored in the buffer
+  !> ```
+  !> num_reals = cb % get_num_elements(CB_KIND_REAL_8)
+  !> ```
+  !> \sa CB_get_available_data_bytes
   pure function get_num_elements(this, type_id) result(num_elements)
     implicit none
     class(circular_buffer), intent(IN) :: this     !< circular_buffer instance
@@ -216,8 +249,8 @@ contains
     if (num_bytes < 0) num_elements = -1
   end function get_num_elements
 
-  !> \brief Get max number of elements this buffer can hold
-  !> \sa CB_get_capacity_bytes()
+  !> Get max number of elements this buffer can hold
+  !> \sa CB_get_capacity_bytes
   function get_capacity(this, type_id) result(num_elements)
     implicit none
     class(circular_buffer), intent(INOUT) :: this         !< The circular buffer instance
@@ -229,7 +262,7 @@ contains
 
   !> \brief Look at the next elements in this buffer without extracting them
   !> \return .true. if peeking was successful, .false. otherwise
-  !> \sa CB_get()
+  !> \sa CB_get
 #define IgnoreTypeKindRank dest
 #define ExtraAttributes , target
   function peek(this, dest, num_elements, type_id, timeout_ms) result(success)
@@ -256,8 +289,11 @@ contains
     if (status == 0) success = .true.
   end function peek
 
-  !> \brief Wait until num_elements (of type type_id) are available then extract them into dest
-  !> success = cb\%get(dest, num_elements, type_id, commit_transaction)
+  !> Wait until num_elements (of type type_id) are available then extract them into dest
+  !> ```
+  !> success = cb % get(dest, num_elements, type_id, commit_transaction)
+  !> success = cb % get(dest, num_elements, type_id, commit_transaction, timeout_ms = 10)
+  !> ```
   !> \sa CB_get()
 #define IgnoreTypeKindRank dest
 #define ExtraAttributes , target
@@ -287,8 +323,12 @@ contains
     if (status == 0) success = .true.
   end function get
 
-  !> \brief Wait until num_elements of type type_id are available, then insert from src array
-  !> success = cb\%put(src, num_elements, type_id, commit_transaction)
+  !> Wait until num_elements of type type_id are available, then insert from src array
+  !> ```
+  !> success = cb % put(src, num_elements, type_id, commit_transaction)
+  !> success = cb % put(src, num_elements, type_id, commit_transaction, timeout_ms = 1)
+  !> success = cb % put(src, num_elements, type_id, commit_transaction, thread_safe = .true.)
+  !> ```
   !> \sa CB_put()
 #define IgnoreTypeKindRank src
 #define ExtraAttributes , target
@@ -360,6 +400,7 @@ contains
     if (this % is_valid()) call CB_print_stats(this % p, buffer_id, with_header_c)
   end subroutine print_stats
 
+  !> Retrieve a pointer to the stats struct stored with this circular_buffer instance.
   subroutine get_stats(this, stats)
     implicit none
     class(circular_buffer),  intent(in)  :: this  !< CB instance
@@ -370,6 +411,7 @@ contains
     call c_f_pointer(c_stats, stats)
   end subroutine get_stats
 
+  !> Get a human-readable string for a certain error code
   function error_code_to_string(error_code) result(error_string)
     implicit none
     integer(C_INT), intent(in) :: error_code !< The code we want to translate into a string

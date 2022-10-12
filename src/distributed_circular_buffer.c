@@ -377,8 +377,8 @@ static inline void init_control_data(
 
 //! Print the contents of the given control metadata header. Optionally print the corresponding control data.
 static inline void print_control_metadata(
-    const control_header_p header, //! [in] Control metadata header we want to print
-    const data_element* data       //! [in] (Optional) Pointer to the control data. Will be ignored if NULL.
+    const control_header_p header, //!< [in] Control metadata header we want to print
+    const data_element* data       //!< [in] (Optional) Pointer to the control data. Will be ignored if NULL.
 ) {
   printf(
       "------------------------------------------\n"
@@ -782,8 +782,8 @@ static inline int init_circular_buffer_instance(
 
 //! Print the collected stats for a single buffer instance
 static void print_instance_stats(
-    circular_buffer_instance_p instance,
-    const int                  with_header //!< Whether to print a header to name the columns
+    circular_buffer_instance_p instance,    //!< Pointer to a #circular_buffer instance
+    const int                  with_header  //!< Whether to print a header to name the columns
 ) {
   CB_print_stats(&instance->circ_buffer, instance->id, with_header);
 }

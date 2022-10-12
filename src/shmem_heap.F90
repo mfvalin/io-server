@@ -99,7 +99,7 @@ module shmem_heap_module
     procedure :: is_valid_block           !< \copydoc shmem_heap_module::is_valid_block
 
     procedure :: get_address_from_offset  !< \copydoc shmem_heap_module::get_address_from_offset
-    procedure :: get_ptr => heap_get_ptr  !< \copydoc shmem_heap_module::head_get_ptr
+    procedure :: get_ptr => heap_get_ptr  !< \copydoc shmem_heap_module::heap_get_ptr
 
     procedure :: get_size               !< \copydoc shmem_heap_module::get_size
     procedure :: alloc                  !< \copydoc shmem_heap_module::alloc

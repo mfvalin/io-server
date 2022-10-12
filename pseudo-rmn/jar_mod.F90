@@ -54,41 +54,42 @@ module jar_module
     !> C interoperable version of jar
     type, public, BIND(C) :: c_jar
         private
-        integer(JAR_ELEMENT) :: size_elem = 0             ! capacity of jar, in number of elements
-        integer(JAR_ELEMENT) :: top       = 0             ! last posision "written" (cannot write beyond size)
-        integer(JAR_ELEMENT) :: bot       = 0             ! last position "read" (cannot read beyond top)
-        integer(JAR_ELEMENT) :: opt       = 0             ! option flags (0 owner of data memory, 1 not owner)
-        type(C_PTR)          :: ptr       = C_NULL_PTR    ! address of actual data
+        integer(JAR_ELEMENT) :: size_elem = 0             !< capacity of jar, in number of elements
+        integer(JAR_ELEMENT) :: top       = 0             !< last posision "written" (cannot write beyond size)
+        integer(JAR_ELEMENT) :: bot       = 0             !< last position "read" (cannot read beyond top)
+        integer(JAR_ELEMENT) :: opt       = 0             !< option flags (0 owner of data memory, 1 not owner)
+        type(C_PTR)          :: ptr       = C_NULL_PTR    !< address of actual data
     end type
 
     !> Same as c_jar, but with type bound procedures
     type, public :: jar
         private
-        integer(JAR_ELEMENT) :: size_elem = 0             ! capacity of jar, in number of elements
-        integer(JAR_ELEMENT) :: top       = 0             ! last posision "written" (cannot write beyond size)
-        integer(JAR_ELEMENT) :: bot       = 0             ! last position "read" (cannot read beyond top)
-        integer(JAR_ELEMENT) :: opt       = 0             ! option flags (0 owner of data memory, 1 not owner)
-        type(C_PTR)          :: ptr       = C_NULL_PTR    ! address of actual data
+        integer(JAR_ELEMENT) :: size_elem = 0             !< capacity of jar, in number of elements
+        integer(JAR_ELEMENT) :: top       = 0             !< last posision "written" (cannot write beyond size)
+        integer(JAR_ELEMENT) :: bot       = 0             !< last position "read" (cannot read beyond top)
+        integer(JAR_ELEMENT) :: opt       = 0             !< option flags (0 owner of data memory, 1 not owner)
+        type(C_PTR)          :: ptr       = C_NULL_PTR    !< address of actual data
     contains
-        procedure, PASS :: jar_new_i4, jar_new_i8
-        generic         :: new            => jar_new_i4, jar_new_i8
-        procedure, PASS :: shape_with     => jar_shape_with
-        procedure, PASS :: is_valid       => jar_is_valid
-        procedure, PASS :: free           => jar_free
-        procedure, PASS :: reset          => jar_reset
-        procedure, PASS :: raw_data       => jar_raw_pointer
-        procedure, PASS :: f_array        => jar_contents
-        procedure, PASS :: full_f_array   => jar_contents_full
-        procedure, PASS :: get_size       => jar_size
-        procedure, PASS :: get_top        => jar_top
-        procedure, PASS :: get_bot        => jar_bot
-        procedure, PASS :: get_num_avail  => jar_avail
-        procedure, PASS :: insert         => jar_put_into
-        procedure, PASS :: insert_string  => jar_put_string_into
-        procedure, PASS :: extract        => jar_get_outof
-        procedure, PASS :: extract_string => jar_get_string_outof
-        procedure, PASS :: print_data     => jar_print_data
-        procedure, NOPASS :: debug        => debug_jars
+        generic         :: new            => new_i4, new_i8         !< Generic function for creating a new jar
+        procedure, PASS :: new_i4         => jar_new_i4             !< \copydoc jar_new_i4
+        procedure, PASS :: new_i8         => jar_new_i8             !< \copydoc jar_new_i8
+        procedure, PASS :: shape_with     => jar_shape_with         !< \copydoc jar_shape_with
+        procedure, PASS :: is_valid       => jar_is_valid           !< \copydoc jar_is_valid
+        procedure, PASS :: free           => jar_free               !< \copydoc jar_free
+        procedure, PASS :: reset          => jar_reset              !< \copydoc jar_reset
+        procedure, PASS :: raw_data       => jar_raw_pointer        !< \copydoc jar_raw_pointer
+        procedure, PASS :: f_array        => jar_contents           !< \copydoc jar_contents
+        procedure, PASS :: full_f_array   => jar_contents_full      !< \copydoc jar_contents_full
+        procedure, PASS :: get_size       => jar_size               !< \copydoc jar_size
+        procedure, PASS :: get_top        => jar_top                !< \copydoc jar_top
+        procedure, PASS :: get_bot        => jar_bot                !< \copydoc jar_bot
+        procedure, PASS :: get_num_avail  => jar_avail              !< \copydoc jar_avail
+        procedure, PASS :: insert         => jar_put_into           !< \copydoc jar_put_into
+        procedure, PASS :: insert_string  => jar_put_string_into    !< \copydoc jar_put_string_into
+        procedure, PASS :: extract        => jar_get_outof          !< \copydoc jar_get_outof
+        procedure, PASS :: extract_string => jar_get_string_outof   !< \copydoc jar_get_string_outof
+        procedure, PASS :: print_data     => jar_print_data         !< \copydoc jar_print_data
+        procedure, NOPASS :: debug        => debug_jars             !< \copydoc debug_jars
         final :: jar_final
     end type
 
@@ -113,7 +114,7 @@ module jar_module
         integer(C_INT32_T), intent(IN), value :: data_size    !> Number of elements in jar
         logical :: ok                             !> .true. if jar was successfully created, .false. otherwise
 
-        ok = jar_instance % jar_new_i8(int(data_size, kind = 8))
+        ok = jar_instance % new_i8(int(data_size, kind = 8))
     end function jar_new_i4
 
 

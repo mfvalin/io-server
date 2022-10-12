@@ -1,133 +1,133 @@
 
-!> Whether this context belongs to a relay process (server- or model-bound)
-function is_relay(context)
+!> Query whether this context belongs to a relay process (can be either server- or model-bound)
+function ioctx_is_relay(context) result(is_relay)
   implicit none
-  class(ioserver_context), intent(in) :: context
-  logical :: is_relay
+  class(ioserver_context), intent(in) :: context !< ioserver_context instance
+  logical :: is_relay !< Whether this context belongs to a relay PE
   is_relay = is_color_relay(context % color)
-end function is_relay
+end function ioctx_is_relay
 
 !> Whether this context belongs to a server process
-function is_server(context)
+function ioctx_is_server(context) result(is_server)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_server
   is_server = is_color_server(context % color)
-end function is_server
+end function ioctx_is_server
 
 !> Whether this context belongs to a model process
-function is_model(context)
+function ioctx_is_model(context) result(is_model)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_model
   is_model = is_color_model(context % color)
-end function is_model
+end function ioctx_is_model
 
 !> Whether this context belongs to a process that handles communications going towards the server
-function is_server_bound(context)
+function ioctx_is_server_bound(context) result(is_server_bound)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_server_bound
   is_server_bound = iand(context % color, SERVER_BOUND_COLOR) == SERVER_BOUND_COLOR
-end function is_server_bound
+end function ioctx_is_server_bound
 
 !> Whether this context belongs to a process that handles communications going towards the model
-function is_model_bound(context)
+function ioctx_is_model_bound(context) result(is_model_bound)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_model_bound
   is_model_bound = iand(context % color, MODEL_BOUND_COLOR) == MODEL_BOUND_COLOR
-end function is_model_bound
+end function ioctx_is_model_bound
 
 !> Whether this context belongs to a process that serves as a MPI communication channel (on server only)
-function is_channel(context)
+function ioctx_is_channel(context) result(is_channel)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_channel
   is_channel = iand(context % color, CHANNEL_COLOR) == CHANNEL_COLOR
-end function is_channel
+end function ioctx_is_channel
 
 !> Whether this context belongs to a process that processes streams (command and data) on the server
-function is_stream_processor(context)
+function ioctx_is_stream_processor(context) result(is_stream_processor)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_stream_processor
   is_stream_processor = iand(context % color, STREAM_PROCESSOR_COLOR) == STREAM_PROCESSOR_COLOR
-end function is_stream_processor
+end function ioctx_is_stream_processor
 
 !> Whether this context belongs to a NO-OP process
-function is_no_op(context)
+function ioctx_is_no_op(context) result(is_no_op)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_no_op
   is_no_op = iand(context % color, NO_OP_COLOR) == NO_OP_COLOR
-end function is_no_op
+end function ioctx_is_no_op
 
 !> Check whether this context has been successfully initialized
-function is_initialized(context)
+function ioctx_is_initialized(context) result(is_initialized)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_initialized
   is_initialized = context % color .ne. NO_COLOR
-end function is_initialized
+end function ioctx_is_initialized
 
-!> Whether debug mode is enabled for this context
-function get_debug_level(context) result(debug_level)
+!> Whether debug mode is enabled for this context. See ioserver_input_parameters::debug_level
+function ioctx_get_debug_level(context) result(debug_level)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: debug_level
   debug_level = context % params % debug_level
-end function get_debug_level
+end function ioctx_get_debug_level
 
 !> Contruct and return a string containing human-readable info about the calling process
-function get_detailed_pe_name(context) result(detailed_name)
+function ioctx_get_detailed_pe_name(context) result(detailed_name)
   implicit none
   class(ioserver_context), intent(in) :: context
   character(len=:), allocatable :: detailed_name
   detailed_name = context % detailed_pe_name
-end function get_detailed_pe_name
+end function ioctx_get_detailed_pe_name
 
-function get_short_pe_name(context) result(name)
+function ioctx_get_short_pe_name(context) result(name)
   implicit none
   class(ioserver_context), intent(in) :: context
   character(len=:), allocatable :: name
   name = context % short_pe_name
-end function get_short_pe_name
+end function ioctx_get_short_pe_name
 
 !> Check whether the "time-to-quit" flag has been set on this node
-function is_time_to_quit(context)
+function ioctx_is_time_to_quit(context) result(is_time_to_quit)
   implicit none
   class(ioserver_context), intent(in) :: context
   logical :: is_time_to_quit
   is_time_to_quit = (context % shmem % time_to_quit == 1)
-end function is_time_to_quit
+end function ioctx_is_time_to_quit
 
 !> Get number of model processes on this node
-function get_num_local_model(context) result(num_model)
+function ioctx_get_num_local_model(context) result(num_model)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: num_model
   num_model = context % num_local_model_proc
-end function get_num_local_model
+end function ioctx_get_num_local_model
 
 !> Get total number of model PEs that connect to the IO server
-function get_num_total_model(context) result(num_model)
+function ioctx_get_num_total_model(context) result(num_model)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: num_model
   num_model = context % num_model_pes
-end function get_num_total_model
+end function ioctx_get_num_total_model
 
 !> Get rank of this process on the global communicator
-function get_global_rank(context) result(global_rank)
+function ioctx_get_global_rank(context) result(global_rank)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: global_rank
   global_rank = context % global_rank
-end function get_global_rank
+end function ioctx_get_global_rank
 
 !> Get the comm_rank_size object corresponding to the given input color
-function IOserver_get_crs(context, color) result(crs)
+function ioctx_get_crs(context, color) result(crs)
   implicit none
   class(ioserver_context), intent(in)        :: context
   integer,                 intent(IN), value :: color
@@ -203,101 +203,101 @@ function IOserver_get_crs(context, color) result(crs)
     call MPI_Comm_rank(crs % comm, crs % rank, ierr)
     call MPI_Comm_size(crs % comm, crs % size, ierr)
   endif
-end function IOserver_get_crs
+end function ioctx_get_crs
 
 !> Get the local shmem_heap that belongs to this PE
-function IOserver_get_local_heap(context) result(h)
+function ioctx_get_local_heap(context) result(h)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(shmem_heap) :: h
   h = context % local_heap
-end function IOserver_get_local_heap
+end function ioctx_get_local_heap
 
 !> Get the local shmem_heap that belongs to this node (server only?)
-function IOserver_get_node_heap(context) result(h)
+function ioctx_get_node_heap(context) result(h)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(shmem_heap) :: h
   h = context % node_heap
-end function IOserver_get_node_heap
+end function ioctx_get_node_heap
 
 !> Get the local accessor to the model-bound CB that belongs to this process
-function IOserver_get_model_bound_cb(context) result(cio)
+function ioctx_get_model_bound_cb(context) result(cio)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(circular_buffer) :: cio
   cio = context % local_cio_in
-end function IOserver_get_model_bound_cb
+end function ioctx_get_model_bound_cb
 
 !> Get the local accessor to the server-bound CB that belongs to this process
-function IOserver_get_server_bound_cb(context) result(cio)
+function ioctx_get_server_bound_cb(context) result(cio)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(circular_buffer) :: cio
   cio = context % local_server_bound_cb
-end function IOserver_get_server_bound_cb
+end function ioctx_get_server_bound_cb
 
 !> Get the DCB created when initializing this context
-function IOserver_get_dcb(context) result(dcb)
+function ioctx_get_dcb(context) result(dcb)
   implicit none
   class(ioserver_context), intent(in) :: context
   type(distributed_circular_buffer) :: dcb
   dcb = context % local_dcb
-end function IOserver_get_dcb
+end function ioctx_get_dcb
 
 !> Get the messenger object created for this context
-function IOserver_get_messenger(context) result(messenger)
+function ioctx_get_messenger(context) result(messenger)
   implicit none
   class(ioserver_context), intent(inout) :: context
   type(ioserver_messenger), pointer :: messenger
   messenger => context % messenger
-end function IOserver_get_messenger
+end function ioctx_get_messenger
 
 !> Get a local accessor to a specific stream
-subroutine IOserver_get_stream(context, stream_rank, stream)
+subroutine ioctx_get_stream(context, stream_rank, stream)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer,                 intent(in)    :: stream_rank !< Rank of the stream we want to access
   type(local_server_stream), pointer, intent(out) :: stream
   stream => context % local_server_streams(stream_rank)
-end subroutine IOserver_get_stream
+end subroutine ioctx_get_stream
 
 !> Get the value of relay_pipeline_depth
-function get_relay_pipeline_depth(context) result(depth)
+function ioctx_get_relay_pipeline_depth(context) result(depth)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: depth
   depth = context % params % relay_pipeline_depth
-end function get_relay_pipeline_depth
+end function ioctx_get_relay_pipeline_depth
 
 !> Get the value of server_pipeline_depth
-function get_server_pipeline_depth(context) result(depth)
+function ioctx_get_server_pipeline_depth(context) result(depth)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: depth
   depth = context % params % server_pipeline_depth
-end function get_server_pipeline_depth
+end function ioctx_get_server_pipeline_depth
 
 !> Get the max number of streams that can be open concurrently
-function get_max_num_streams(context) result(num_streams)
+function ioctx_get_max_num_streams(context) result(num_streams)
   implicit none
   class(ioserver_context), intent(in) :: context
   integer :: num_streams
   num_streams = context % params % max_num_concurrent_streams
-end function get_max_num_streams
+end function ioctx_get_max_num_streams
 
 !> Get the list of local accessors to the server-bound CBs created on this node
-subroutine get_server_bound_cb_list(context, cb_list)
+subroutine ioctx_get_server_bound_cb_list(context, cb_list)
   implicit none
   class(ioserver_context),                      intent(in)  :: context !< The ioserver_context instance
   type(circular_buffer), dimension(:), pointer, intent(out) :: cb_list !< Pointer to the local list of server-bound CBs
   cb_list => context % server_bound_cbs
-end subroutine get_server_bound_cb_list
+end subroutine ioctx_get_server_bound_cb_list
 
 !> Get the list of local accessors to the heaps created on this node
-subroutine get_heap_list(context, heap_list)
+subroutine ioctx_get_heap_list(context, heap_list)
   implicit none
   class(ioserver_context), intent(in)  :: context   !< The ioserver_context instance
   type(shmem_heap), dimension(:), pointer, intent(out) :: heap_list !< Pointer to the local list of model heaps
   heap_list => context % local_heaps
-end subroutine get_heap_list
+end subroutine ioctx_get_heap_list

@@ -40,27 +40,39 @@ module distributed_circular_buffer_module
     private
     type(C_PTR) :: c_buffer = C_NULL_PTR !< Pointer to the C struct containing all distributed circular buffer info
   contains
-    procedure :: is_valid => dcb_is_valid !< distributed_circular_buffer_module::dcb_is_valid
-    procedure :: create_bytes             !< distributed_circular_buffer_module::create_bytes
-    procedure :: delete                   !< distributed_circular_buffer_module::delete
-    procedure :: print                    !< distributed_circular_buffer_module::print
-    procedure :: put_elems                !< distributed_circular_buffer_module::put_elems
-    procedure :: get_elems                !< distributed_circular_buffer_module::get_elems
-    procedure :: peek_elems               !< distributed_circular_buffer_module::peek_elems
-    procedure :: get_num_elements         !< distributed_circular_buffer_module::get_num_elements
-    procedure :: get_num_spaces           !< distributed_circular_buffer_module::get_num_spaces
-    procedure :: get_channel_id           !< distributed_circular_buffer_module::get_channel_id
-    procedure :: get_server_bound_server_id    !< distributed_circular_buffer_module::get_server_bound_server_id
-    procedure :: get_server_bound_client_id    !< distributed_circular_buffer_module::get_server_bound_client_id
-    procedure :: get_num_server_bound_clients  !< distributed_circular_buffer_module::get_num_server_bound_clients
-    procedure :: get_num_server_consumers      !< distributed_circular_buffer_module::get_num_server_consumers
-    GENERIC :: get_capacity => get_capacity_local, get_capacity_server !< Get the capacity of this buffer
-    procedure :: get_capacity_local   !< distributed_circular_buffer_module::get_capacity_local
-    procedure :: get_capacity_server  !< distributed_circular_buffer_module::get_capacity_server
-    procedure :: start_listening      !< distributed_circular_buffer_module::start_listening
-    procedure :: server_barrier       !< distributed_circular_buffer_module::server_barrier
-    procedure :: full_barrier         !< distributed_circular_buffer_module::full_barrier
+
+    !> @{ \name Create/delete
+    procedure :: create_bytes             !< \copydoc distributed_circular_buffer_module::create_bytes
+    procedure :: delete                   !< \copydoc distributed_circular_buffer_module::delete
     ! final     :: dcb_finalize
+    !> @}
+
+    !> @{ \name Read/write data
+    procedure :: put_elems                !< \copydoc distributed_circular_buffer_module::put_elems
+    procedure :: get_elems                !< \copydoc distributed_circular_buffer_module::get_elems
+    procedure :: peek_elems               !< \copydoc distributed_circular_buffer_module::peek_elems
+    !> @}
+
+    !> @{ \name Query metadata
+    procedure :: get_num_elements             !< \copydoc distributed_circular_buffer_module::get_num_elements
+    procedure :: get_num_spaces               !< \copydoc distributed_circular_buffer_module::get_num_spaces
+    procedure :: get_channel_id               !< \copydoc distributed_circular_buffer_module::get_channel_id
+    procedure :: get_server_bound_server_id   !< \copydoc distributed_circular_buffer_module::get_server_bound_server_id
+    procedure :: get_server_bound_client_id   !< \copydoc distributed_circular_buffer_module::get_server_bound_client_id
+    procedure :: get_num_server_bound_clients !< \copydoc distributed_circular_buffer_module::get_num_server_bound_clients
+    procedure :: get_num_server_consumers     !< \copydoc distributed_circular_buffer_module::get_num_server_consumers
+    GENERIC :: get_capacity => get_capacity_local, get_capacity_server !< Get the capacity of this buffer
+    procedure :: get_capacity_local           !< \copydoc distributed_circular_buffer_module::get_capacity_local
+    procedure :: get_capacity_server          !< \copydoc distributed_circular_buffer_module::get_capacity_server
+    !> @}
+
+    !> @{ \name Other
+    procedure :: is_valid => dcb_is_valid !< \copydoc distributed_circular_buffer_module::dcb_is_valid
+    procedure :: print                    !< \copydoc distributed_circular_buffer_module::print
+    procedure :: start_listening      !< \copydoc distributed_circular_buffer_module::start_listening
+    procedure :: server_barrier       !< \copydoc distributed_circular_buffer_module::server_barrier
+    procedure :: full_barrier         !< \copydoc distributed_circular_buffer_module::full_barrier
+    !> @}
   end type distributed_circular_buffer
 
 contains
@@ -69,7 +81,7 @@ contains
   !> \sa DCB_check_integrity
   function dcb_is_valid(this) result(is_valid)
     implicit none
-    class(distributed_circular_buffer), intent(in) :: this
+    class(distributed_circular_buffer), intent(in) :: this !< distributed_circular_buffer instance
     logical :: is_valid !< Whether this buffer is usable
 
     is_valid = .false.
@@ -113,7 +125,7 @@ contains
   !> Free the memory used by a distributed circular buffer. See DCB_delete
   subroutine delete(this)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
 
     if (this % is_valid()) then
       call DCB_delete(this % c_buffer)
@@ -136,7 +148,7 @@ contains
 #define ExtraAttributes , target
   function put_elems(this, src_data, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to insert
     integer,           intent(in) :: type_id      !< Type of elements to insert
@@ -167,7 +179,7 @@ contains
 #define ExtraAttributes , target
   function get_elems(this, buffer_id, dest_data, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
-    class(distributed_circular_buffer), intent(inout)   :: this
+    class(distributed_circular_buffer), intent(inout)   :: this      !< DCB instance
     integer(C_INT), intent(in)                          :: buffer_id !< The individual buffer instance from which we want to read
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to read
@@ -199,7 +211,7 @@ contains
 #define ExtraAttributes , target
   function peek_elems(this, buffer_id, dest_data, num_elements, type_id, timeout_ms) result(success)
     implicit none
-    class(distributed_circular_buffer), intent(inout)   :: this
+    class(distributed_circular_buffer), intent(inout)   :: this      !< DCB instance
     integer(C_INT), intent(in)                          :: buffer_id !< The individual buffer instance from which we want to peek
 #include <IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to look at
@@ -222,12 +234,12 @@ contains
     if (status == 0) success = .true.
   end function peek_elems
 
-  !> \brief Get current number of elements of type [type_id] stored in one of the buffer instances.
+  !> Get current number of elements of type [type_id] stored in one of the buffer instances.
   !> \return The number of elements if all went well, -1 if there was an error
   !> \sa DCB_get_available_data
   function get_num_elements(this, buffer_id, type_id) result(num_elements)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this       !< DCB instance
     integer(C_INT), intent(in)                        :: buffer_id  !< The individual buffer instance we want to query
     integer,        intent(in)                        :: type_id    !< Type of elements we want to count
     integer(C_INT64_T) :: num_elements
@@ -241,12 +253,12 @@ contains
     if (num_bytes < 0) num_elements = -1
   end function get_num_elements
 
-  !> \brief Get current number of available spaces that can fit element of type [type_id] in one of the buffer instances.
+  !> Get current number of available spaces that can fit element of type [type_id] in one of the buffer instances.
   !> \return The number of spaces if all went well, -1 if there was an error.
   !> \sa DCB_get_available_space
   function get_num_spaces(this, type_id, update_from_remote) result(num_spaces)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this               !< DCB instance
     integer, intent(in)                               :: type_id            !< Type of elements we want to count
     logical, intent(in)                               :: update_from_remote !< Whether to get the very latest count by querying the server
     integer(C_INT64_T) :: num_spaces
@@ -268,7 +280,7 @@ contains
   !> \return The client ID if we are indeed a server-bound client, -1 otherwise
   function get_server_bound_client_id(this) result(client_id)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     integer(C_INT) :: client_id
     client_id = DCB_get_server_bound_client_id(this % c_buffer)
   end function get_server_bound_client_id
@@ -277,7 +289,7 @@ contains
   !> \return The channel ID if we are indeed a channel process, -1 otherwise
   function get_channel_id(this) result(channel_id)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     integer(C_INT) :: channel_id
     channel_id = DCB_get_channel_id(this % c_buffer)
   end function get_channel_id
@@ -286,7 +298,7 @@ contains
   !> \return The consumer ID if we are indeed a consumer, -1 otherwise
   function get_server_bound_server_id(this) result(server_id)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     integer(C_INT) :: server_id
     server_id = DCB_get_server_bound_server_id(this % c_buffer)
   end function get_server_bound_server_id
@@ -295,7 +307,7 @@ contains
   !> \sa DCB_get_num_server_bound_instances
   function get_num_server_bound_clients(this) result(num_clients)
     implicit none
-    class(distributed_circular_buffer), intent(in) :: this
+    class(distributed_circular_buffer), intent(in) :: this !< DCB instance
     integer(C_INT) :: num_clients
     num_clients = DCB_get_num_server_bound_instances(this % c_buffer)
   end function get_num_server_bound_clients
@@ -304,7 +316,7 @@ contains
   !> \sa DCB_get_num_server_consumers
   function get_num_server_consumers(this) result(num_consumers)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     integer(C_INT) :: num_consumers
     num_consumers = DCB_get_num_server_consumers(this % c_buffer)
   end function get_num_server_consumers
@@ -314,7 +326,7 @@ contains
   !> \sa DCB_get_capacity_local_bytes
   function get_capacity_local(this, type_id) result(num_elements)
     implicit none
-    class(distributed_circular_buffer), intent(in) :: this
+    class(distributed_circular_buffer), intent(in) :: this    !< DCB instance
     integer,                            intent(in) :: type_id !< Type of elements we want to count
     integer(C_INT64_T) :: num_elements
     num_elements = DCB_get_capacity_local(this % c_buffer) / get_type_size(type_id)
@@ -325,9 +337,9 @@ contains
   !> \sa DCB_get_capacity_server_bytes
   function get_capacity_server(this, buffer_id, type_id) result(num_elements)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
-    integer(C_INT),                     intent(in)    :: buffer_id !< ID of the instance we want to query 
-    integer       ,                     intent(in)    :: type_id !< Type of elements we want to count
+    class(distributed_circular_buffer), intent(inout) :: this       !< DCB instance
+    integer(C_INT),                     intent(in)    :: buffer_id  !< ID of the instance we want to query 
+    integer       ,                     intent(in)    :: type_id    !< Type of elements we want to count
     integer(C_INT64_T) :: num_elements
     num_elements = DCB_get_capacity_server(this % c_buffer, buffer_id) / get_type_size(type_id)
   end function get_capacity_server
@@ -337,7 +349,7 @@ contains
   !> \sa DCB_channel_start_listening
   function start_listening(this) result(success)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     logical :: success
     integer(C_INT) :: return_value
 
@@ -350,7 +362,7 @@ contains
   !> \sa DCB_full_barrier
   subroutine full_barrier(this)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     call DCB_full_barrier(this % c_buffer)
   end subroutine full_barrier
 
@@ -358,7 +370,7 @@ contains
   !> \sa DCB_server_barrier
   subroutine server_barrier(this)
     implicit none
-    class(distributed_circular_buffer), intent(inout) :: this
+    class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
     call DCB_server_barrier(this % c_buffer)
   end subroutine server_barrier
 

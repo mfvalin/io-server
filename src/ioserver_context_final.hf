@@ -1,6 +1,6 @@
 
 !> Finalize this context (on model PEs)
-subroutine finalize_model(this)
+subroutine ioctx_finalize_model(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
@@ -41,10 +41,10 @@ subroutine finalize_model(this)
   else
     print '(A)', 'WARNING: Should NOT be calling "finish_model"'
   end if
-end subroutine finalize_model
+end subroutine ioctx_finalize_model
 
 !> Finalize this context (on relay PEs)
-subroutine finalize_relay(this)
+subroutine ioctx_finalize_relay(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
@@ -69,10 +69,10 @@ subroutine finalize_relay(this)
       call print_message_header(header)
     end if
   end if
-end subroutine finalize_relay
+end subroutine ioctx_finalize_relay
 
 !> Finalize this context (on server PEs)
-subroutine finalize_server(this)
+subroutine ioctx_finalize_server(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
@@ -146,10 +146,10 @@ subroutine finalize_server(this)
 
   ! Sync non-channel processes here
   if (.not. this % is_channel()) call MPI_Barrier(this % server_work_comm, ierr)
-end subroutine finalize_server
+end subroutine ioctx_finalize_server
 
 !> Finalize function that can be called explicitly
-subroutine ioserver_context_finalize_manually(this)
+subroutine ioctx_finalize_manually(this)
   implicit none
   class(ioserver_context), intent(inout) :: this
 
@@ -179,10 +179,10 @@ subroutine ioserver_context_finalize_manually(this)
 
     this % color = NO_COLOR
   end if
-end subroutine ioserver_context_finalize_manually
+end subroutine ioctx_finalize_manually
 
-subroutine ioserver_context_finalize(context)
+subroutine ioctx_finalize(context)
   implicit none
   type(ioserver_context), intent(inout) :: context
   call context % finalize()
-end subroutine ioserver_context_finalize
+end subroutine ioctx_finalize

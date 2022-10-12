@@ -9,13 +9,16 @@
 !  but WITHOUT ANY WARRANTY; without even the implied warranty of
 !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 !  Lesser General Public License for more details.
-!
-! Authors:
-!     M. Valin,   Recherche en Prevision Numerique, 2020-2022
-!     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
-!
+
+!> \author M. Valin,   Recherche en Prevision Numerique
+!> \author V. Magnoux, Recherche en Prevision Numerique
+!> \date 2020-2022
+
+!> \file ioserver_context.F90
+!> Fortran module that provides the main interface to the IO-server library
+
 module ioserver_context_module
-  !> Module description
+  !> \copydoc ioserver_context.F90
   use ISO_C_BINDING
   use ioserver_mpi
 
@@ -133,14 +136,14 @@ module ioserver_context_module
 
     ! control memory, shared by all PEs on a given SMP node (whether active PEs or NO-OP PEs)
     type(C_PTR)       :: ctrl_shmem_c      = C_NULL_PTR       !< Address of main (control) shared memory area on this node
-    integer(C_SIZE_T) :: ctrl_shmem_size = 0 !< Size of control shared memory
+    integer(C_SIZE_T) :: ctrl_shmem_size   = 0                !< Size of control shared memory
 
     ! information for model compute and IO relay PEs on a given SMP node
     ! shared memory used for heaps and circular buffers on a given SMP node
     ! (one heap and 2 circular buffers per compute PE)
     ! this memory is used for communications between IO relay and model compute PEs
-    type(C_PTR)       :: model_shmem          = C_NULL_PTR    !< Address of relay+model PEs shared memory area
-    integer(C_SIZE_T) :: model_shmem_size     = 0             !< Size of relay/model shared memory area
+    type(C_PTR)       :: model_shmem            = C_NULL_PTR  !< Address of relay+model PEs shared memory area
+    integer(C_SIZE_T) :: model_shmem_size       = 0           !< Size of relay/model shared memory area
 
     type(C_PTR)       :: server_heap_shmem      = C_NULL_PTR  !< Address of io server PEs shared memory area
     integer(C_SIZE_T) :: server_heap_shmem_size = 0           !< Size of server shared memory area (we want a lot on the server for grid assembly)
@@ -148,7 +151,7 @@ module ioserver_context_module
     type(C_PTR)       :: server_file_shmem      = C_NULL_PTR  !< Address of server shared memory area for holding open file data
     integer(C_SIZE_T) :: server_file_shmem_size = 0           !< Size of server shared memory area for holding open file data (computed at initialization)
 
-    type(C_PTR) :: local_arena_ptr                            !< Pointer to start of shared memory arena
+    type(C_PTR)       :: local_arena_ptr        = C_NULL_PTR  !< Pointer to start of shared memory arena
     !> @}
     
     ! -----------------
@@ -249,78 +252,76 @@ module ioserver_context_module
     private
 
     !> @{ \name Initialization
-    procedure, pass, public :: init                     => ioctx_init
-    procedure, pass         :: init_communicators       => ioctx_init_communicators
-    procedure, pass         :: init_shared_mem          => ioctx_init_shared_mem
-    procedure, pass         :: build_relay_model_index  => ioctx_build_relay_model_index
-    procedure, pass         :: fetch_node_shmem_structs => ioctx_fetch_node_shmem_structs
-    procedure, pass         :: allocate_from_arena      => ioctx_allocate_from_arena
-    procedure, pass         :: create_local_heap        => ioctx_create_local_heap
-    procedure, pass         :: create_local_cb          => ioctx_create_local_cb
-    procedure, pass         :: make_pe_name             => ioctx_make_pe_name
+    procedure, pass, public :: init                     => ioctx_init                       !< \copydoc ioctx_init
+    procedure, pass         :: init_communicators       => ioctx_init_communicators         !< \copydoc ioctx_init_communicators
+    procedure, pass         :: init_shared_mem          => ioctx_init_shared_mem            !< \copydoc ioctx_init_shared_mem
+    procedure, pass         :: build_relay_model_index  => ioctx_build_relay_model_index    !< \copydoc ioctx_build_relay_model_index
+    procedure, pass         :: fetch_node_shmem_structs => ioctx_fetch_node_shmem_structs   !< \copydoc ioctx_fetch_node_shmem_structs
+    procedure, pass         :: allocate_from_arena      => ioctx_allocate_from_arena        !< \copydoc ioctx_allocate_from_arena
+    procedure, pass         :: create_local_heap        => ioctx_create_local_heap          !< \copydoc ioctx_create_local_heap
+    procedure, pass         :: create_local_cb          => ioctx_create_local_cb            !< \copydoc ioctx_create_local_cb
+    procedure, pass         :: make_pe_name             => ioctx_make_pe_name               !< \copydoc ioctx_make_pe_name
     !> @}
 
     !> @{ \name Process type query
-    procedure, pass, public :: is_relay
-    procedure, pass, public :: is_server
-    procedure, pass, public :: is_model
-    procedure, pass, public :: is_server_bound
-    procedure, pass, public :: is_model_bound
-    procedure, pass, public :: is_channel
-    procedure, pass, public :: is_stream_processor
-    procedure, pass, public :: is_no_op
+    procedure, pass, public :: is_relay             => ioctx_is_relay             !< \copydoc ioctx_is_relay
+    procedure, pass, public :: is_server            => ioctx_is_server            !< \copydoc ioctx_is_server
+    procedure, pass, public :: is_model             => ioctx_is_model             !< \copydoc ioctx_is_model
+    procedure, pass, public :: is_server_bound      => ioctx_is_server_bound      !< \copydoc ioctx_is_server_bound
+    procedure, pass, public :: is_model_bound       => ioctx_is_model_bound       !< \copydoc ioctx_is_model_bound
+    procedure, pass, public :: is_channel           => ioctx_is_channel           !< \copydoc ioctx_is_channel
+    procedure, pass, public :: is_stream_processor  => ioctx_is_stream_processor  !< \copydoc ioctx_is_stream_processor
+    procedure, pass, public :: is_no_op             => ioctx_is_no_op             !< \copydoc ioctx_is_no_op
     !> @}
 
     !> @{ \name Finalization
-    procedure, pass         :: set_time_to_quit
-    procedure, pass         :: finalize_model
-    procedure, pass         :: finalize_relay
-    procedure, pass         :: finalize_server
-    procedure, pass, public :: finalize => ioserver_context_finalize_manually
-    final                   :: ioserver_context_finalize
+    procedure, pass         :: set_time_to_quit => ioctx_set_time_to_quit  !< \copydoc ioctx_set_time_to_quit
+    procedure, pass         :: finalize_model   => ioctx_finalize_model    !< \copydoc ioctx_finalize_model
+    procedure, pass         :: finalize_relay   => ioctx_finalize_relay    !< \copydoc ioctx_finalize_relay
+    procedure, pass         :: finalize_server  => ioctx_finalize_server   !< \copydoc ioctx_finalize_server
+    procedure, pass, public :: finalize         => ioctx_finalize_manually !< \copydoc ioctx_finalize_manually
+    final                   :: ioctx_finalize                              !<
     !> @}
 
     !> @{ \name Getters
-    procedure, pass         :: is_initialized
-    procedure, pass, public :: is_time_to_quit
-    procedure, pass, public :: get_num_local_model
-    procedure, pass, public :: get_num_total_model
+    procedure, pass         :: is_initialized       => ioctx_is_initialized       !< \copydoc ioctx_is_initialized
+    procedure, pass, public :: is_time_to_quit      => ioctx_is_time_to_quit      !< \copydoc ioctx_is_time_to_quit
+    procedure, pass, public :: get_num_local_model  => ioctx_get_num_local_model  !< \copydoc ioctx_get_num_local_model
+    procedure, pass, public :: get_num_total_model  => ioctx_get_num_total_model  !< \copydoc ioctx_get_num_total_model
 
-    procedure, pass, public :: get_global_rank
-    procedure, pass, public :: get_crs => IOserver_get_crs
-    procedure, pass, public :: get_local_heap => IOserver_get_local_heap
-    procedure, pass, public :: get_node_heap => IOserver_get_node_heap
-    procedure, pass, public :: get_server_bound_cb => IOserver_get_server_bound_cb
-    procedure, pass, public :: get_model_bound_cb => IOserver_get_model_bound_cb
-    procedure, pass, public :: get_dcb => IOserver_get_dcb
-    procedure, pass, public :: get_messenger => IOserver_get_messenger
-    procedure, pass, public :: get_stream => IOserver_get_stream
-    procedure, pass, public :: get_relay_pipeline_depth
-    procedure, pass, public :: get_server_pipeline_depth
-    procedure, pass, public :: get_max_num_streams
+    procedure, pass, public :: get_global_rank     => ioctx_get_global_rank     !< \copydoc ioctx_get_global_rank
+    procedure, pass, public :: get_crs             => ioctx_get_crs             !< \copydoc ioctx_get_crs
+    procedure, pass, public :: get_local_heap      => ioctx_get_local_heap      !< \copydoc ioctx_get_local_heap
+    procedure, pass, public :: get_node_heap       => ioctx_get_node_heap       !< \copydoc ioctx_get_node_heap
+    procedure, pass, public :: get_server_bound_cb => ioctx_get_server_bound_cb !< \copydoc ioctx_get_server_bound_cb
+    procedure, pass, public :: get_model_bound_cb  => ioctx_get_model_bound_cb  !< \copydoc ioctx_get_model_bound_cb
+    procedure, pass, public :: get_dcb             => ioctx_get_dcb             !< \copydoc ioctx_get_dcb
+    procedure, pass, public :: get_messenger       => ioctx_get_messenger       !< \copydoc ioctx_get_messenger
+    procedure, pass, public :: get_stream          => ioctx_get_stream          !< \copydoc ioctx_get_stream
+    procedure, pass, public :: get_relay_pipeline_depth   => ioctx_get_relay_pipeline_depth   !< \copydoc ioctx_get_relay_pipeline_depth
+    procedure, pass, public :: get_server_pipeline_depth  => ioctx_get_server_pipeline_depth  !< \copydoc ioctx_get_server_pipeline_depth
+    procedure, pass, public :: get_max_num_streams        => ioctx_get_max_num_streams        !< \copydoc ioctx_get_max_num_streams
 
-    procedure, pass, public :: get_server_bound_cb_list
-    procedure, pass, public :: get_heap_list
+    procedure, pass, public :: get_server_bound_cb_list => ioctx_get_server_bound_cb_list !< \copydoc ioctx_get_server_bound_cb_list
+    procedure, pass, public :: get_heap_list            => ioctx_get_heap_list            !< \copydoc ioctx_get_heap_list
     !> @}
 
     !> @{ \name Process function management
-    procedure, pass, public :: no_op => IOserver_noop
+    procedure, pass, public :: no_op => ioctx_noop      !< \copydoc ioctx_noop
     !> @}
 
-    !> @{ \name File management
-    procedure, pass, public :: open_stream_model
-    ! procedure, pass, public :: open_stream_server
-    ! procedure, pass, public :: close_stream_server
+    !> @{ \name Stream management
+    procedure, pass, public :: open_stream_model      => ioctx_open_stream_model    !< \copydoc ioctx_open_stream_model
     !> @}
     
     !> @{ \name Debugging
-    procedure, pass, public :: set_debug_level  !< Debug level setter. \sa ioserver_input_parameters::debug_level
-    procedure, pass, public :: get_debug_level  !< Debug level getter. \sa ioserver_input_parameters::debug_level
-    procedure, pass, public :: get_detailed_pe_name
-    procedure, pass, public :: get_short_pe_name
+    procedure, pass, public :: set_debug_level        => ioctx_set_debug_level      !< \copydoc ioctx_set_debug_level
+    procedure, pass, public :: get_debug_level        => ioctx_get_debug_level      !< \copydoc ioctx_get_debug_level
+    procedure, pass, public :: get_detailed_pe_name   => ioctx_get_detailed_pe_name !< \copydoc ioctx_get_detailed_pe_name
+    procedure, pass, public :: get_short_pe_name      => ioctx_get_short_pe_name    !< \copydoc ioctx_get_short_pe_name
 
-    procedure, pass :: print_io_colors
-    procedure, pass :: print_shared_mem_sizes
+    procedure, pass :: print_io_colors        => ioctx_print_io_colors        !< \copydoc ioctx_print_io_colors
+    procedure, pass :: print_shared_mem_sizes => ioctx_print_shared_mem_sizes !< \copydoc ioctx_print_shared_mem_sizes
     !> @}
   end type ioserver_context
 
@@ -349,10 +350,10 @@ function default_no_op(context) result(no_op_success)
 end function default_no_op
 
 !> Open a stream where the model can write data
-subroutine open_stream_model(context, new_stream)
+subroutine ioctx_open_stream_model(context, new_stream)
   implicit none
-  class(ioserver_context),     intent(inout) :: context     !< io-server context instance
-  type(model_stream), pointer, intent(out)   :: new_stream  !< A pointer to a newly-opened stream. NULL() if there was an error
+  class(ioserver_context),     intent(inout) :: context     !< ioserver_context instance
+  type(model_stream), pointer, intent(out)   :: new_stream  !< [out] A pointer to a newly-opened stream. NULL() if there was an error
 
   integer :: i_stream
   type(model_stream), pointer :: tmp_stream
@@ -377,32 +378,33 @@ subroutine open_stream_model(context, new_stream)
   end do
 
   print '(A, A)', context % short_pe_name, ' ERROR: No space left in the list of (model) streams to open a new one'
-end subroutine open_stream_model
+end subroutine ioctx_open_stream_model
 
 !> Set time to quit flag in control area
-subroutine set_time_to_quit(context)
+subroutine ioctx_set_time_to_quit(context)
   implicit none
-  class(ioserver_context), intent(inout) :: context
+  class(ioserver_context), intent(inout) :: context !< ioserver_context instance
   context % shmem % time_to_quit = 1
   if (context % get_debug_level() >= 2) print '(A, A)', context % short_pe_name, ' DEBUG: time to quit '
-end subroutine set_time_to_quit
+end subroutine ioctx_set_time_to_quit
 
-subroutine print_io_colors(context)
+!> Print some debugging information
+subroutine ioctx_print_io_colors(context)
     implicit none
     class(ioserver_context), intent(in) :: context
     write(6,'(A, A,(15I5))') context % short_pe_name, ' DEBUG: colors =', context % shmem % pe(0:context % max_smp_pe) % color
-end subroutine print_io_colors
+end subroutine ioctx_print_io_colors
 
-!> Set the debug flag for this context
-subroutine set_debug_level(context, level)
+!> Set the debug flag for this context. See ioserver_input_parameters::debug_level
+subroutine ioctx_set_debug_level(context, level)
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer, intent(in) :: level
   context % params % debug_level = max(level, 0)
-end subroutine set_debug_level
+end subroutine ioctx_set_debug_level
 
 !> NO OP loop to park processes with minimal CPU consumption
-subroutine IOserver_noop(context) 
+subroutine ioctx_noop(context) 
   implicit none
   class(ioserver_context), intent(inout) :: context
   integer :: sleep_dummy
@@ -419,11 +421,12 @@ subroutine IOserver_noop(context)
   do while (.not. context % is_time_to_quit())    ! sleep loop until quit flag appears
     sleep_dummy = sleep(1)
   enddo
-end subroutine IOserver_noop
+end subroutine ioctx_noop
 
-subroutine print_shared_mem_sizes(context)
+!> Print information about shared memory allocation for this context
+subroutine ioctx_print_shared_mem_sizes(context)
   implicit none
-  class(ioserver_context), intent(in) :: context
+  class(ioserver_context), intent(in) :: context !< ioserver_context instance
   if (context % is_server()) then
     print '(A, A, F8.1, A)', context % short_pe_name, ' Shared memory heap: ', context % params % server_heap_size_mb, ' MB'
     if (.not. context % is_stream_processor()) then
@@ -443,7 +446,7 @@ subroutine print_shared_mem_sizes(context)
         real(context % local_dcb % get_capacity_local(CB_KIND_CHAR), kind=4) / MBYTE, ' MB'
     end if
   end if
-end subroutine print_shared_mem_sizes
+end subroutine ioctx_print_shared_mem_sizes
 
 subroutine ioserver_input_parameters_print(params)
   implicit none
