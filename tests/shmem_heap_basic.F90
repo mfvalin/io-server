@@ -54,7 +54,7 @@ contains
     integer(C_INT64_T), dimension(:), intent(in), optional :: dim2
     logical :: success
 
-    type(block_meta_f08) :: info
+    type(block_meta) :: info
     integer, dimension(size(dim1)) :: default_dim2
     default_dim2(:) = 1
 
@@ -173,7 +173,7 @@ contains
 
     subroutine concurrent_alloc_basic()
       implicit none
-      type(block_meta_f08) :: array_info
+      type(block_meta) :: array_info
       logical :: success
       integer(kind=4), dimension(:), contiguous, pointer :: array_i4_1
 
@@ -199,7 +199,7 @@ contains
       logical :: success
       integer :: num_errors, total_errors
 
-      type(block_meta_f08) :: array_info
+      type(block_meta) :: array_info
       integer(kind=4), dimension(:), contiguous, pointer :: array_i4_1
 
       do i = 1, 100
@@ -258,7 +258,7 @@ contains
       integer :: i, j, ierr
       logical :: success
 
-      type(block_meta_f08) :: array_info, array_info_2
+      type(block_meta) :: array_info, array_info_2
 
       if (rank == ALLOCATOR_RANK) then
 
@@ -328,7 +328,7 @@ contains
 
     subroutine various_params()
       implicit none
-      type(block_meta_f08) :: info
+      type(block_meta) :: info
       logical :: success
       integer(C_INT16_T), dimension(:, :, :), contiguous, pointer :: array
 
@@ -365,7 +365,7 @@ contains
       use ioserver_timer_module
       use rpn_extra_module, only: sleep_us
       implicit none
-      type(block_meta_f08) :: info
+      type(block_meta) :: info
       integer(kind=8), dimension(:), contiguous, pointer :: a
       integer(kind=8) :: big_size
       logical :: success
@@ -487,7 +487,7 @@ contains
       integer, parameter :: NUM_ARRAYS = 6
 
       integer(HEAP_ELEMENT), dimension(NUM_ARRAYS) :: offsets
-      type(block_meta_f08),  dimension(NUM_ARRAYS) :: array_infos
+      type(block_meta),  dimension(NUM_ARRAYS) :: array_infos
       integer(kind=1), dimension(:, :, :, :, :), contiguous, pointer :: array_i1_5
       integer(kind=2), dimension(:, :, :, :),    contiguous, pointer :: array_i2_4
       integer(kind=4), dimension(:, :, :),       contiguous, pointer :: array_i4_3
@@ -669,7 +669,7 @@ contains
 
     subroutine big_alloc()
       implicit none
-      type(block_meta_f08) :: array_info1, array_info2
+      type(block_meta) :: array_info1, array_info2
       integer(kind=8), dimension(:), contiguous, pointer :: kinda_big_array1, kinda_big_array2, big_array
       integer(kind=8) :: kinda_big_alloc_size, big_alloc_size
       integer :: num_errors, total_errors

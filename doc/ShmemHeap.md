@@ -36,7 +36,7 @@ type(shmem_heap) :: h           ! a (shared) memory heap
 integer(kind=4), dimension(:,:),     pointer :: iarray2d
 real(kind=8),    dimension(:,:,:,:), pointer :: darray4d
 integer :: ni, nj, nk, nt, i0, j0
-type(block_meta_f08) :: ibmi2d, dbmi4d            ! descriptors associated with the arrays
+type(block_meta) :: ibmi2d, dbmi4d                ! descriptors associated with the arrays
 
 ibmi2d = h % allocate(iarray2d, [ni, nj])         ! allocate a 2D integer Fortran array
 iarray2d(:, :) = 0                                ! do something with iarray2d

@@ -125,10 +125,10 @@ program model_integration
     !--------------
     ! Send data
     block
-      type(shmem_heap)     :: data_heap
-      type(grid_bounds_t)  :: local_grid, global_grid
-      type(block_meta_f08) :: array_info
-      type(model_grid)     :: m_grid
+      type(shmem_heap)    :: data_heap
+      type(grid_bounds_t) :: local_grid, global_grid
+      type(block_meta)    :: array_info
+      type(model_grid)    :: m_grid
 
       integer(kind=8), dimension(:), contiguous, pointer :: model_data
 

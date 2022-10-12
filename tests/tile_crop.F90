@@ -265,7 +265,7 @@ contains
       integer :: i, j, k
       integer :: minx, maxx, miny, maxy
       
-      type(block_meta_f08) :: info_i1, info_i2, info_i4, info_i8, info_r4, info_r4b, info_r8
+      type(block_meta) :: info_i1, info_i2, info_i4, info_i8, info_r4, info_r4b, info_r8
       integer(C_INT8_T),  dimension(:,:), pointer, contiguous :: data_i1
       integer(C_INT16_T), dimension(:,:), pointer, contiguous :: data_i2
       integer(C_INT32_T), dimension(:,:), pointer, contiguous :: data_i4

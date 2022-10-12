@@ -142,7 +142,7 @@ contains
     integer :: line_id !< Id of the created line
 
     integer :: free_line_id
-    type(block_meta_f08) :: data_array_info
+    type(block_meta) :: data_array_info
     integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: data_array_byte
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: global_min, global_max
 

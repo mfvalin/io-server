@@ -38,7 +38,7 @@ module server_stream_module
 
   private
 
-  public :: block_meta_f08, grid_bounds_t
+  public :: block_meta, grid_bounds_t
 
   integer, parameter :: STREAM_STATUS_UNINITIALIZED = -1 !< Not even initialized
   integer, parameter :: STREAM_STATUS_INITIALIZED   =  0 !< Initialized but not open

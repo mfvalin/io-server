@@ -47,7 +47,7 @@ module shmem_heap_module
   include 'io-server/shmem_heap.inc'
 
   !> \brief Fortran 2008 data block metadata (using the C layout)
-  type, public :: block_meta_f08
+  type, public :: block_meta
     private
     type(block_meta_c) :: a           !< array descriptor, C interoperable \private
 
@@ -69,7 +69,7 @@ module shmem_heap_module
     GENERIC :: operator(==) => equal        !< \copydoc shmem_heap_module::equal
     procedure :: unequal_meta               !< \copydoc shmem_heap_module::unequal_meta
     GENERIC :: operator(/=) => unequal_meta !< \copydoc shmem_heap_module::unequal_meta
-  end type block_meta_f08
+  end type block_meta
 
   type, public :: heap_stats
     integer(C_INT64_T) :: size_byte           !< Total size of heap (bytes)
@@ -155,8 +155,8 @@ module shmem_heap_module
     !>
     !> For example:
     !> ```
-    !> type(shmem_heap)     :: h
-    !> type(block_meta_f08) :: info
+    !> type(shmem_heap) :: h
+    !> type(block_meta) :: info
     !> integer, dimension(:),       contiguous, pointer :: i1, i1_nowait, i1_safe
     !> real,    dimension(:, :, :), contiguous, pointer :: r3
     !> 
@@ -199,7 +199,7 @@ module shmem_heap_module
   !> Print metadata content
   subroutine block_meta_print(this)
     implicit none
-    class(block_meta_f08), intent(in) :: this !< block_meta instance
+    class(block_meta), intent(in) :: this !< block_meta instance
     print *, this % get_offset(), this % get_type(), this % get_kind(), this % get_rank(), this % get_dimensions()
   end subroutine block_meta_print
 
@@ -224,7 +224,7 @@ module shmem_heap_module
   !> \brief Get array type from Fortran block metadata
   function block_meta_get_type(this) result(n)
     implicit none
-    class(block_meta_f08), intent(IN) :: this              !< block object
+    class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array type code
     n = and(ishft(this%a%tkr,-4), 15)
   end function block_meta_get_type
@@ -232,7 +232,7 @@ module shmem_heap_module
   !> \brief Get array kind from Fortran block metadata
   function block_meta_get_kind(this) result(n)
     implicit none
-    class(block_meta_f08), intent(IN) :: this              !< block object
+    class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array kind (1/2/4/8 bytes)
     n = and(ishft(this%a%tkr,-8), 15)
   end function block_meta_get_kind
@@ -240,7 +240,7 @@ module shmem_heap_module
   !> \brief Get array rank from Fortran block metadata
   function block_meta_get_rank(this) result(n)
     implicit none
-    class(block_meta_f08), intent(IN) :: this              !< block object
+    class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT) :: n                                !< array rank
     n = and(this%a%tkr, 15)
   end function block_meta_get_rank
@@ -248,56 +248,56 @@ module shmem_heap_module
   !> \brief Get array dimensions from Fortran block metadata
   function get_dimensions(this) result(d)
     implicit none
-    class(block_meta_f08), intent(IN) :: this              !< block object
+    class(block_meta), intent(IN) :: this              !< block object
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: d     !< array dimensions
     d = this%a%d
   end function get_dimensions
 
-  !> \brief Nullify operator for type block_meta_f08
+  !> \brief Nullify operator for type block_meta
   subroutine reset(this)
     implicit none
-    class(block_meta_f08), intent(INOUT) :: this              !< metadata object
+    class(block_meta), intent(INOUT) :: this              !< metadata object
     this % a % tkr    = 0
     this % a % d      = 0
     this % a % offset = 0
   end subroutine reset
 
-  !> \brief Assignment operator for type block_meta_f08
+  !> \brief Assignment operator for type block_meta
   subroutine assign(this, other)
     implicit none
-    class(block_meta_f08), intent(INOUT) :: this              !< metadata object
-    type(block_meta_f08),  intent(IN)    :: other             !< metadata object assigned to this (this = other)
+    class(block_meta), intent(INOUT) :: this              !< metadata object
+    type(block_meta),  intent(IN)    :: other             !< metadata object assigned to this (this = other)
     this % a % tkr      = other % a % tkr
     this % a % d        = other % a % d
     this % a % offset   = other % a % offset
   end subroutine assign
 
-  !> \brief Assignment operator for type block_meta_f08
+  !> \brief Assignment operator for type block_meta
   subroutine assign_c(this, other)
     implicit none
-    class(block_meta_f08), intent(INOUT) :: this              !< metadata instance
-    type(block_meta_c),    intent(IN)    :: other             !< metadata object assigned to this (this = other)
+    class(block_meta),  intent(INOUT) :: this              !< metadata instance
+    type(block_meta_c), intent(IN)    :: other             !< metadata object assigned to this (this = other)
     this % a % tkr      = other % tkr
     this % a % d        = other % d
     this % a % offset   = other % offset
   end subroutine assign_c
 
-  !> \brief Equality operator for type block_meta_f08
+  !> \brief Equality operator for type block_meta
   function equal(this, other) result(isequal)
     implicit none
-    class(block_meta_f08), intent(IN)    :: this              !< metadata object
-    type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
-    logical :: isequal                                        !< true if equal
+    class(block_meta), intent(IN)    :: this              !< metadata object
+    type(block_meta), intent(IN)     :: other             !< metadata object assigned to this (this = other)
+    logical :: isequal                                    !< true if equal
     isequal = (this % a % tkr == other % a % tkr)
     isequal = isequal .and. (all(this % a % d == other % a % d))
   end function equal
 
-  !> \brief Non equality operator for type block_meta_f08
+  !> \brief Non equality operator for type block_meta
   function unequal_meta(this, other) result(is_unequal)
     implicit none
-    class(block_meta_f08), intent(IN)    :: this              !< metadata object
-    type(block_meta_f08), intent(IN)     :: other             !< metadata object assigned to this (this = other)
-    logical :: is_unequal                                     !< true if unequal
+    class(block_meta), intent(IN)    :: this              !< metadata object
+    type(block_meta), intent(IN)     :: other             !< metadata object assigned to this (this = other)
+    logical :: is_unequal                                 !< true if unequal
     is_unequal = (this % a % tkr /= other % a % tkr)
     is_unequal = is_unequal .or. any(this % a % d /= other % a % d)
   end function unequal_meta
@@ -390,9 +390,9 @@ module shmem_heap_module
   !> \brief Free block from heap
   function free_by_meta(this, block_info) result(success)
     implicit none
-    class(shmem_heap),    intent(inout) :: this       !< shmem_heap instance
-    type(block_meta_f08), intent(in)    :: block_info !< metadata associated to memory block
-    logical :: success                                !< .true. if call to underlying C function had no error
+    class(shmem_heap), intent(inout) :: this       !< shmem_heap instance
+    type(block_meta),  intent(in)    :: block_info !< metadata associated to memory block
+    logical :: success                             !< .true. if call to underlying C function had no error
     success = this % free(block_info % get_offset())
   end function free_by_meta 
   
@@ -521,7 +521,7 @@ module shmem_heap_module
   !> Get the offset of the allocated block within its heap
   function block_meta_get_offset(this) result(offset)
     implicit none
-    class(block_meta_f08), intent(in) :: this
+    class(block_meta), intent(in) :: this !< block_meta instance
     integer(C_SIZE_T) :: offset !< The offset of this block within its heap
     offset = this % a % offset
   end function block_meta_get_offset

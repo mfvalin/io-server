@@ -127,9 +127,9 @@ contains
     type(circular_buffer) :: data_buffer
     type(comm_rank_size)  :: model_crs, node_crs
 
-    type(grid_bounds_t)  :: local_grid, big_local_grid
-    type(grid_bounds_t)  :: global_grid, big_global_grid
-    type(block_meta_f08) :: data_array_info_1, data_array_info_2, big_array_info
+    type(grid_bounds_t) :: local_grid, big_local_grid
+    type(grid_bounds_t) :: global_grid, big_global_grid
+    type(block_meta)    :: data_array_info_1, data_array_info_2, big_array_info
     integer(kind=4), dimension(:,:), contiguous, pointer :: data_array_4
     integer(kind=8), dimension(:,:), contiguous, pointer :: data_array_8
     real(kind=8), dimension(:,:,:,:,:), contiguous, pointer :: big_array

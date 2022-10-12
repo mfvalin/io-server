@@ -336,12 +336,12 @@ contains
     use iso_c_binding
     use jar_module
     implicit none
-    class(model_stream),  intent(inout) :: this           !< model_stream instance
-    type(block_meta_f08), intent(in)    :: data_info      !< Array descriptor from shared memory heap allocation
-    type(grid_bounds_t),  intent(in)    :: local_bounds   !< Bounds of the local grid, in global coordinates
-    type(grid_bounds_t),  intent(in)    :: global_bounds  !< Bounds of the (reduced) global grid, in global coordinates
+    class(model_stream), intent(inout) :: this           !< model_stream instance
+    type(block_meta),    intent(in)    :: data_info      !< Array descriptor from shared memory heap allocation
+    type(grid_bounds_t), intent(in)    :: local_bounds   !< Bounds of the local grid, in global coordinates
+    type(grid_bounds_t), intent(in)    :: global_bounds  !< Bounds of the (reduced) global grid, in global coordinates
 
-    type(jar),   intent(IN), optional :: command          !< Command to apply to the data by the model once assembled
+    type(jar),           intent(in), optional :: command !< Command to apply to the data by the model once assembled
 
     logical :: success  !< Whether this function call succeeded
 

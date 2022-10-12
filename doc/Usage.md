@@ -135,7 +135,7 @@ subroutine send_tile_to_server()
   ! computed is the result of computation by the model
   integer, dimension(i_size, j_size, k_size) :: computed_data
   integer, dimension(:,:,:), pointer, contiguous :: h_data
-  type(block_meta_f08) :: h_info
+  type(block_meta) :: h_info
 
   ! Access the heap for this PE
   model_heap = context % get_local_heap()

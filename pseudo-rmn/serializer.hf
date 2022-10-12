@@ -82,10 +82,11 @@
 !> \brief Insert an ARRAY or an ARRAY section into data jar at current insertion position or at a specific position
 !> beginning of data jar is at position 1
 !> ARRAY may be of any user defined type
+!> ARRAY *must* be contiguous in memory (regardless of whether is has the contiguous attribute)
 !> the result is the position of the last filled element in the data jar (or -1 if an overflow would accur)
 !> integer :: insertion_point
 !> logical :: success
-!> type(whatever_type), dimension(whatever_dimensions) :: my_array
+!> type(whatever_type), dimension(whatever_dimensions), contiguous :: my_array
 !> success = JAR_PUT_ITEMS(my_jar_name, my_array(start:end))                      ! or JAR_INTO_MULTI
 !> success = JAR_PUT_ITEMS_AT(my_jar_name, my_array(start:end), insertion_point)  ! or JAR_INTO_MULTI_AT
 #define JAR_PUT_ITEMS(jar, item)          jar%insert( item, storage_size(item)*int(size(item), kind = 8) )
