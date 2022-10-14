@@ -49,7 +49,7 @@ contains
     implicit none
     type(shmem_heap), intent(inout) :: the_heap
     integer(C_INT16_T), dimension(:, :, :), contiguous, pointer, intent(inout) :: array
-    logical, intent(in) :: expected
+    integer, intent(in) :: expected
     integer(C_INT64_T), dimension(:), intent(in) :: dim1
     integer(C_INT64_T), dimension(:), intent(in), optional :: dim2
     logical :: success
@@ -65,10 +65,11 @@ contains
       info = the_heap % allocate(array, dim1)
     end if
 
-    success = .not. expected
-    if (associated(array)) success = expected
+    success = .false.
+    if (info % get_status() == expected) success = .true.
+    if (associated(array) .and. expected .ne. SHMEM_HEAP_ALLOC_SUCCESS) success = .false.
     if (.not. success) then
-      if (expected) then
+      if (expected == SHMEM_HEAP_ALLOC_SUCCESS) then
         print *, 'ERROR: Unable to allocate: ', dim1, default_dim2
       else
         print *, 'ERROR: Should NOT have allocated: ', size(array), dim1, default_dim2
@@ -86,7 +87,7 @@ contains
     implicit none
     type(shmem_heap), intent(inout) :: the_heap
     integer(C_INT16_T), dimension(:, :, :), contiguous, pointer, intent(inout) :: array
-    logical, intent(in) :: expected
+    integer, intent(in) :: expected
     integer(C_INT32_T), dimension(:), intent(in) :: dim1
     integer(C_INT32_T), dimension(:), intent(in), optional :: dim2
     logical :: success
@@ -178,8 +179,9 @@ contains
       integer(kind=4), dimension(:), contiguous, pointer :: array_i4_1
 
       array_info = the_heap % allocate(array_i4_1, [SMALL_BLOCK_SIZE], .true.) ! Allocate 'safely'
-      if (.not. associated(array_i4_1)) then
-        print '(A, I2, A, I6)','ERROR: Unable to allocate a 1D 32-bit integer array! Rank ', rank, ', offset ', array_info % get_offset()
+      if (.not. associated(array_i4_1) .or. array_info % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) then
+        print '(A, I2, A, I6, L2, I3)','ERROR: Unable to allocate a 1D 32-bit integer array! Rank ', rank,            &
+              ', offset ', array_info % get_offset(), associated(array_i4_1), array_info % get_status()
         error stop 1
       end if
 
@@ -266,7 +268,7 @@ contains
         ! This shoudl also check coalescing small blocks into a bigger one
         array_info = the_heap % allocate(array, [ALLOC_BASE_SIZE], .false.) ! Allocate *not* safely
         offsets(1) = array_info % get_offset()
-        if (.not. the_heap % is_valid_block(c_loc(array)) .or. .not. associated(array)) then
+        if (.not. the_heap % is_valid_block(c_loc(array)) .or. .not. associated(array) .or. array_info % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) then
           print *, 'ERROR: Allocated block is not valid!'
           error stop 1
         end if
@@ -283,7 +285,7 @@ contains
         end if
 
         array_info = the_heap % allocate(array, [ALLOC_BASE_SIZE*2], .false.)
-        if (.not. associated(array)) then
+        if (.not. associated(array) .or. array_info % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) then
           print *, 'ERROR: Could not allocate block when a smaller free block is available before an occupied one'
           error stop 1
         end if
@@ -298,7 +300,7 @@ contains
         do i = 1, NUM_LOOPS
           do j = 1, NUM_ALLOC
             array_info = the_heap % allocate(array, [ALLOC_BASE_SIZE - 2*j], .false.)
-            if (.not. associated(array)) then
+            if (.not. associated(array) .or. array_info % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) then
               print '(A,I4)', 'ERROR: Not allocated (single allocator), i = ', i
               error stop 1
             end if
@@ -334,30 +336,30 @@ contains
 
       if (rank .ne. 0) return
 
-      success = test_alloc4(the_heap, array, .true., [2, 2])
-      success = test_alloc4(the_heap, array, .true., [2, 2, 2, 1])       .and. success
-      success = test_alloc4(the_heap, array, .true., [2, 2, 3, 1, 1, 1]) .and. success
-      success = test_alloc4(the_heap, array, .false., [2, 2, 2, 2])      .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [2, 2])
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [2, 2, 2, 1])       .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [2, 2, 3, 1, 1, 1]) .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [2, 2, 2, 2])      .and. success
 
-      success = test_alloc4(the_heap, array, .true., [1, 1, 1], [2, 2, 1])           .and. success
-      success = test_alloc4(the_heap, array, .true., [1, 4, 1], [2, 4, 1])           .and. success
-      success = test_alloc4(the_heap, array, .true., [-5, -1], [-2, 2])              .and. success
-      success = test_alloc4(the_heap, array, .true., [-5, -1, 1, 1], [-2, 2, 1, 1])  .and. success
-      success = test_alloc4(the_heap, array, .true., [-5, -1, 1, 1], [-5, 2, 1, 1])  .and. success
-      success = test_alloc4(the_heap, array, .false., [1, 1], [2, 2, 1])             .and. success
-      success = test_alloc4(the_heap, array, .false., [1, 1, 1], [2, 2])             .and. success
-      success = test_alloc4(the_heap, array, .false., [1, 1, 1], [2, 0, 1])          .and. success
-      success = test_alloc4(the_heap, array, .false., [1, 2, 1], [2, 0, 1])          .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [1, 1, 1], [2, 2, 1])           .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [1, 4, 1], [2, 4, 1])           .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [-5, -1], [-2, 2])              .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [-5, -1, 1, 1], [-2, 2, 1, 1])  .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [-5, -1, 1, 1], [-5, 2, 1, 1])  .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1, 1], [2, 2, 1])             .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1, 1, 1], [2, 2])             .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1, 1, 1], [2, 0, 1])          .and. success
+      success = test_alloc4(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1, 2, 1], [2, 0, 1])          .and. success
 
-      success = test_alloc(the_heap, array, .true., [1_8, 1_8, 1_8], [2_8, 2_8, 1_8])               .and. success
-      success = test_alloc(the_heap, array, .true., [1_8, 4_8, 1_8], [2_8, 4_8, 1_8])               .and. success
-      success = test_alloc(the_heap, array, .true., [-5_8, -1_8], [-2_8, 2_8])                      .and. success
-      success = test_alloc(the_heap, array, .true., [-5_8, -1_8, 1_8, 1_8], [-2_8, 2_8, 1_8, 1_8])  .and. success
-      success = test_alloc(the_heap, array, .true., [-5_8, -1_8, 1_8, 1_8], [-5_8, 2_8, 1_8, 1_8])  .and. success
-      success = test_alloc(the_heap, array, .false., [1_8, 1_8], [2_8, 2_8, 1_8])                   .and. success
-      success = test_alloc(the_heap, array, .false., [1_8, 1_8, 1_8], [2_8, 2_8])                   .and. success
-      success = test_alloc(the_heap, array, .false., [1_8, 1_8, 1_8], [2_8, 0_8, 1_8])              .and. success
-      success = test_alloc(the_heap, array, .false., [1_8, 2_8, 1_8], [2_8, 0_8, 1_8])              .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [1_8, 1_8, 1_8], [2_8, 2_8, 1_8])               .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [1_8, 4_8, 1_8], [2_8, 4_8, 1_8])               .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [-5_8, -1_8], [-2_8, 2_8])                      .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [-5_8, -1_8, 1_8, 1_8], [-2_8, 2_8, 1_8, 1_8])  .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_ALLOC_SUCCESS, [-5_8, -1_8, 1_8, 1_8], [-5_8, 2_8, 1_8, 1_8])  .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1_8, 1_8], [2_8, 2_8, 1_8])                   .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1_8, 1_8, 1_8], [2_8, 2_8])                   .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1_8, 1_8, 1_8], [2_8, 0_8, 1_8])              .and. success
+      success = test_alloc(the_heap, array, SHMEM_HEAP_INVALID_BOUNDS, [1_8, 2_8, 1_8], [2_8, 0_8, 1_8])              .and. success
 
     end subroutine various_params
 
@@ -400,7 +402,7 @@ contains
         call timer % stop()
         time = timer % get_latest_time_ms()
 
-        if (associated(a)) then
+        if (associated(a) .or. info % get_status() .ne. SHMEM_HEAP_ALLOC_TIMEOUT) then
           print *, 'ERROR: Allocation should have failed'
           error stop 1
         end if
@@ -418,7 +420,7 @@ contains
         call timer % stop()
         time = timer % get_latest_time_ms()
 
-        if (associated(a)) then
+        if (associated(a) .or. info % get_status() .ne. SHMEM_HEAP_ALLOC_TIMEOUT) then
           print *, 'ERROR: Allocation should have failed'
           error stop 1
         end if
@@ -433,7 +435,7 @@ contains
         call timer % stop()
         time = timer % get_latest_time_ms()
 
-        if (associated(a)) then
+        if (associated(a) .or. info % get_status() .ne. SHMEM_HEAP_ALLOC_TIMEOUT) then
           print *, 'ERROR: Allocation should have failed'
           error stop 1
         end if
@@ -455,7 +457,7 @@ contains
         call timer % stop()
         time = timer % get_latest_time_ms()
 
-        if (.not. associated(a)) then
+        if (.not. associated(a) .or. info % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) then
           print *, 'ERROR: Should have succeeded with the allocation!'
           error stop 1
         end if
@@ -683,8 +685,8 @@ contains
 
       num_errors = 0
       total_errors = 0
-      if (.not. associated(kinda_big_array1)) num_errors = num_errors + 1
-      if (.not. associated(kinda_big_array2)) num_errors = num_errors + 1
+      if (.not. associated(kinda_big_array1) .or. array_info1 % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) num_errors = num_errors + 1
+      if (.not. associated(kinda_big_array2) .or. array_info2 % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) num_errors = num_errors + 1
 
       call MPI_Reduce(num_errors, total_errors, 1, MPI_INTEGER, MPI_SUM, 0, MPI_COMM_WORLD, ierr)
       !------------------------
@@ -712,7 +714,7 @@ contains
         end if
 
         array_info1 = the_heap % allocate(big_array, [big_alloc_size])
-        if (.not. associated(big_array)) then
+        if (.not. associated(big_array) .or. array_info1 % get_status() .ne. SHMEM_HEAP_ALLOC_SUCCESS) then
           print *, 'ERROR: Unable to allocate array of size ', big_alloc_size
           error stop 1
         end if
@@ -724,7 +726,7 @@ contains
         end if
 
         array_info1 = the_heap % allocate(big_array, [the_heap % get_size() / 8 + 1], timeout_ms = 0)
-        if (associated(big_array)) then
+        if (associated(big_array) .or. array_info1 % get_status() == SHMEM_HEAP_ALLOC_SUCCESS) then
           print *, 'ERROR: Should not have been able to allocate that much data!'
           error stop 1
         end if

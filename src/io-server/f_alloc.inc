@@ -58,15 +58,21 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) return
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -96,7 +102,11 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -111,7 +121,9 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I1_5D
 
 !> Wrapper around allocate_I1_5D to be able to call it and specify dimensions with an array of integer*4
@@ -161,10 +173,10 @@ function allocate_I1_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -248,15 +260,21 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) return
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -286,7 +304,11 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -301,7 +323,9 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I1_4D
 
 !> Wrapper around allocate_I1_4D to be able to call it and specify dimensions with an array of integer*4
@@ -351,10 +375,10 @@ function allocate_I1_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -438,15 +462,21 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) return
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -476,7 +506,11 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -491,7 +525,9 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I1_3D
 
 !> Wrapper around allocate_I1_3D to be able to call it and specify dimensions with an array of integer*4
@@ -541,10 +577,10 @@ function allocate_I1_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -628,15 +664,21 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) return
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -666,7 +708,11 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -681,7 +727,9 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I1_2D
 
 !> Wrapper around allocate_I1_2D to be able to call it and specify dimensions with an array of integer*4
@@ -731,10 +779,10 @@ function allocate_I1_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -818,15 +866,21 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) return
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -856,7 +910,11 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -871,7 +929,9 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I1_1D
 
 !> Wrapper around allocate_I1_1D to be able to call it and specify dimensions with an array of integer*4
@@ -921,10 +981,10 @@ function allocate_I1_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -1008,15 +1068,21 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) return
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -1046,7 +1112,11 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -1061,7 +1131,9 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I2_5D
 
 !> Wrapper around allocate_I2_5D to be able to call it and specify dimensions with an array of integer*4
@@ -1111,10 +1183,10 @@ function allocate_I2_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -1198,15 +1270,21 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) return
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -1236,7 +1314,11 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -1251,7 +1333,9 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I2_4D
 
 !> Wrapper around allocate_I2_4D to be able to call it and specify dimensions with an array of integer*4
@@ -1301,10 +1385,10 @@ function allocate_I2_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -1388,15 +1472,21 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) return
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -1426,7 +1516,11 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -1441,7 +1535,9 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I2_3D
 
 !> Wrapper around allocate_I2_3D to be able to call it and specify dimensions with an array of integer*4
@@ -1491,10 +1587,10 @@ function allocate_I2_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -1578,15 +1674,21 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) return
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -1616,7 +1718,11 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -1631,7 +1737,9 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I2_2D
 
 !> Wrapper around allocate_I2_2D to be able to call it and specify dimensions with an array of integer*4
@@ -1681,10 +1789,10 @@ function allocate_I2_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -1768,15 +1876,21 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) return
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -1806,7 +1920,11 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -1821,7 +1939,9 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I2_1D
 
 !> Wrapper around allocate_I2_1D to be able to call it and specify dimensions with an array of integer*4
@@ -1871,10 +1991,10 @@ function allocate_I2_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -1958,15 +2078,21 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) return
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -1996,7 +2122,11 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -2011,7 +2141,9 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I4_5D
 
 !> Wrapper around allocate_I4_5D to be able to call it and specify dimensions with an array of integer*4
@@ -2061,10 +2193,10 @@ function allocate_I4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -2148,15 +2280,21 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) return
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -2186,7 +2324,11 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -2201,7 +2343,9 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I4_4D
 
 !> Wrapper around allocate_I4_4D to be able to call it and specify dimensions with an array of integer*4
@@ -2251,10 +2395,10 @@ function allocate_I4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -2338,15 +2482,21 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) return
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -2376,7 +2526,11 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -2391,7 +2545,9 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I4_3D
 
 !> Wrapper around allocate_I4_3D to be able to call it and specify dimensions with an array of integer*4
@@ -2441,10 +2597,10 @@ function allocate_I4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -2528,15 +2684,21 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) return
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -2566,7 +2728,11 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -2581,7 +2747,9 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I4_2D
 
 !> Wrapper around allocate_I4_2D to be able to call it and specify dimensions with an array of integer*4
@@ -2631,10 +2799,10 @@ function allocate_I4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -2718,15 +2886,21 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) return
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -2756,7 +2930,11 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -2771,7 +2949,9 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I4_1D
 
 !> Wrapper around allocate_I4_1D to be able to call it and specify dimensions with an array of integer*4
@@ -2821,10 +3001,10 @@ function allocate_I4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -2908,15 +3088,21 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) return
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -2946,7 +3132,11 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -2961,7 +3151,9 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I8_5D
 
 !> Wrapper around allocate_I8_5D to be able to call it and specify dimensions with an array of integer*4
@@ -3011,10 +3203,10 @@ function allocate_I8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -3098,15 +3290,21 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) return
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -3136,7 +3334,11 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -3151,7 +3353,9 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I8_4D
 
 !> Wrapper around allocate_I8_4D to be able to call it and specify dimensions with an array of integer*4
@@ -3201,10 +3405,10 @@ function allocate_I8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -3288,15 +3492,21 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) return
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -3326,7 +3536,11 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -3341,7 +3555,9 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I8_3D
 
 !> Wrapper around allocate_I8_3D to be able to call it and specify dimensions with an array of integer*4
@@ -3391,10 +3607,10 @@ function allocate_I8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -3478,15 +3694,21 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) return
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -3516,7 +3738,11 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -3531,7 +3757,9 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I8_2D
 
 !> Wrapper around allocate_I8_2D to be able to call it and specify dimensions with an array of integer*4
@@ -3581,10 +3809,10 @@ function allocate_I8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -3668,15 +3896,21 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) return
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -3706,7 +3940,11 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -3721,7 +3959,9 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_I8_1D
 
 !> Wrapper around allocate_I8_1D to be able to call it and specify dimensions with an array of integer*4
@@ -3771,10 +4011,10 @@ function allocate_I8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -3858,15 +4098,21 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) return
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -3896,7 +4142,11 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -3911,7 +4161,9 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R4_5D
 
 !> Wrapper around allocate_R4_5D to be able to call it and specify dimensions with an array of integer*4
@@ -3961,10 +4213,10 @@ function allocate_R4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -4048,15 +4300,21 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) return
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -4086,7 +4344,11 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -4101,7 +4363,9 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R4_4D
 
 !> Wrapper around allocate_R4_4D to be able to call it and specify dimensions with an array of integer*4
@@ -4151,10 +4415,10 @@ function allocate_R4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -4238,15 +4502,21 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) return
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -4276,7 +4546,11 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -4291,7 +4565,9 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R4_3D
 
 !> Wrapper around allocate_R4_3D to be able to call it and specify dimensions with an array of integer*4
@@ -4341,10 +4617,10 @@ function allocate_R4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -4428,15 +4704,21 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) return
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -4466,7 +4748,11 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -4481,7 +4767,9 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R4_2D
 
 !> Wrapper around allocate_R4_2D to be able to call it and specify dimensions with an array of integer*4
@@ -4531,10 +4819,10 @@ function allocate_R4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -4618,15 +4906,21 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) return
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -4656,7 +4950,11 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -4671,7 +4969,9 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R4_1D
 
 !> Wrapper around allocate_R4_1D to be able to call it and specify dimensions with an array of integer*4
@@ -4721,10 +5021,10 @@ function allocate_R4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -4808,15 +5108,21 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) return
+    if (.not. all(di(5+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -4846,7 +5152,11 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -4861,7 +5171,9 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R8_5D
 
 !> Wrapper around allocate_R8_5D to be able to call it and specify dimensions with an array of integer*4
@@ -4911,10 +5223,10 @@ function allocate_R8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -4998,15 +5310,21 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) return
+    if (.not. all(di(4+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -5036,7 +5354,11 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -5051,7 +5373,9 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R8_4D
 
 !> Wrapper around allocate_R8_4D to be able to call it and specify dimensions with an array of integer*4
@@ -5101,10 +5425,10 @@ function allocate_R8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -5188,15 +5512,21 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) return
+    if (.not. all(di(3+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -5226,7 +5556,11 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -5241,7 +5575,9 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R8_3D
 
 !> Wrapper around allocate_R8_3D to be able to call it and specify dimensions with an array of integer*4
@@ -5291,10 +5627,10 @@ function allocate_R8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -5378,15 +5714,21 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) return
+    if (.not. all(di(2+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -5416,7 +5758,11 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -5431,7 +5777,9 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R8_2D
 
 !> Wrapper around allocate_R8_2D to be able to call it and specify dimensions with an array of integer*4
@@ -5481,10 +5829,10 @@ function allocate_R8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
@@ -5568,15 +5916,21 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer :: i_wait, num_waits
 
   nullify(array_ptr)                        ! in case of allocation failure
-  alloc_info = block_meta_c([0,0,0,0,0], 0, 0)
+  alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   ! Given dimensions not consistent with array rank
   if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) return
+    if (.not. all(di(1+1:size(di)) == 1)) then
+      alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+      return
+    end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) return
+  if (PRODUCT(di) <= 0) then
+    alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
+    return
+  end if
 
   metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
   alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
@@ -5606,7 +5960,11 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     ptr_c = ShmemHeap_alloc_block(this % p, alloc_size, safe_alloc_flag) ! allocate block in heap
   end do
 
-  if(.not. C_ASSOCIATED(ptr_c) ) return   ! allocation failed
+  ! Check whether allocation failed
+  if (.not. C_ASSOCIATED(ptr_c) ) then
+    alloc_info % status = SHMEM_HEAP_ALLOC_TIMEOUT
+    return
+  end if
 
   call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
 
@@ -5621,7 +5979,9 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   end if
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
+  alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
   status = ShmemHeap_set_block_meta(this % p, ptr_c, alloc_info, metadata_size) ! insert metadata into data block
+
 end function allocate_R8_1D
 
 !> Wrapper around allocate_R8_1D to be able to call it and specify dimensions with an array of integer*4
@@ -5671,10 +6031,10 @@ function allocate_R8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   integer(C_INT64_T), dimension(size(min_bound)) :: array_size
 
   nullify(array_ptr)
-  bmi = block_meta_c([0,0,0,0,0], 0, 0)
+  bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
   if (size(min_bound) .ne. size(max_bound))  then
-    print *, 'ERROR: min and max bounds must have the same number of bounds to be able to allocate an array'
+    bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 

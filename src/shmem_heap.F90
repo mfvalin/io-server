@@ -35,13 +35,20 @@ module shmem_heap_module
   !> How long to wait (in ms) for space to become available on the heap, when allocating, before declaring failure
   integer, parameter, public :: DEFAULT_ALLOC_TIMEOUT_MS = 30000
 
+  integer, parameter, public :: SHMEM_HEAP_ALLOC_SUCCESS  =  0 !< The allocation completed successfully
+  integer, parameter, public :: SHMEM_HEAP_ALLOC_INVALID  = -1 !< This block has not been allocated
+  integer, parameter, public :: SHMEM_HEAP_INVALID_BOUNDS = -2 !< Invalid bounds given as input
+  integer, parameter, public :: SHMEM_HEAP_ALLOC_TIMEOUT  = -3 !< Could not allocate within the given time (heap is likely full)
+  integer, parameter, public :: SHMEM_HEAP_ALLOC_FAILED   = -4 !< Call to underlying C allocation function returned an error
+
   !   ===========================  metadata types and type bound procedures ===========================
   !> \brief C interoperable data block metadata
   type, bind(C) :: block_meta_c
     private
     integer(C_INT64_T), dimension(MAX_ARRAY_RANK) :: d  = [0, 0, 0, 0, 0] !< array dimensions \private
-    integer(C_INT)    :: tkr = 0           !< array type, kind, rank \private
-    integer(C_SIZE_T) :: offset = 0        !< offset in bytes from reference address (memory arena most likely) \private
+    integer(C_INT32_T) :: tkr = 0           !< array type, kind, rank \private
+    integer(C_SIZE_T)  :: offset = 0        !< offset in bytes from reference address (memory arena most likely) \private
+    integer(C_INT32_T) :: status = -1       !< Allocation status (0 for success)
   end type block_meta_c
 
   include 'io-server/shmem_heap.inc'
@@ -58,6 +65,7 @@ module shmem_heap_module
     procedure :: get_type   => block_meta_get_type   !< \copydoc block_meta_get_type
     procedure :: get_kind   => block_meta_get_kind   !< \copydoc block_meta_get_kind
     procedure :: get_rank   => block_meta_get_rank   !< \copydoc block_meta_get_rank
+    procedure :: get_status => block_meta_get_status !< \copydoc block_meta_get_status
     procedure :: get_dimensions                      !< \copydoc shmem_heap_module::get_dimensions
 
     procedure :: reset                      !< \copydoc shmem_heap_module::reset
@@ -166,7 +174,7 @@ module shmem_heap_module
     !> info = h % allocate(i1_safe, [40], safe = .true.)                          ! Allocate a 1D array of 40 integers safely, in case other processes are allocating from the same heap
     !> !
     !> ```
-    !> \return     a fortran pointer to integer and real arrays of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
+    !> \return     An array descriptor and a fortran pointer to an integer or real array of 1 to MAX_ARRAY_RANK dimension (see f_alloc.inc)
     GENERIC   :: allocate =>  &
                               allocate_I1_5D, allocate_I1_4D, allocate_I1_3D, allocate_I1_2D, allocate_I1_1D, &
                               allocate_I2_5D, allocate_I2_4D, allocate_I2_3D, allocate_I2_2D, allocate_I2_1D, &
@@ -245,6 +253,14 @@ module shmem_heap_module
     n = and(this%a%tkr, 15)
   end function block_meta_get_rank
 
+  !> Get status from block metadata
+  function block_meta_get_status(this) result(status)
+    implicit none
+    class(block_meta), intent(in) :: this !< block_meta instance
+    integer(C_INT32_T) :: status
+    status = this % a % status
+  end function block_meta_get_status
+
   !> \brief Get array dimensions from Fortran block metadata
   function get_dimensions(this) result(d)
     implicit none
@@ -260,6 +276,7 @@ module shmem_heap_module
     this % a % tkr    = 0
     this % a % d      = 0
     this % a % offset = 0
+    this % a % status = SHMEM_HEAP_ALLOC_INVALID
   end subroutine reset
 
   !> \brief Assignment operator for type block_meta
@@ -270,6 +287,7 @@ module shmem_heap_module
     this % a % tkr      = other % a % tkr
     this % a % d        = other % a % d
     this % a % offset   = other % a % offset
+    this % a % status   = other % a % status
   end subroutine assign
 
   !> \brief Assignment operator for type block_meta
@@ -280,6 +298,7 @@ module shmem_heap_module
     this % a % tkr      = other % tkr
     this % a % d        = other % d
     this % a % offset   = other % offset
+    this % a % status   = other % status
   end subroutine assign_c
 
   !> \brief Equality operator for type block_meta
@@ -289,6 +308,7 @@ module shmem_heap_module
     type(block_meta), intent(IN)     :: other             !< metadata object assigned to this (this = other)
     logical :: isequal                                    !< true if equal
     isequal = (this % a % tkr == other % a % tkr)
+    isequal = isequal .and. (this % a % status == other % a % status)
     isequal = isequal .and. (all(this % a % d == other % a % d))
   end function equal
 
@@ -299,6 +319,7 @@ module shmem_heap_module
     type(block_meta), intent(IN)     :: other             !< metadata object assigned to this (this = other)
     logical :: is_unequal                                 !< true if unequal
     is_unequal = (this % a % tkr /= other % a % tkr)
+    is_unequal = is_unequal .or. (this % a % status /= other % a % status)
     is_unequal = is_unequal .or. any(this % a % d /= other % a % d)
   end function unequal_meta
 
