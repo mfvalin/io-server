@@ -128,7 +128,7 @@ target_compile_options(
    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:-Wall -Wextra -fmax-errors=8>
    $<$<COMPILE_LANG_AND_ID:Fortran,GNU>:
             -Werror -Wno-error=unused-function -Wno-error=maybe-uninitialized -Wno-error=unused-variable
-            -Wno-error=unused-dummy-argument -Wno-error=integer-division>
+            -Wno-error=unused-dummy-argument -Wno-integer-division>
    $<$<COMPILE_LANG_AND_ID:C,Intel>:-Wall -Werror>
    $<$<COMPILE_LANG_AND_ID:Fortran,Intel>:-error-limit 8 -warn all -diag-error=6188,6192 -diag-disable 5268,7025,7416,8889 -diag-warning=7712>
 )

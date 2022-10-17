@@ -59,7 +59,7 @@ contains
     default_dim2(:) = 1
 
     if (present(dim2)) then
-      default_dim2(:) = dim2(1:size(dim1))
+      default_dim2(:) = dim2(1:min(size(dim1), size(dim2)))
       info = the_heap % allocate(array, dim1, dim2)
     else
       info = the_heap % allocate(array, dim1)
@@ -372,7 +372,7 @@ contains
       integer(kind=8) :: big_size
       logical :: success
       type(ioserver_timer) :: timer
-      real :: time
+      real(kind = 8) :: time
 
       integer, parameter :: ALLOC_RANK_0 = 0
       integer, parameter :: ALLOC_RANK_1 = 1

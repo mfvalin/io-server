@@ -33,12 +33,12 @@
 
 !! ===============================  integer*1 5D  ===============================
 !> \brief integer*1 5D array allocator
-function allocate_I1_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I1_5D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -57,25 +57,32 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(5) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(5, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 5) then
+    if (.not. all(dims_in(5+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -108,17 +115,12 @@ function allocate_I1_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*1 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 5) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:5)        = di(1:5)
-  end if
+  tkr                       = 256*1 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -157,12 +159,12 @@ function allocate_I1_5D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I1_5D_integer
 
 !> integer*1 5D array allocator (with custom bounds)
-function allocate_I1_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I1_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -170,17 +172,29 @@ function allocate_I1_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 5)
+  max_dim = min(size(max_bound_in), 5)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I1_5D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -235,12 +249,12 @@ end function allocate_I1_5D_bounds_int4
 
 !! ===============================  integer*1 4D  ===============================
 !> \brief integer*1 4D array allocator
-function allocate_I1_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I1_4D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -259,25 +273,32 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(4) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(4, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 4) then
+    if (.not. all(dims_in(4+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -310,17 +331,12 @@ function allocate_I1_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*1 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 4) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:4)        = di(1:4)
-  end if
+  tkr                       = 256*1 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -359,12 +375,12 @@ function allocate_I1_4D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I1_4D_integer
 
 !> integer*1 4D array allocator (with custom bounds)
-function allocate_I1_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I1_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -372,17 +388,29 @@ function allocate_I1_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 4)
+  max_dim = min(size(max_bound_in), 4)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I1_4D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -437,12 +465,12 @@ end function allocate_I1_4D_bounds_int4
 
 !! ===============================  integer*1 3D  ===============================
 !> \brief integer*1 3D array allocator
-function allocate_I1_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I1_3D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -461,25 +489,32 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(3) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(3, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 3) then
+    if (.not. all(dims_in(3+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -512,17 +547,12 @@ function allocate_I1_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*1 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 3) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:3)        = di(1:3)
-  end if
+  tkr                       = 256*1 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -561,12 +591,12 @@ function allocate_I1_3D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I1_3D_integer
 
 !> integer*1 3D array allocator (with custom bounds)
-function allocate_I1_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I1_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -574,17 +604,29 @@ function allocate_I1_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 3)
+  max_dim = min(size(max_bound_in), 3)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I1_3D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -639,12 +681,12 @@ end function allocate_I1_3D_bounds_int4
 
 !! ===============================  integer*1 2D  ===============================
 !> \brief integer*1 2D array allocator
-function allocate_I1_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I1_2D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -663,25 +705,32 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(2) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(2, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 2) then
+    if (.not. all(dims_in(2+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -714,17 +763,12 @@ function allocate_I1_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*1 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 2) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:2)        = di(1:2)
-  end if
+  tkr                       = 256*1 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -763,12 +807,12 @@ function allocate_I1_2D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I1_2D_integer
 
 !> integer*1 2D array allocator (with custom bounds)
-function allocate_I1_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I1_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -776,17 +820,29 @@ function allocate_I1_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 2)
+  max_dim = min(size(max_bound_in), 2)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I1_2D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -841,12 +897,12 @@ end function allocate_I1_2D_bounds_int4
 
 !! ===============================  integer*1 1D  ===============================
 !> \brief integer*1 1D array allocator
-function allocate_I1_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I1_1D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -865,25 +921,32 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(1) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(1, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 1) then
+    if (.not. all(dims_in(1+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -916,17 +979,12 @@ function allocate_I1_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*1 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 1) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:1)        = di(1:1)
-  end if
+  tkr                       = 256*1 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -965,12 +1023,12 @@ function allocate_I1_1D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I1_1D_integer
 
 !> integer*1 1D array allocator (with custom bounds)
-function allocate_I1_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I1_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT8_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -978,17 +1036,29 @@ function allocate_I1_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT8_T), dimension(:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 1)
+  max_dim = min(size(max_bound_in), 1)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I1_1D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -1043,12 +1113,12 @@ end function allocate_I1_1D_bounds_int4
 
 !! ===============================  integer*2 5D  ===============================
 !> \brief integer*2 5D array allocator
-function allocate_I2_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I2_5D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1067,25 +1137,32 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(5) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(5, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 5) then
+    if (.not. all(dims_in(5+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -1118,17 +1195,12 @@ function allocate_I2_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*2 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 5) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:5)        = di(1:5)
-  end if
+  tkr                       = 256*2 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -1167,12 +1239,12 @@ function allocate_I2_5D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I2_5D_integer
 
 !> integer*2 5D array allocator (with custom bounds)
-function allocate_I2_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I2_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1180,17 +1252,29 @@ function allocate_I2_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 5)
+  max_dim = min(size(max_bound_in), 5)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I2_5D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -1245,12 +1329,12 @@ end function allocate_I2_5D_bounds_int4
 
 !! ===============================  integer*2 4D  ===============================
 !> \brief integer*2 4D array allocator
-function allocate_I2_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I2_4D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1269,25 +1353,32 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(4) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(4, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 4) then
+    if (.not. all(dims_in(4+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -1320,17 +1411,12 @@ function allocate_I2_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*2 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 4) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:4)        = di(1:4)
-  end if
+  tkr                       = 256*2 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -1369,12 +1455,12 @@ function allocate_I2_4D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I2_4D_integer
 
 !> integer*2 4D array allocator (with custom bounds)
-function allocate_I2_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I2_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1382,17 +1468,29 @@ function allocate_I2_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 4)
+  max_dim = min(size(max_bound_in), 4)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I2_4D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -1447,12 +1545,12 @@ end function allocate_I2_4D_bounds_int4
 
 !! ===============================  integer*2 3D  ===============================
 !> \brief integer*2 3D array allocator
-function allocate_I2_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I2_3D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1471,25 +1569,32 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(3) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(3, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 3) then
+    if (.not. all(dims_in(3+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -1522,17 +1627,12 @@ function allocate_I2_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*2 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 3) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:3)        = di(1:3)
-  end if
+  tkr                       = 256*2 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -1571,12 +1671,12 @@ function allocate_I2_3D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I2_3D_integer
 
 !> integer*2 3D array allocator (with custom bounds)
-function allocate_I2_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I2_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1584,17 +1684,29 @@ function allocate_I2_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 3)
+  max_dim = min(size(max_bound_in), 3)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I2_3D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -1649,12 +1761,12 @@ end function allocate_I2_3D_bounds_int4
 
 !! ===============================  integer*2 2D  ===============================
 !> \brief integer*2 2D array allocator
-function allocate_I2_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I2_2D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1673,25 +1785,32 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(2) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(2, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 2) then
+    if (.not. all(dims_in(2+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -1724,17 +1843,12 @@ function allocate_I2_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*2 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 2) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:2)        = di(1:2)
-  end if
+  tkr                       = 256*2 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -1773,12 +1887,12 @@ function allocate_I2_2D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I2_2D_integer
 
 !> integer*2 2D array allocator (with custom bounds)
-function allocate_I2_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I2_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1786,17 +1900,29 @@ function allocate_I2_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 2)
+  max_dim = min(size(max_bound_in), 2)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I2_2D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -1851,12 +1977,12 @@ end function allocate_I2_2D_bounds_int4
 
 !! ===============================  integer*2 1D  ===============================
 !> \brief integer*2 1D array allocator
-function allocate_I2_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I2_1D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1875,25 +2001,32 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(1) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(1, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 1) then
+    if (.not. all(dims_in(1+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -1926,17 +2059,12 @@ function allocate_I2_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*2 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 1) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:1)        = di(1:1)
-  end if
+  tkr                       = 256*2 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -1975,12 +2103,12 @@ function allocate_I2_1D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I2_1D_integer
 
 !> integer*2 1D array allocator (with custom bounds)
-function allocate_I2_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I2_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT16_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -1988,17 +2116,29 @@ function allocate_I2_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT16_T), dimension(:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 1)
+  max_dim = min(size(max_bound_in), 1)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I2_1D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -2053,12 +2193,12 @@ end function allocate_I2_1D_bounds_int4
 
 !! ===============================  integer*4 5D  ===============================
 !> \brief integer*4 5D array allocator
-function allocate_I4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I4_5D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2077,25 +2217,32 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(5) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(5, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 5) then
+    if (.not. all(dims_in(5+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -2128,17 +2275,12 @@ function allocate_I4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 5) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:5)        = di(1:5)
-  end if
+  tkr                       = 256*4 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -2177,12 +2319,12 @@ function allocate_I4_5D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I4_5D_integer
 
 !> integer*4 5D array allocator (with custom bounds)
-function allocate_I4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I4_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2190,17 +2332,29 @@ function allocate_I4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 5)
+  max_dim = min(size(max_bound_in), 5)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I4_5D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -2255,12 +2409,12 @@ end function allocate_I4_5D_bounds_int4
 
 !! ===============================  integer*4 4D  ===============================
 !> \brief integer*4 4D array allocator
-function allocate_I4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I4_4D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2279,25 +2433,32 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(4) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(4, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 4) then
+    if (.not. all(dims_in(4+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -2330,17 +2491,12 @@ function allocate_I4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 4) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:4)        = di(1:4)
-  end if
+  tkr                       = 256*4 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -2379,12 +2535,12 @@ function allocate_I4_4D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I4_4D_integer
 
 !> integer*4 4D array allocator (with custom bounds)
-function allocate_I4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I4_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2392,17 +2548,29 @@ function allocate_I4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 4)
+  max_dim = min(size(max_bound_in), 4)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I4_4D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -2457,12 +2625,12 @@ end function allocate_I4_4D_bounds_int4
 
 !! ===============================  integer*4 3D  ===============================
 !> \brief integer*4 3D array allocator
-function allocate_I4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I4_3D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2481,25 +2649,32 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(3) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(3, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 3) then
+    if (.not. all(dims_in(3+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -2532,17 +2707,12 @@ function allocate_I4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 3) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:3)        = di(1:3)
-  end if
+  tkr                       = 256*4 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -2581,12 +2751,12 @@ function allocate_I4_3D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I4_3D_integer
 
 !> integer*4 3D array allocator (with custom bounds)
-function allocate_I4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I4_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2594,17 +2764,29 @@ function allocate_I4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 3)
+  max_dim = min(size(max_bound_in), 3)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I4_3D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -2659,12 +2841,12 @@ end function allocate_I4_3D_bounds_int4
 
 !! ===============================  integer*4 2D  ===============================
 !> \brief integer*4 2D array allocator
-function allocate_I4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I4_2D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2683,25 +2865,32 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(2) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(2, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 2) then
+    if (.not. all(dims_in(2+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -2734,17 +2923,12 @@ function allocate_I4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 2) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:2)        = di(1:2)
-  end if
+  tkr                       = 256*4 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -2783,12 +2967,12 @@ function allocate_I4_2D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I4_2D_integer
 
 !> integer*4 2D array allocator (with custom bounds)
-function allocate_I4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I4_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2796,17 +2980,29 @@ function allocate_I4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 2)
+  max_dim = min(size(max_bound_in), 2)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I4_2D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -2861,12 +3057,12 @@ end function allocate_I4_2D_bounds_int4
 
 !! ===============================  integer*4 1D  ===============================
 !> \brief integer*4 1D array allocator
-function allocate_I4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I4_1D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2885,25 +3081,32 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(1) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(1, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 1) then
+    if (.not. all(dims_in(1+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -2936,17 +3139,12 @@ function allocate_I4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 1) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:1)        = di(1:1)
-  end if
+  tkr                       = 256*4 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -2985,12 +3183,12 @@ function allocate_I4_1D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I4_1D_integer
 
 !> integer*4 1D array allocator (with custom bounds)
-function allocate_I4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I4_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT32_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -2998,17 +3196,29 @@ function allocate_I4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT32_T), dimension(:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 1)
+  max_dim = min(size(max_bound_in), 1)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I4_1D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -3063,12 +3273,12 @@ end function allocate_I4_1D_bounds_int4
 
 !! ===============================  integer*8 5D  ===============================
 !> \brief integer*8 5D array allocator
-function allocate_I8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I8_5D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3087,25 +3297,32 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(5) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(5, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 5) then
+    if (.not. all(dims_in(5+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -3138,17 +3355,12 @@ function allocate_I8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 5) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:5)        = di(1:5)
-  end if
+  tkr                       = 256*8 + 16*I + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -3187,12 +3399,12 @@ function allocate_I8_5D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I8_5D_integer
 
 !> integer*8 5D array allocator (with custom bounds)
-function allocate_I8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I8_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3200,17 +3412,29 @@ function allocate_I8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 5)
+  max_dim = min(size(max_bound_in), 5)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I8_5D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -3265,12 +3489,12 @@ end function allocate_I8_5D_bounds_int4
 
 !! ===============================  integer*8 4D  ===============================
 !> \brief integer*8 4D array allocator
-function allocate_I8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I8_4D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3289,25 +3513,32 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(4) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(4, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 4) then
+    if (.not. all(dims_in(4+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -3340,17 +3571,12 @@ function allocate_I8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 4) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:4)        = di(1:4)
-  end if
+  tkr                       = 256*8 + 16*I + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -3389,12 +3615,12 @@ function allocate_I8_4D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I8_4D_integer
 
 !> integer*8 4D array allocator (with custom bounds)
-function allocate_I8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I8_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3402,17 +3628,29 @@ function allocate_I8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 4)
+  max_dim = min(size(max_bound_in), 4)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I8_4D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -3467,12 +3705,12 @@ end function allocate_I8_4D_bounds_int4
 
 !! ===============================  integer*8 3D  ===============================
 !> \brief integer*8 3D array allocator
-function allocate_I8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I8_3D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3491,25 +3729,32 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(3) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(3, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 3) then
+    if (.not. all(dims_in(3+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -3542,17 +3787,12 @@ function allocate_I8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 3) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:3)        = di(1:3)
-  end if
+  tkr                       = 256*8 + 16*I + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -3591,12 +3831,12 @@ function allocate_I8_3D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I8_3D_integer
 
 !> integer*8 3D array allocator (with custom bounds)
-function allocate_I8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I8_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3604,17 +3844,29 @@ function allocate_I8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 3)
+  max_dim = min(size(max_bound_in), 3)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I8_3D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -3669,12 +3921,12 @@ end function allocate_I8_3D_bounds_int4
 
 !! ===============================  integer*8 2D  ===============================
 !> \brief integer*8 2D array allocator
-function allocate_I8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I8_2D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3693,25 +3945,32 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(2) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(2, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 2) then
+    if (.not. all(dims_in(2+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -3744,17 +4003,12 @@ function allocate_I8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 2) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:2)        = di(1:2)
-  end if
+  tkr                       = 256*8 + 16*I + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -3793,12 +4047,12 @@ function allocate_I8_2D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I8_2D_integer
 
 !> integer*8 2D array allocator (with custom bounds)
-function allocate_I8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I8_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3806,17 +4060,29 @@ function allocate_I8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 2)
+  max_dim = min(size(max_bound_in), 2)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I8_2D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -3871,12 +4137,12 @@ end function allocate_I8_2D_bounds_int4
 
 !! ===============================  integer*8 1D  ===============================
 !> \brief integer*8 1D array allocator
-function allocate_I8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_I8_1D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -3895,25 +4161,32 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(1) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(1, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 1) then
+    if (.not. all(dims_in(1+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -3946,17 +4219,12 @@ function allocate_I8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 1) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:1)        = di(1:1)
-  end if
+  tkr                       = 256*8 + 16*I + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -3995,12 +4263,12 @@ function allocate_I8_1D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_I8_1D_integer
 
 !> integer*8 1D array allocator (with custom bounds)
-function allocate_I8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_I8_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   integer(C_INT64_T), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to integer array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4008,17 +4276,29 @@ function allocate_I8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   integer(C_INT64_T), dimension(:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 1)
+  max_dim = min(size(max_bound_in), 1)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_I8_1D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -4073,12 +4353,12 @@ end function allocate_I8_1D_bounds_int4
 
 !! ===============================  real*4 5D  ===============================
 !> \brief real*4 5D array allocator
-function allocate_R4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R4_5D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4097,25 +4377,32 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(5) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(5, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 5) then
+    if (.not. all(dims_in(5+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -4148,17 +4435,12 @@ function allocate_R4_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 5) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:5)        = di(1:5)
-  end if
+  tkr                       = 256*4 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -4197,12 +4479,12 @@ function allocate_R4_5D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R4_5D_integer
 
 !> real*4 5D array allocator (with custom bounds)
-function allocate_R4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R4_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4210,17 +4492,29 @@ function allocate_R4_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 5)
+  max_dim = min(size(max_bound_in), 5)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R4_5D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -4275,12 +4569,12 @@ end function allocate_R4_5D_bounds_int4
 
 !! ===============================  real*4 4D  ===============================
 !> \brief real*4 4D array allocator
-function allocate_R4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R4_4D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4299,25 +4593,32 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(4) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(4, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 4) then
+    if (.not. all(dims_in(4+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -4350,17 +4651,12 @@ function allocate_R4_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 4) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:4)        = di(1:4)
-  end if
+  tkr                       = 256*4 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -4399,12 +4695,12 @@ function allocate_R4_4D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R4_4D_integer
 
 !> real*4 4D array allocator (with custom bounds)
-function allocate_R4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R4_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4412,17 +4708,29 @@ function allocate_R4_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 4)
+  max_dim = min(size(max_bound_in), 4)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R4_4D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -4477,12 +4785,12 @@ end function allocate_R4_4D_bounds_int4
 
 !! ===============================  real*4 3D  ===============================
 !> \brief real*4 3D array allocator
-function allocate_R4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R4_3D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4501,25 +4809,32 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(3) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(3, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 3) then
+    if (.not. all(dims_in(3+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -4552,17 +4867,12 @@ function allocate_R4_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 3) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:3)        = di(1:3)
-  end if
+  tkr                       = 256*4 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -4601,12 +4911,12 @@ function allocate_R4_3D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R4_3D_integer
 
 !> real*4 3D array allocator (with custom bounds)
-function allocate_R4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R4_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4614,17 +4924,29 @@ function allocate_R4_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 3)
+  max_dim = min(size(max_bound_in), 3)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R4_3D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -4679,12 +5001,12 @@ end function allocate_R4_3D_bounds_int4
 
 !! ===============================  real*4 2D  ===============================
 !> \brief real*4 2D array allocator
-function allocate_R4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R4_2D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4703,25 +5025,32 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(2) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(2, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 2) then
+    if (.not. all(dims_in(2+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -4754,17 +5083,12 @@ function allocate_R4_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 2) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:2)        = di(1:2)
-  end if
+  tkr                       = 256*4 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -4803,12 +5127,12 @@ function allocate_R4_2D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R4_2D_integer
 
 !> real*4 2D array allocator (with custom bounds)
-function allocate_R4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R4_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4816,17 +5140,29 @@ function allocate_R4_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 2)
+  max_dim = min(size(max_bound_in), 2)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R4_2D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -4881,12 +5217,12 @@ end function allocate_R4_2D_bounds_int4
 
 !! ===============================  real*4 1D  ===============================
 !> \brief real*4 1D array allocator
-function allocate_R4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R4_1D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -4905,25 +5241,32 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(1) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(1, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 1) then
+    if (.not. all(dims_in(1+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -4956,17 +5299,12 @@ function allocate_R4_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*4 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 1) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:1)        = di(1:1)
-  end if
+  tkr                       = 256*4 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -5005,12 +5343,12 @@ function allocate_R4_1D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R4_1D_integer
 
 !> real*4 1D array allocator (with custom bounds)
-function allocate_R4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R4_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_FLOAT), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5018,17 +5356,29 @@ function allocate_R4_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_FLOAT), dimension(:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 1)
+  max_dim = min(size(max_bound_in), 1)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R4_1D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -5083,12 +5433,12 @@ end function allocate_R4_1D_bounds_int4
 
 !! ===============================  real*8 5D  ===============================
 !> \brief real*8 5D array allocator
-function allocate_R8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R8_5D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5107,25 +5457,32 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(5) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(5, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 5) then
-    if (.not. all(di(5+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 5) then
+    if (.not. all(dims_in(5+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -5158,17 +5515,12 @@ function allocate_R8_5D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 5) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:5)        = di(1:5)
-  end if
+  tkr                       = 256*8 + 16*R + 5 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -5207,12 +5559,12 @@ function allocate_R8_5D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R8_5D_integer
 
 !> real*8 5D array allocator (with custom bounds)
-function allocate_R8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R8_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 5 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5220,17 +5572,29 @@ function allocate_R8_5D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 5)
+  max_dim = min(size(max_bound_in), 5)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R8_5D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -5285,12 +5649,12 @@ end function allocate_R8_5D_bounds_int4
 
 !! ===============================  real*8 4D  ===============================
 !> \brief real*8 4D array allocator
-function allocate_R8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R8_4D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5309,25 +5673,32 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(4) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(4, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 4) then
-    if (.not. all(di(4+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 4) then
+    if (.not. all(dims_in(4+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -5360,17 +5731,12 @@ function allocate_R8_4D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 4) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:4)        = di(1:4)
-  end if
+  tkr                       = 256*8 + 16*R + 4 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -5409,12 +5775,12 @@ function allocate_R8_4D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R8_4D_integer
 
 !> real*8 4D array allocator (with custom bounds)
-function allocate_R8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R8_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 4 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5422,17 +5788,29 @@ function allocate_R8_4D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 4)
+  max_dim = min(size(max_bound_in), 4)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R8_4D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -5487,12 +5865,12 @@ end function allocate_R8_4D_bounds_int4
 
 !! ===============================  real*8 3D  ===============================
 !> \brief real*8 3D array allocator
-function allocate_R8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R8_3D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5511,25 +5889,32 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(3) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(3, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 3) then
-    if (.not. all(di(3+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 3) then
+    if (.not. all(dims_in(3+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -5562,17 +5947,12 @@ function allocate_R8_3D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 3) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:3)        = di(1:3)
-  end if
+  tkr                       = 256*8 + 16*R + 3 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -5611,12 +5991,12 @@ function allocate_R8_3D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R8_3D_integer
 
 !> real*8 3D array allocator (with custom bounds)
-function allocate_R8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R8_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:,:), intent(OUT), contiguous, pointer :: array_ptr !< 3 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5624,17 +6004,29 @@ function allocate_R8_3D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 3)
+  max_dim = min(size(max_bound_in), 3)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R8_3D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -5689,12 +6081,12 @@ end function allocate_R8_3D_bounds_int4
 
 !! ===============================  real*8 2D  ===============================
 !> \brief real*8 2D array allocator
-function allocate_R8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R8_2D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5713,25 +6105,32 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(2) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(2, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 2) then
-    if (.not. all(di(2+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 2) then
+    if (.not. all(dims_in(2+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -5764,17 +6163,12 @@ function allocate_R8_2D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 2) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:2)        = di(1:2)
-  end if
+  tkr                       = 256*8 + 16*R + 2 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -5813,12 +6207,12 @@ function allocate_R8_2D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R8_2D_integer
 
 !> real*8 2D array allocator (with custom bounds)
-function allocate_R8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R8_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:,:), intent(OUT), contiguous, pointer :: array_ptr !< 2 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5826,17 +6220,29 @@ function allocate_R8_2D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:,:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 2)
+  max_dim = min(size(max_bound_in), 2)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R8_2D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
@@ -5891,12 +6297,12 @@ end function allocate_R8_2D_bounds_int4
 
 !! ===============================  real*8 1D  ===============================
 !> \brief real*8 1D array allocator
-function allocate_R8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(alloc_info)
+function allocate_R8_1D(this, array_ptr, dims_in, use_safe_alloc, timeout_ms) result(alloc_info)
   use rpn_extra_module, only: sleep_us
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: di  !< dimensions of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: dims_in  !< dimensions of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -5915,25 +6321,32 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
   integer, parameter :: SINGLE_WAIT_TIME_MS = 10
   integer :: i_wait, num_waits
 
+  integer(C_INT64_T), dimension(1) :: dims
+  integer :: num_dim
+
   nullify(array_ptr)                        ! in case of allocation failure
   alloc_info = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
+  dims(:) = 1
+  num_dim = min(1, size(dims_in))
+  dims(1:num_dim) = dims_in(1:num_dim)
+
   ! Given dimensions not consistent with array rank
-  if(size(di) .gt. 1) then
-    if (.not. all(di(1+1:size(di)) == 1)) then
+  if(size(dims_in) .gt. 1) then
+    if (.not. all(dims_in(1+1:size(dims_in)) == 1)) then
       alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
       return
     end if
   end if
 
   ! Gotta allocate more than zero
-  if (PRODUCT(di) <= 0) then
+  if (PRODUCT(dims) <= 0) then
     alloc_info % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
-  metadata_size = C_SIZEOF(alloc_info)                        ! size of C metadata
-  alloc_size    = PRODUCT(di)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
+  metadata_size = C_SIZEOF(alloc_info)                          ! size of C metadata
+  alloc_size    = PRODUCT(dims)*C_SIZEOF(pref) + metadata_size  ! size of data + size of C metadata
 
   ! Determine value of "safe allocation" flag to use
   safe_alloc_flag = 0
@@ -5966,17 +6379,12 @@ function allocate_R8_1D(this, array_ptr, di, use_safe_alloc, timeout_ms) result(
     return
   end if
 
-  call C_F_POINTER(ptr_c, array_ptr, [di]) ! make Fortran array pointer from C pointer
+  call C_F_POINTER(ptr_c, array_ptr, [dims]) ! make Fortran array pointer from C pointer
 
-  tkr                     = 256*8 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
-  alloc_info % tkr        = tkr              ! build C interoperable metadata
-  alloc_info % d(:)       = 1                ! set all 5 dimensions to 1
-  ! set relevant dimensions to correct value
-  if (size(di) < 1) then
-    alloc_info % d(1:size(di)) = di(1:size(di))
-  else
-    alloc_info % d(1:1)        = di(1:1)
-  end if
+  tkr                       = 256*8 + 16*R + 1 ! TKR code hex [1/2/4/8] [1/2] [1/2/3/4/5]
+  alloc_info % tkr          = tkr              ! build C interoperable metadata
+  alloc_info % d(:)         = 1                ! set all 5 dimensions to 1
+  alloc_info % d(1:num_dim) = dims(:)
 
   alloc_info % offset = ShmemHeap_offset_from_pointer(this % p, ptr_c)      ! minus reference address  (offset in number of heap elements)
   alloc_info % status = SHMEM_HEAP_ALLOC_SUCCESS
@@ -6015,12 +6423,12 @@ function allocate_R8_1D_integer(this, array_ptr, di, use_safe_alloc, timeout_ms)
 end function allocate_R8_1D_integer
 
 !> real*8 1D array allocator (with custom bounds)
-function allocate_R8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_alloc, timeout_ms) result(bmi)
+function allocate_R8_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_safe_alloc, timeout_ms) result(bmi)
   implicit none
   class(shmem_heap), intent(INOUT)  :: this    !< shmem_heap instance
   real(C_DOUBLE), dimension(:), intent(OUT), contiguous, pointer :: array_ptr !< 1 dimensional pointer to real array
-  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound  !< min bounds of array array_ptr
-  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound  !< max bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: min_bound_in  !< min bounds of array array_ptr
+  integer(C_INT64_T), dimension(:), intent(IN) :: max_bound_in  !< max bounds of array array_ptr
   logical, intent(in), optional     :: use_safe_alloc !< Whether to lock the heap when doing the allocation (for multiple allocator processes)
   !> When heap is full, how long to wait for space to be freed before declaring failure.
   !> 0 to fail immediately (no wait), -1 to wait indefinitely
@@ -6028,17 +6436,29 @@ function allocate_R8_1D_bounds(this, array_ptr, min_bound, max_bound, use_safe_a
   type(block_meta_c)                :: bmi !< metadata for allocated block
 
   real(C_DOUBLE), dimension(:), contiguous, pointer :: tmp_ptr
-  integer(C_INT64_T), dimension(size(min_bound)) :: array_size
+
+  integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
+  integer :: min_dim, max_dim
+
+  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
-  if (size(min_bound) .ne. size(max_bound))  then
+  if (size(min_bound_in) .ne. size(max_bound_in))  then
     bmi % status = SHMEM_HEAP_INVALID_BOUNDS
     return
   end if
 
+  ! Setup min/max bounds in a clean way
+  min_bound(:) = 1
+  max_bound(:) = 1
+  min_dim = min(size(min_bound_in), 1)
+  max_dim = min(size(max_bound_in), 1)
+  min_bound(1:min_dim) = min_bound_in(1:min_dim)
+  max_bound(1:max_dim) = max_bound_in(1:max_dim)
   array_size(:) = max_bound - min_bound + 1
+
   if (present(use_safe_alloc)) then
     if (present(timeout_ms)) then
       bmi = this % allocate_R8_1D(tmp_ptr, array_size, use_safe_alloc = use_safe_alloc, timeout_ms = timeout_ms)
