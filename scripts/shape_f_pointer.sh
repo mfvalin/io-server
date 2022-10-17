@@ -195,8 +195,6 @@ function allocate_${RI}${L}_${D}D_bounds(this, array_ptr, min_bound_in, max_boun
   integer(C_INT64_T), dimension(${D}) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
