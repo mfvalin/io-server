@@ -81,7 +81,7 @@ function process_command(command_data, stream_id) result(success)
   use jar_module
   use process_command_module
   implicit none
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
   type(jar), intent(inout) :: command_data
   integer,   intent(in)    :: stream_id
@@ -149,7 +149,7 @@ function process_data(data_c, command, stream_id) result(success)
   use jar_module
   use process_command_module
   implicit none
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
   type(C_PTR), intent(in)    :: data_c
   type(jar),   intent(inout) :: command

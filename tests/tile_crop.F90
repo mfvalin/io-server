@@ -169,7 +169,7 @@ contains
     use rpn_extra_module, only: sleep_us
     implicit none
 
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
     type(ioserver_context), intent(inout) :: context
     logical :: model_success
@@ -489,7 +489,7 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     type(jar),              intent(inout) :: command
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
     logical :: success
 

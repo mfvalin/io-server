@@ -8,8 +8,8 @@ set(PROJECT_F_FILES
 )
 
 set(PROJECT_INCLUDE_FILES
-   IgnoreTypeKindRank.hf
-   serializer.hf
+   rmn/IgnoreTypeKindRank.hf
+   rmn/serializer.hf
 )
 
 # The library itself

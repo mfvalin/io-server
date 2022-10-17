@@ -19,7 +19,7 @@
 !     M. Valin,   Recherche en Prevision Numerique, 2020-2022
 !     V. Magnoux, Recherche en Prevision Numerique, 2020-2022
 
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
 module run_model_node_module
   use iso_c_binding

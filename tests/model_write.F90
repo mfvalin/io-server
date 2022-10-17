@@ -116,7 +116,7 @@ contains
     use shmem_heap_module
     implicit none
 
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
     type(ioserver_context), intent(inout) :: context
     logical :: model_success
@@ -509,7 +509,7 @@ contains
     implicit none
     type(ioserver_context), intent(inout) :: context
     type(jar),              intent(inout) :: command
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
     logical :: success
 

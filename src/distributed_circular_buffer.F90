@@ -149,7 +149,7 @@ contains
   function put_elems(this, src_data, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
     class(distributed_circular_buffer), intent(inout) :: this !< DCB instance
-#include <IgnoreTypeKindRank.hf>
+#include <rmn/IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to insert
     integer,           intent(in) :: type_id      !< Type of elements to insert
     logical,           intent(in) :: commit_transaction !< Whether to make the inserted elements immediately available to the server process
@@ -181,7 +181,7 @@ contains
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this      !< DCB instance
     integer(C_INT), intent(in)                          :: buffer_id !< The individual buffer instance from which we want to read
-#include <IgnoreTypeKindRank.hf>
+#include <rmn/IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to read
     integer,           intent(in) :: type_id      !< Type of elements to read
     logical,           intent(in) :: commit_transaction !< Whether to immediately free the space used by the read elements for the corresponding producer
@@ -213,7 +213,7 @@ contains
     implicit none
     class(distributed_circular_buffer), intent(inout)   :: this      !< DCB instance
     integer(C_INT), intent(in)                          :: buffer_id !< The individual buffer instance from which we want to peek
-#include <IgnoreTypeKindRank.hf>
+#include <rmn/IgnoreTypeKindRank.hf>
     integer(C_SIZE_T), intent(in) :: num_elements !< How many elements we want to look at
     integer,           intent(in) :: type_id      !< Type of elements we want to look at
     integer, optional, intent(in) :: timeout_ms   !< [optional] How long (in ms) to wait for data before failing, (practically) infinity if not present

@@ -268,7 +268,7 @@ contains
   function peek(this, dest, num_elements, type_id, timeout_ms) result(success)
     implicit none
     class(circular_buffer), intent(INOUT)     :: this         !< The circular_buffer instance
-#include <IgnoreTypeKindRank.hf>
+#include <rmn/IgnoreTypeKindRank.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements !< How many elements we want to look at
     integer,                intent(IN), value :: type_id      !< ID of the type of elements we are looking for
     integer, optional,      intent(IN)        :: timeout_ms   !< [optional] Number of milliseconds to wait before failing, (practically) infinity if absent
@@ -300,7 +300,7 @@ contains
   function get(this, dest, num_elements, type_id, commit_transaction, timeout_ms) result(success)
     implicit none
     class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer instance
-#include <IgnoreTypeKindRank.hf>
+#include <rmn/IgnoreTypeKindRank.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements       !< number of elements to extract
     integer,                intent(IN), value :: type_id            !< ID of the type of elements we're looking for
     logical,                intent(IN), value :: commit_transaction !< Whether to update the buffer (ie _extract_ the data)
@@ -335,7 +335,7 @@ contains
   function put(this, src, num_elements, type_id, commit_transaction, timeout_ms, thread_safe) result(success)
     implicit none
     class(circular_buffer), intent(INOUT)     :: this               !< circular_buffer instance
-#include <IgnoreTypeKindRank.hf>
+#include <rmn/IgnoreTypeKindRank.hf>
     integer(C_SIZE_T),      intent(IN), value :: num_elements       !< number of tokens to insert from src
     integer,                intent(IN), value :: type_id            !< ID of the type of elements we're looking for
     logical,                intent(IN), value :: commit_transaction !< Whether to make the inserted data immediately available

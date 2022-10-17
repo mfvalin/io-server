@@ -29,7 +29,7 @@ program model_integration
   use process_command_module
   implicit none
 
-#include <serializer.hf>
+#include <rmn/serializer.hf>
 
   type(ioserver_context)          :: context
   type(ioserver_input_parameters) :: params

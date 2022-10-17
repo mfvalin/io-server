@@ -2,7 +2,7 @@ program test_large_jar
     use jar_module
     implicit none
 
-#include "serializer.hf"
+#include "rmn/serializer.hf"
 
     logical   :: ok
     type(jar) :: medium_jar, large_jar
