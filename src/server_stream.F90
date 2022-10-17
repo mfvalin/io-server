@@ -509,7 +509,7 @@ contains
     integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 
-    integer, parameter :: MAX_WAIT_TIME_S  = 15
+    integer, parameter :: MAX_WAIT_TIME_S  = 30
     integer, parameter :: WAIT_TIME_US     = 50000
     integer :: max_num_attempts
     integer :: i
