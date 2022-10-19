@@ -176,8 +176,6 @@ function allocate_I1_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -391,8 +389,6 @@ function allocate_I1_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -608,8 +604,6 @@ function allocate_I1_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -823,8 +817,6 @@ function allocate_I1_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -1040,8 +1032,6 @@ function allocate_I1_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -1255,8 +1245,6 @@ function allocate_I2_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -1472,8 +1460,6 @@ function allocate_I2_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -1687,8 +1673,6 @@ function allocate_I2_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -1904,8 +1888,6 @@ function allocate_I2_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -2119,8 +2101,6 @@ function allocate_I2_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -2336,8 +2316,6 @@ function allocate_I4_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -2551,8 +2529,6 @@ function allocate_I4_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -2768,8 +2744,6 @@ function allocate_I4_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -2983,8 +2957,6 @@ function allocate_I4_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -3200,8 +3172,6 @@ function allocate_I4_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -3415,8 +3385,6 @@ function allocate_I8_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -3632,8 +3600,6 @@ function allocate_I8_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -3847,8 +3813,6 @@ function allocate_I8_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -4064,8 +4028,6 @@ function allocate_I8_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -4279,8 +4241,6 @@ function allocate_I8_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -4496,8 +4456,6 @@ function allocate_R4_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -4711,8 +4669,6 @@ function allocate_R4_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -4928,8 +4884,6 @@ function allocate_R4_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -5143,8 +5097,6 @@ function allocate_R4_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -5360,8 +5312,6 @@ function allocate_R4_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -5575,8 +5525,6 @@ function allocate_R8_5D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(5) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -5792,8 +5740,6 @@ function allocate_R8_4D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(4) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -6007,8 +5953,6 @@ function allocate_R8_3D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(3) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
@@ -6224,8 +6168,6 @@ function allocate_R8_2D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
   integer(C_INT64_T), dimension(2) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
 
-  print *, 'Allocate with bounds'
-
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
 
@@ -6439,8 +6381,6 @@ function allocate_R8_1D_bounds(this, array_ptr, min_bound_in, max_bound_in, use_
 
   integer(C_INT64_T), dimension(1) :: min_bound, max_bound, array_size
   integer :: min_dim, max_dim
-
-  print *, 'Allocate with bounds'
 
   nullify(array_ptr)
   bmi = block_meta_c([0,0,0,0,0], 0, 0, SHMEM_HEAP_ALLOC_INVALID)
