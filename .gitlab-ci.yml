@@ -34,6 +34,7 @@ post-test-cleanup:u2:
       - test:U2_gnu-9.3.0_single_node
       - test:U2_gnu-9.3.0_multi_node
       - test:U2_aocc
+      - test:U2_nvhpc
    tags:
       - U2
    script:
@@ -266,6 +267,58 @@ test:U2_aocc:
       - set +e
       - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
       - module load aocc
+      - SRC_DIR=$(pwd)
+      - cd ${build_dir}
+      - BUILD_PATH=`pwd`
+      - mkdir -pv ${run_dir} && cd ${run_dir}
+      - source ${SRC_DIR}/tests/script/single_node_tests.sh
+
+################
+# U2 NVHPC
+build:U2_nvhpc:
+   stage: build
+   dependencies:
+      - cleanup:u2
+   tags:
+      - U2
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_nvhpc
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_W: "20"
+      ORD_SOUMET_C: "20"
+      ORD_SOUMET_M: "2G"
+   script:
+      - set +e
+      - source ~/ci-env/latest/profile.sh
+      - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
+      - module load nvhpc
+      - SRC_DIR=$(pwd)
+      - mkdir -pv ${build_dir}
+      - cd ${build_dir}
+      - pwd
+      - cmake ${SRC_DIR} -DUSE_ECCC_ENV_IF_AVAIL=0 -DCOMPILER_SUITE=nvhpc -DIOSERVER_BUILD_PSEUDO_MODEL=ON -DIOSERVER_BUILD_TESTS=ON
+      - make
+
+test:U2_nvhpc:
+   stage: test
+   tags:
+      - U2
+   dependencies:
+      - build:U2_nvhpc
+   variables:
+      build_dir: ${BUILD_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_nvhpc
+      run_dir: ${RUN_BASE_DIR}/${CI_PROJECT_PATH}/${CI_BUILD_REF_NAME}/${CI_PIPELINE_ID}/build_U2_nvhpc/single_node_test
+      NUM_CPUS: "80"
+      ORD_SOUMET_MACH: ${ECCI_FRONTEND}
+      ORD_SOUMET_C: "${NUM_CPUS}"
+      ORD_SOUMET_M: "2G"
+      ORD_SOUMET_W: "60"
+      ORD_SOUMET_JN: u2-nvhpc-single-node
+      MPI_COMMAND: "mpirun"
+   script:
+      - set +e
+      - export MODULEPATH=${MODULEPATH}:/home/mfv001/modules
+      - module load nvhpc
       - SRC_DIR=$(pwd)
       - cd ${build_dir}
       - BUILD_PATH=`pwd`
