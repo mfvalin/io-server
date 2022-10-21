@@ -30,6 +30,52 @@ module atomic_test_module
 
 contains
 
+subroutine test_atomic_int32_add(atomic_var, rank, size)
+  implicit none
+  type(atomic_int32), intent(inout) :: atomic_var
+  integer, intent(in) :: rank, size
+
+  integer :: i, ierr
+  integer :: new_val, expected_val
+  logical :: success
+
+  !-------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !-------------------------------------
+
+  if (rank == 0) then
+    success = atomic_var % try_update(atomic_var % read(), 0)
+    if (.not. success) then
+      print *, 'Should have been able to update the value!!!'
+      error stop 1
+    end if
+  end if
+
+  !-------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !-------------------------------------
+
+  do i = 1, NUM_ITERATIONS
+    new_val = atomic_var % add(rank)
+  end do
+
+  !-------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !-------------------------------------
+
+  expected_val = ((size * (size-1)) / 2) * NUM_ITERATIONS
+
+  if (atomic_var % read() /= expected_val) then
+    print *, 'ERROR: Atomic add is not working!!!', atomic_var % read(), expected_val
+    error stop 1
+  end if
+
+  !-------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !-------------------------------------
+
+end subroutine test_atomic_int32_add
+
 subroutine test_atomic_int32_try_update(atomic_var, rank, size)
   implicit none
   type(atomic_int32), intent(inout) :: atomic_var
@@ -160,6 +206,14 @@ program atomic_test
 
   call test_atomic_int32_try_update(atomic_int, rank, size)
 
+  !-------------------------------------
+  call MPI_Barrier(MPI_COMM_WORLD, ierr)
+  !-------------------------------------
+
   call MPI_Finalize(ierr)
+
+  if (rank == 0) then
+    print*, 'Test passed'
+  end if
 
 end program atomic_test

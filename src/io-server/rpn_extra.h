@@ -182,6 +182,19 @@ static inline int32_t try_increment(volatile int32_t *variable, int32_t expected
   return (__sync_val_compare_and_swap(variable, expected_old_value, expected_old_value + 1) == expected_old_value);
 }
 
+//! Atomic addition operation on an int32. @return The updated value of the variable
+static inline int32_t atomic_add_int32(
+    volatile int32_t *variable, //!< The variable we are updating
+    int32_t increment           //!< How much we want to add to the variable
+) {
+  int32_t old_value, new_value;
+  do {
+    old_value = *variable;
+    new_value = old_value + increment;
+  } while (__sync_val_compare_and_swap(variable, old_value, new_value) != old_value);
+  return new_value;
+}
+
 //! Do nothing for a certain number of microseconds
 void sleep_us(const int num_us //!< [in] How many microseconds we want to wait
 );

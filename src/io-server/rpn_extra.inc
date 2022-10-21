@@ -81,6 +81,12 @@ type(C_PTR), intent(in), value :: variable_ptr
 integer(C_INT32_T), intent(in), value :: old_value, new_value
 integer(C_INT32_T) :: status
 end function try_update_int32
+function atomic_add_int32(var_ptr, increment) BIND(C, name = 'atomic_add_int32_F') result(new_value)
+import C_PTR, C_INT32_T
+type(C_PTR),        intent(in), value :: var_ptr
+integer(C_INT32_T), intent(in), value :: increment
+integer(C_INT32_T) :: new_value
+end function atomic_add_int32
 subroutine sleep_us(num_us) BIND(C, name = 'sleep_us')
 import :: C_INT
 implicit none

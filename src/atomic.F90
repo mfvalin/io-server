@@ -30,6 +30,7 @@ module atomic_module
     type(C_PTR) :: c_location = C_NULL_PTR
   contains
     procedure, pass :: init_from_int  => atomic_int32_init_from_int
+    procedure, pass :: add            => atomic_int32_add
     procedure, pass :: try_update     => atomic_int32_try_update
     procedure, pass :: read           => atomic_int32_read
   end type atomic_int32
@@ -41,6 +42,14 @@ subroutine atomic_int32_init_from_int(this, variable)
   integer(C_INT32_T),  intent(in), target :: variable
   this % c_location = c_loc(variable)
 end subroutine atomic_int32_init_from_int
+
+function atomic_int32_add(this, increment) result(new_value)
+  implicit none
+  class(atomic_int32), intent(inout) :: this
+  integer(C_INT32_T),  intent(in)    :: increment
+  integer(C_INT32_T) :: new_value
+  new_value = atomic_add_int32(this % c_location, increment)
+end function atomic_int32_add
 
 function atomic_int32_try_update(this, old_value, new_value) result(has_updated)
   implicit none
