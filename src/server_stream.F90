@@ -49,6 +49,9 @@ module server_stream_module
 
   integer(C_INT64_T), parameter :: COMMAND_BUFFER_SIZE_BYTES = 5000 !< Size of the buffer used to send commands to the stream owner
 
+  integer, parameter :: PUT_DATA_MAX_WAIT_TIME_S  = 30    !< Total time (in seconds) to attempt putting grid data in an assembly line
+  integer, parameter :: PUT_DATA_WAIT_TIME_US     = 50000 !< Time to wait between each attempt to put grid data in an assembly line, when it fails
+
   !> Derived type that handles a server stream in shared memory. This is used to reassemble grids that
   !> are transmitted through that stream. Any server process can contribute to the grids, but only the
   !> owner can trigger the processing of a completed grid (interpolation, writing to file, etc.)
@@ -66,6 +69,10 @@ module server_stream_module
     !> command queue
     integer :: command_tag_counter = 0
     integer :: num_opens           = 0  !< How many times this stream rank was opened
+
+    !> Value in shared memory for the number of waits when trying to put grid data in an assebly line.
+    !> Should only be accessed through an atomic_int32 type from a local_server_stream
+    integer :: put_wait_counter_value  = 0
 
     type(circular_buffer) :: command_buffer
     integer(C_INT8_T), dimension(COMMAND_BUFFER_SIZE_BYTES) :: command_buffer_data
@@ -109,6 +116,7 @@ module server_stream_module
     type(ioserver_timer)  :: data_wait_timer      !< To determine how long we have waited for grids to be assembled
     type(ioserver_timer)  :: process_cmd_timer    !< To determine how long we spent executing commands (the function provided by the client)
     type(ioserver_timer)  :: process_data_timer   !< To determing how long we spent executing the commands associated with data grids (the function provided by the client)
+    type(atomic_int32)    :: num_put_data_waits   !< Counter for the number of times we needed to wait when trying to insert grid data into an assembly line
     character(len=:), allocatable :: pe_name
 
     contains
@@ -285,6 +293,7 @@ contains
     call this % data_wait_timer % create()
     call this % process_cmd_timer % create()
     call this % process_data_timer % create()
+    call this % num_put_data_waits % init_from_int(this % shared_instance % put_wait_counter_value)
   end function local_server_stream_init
 
   !> Check whether this local stream has been initialized (i.e. it has an ID and is associated with a shared instance)
@@ -509,28 +518,29 @@ contains
     integer(kind = 8), intent(in), dimension(:), contiguous, pointer :: subgrid_data  !< [in] Pointer to the data itself
     logical :: success
 
-    integer, parameter :: MAX_WAIT_TIME_S  = 30
-    integer, parameter :: WAIT_TIME_US     = 50000
     integer :: max_num_attempts
-    integer :: i
+    integer :: i, num_waits
+
+    num_waits = 0
 
     ! First attempt
     success = this % shared_instance % partial_grid_data % put_data(                                                  &
         record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
 
-    max_num_attempts = MAX_WAIT_TIME_S * 1000000 / WAIT_TIME_US
+    max_num_attempts = PUT_DATA_MAX_WAIT_TIME_S * 1000000 / PUT_DATA_WAIT_TIME_US
 
     ! Try again a few times, after waiting a bit, instead of just crashing right away
     do i = 1, max_num_attempts
       if (.not. success) then
         ! Print a message every second or so
-        if (mod(i, 1000000/WAIT_TIME_US) == 0) then
+        if (mod(i, 1000000/PUT_DATA_WAIT_TIME_US) == 0) then
           print '(A, A, I2, A, F5.2, A)', this % pe_name, ' WARNING: Could not put the data into the grid for owner ',&
               this % shared_instance % get_owner_id(), '. Trying repeatedly for another ', &
-              (max_num_attempts - i) * WAIT_TIME_US / 1000000.0, 's'
+              (max_num_attempts - i) * PUT_DATA_WAIT_TIME_US / 1000000.0, 's'
         end if
 
-        call sleep_us(WAIT_TIME_US)
+        call sleep_us(PUT_DATA_WAIT_TIME_US)
+        num_waits = i
         success = this % shared_instance % partial_grid_data % put_data(                                              &
             record, subgrid_data, this % data_heap, this % mutex, this % pe_name, this % debug_level)
       else
@@ -538,6 +548,7 @@ contains
       end if
     end do
 
+    i = this % num_put_data_waits % add(num_waits)
   end function local_server_stream_put_data
 
   function local_server_stream_print_command_stats(this, id, with_header) result(has_opened)
@@ -560,13 +571,20 @@ contains
     class(local_server_stream), intent(in) :: this
     integer, intent(in) :: id
     logical, intent(in) :: with_header
-    if (with_header) print '(A)', 'Rank   process cmd (s) : wait for data (s) : process data (s)'
+    if (with_header)                                                                                                  &
+        print '(4(A, /), A)',                                                                                         &
+         'Process cmd:   Time spent processing commands (by the stream processor)',                                   &
+         'Wait for data: Time spent waiting for grids to be fully assembled (by the stream processor)',               &
+         'Process data:  Time spent processing assembled grids (by the stream processor)',                            &
+         'Put data wait: Time spent waiting to be able to put partial grid data (by the data receivers)',             &
+         'Rank   process cmd (s) : wait for data (s) : process data (s) : put data wait (s)'
     if (this % is_init()) then
       if (this % shared_instance % num_opens > 0) then
-        print '(I4.4, 3F18.3)', id,                                                                                   &
+        print '(I4.4, 4F18.3)', id,                                                                                   &
               this % process_cmd_timer % get_total_time_ms() / 1000.0,                                                &
               this % data_wait_timer % get_total_time_ms() / 1000.0,                                                  &
-              this % process_data_timer % get_total_time_ms() / 1000.0
+              this % process_data_timer % get_total_time_ms() / 1000.0,                                               &
+              this % num_put_data_waits % read() * PUT_DATA_WAIT_TIME_US / 1000000.0
       end if
     end if
   end subroutine local_server_stream_print_process_times
