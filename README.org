@@ -1,5 +1,5 @@
 
-hybrid IO server for model usage
+hybrid IO server for model usage (initial repository, no longer updated)
 
 * At CMC
 
